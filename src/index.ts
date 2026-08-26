@@ -13,6 +13,7 @@ import { Metrics } from "./lib/metrics.js";
 import { createHandler } from "./handler.js";
 import { createShutdown, installSignalHandlers, installCrashHandlers } from "./shutdown.js";
 import { formatStatus, makeAnvilPinger } from "./lib/status.js";
+import { makeMetricsHeartbeat } from "./lib/metrics-heartbeat.js";
 import { runAgent } from "./agent.js";
 import { formatReply } from "./lib/format-reply.js";
 import { friendlyError } from "./lib/failure.js";
@@ -61,6 +62,16 @@ function recordTurn(t: { steps: number; tools: string[]; elapsedMs: number; ok: 
     writeMetricsSnapshot(paths.metrics, metrics.summary(), Date.now());
   }
 }
+
+// DEV-0111: wall-clock heartbeat so a command-only / idle period still logs + snapshots metrics
+// (the turn-count flush above never fires with zero agent turns). Disabled if RELAY_METRICS_HEARTBEAT_MS<=0.
+const METRICS_HEARTBEAT_MS = Number(process.env.RELAY_METRICS_HEARTBEAT_MS ?? 300000); // 5 min default
+const metricsHeartbeat = makeMetricsHeartbeat({
+  emit: () => console.log(metrics.format()),
+  snapshot: () => writeMetricsSnapshot(paths.metrics, metrics.summary(), Date.now()),
+  periodMs: METRICS_HEARTBEAT_MS,
+  onError: () => {},
+});
 
 // Per-chat rolling memory (last few turns). Bounded to keep prompts small, and PERSISTED to a local
 // JSON file (DEV-0001) so a redeploy/restart no longer wipes every conversation. Path is env-tunable;
@@ -218,6 +229,7 @@ async function main() {
   else console.log(`agent brain: ${LLM_PROVIDER}`);
 
   scheduleRunner.start();              // fire proactive/scheduled tasks (no-op if RELAY_SCHED_TICK_MS=0)
+  metricsHeartbeat.start();            // periodic metrics flush (no-op if RELAY_METRICS_HEARTBEAT_MS=0)
   if (SCHED_TICK_MS > 0) console.log(`schedule runner on (${schedules.size()} pending, tick ${SCHED_TICK_MS}ms)`);
 
   console.log(`Relay listening on ${channel.name}…`);
@@ -225,7 +237,7 @@ async function main() {
   // Clean stop on docker stop / pm2 restart / Ctrl-C: halt polling, exit 0. Memory is
   // already durable (MemoryStore persists synchronously each turn).
   installSignalHandlers(createShutdown({
-    stopPolling: () => { poller.stop(); anvilPinger.stop(); scheduleRunner.stop(); },
+    stopPolling: () => { poller.stop(); anvilPinger.stop(); scheduleRunner.stop(); metricsHeartbeat.stop(); },
     onShutdown: () => { console.log(metrics.format()); writeMetricsSnapshot(paths.metrics, metrics.summary(), Date.now()); }, // flush + persist the final window (DEV-0041, ops-3)
     log: (m) => console.log(m),
     exit: (code) => process.exit(code),
