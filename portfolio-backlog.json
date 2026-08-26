@@ -1067,7 +1067,7 @@
       "id": "safety-audit-4",
       "stream": "datafaucet",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "mcp-forge",
       "task": "[m26] Mirror the trailing-dot SSRF fix to mcp-forge (url-validator.ts is vendored identical Relay<->DataFaucet per its header). On anvil-migration ONLY: apply the same hostname.replace(/.$/,\"\") strip in isUrlSafe + copy the ssrf-adversarial test; run test:unit; commit to anvil-migration, never master. Keeps the two copies identical so the fix merges back."
     },
@@ -1075,7 +1075,7 @@
       "id": "vendor-1",
       "stream": "datafaucet",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "mcp-forge",
       "task": "[m27] Mirror the trailing-dot SSRF fix into mcp-forge url-validator.ts (anvil-migration only): add hostname.replace(/.$/,\"\") before the blocklist/IP checks, matching Relay. Copy test/ssrf-adversarial cases (adapt to node:test). Run test:unit. Commit anvil-migration, NEVER master. (supersedes safety-audit-4)"
     },
@@ -1482,6 +1482,9 @@
     },
     {
       "event": "m26 safety-audit-3 DONE + m26-safety-audit COMPLETE. safety-audit-3: redaction sweep FOUND 2 real gaps — Gemini AQ. keys (unmatched) + Anthropic sk-ant- (generic sk- rule stopped at the hyphen) both survived redactText -> ADDED patterns. Rate-limit verified reset-resistant (hammering in-window stays blocked; recovers only after 60s). +10 tests. SECURITY.md written (SSRF+dangerous-action+redaction+rate-limit+step-caps, each linked to its adversarial test + accepted limits), linked from PORTFOLIO. 458 pass, tsc clean. m26 done_when met: all four surfaces swept, gaps fixed, documented. ROADMAP advanced -> AUTHORED m27-vendor-consistency (the safety fixes landed in Relay but url-validator is vendored-identical to mcp-forge -> copies now DIFFER = the exact drift parity tests catch; mirror + audit all shared libs). Seeded vendor-1/2/3. 23rd self-directed milestone."
+    },
+    {
+      "event": "m27 vendor-1 DONE (mcp-forge anvil-migration, NEVER master; supersedes safety-audit-4). Mirrored Relays trailing-dot SSRF fix into mcp-forge url-validator.ts (hostname.replace(/.$/) strip before blocklist/IP checks) — the vendored-identical copies were drifting after m26. Added adversarial SSRF cases (trailing-dot, decimal/hex IP, IPv6 loopback/mapped/ULA, creds, file/gopher, redis port) to the existing url-validator.test.ts. test:unit 1841 pass/0 fail (+18), tsc clean. Copies re-aligned. call-tested TRUE. vendor-2 = audit whether url-validator + redact-secrets are TRULY identical Relay<->mcp-forge (redactText AQ./sk-ant additions are Relay-side safety.ts, NOT the shared url-validator — likely Relay-local, confirm)."
     }
   ],
   "roadmap": {
