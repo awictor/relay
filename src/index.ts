@@ -2,17 +2,15 @@
 // Per-chat short memory so follow-ups have context. Falls back to a clear message
 // if keys/anvil are missing so it never hangs silently.
 
-import { startPolling, sendMessage, sendTyping, hasToken, type InboundMessage } from "./telegram.js";
+import { startPolling, sendMessage, sendTyping, hasToken } from "./telegram.js";
 import { anvilLive } from "./anvil.js";
-import { runAgent } from "./agent.js";
 import { GeminiClient } from "./llm.js";
 import type { LLMMessage } from "./llm.js";
 import { checkRateLimit, redactText } from "./safety.js";
 import { handleCommand } from "./commands.js";
 import { MemoryStore } from "./lib/memory-store.js";
-import { formatReply } from "./lib/format-reply.js";
-import { formatTurnLog } from "./lib/turn-log.js";
 import { Metrics } from "./lib/metrics.js";
+import { createHandler } from "./handler.js";
 
 const llm = new GeminiClient();
 
@@ -35,52 +33,19 @@ const memory = new MemoryStore({
   maxTurns: MEMORY_TURNS * 2,
 });
 
-async function handle(msg: InboundMessage): Promise<void> {
-  console.log(`[in] ${msg.from}: ${redactText(msg.text).slice(0, 120)}`);
-
-  // Slash commands (/start, /help) reply instantly, no rate-limit/agent needed.
-  const cmd = handleCommand(msg.text);
-  if (cmd) { await sendMessage(msg.chatId, cmd); return; }
-
-  const rl = checkRateLimit(msg.chatId);
-  if (!rl.allowed) {
-    await sendMessage(msg.chatId, `You're sending a lot — give me ${rl.retryAfterSec}s to catch up.`);
-    return;
-  }
-
-  if (!process.env.GEMINI_API_KEY) {
-    await sendMessage(msg.chatId, "I'm not fully configured yet (missing model key). Try again soon.");
-    return;
-  }
-
-  const history = memory.get(msg.chatId) as LLMMessage[];
-  const startedAt = Date.now();
-  try {
-    await sendTyping(msg.chatId); // show "typing…" while the agent works
-    const { reply, steps, tools } = await runAgent(msg.text, { llm }, history);
-    const out = formatReply(reply); // SMS-friendly: render stray JSON as lines, trim length
-    await sendMessage(msg.chatId, out);
-
-    // Append this turn to memory (user + assistant); the store trims to its maxTurns + persists.
-    const next: LLMMessage[] = [...history, { role: "user", content: msg.text }, { role: "assistant", content: out }];
-    memory.set(msg.chatId, next);
-    const elapsedMs = Date.now() - startedAt;
-    console.log(formatTurnLog({ chatId: msg.chatId, steps, tools, elapsedMs, replyChars: out.length, ok: true }));
-    recordTurn({ steps, tools, elapsedMs, ok: true });
-  } catch (e) {
-    const emsg = e instanceof Error ? e.message : String(e);
-    console.error("agent error:", emsg);
-    const elapsedMs = Date.now() - startedAt;
-    console.log(formatTurnLog({ chatId: msg.chatId, steps: 0, tools: [], elapsedMs, replyChars: 0, ok: false, error: emsg }));
-    recordTurn({ steps: 0, tools: [], elapsedMs, ok: false });
-    // Friendlier message for the common transient model-overload case.
-    if (/\b(503|429|UNAVAILABLE|high demand|overloaded|rate)/i.test(emsg)) {
-      await sendMessage(msg.chatId, "My brain's overloaded right now (free-tier model is busy). Try again in a moment.");
-    } else {
-      await sendMessage(msg.chatId, `Sorry — something went wrong: ${emsg}`);
-    }
-  }
-}
+const handle = createHandler({
+  llm,
+  memoryGet: (id) => memory.get(id) as LLMMessage[],
+  memorySet: (id, history) => memory.set(id, history),
+  sendMessage,
+  sendTyping,
+  handleCommand,
+  checkRateLimit,
+  redactText,
+  hasModelKey: () => !!process.env.GEMINI_API_KEY,
+  recordTurn,
+  now: () => Date.now(),
+});
 
 async function main() {
   if (!hasToken()) {
