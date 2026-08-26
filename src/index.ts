@@ -20,6 +20,8 @@ import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunCommand } from "./lib/recipes.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
+import { AlertStore, parseAlertCommand } from "./lib/alerts.js";
+import { checkAlert } from "./alert-runner.js";
 import { parseScheduleFor } from "./lib/schedule.js";
 
 const llm = new GeminiClient();
@@ -61,12 +63,21 @@ const memory = new MemoryStore({
 const schedules = new ScheduleStore({ file: process.env.RELAY_SCHEDULE_FILE ?? "data/relay-schedules.json" });
 const recipes = new RecipeStore({ file: process.env.RELAY_RECIPE_FILE ?? "data/relay-recipes.json" });
 const digests = new DigestStore({ file: process.env.RELAY_DIGEST_FILE ?? "data/relay-digests.json" });
+const alerts = new AlertStore({ file: process.env.RELAY_ALERT_FILE ?? "data/relay-alerts.json" });
 // Run a digest -> composed briefing text (member recipes -> one message). Shared by /run + schedule.
 const digestRunText = (chatId: number, name: string): Promise<string | null> => {
   const d = digests.get(chatId, name);
   if (!d) return Promise.resolve(null);
   return runDigest(d, { llm, resolveRecipe: (c, n) => { const r = recipes.get(c, n); return r ? { task: r.task } : null; }, runAgent, formatReply });
 };
+// Check an alert -> the notify message ONLY if changed (null = silent). Shared by the runner.
+const alertCheck = async (chatId: number, name: string): Promise<string | null> => {
+  const a = alerts.get(chatId, name);
+  if (!a) return null;
+  const r = await checkAlert(a, { llm, runAgent, formatReply, setLast: (c, n, v) => alerts.setLast(c, n, v) });
+  return r.notify ? r.message : null;
+};
+const ALERT_CADENCE = process.env.RELAY_ALERT_CADENCE ?? "every day at 09:00"; // default alert check cadence
 const SCHED_TICK_MS = Number(process.env.RELAY_SCHED_TICK_MS ?? 30_000); // 0 disables
 const scheduleRunner = makeScheduleRunner({
   store: schedules, llm, runAgent, send: sendMessage, formatReply,
@@ -75,6 +86,7 @@ const scheduleRunner = makeScheduleRunner({
   recordTurn, // proactive fires count in the same Metrics as inbound turns (m8)
   maxPerChatPerHour: Number(process.env.RELAY_PROACTIVE_MAX_PER_HOUR ?? 10), // anti-spam (m8)
   digestRun: (chatId, name) => digestRunText(chatId, name), // scheduled digests (m9)
+  alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
 });
 
 const handle = createHandler({
@@ -144,6 +156,18 @@ const handle = createHandler({
     if (!s) return { ok: false, reason: "capped" };
     return { ok: true, kind: s.kind };
   },
+  alertDefine: (chatId, text, now) => {
+    const p = parseAlertCommand(text);
+    if (!p) return { ok: false, reason: "unparsed" };
+    const rec = alerts.add(chatId, p, now);
+    if (!rec) return { ok: false, reason: "capped" };
+    // Auto-schedule the check (marker "alert:<name>"); the runner runs checkAlert on fire.
+    const sp = parseScheduleFor(ALERT_CADENCE, `alert:${rec.name}`, now);
+    if (sp) schedules.add(chatId, sp, now);
+    return { ok: true, name: rec.name };
+  },
+  alertList: (chatId) => alerts.list(chatId).map((a) => ({ name: a.name, task: a.task, lastValue: a.lastValue, threshold: a.threshold })),
+  alertForget: (chatId, name) => alerts.remove(chatId, name),
   sendMessage,
   sendPhoto,
   sendDocument,

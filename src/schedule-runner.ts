@@ -28,6 +28,9 @@ export interface ScheduleRunnerDeps {
   // Digests (m9 digest-3): a scheduled digest stores the task "digest:<name>"; when it fires,
   // run the digest to a composed message instead of the agent. Optional.
   digestRun?: (chatId: number, name: string) => Promise<string | null>;
+  // Alerts (m10 alert-3): a scheduled alert stores "alert:<name>"; on fire, check it and get
+  // back the notify message ONLY if it changed (null = silent, don't send). Optional.
+  alertCheck?: (chatId: number, name: string) => Promise<string | null>;
 }
 
 export interface ScheduleRunner {
@@ -67,9 +70,21 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     // A scheduled digest carries "digest:<name>" — run the digest to a composed briefing
     // instead of the agent. Otherwise a normal scheduled/recipe agent run.
     const digestMatch = s.task.match(/^digest:(.+)$/);
+    const alertMatch = s.task.match(/^alert:(.+)$/);
     let res: { reply: string; steps?: number; tools?: string[] };
-    let sendText: string;
-    if (digestMatch && deps.digestRun) {
+    let sendText: string | null;
+    if (alertMatch && deps.alertCheck) {
+      // Alert: only sends when the watched value changed (null = silent). Always completes
+      // (a daily alert reschedules) so it keeps watching.
+      sendText = await deps.alertCheck(s.chatId, alertMatch[1]!.trim());
+      res = { reply: sendText ?? "" };
+      if (sendText === null) {
+        deps.store.complete(s.id, deps.now());
+        log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, alert: alertMatch[1], ok: true, sent: false })}`);
+        deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
+        return;
+      }
+    } else if (digestMatch && deps.digestRun) {
       const composed = await deps.digestRun(s.chatId, digestMatch[1]!.trim());
       res = { reply: composed ?? "(digest is empty or was removed)" };
       sendText = deps.formatReply(res.reply); // digest text already labeled; no reminder prefix
@@ -79,7 +94,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       const label = s.kind === "daily" ? "⏰ Daily" : "⏰ Reminder";
       sendText = `${label}: ${s.task}\n\n${body}`;
     }
-    await deps.send(s.chatId, sendText);
+    await deps.send(s.chatId, sendText!); // non-null here (alert-silent path returned early)
     noteSend(s.chatId, deps.now());
     deps.store.complete(s.id, deps.now());
     // Observability (m8): structured proactive-run line + Metrics record (same as inbound).

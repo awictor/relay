@@ -52,6 +52,11 @@ export interface HandlerDeps {
   digestRun?: (chatId: number, name: string) => Promise<string | null>;
   digestSchedule?: (chatId: number, name: string, whenClause: string, now: number) =>
     { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" };
+  // Change-alerts (m10 alert-3): "watch <name>: <task>" defines + auto-schedules a check.
+  // All optional. alertDefine parses + stores + schedules (default cadence); returns the cadence.
+  alertDefine?: (chatId: number, text: string, now: number) => { ok: true; name: string } | { ok: false; reason: "unparsed" | "capped" };
+  alertList?: (chatId: number) => Array<{ name: string; task: string; lastValue?: string; threshold?: number }>;
+  alertForget?: (chatId: number, name: string) => boolean;
   checkRateLimit: (chatId: number) => { allowed: boolean; retryAfterSec?: number };
   redactText: (text: string) => string;
   hasModelKey: () => boolean;
@@ -129,6 +134,31 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       const removed = name ? deps.recipeForget(msg.chatId, name) : false;
       await deps.sendMessage(msg.chatId, removed ? `Forgot "${name}".` : "No recipe by that name — see /recipes.");
       return;
+    }
+
+    // /alerts: list watch-and-notify alerts. No agent run.
+    if (first === "/alerts" && deps.alertList) {
+      const list = deps.alertList(msg.chatId);
+      if (!list.length) { await deps.sendMessage(msg.chatId, "No alerts. Set one: \"watch btc: price of bitcoin when it changes by 1000\" — I'll only ping you when it moves."); return; }
+      const lines = list.map((a) => `• ${a.name}${a.threshold ? ` (±${a.threshold})` : ""} — ${a.task}${a.lastValue ? ` [last: ${a.lastValue.slice(0, 40)}]` : ""}`);
+      await deps.sendMessage(msg.chatId, `Your alerts:\n${lines.join("\n")}\n\nRemove with /forget-alert <name>.`);
+      return;
+    }
+
+    // /forget-alert <name>: remove an alert. No agent run.
+    if (first === "/forget-alert" && deps.alertForget) {
+      const name = msg.text.trim().split(/\s+/).slice(1).join(" ").trim();
+      const removed = name ? deps.alertForget(msg.chatId, name) : false;
+      await deps.sendMessage(msg.chatId, removed ? `Stopped watching "${name}".` : "No alert by that name — see /alerts.");
+      return;
+    }
+
+    // "watch <name>: <task>" / "alert me <name>: <task>" -> define + auto-schedule a change-alert.
+    if (deps.alertDefine && /^\s*(?:alert(?:\s+me)?|watch)\s+[^:]+:\s*\S/i.test(msg.text)) {
+      const r = deps.alertDefine(msg.chatId, msg.text, deps.now());
+      if (r.ok) { await deps.sendMessage(msg.chatId, `Watching "${r.name}" — I'll only message you when it changes. See /alerts.`); return; }
+      if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the alert limit — /forget-alert one first."); return; }
+      // unparsed: fall through
     }
 
     // /digests: list saved digests. No agent run.
