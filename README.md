@@ -10,6 +10,10 @@ self-hosted anvil-engine (real Chrome).
 
 > **New here?** [PORTFOLIO.md](PORTFOLIO.md) is the 2-minute map — the one-shared-browser thesis,
 > the three repos and how they connect, what's proven live, and a 5-command guided demo.
+>
+> **Want to just *see* it?** `npm run demo` — type a task at a prompt and watch the real agent drive
+> self-hosted anvil and answer, right in your terminal (no Telegram bot). Needs `GEMINI_API_KEY` +
+> anvil running; prints a clear notice and exits if either is missing.
 
 ## Architecture
 

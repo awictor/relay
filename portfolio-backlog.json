@@ -1035,9 +1035,33 @@
       "id": "demo-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m25] Document npm run demo in README (top, near the PORTFOLIO pointer — its the lowest-friction way to SEE the product) + add it to PORTFOLIO.md guided demo as step 0 (the human-facing one). Note it needs GEMINI_API_KEY + anvil, degrades with a notice otherwise. Closes m25."
+    },
+    {
+      "id": "safety-audit-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m26] SSRF sweep: read src/lib/url-validator.ts (isUrlSafe), enumerate bypass shapes — decimal IP (2130706433), hex/octal octets, IPv6 (::1, ::ffff:127.0.0.1, fc00::/7 ULA), 0.0.0.0, 169.254.169.254 metadata, embedded creds (http://x@internal), non-http(s) protocols (file:/gopher:/data:), and trailing-dot/case host tricks. Write an adversarial test asserting each is refused; FIX any that pass. Report which bypasses existed."
+    },
+    {
+      "id": "safety-audit-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m26] Dangerous-action sweep: read src/safety.ts (isDangerousAction), try obfuscated destructive labels the agent might click — Pay/Buy/Delete/Submit/Transfer/Logout with spacing, casing, unicode lookalikes, synonyms (Purchase, Remove, Confirm order, Send money), and selector-only (no label) cases. Test each; tighten the regex/logic for real misses; document accepted limits (cant catch everything without semantics)."
+    },
+    {
+      "id": "safety-audit-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m26] Redaction + rate-limit sweep: confirm redact-secrets catches the key/token shapes the bot actually handles (Gemini AQ./AIza, Anthropic sk-ant, Telegram bot token) in agent output/logs, and the per-chat rate limit cant be trivially reset. Add any missing shape. Document the safety model (SSRF + dangerous-action + redaction + rate-limit + step caps) in a SECURITY.md, linked from PORTFOLIO. Closes m26."
     }
   ],
   "history": [
@@ -1414,10 +1438,13 @@
     },
     {
       "event": "m25 demo-2 DONE: console-channel demo UX. Added /quit + /exit (writes Bye, onQuit hook -> node wiring closes readline + exit 0, input after quit ignored) + onThinking hook (prints working (driving the browser) when a task is accepted, before the agent runs, so the seconds-long round-trip doesnt look hung). Both optional deps on makeConsoleChannel (tests/older wiring unaffected); nodeConsoleChannel wires them to real stdout/exit. demo.mjs banner updated to /quit. +6 tests (onThinking fires on task, /quit fires onQuit+bye+no-agent-run+no-thinking, /exit alias, post-quit ignored). 388 pass, tsc clean. VERIFIED live: printf /quit | npm run demo -> exit 0 clean, no hang."
+    },
+    {
+      "event": "m25 demo-3 DONE + m25-console-demo COMPLETE. demo-3: README top now has a Want to just see it? npm run demo pointer (lowest-friction product view, needs key+anvil, degrades w/ notice); PORTFOLIO guided demo gained Step 0 - feel the product (npm run demo) before the 5 proof commands. m25 done_when met: one-command zero-Telegram drive of the real agent, exits clean, notice if unconfigured, documented. ROADMAP advanced -> AUTHORED m26-safety-audit (adversarial sweep of SSRF url-validator + dangerous-action guard + redaction/rate-limit; fix gaps, pin with tests, SECURITY.md). Seeded safety-audit-1/2/3. 22nd self-directed milestone. Real user-safety hardening — highest-value non-gated work left now the stack is proven+feelable."
     }
   ],
   "roadmap": {
-    "current": "m25-console-demo",
+    "current": "m26-safety-audit",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1590,6 +1617,13 @@
         "id": "m25-console-demo",
         "goal": "A zero-Telegram, one-command demo of the actual product. Relay has a console channel (RELAY_CHANNEL=console) but no frictionless way for someone to DRIVE the real agent loop from a terminal — you still need to wire index.ts + a bot token mentally. Ship npm run demo: type a task at a prompt, watch the REAL agent (default Gemini) drive anvil and answer, in the console channel — no Telegram bot, no public URL, just a key + anvil. Turns the whole product into a 30-second thing a reviewer can feel, not just read about. CI-safe: clear message if the key/anvil are absent.",
         "done_when": "npm run demo starts an interactive console session that runs the real handler/agent loop over the console channel (type task -> real anvil-driven reply), no Telegram needed; exits cleanly; prints a helpful notice (not a crash) if GEMINI_API_KEY or anvil is absent; documented in README + PORTFOLIO guided demo",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m26-safety-audit",
+        "goal": "Adversarial audit of the agent tool surface. Relay drives a REAL browser for anyone who texts it — the SSRF url-validator + dangerous-action guard are the blast-radius controls, and they have unit tests but no ADVERSARIAL sweep. Systematically try to bypass them (SSRF: decimal/hex/octal IPs, IPv6, redirect-to-internal, DNS-rebind shapes, embedded creds, non-http protocols; dangerous-action: obfuscated pay/delete/submit labels) and fix any gap found. Consumer-trust + real-user-safety hardening — the highest-value non-gated work left now that the stack is proven.",
+        "done_when": "an adversarial test sweep exercises the SSRF guard (isUrlSafe) + the dangerous-action guard (isDangerousAction) against a documented list of bypass shapes; any that get through are FIXED (or documented as accepted with rationale); tests pin every case so a regression cant reopen a hole; tsc + full suite green",
         "status": "todo",
         "owner_gated": false
       }

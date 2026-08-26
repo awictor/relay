@@ -84,6 +84,12 @@ cp .env.example .env                             # fill GEMINI_API_KEY for the l
 # start anvil separately (see anvil-engine repo); default ANVIL_BASE_URL=http://localhost:3000
 ```
 
+**Step 0 — feel the product** (the human-facing one; needs `GEMINI_API_KEY` + anvil up):
+
+```bash
+npm run demo             # type a task; the real agent drives anvil and answers in your terminal
+```
+
 Then five commands walk the whole story (fullest signal when anvil is up + `GEMINI_API_KEY` set;
 each SKIPs cleanly otherwise, so the sequence still runs on a bare machine):
 
