@@ -678,6 +678,9 @@
     },
     {
       "event": "PORTFOLIO INTEGRITY SWEEP + STOP: all 3 repos verified green/clean this run — relay 148 tests, anvil 547 tests (grew from 529 via concurrent /reset+/status work) + build clean, mcp-forge anvil-migration tsc clean. No new concurrent commits since last run (mcp-forge Actions still billing-blocked, last run 08:55 4s-fail). Backlog is genuinely DRY: the only remaining item df-owner-summary is HARD-BLOCKED on gh-billing. Per loop rule STOP is valid (reactive-clean + streams empty + refill yields only cosmetic). NOT padding with invented doc-work. Owner actions required to proceed: (1) fix mcp-forge GitHub billing, (2) merge PR#1, (3) provision VM + docker compose up (pin deploy-v1)."
+    },
+    {
+      "event": "DEV-0025 committed (was left uncommitted by concurrent loop): anvil reachability pinger keeps /status fresh (interval re-probe, not boot-only seed); injectable + unit-tested; index.ts seeds via tick() + start()s it; shutdown stops it (anvilPinger.stop() wired). Caught a transient tsc error mid-write, re-verified clean after the concurrent write settled. 152 full suite pass. Relay grew /reset+/status+pinger this session via concurrent loops; I keep committing+verifying+bug-fixing their output (status ✅/⚠️ prefix fix last run). df-owner-summary STILL billing-blocked. Portfolio green: relay 152, anvil 547, migration tsc clean."
     }
   ]
 }
