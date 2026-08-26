@@ -851,7 +851,7 @@
       "id": "fault-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m18] scripts/e2e-faults.mjs skeleton + anvil-unreachable drill: point ANVIL_BASE_URL at a dead port, run the REAL agent on a scrape task through the handler-equivalent path (runAgent + friendlyError), assert the reply is the friendly browser-down line and NOT a raw ECONNREFUSED, and that it did not throw. SKIP+exit0 if no GEMINI_API_KEY. Wire npm run e2e:faults. Bounded LLM calls."
     },
@@ -859,7 +859,7 @@
       "id": "fault-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m18] Add a blocked/SSRF-URL drill: ask the agent to open a private/blocked URL (e.g. http://169.254.169.254 or http://10.0.0.1), assert the SSRF guard refuses it and the surfaced text is the friendly blocked-link message (not a raw Blocked-URL leak), agent still replies (no crash). Assert classifyFailure would tag it blocked."
     },
@@ -1186,6 +1186,9 @@
     },
     {
       "event": "m17 anvil-ops-3 DONE + m17-anvil-ops COMPLETE. anvil-ops-3: relay status now probes anvil /v1/health (was /v1/live) and prints active/max sessions + warm pool + uptime when the running anvil build reports them; graceful subset for older builds. Live-verified: vs OLD :3000 build -> `sessions 0, up 49057s` (no max/pool, old build); vs NEW :3199 build (MAX=7,POOL=2) -> `sessions 0/7, pool 2/2, up 176s`. README updated. 368 pass, tsc clean. One command (npm run status) now shows the WHOLE stacks health. ROADMAP advanced -> AUTHORED m18-fault-drills (prove degradation under REAL induced failure, not unit mocks — kill anvil/feed blocked URL through the real agent path, assert friendly classification + no crash; CI-safe skip). Seeded fault-1/2/3. 14th self-directed milestone."
+    },
+    {
+      "event": "m18 fault-1+2 DONE: scripts/e2e-faults.mjs (npm run e2e:faults) — real fault-injection drills through the REAL agent, CI-safe SKIP if no GEMINI_API_KEY. Drill 1 anvil-unreachable: set ANVIL_BASE_URL to a dead port BEFORE importing agent (anvil.ts captures BASE at load), run a real scrape errand -> agent degraded gracefully (reply: network error, try again), NO crash, NO raw ECONNREFUSED/host leak. Drill 2 blocked/SSRF (169.254.169.254 metadata) -> agent refused cleanly, no raw Blocked-URL leak. Both also assert classifyFailure/friendlyError tag browser/blocked correctly. LIVE 8/8 assertions pass, exit 0. tsc clean, 368 unit pass. call-tested TRUE. Proves degradation is deploy-proven, not just unit-mock-proven."
     }
   ],
   "roadmap": {

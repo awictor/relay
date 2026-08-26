@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e:live": "tsx scripts/e2e-live.mjs",
+    "e2e:faults": "tsx scripts/e2e-faults.mjs",
     "status": "tsx scripts/status.mjs",
     "clean": "rm -rf dist"
   },
