@@ -979,7 +979,7 @@
       "id": "narrative-2",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m23] Add a Guided demo section to PORTFOLIO.md: the exact command sequence to see it work end-to-end from a clean checkout — npm run preflight (whole-stack GO), npm run bench:latency (real numbers), npm run status (health), npm run e2e:faults (degradation), and (mcp-forge) node scripts/merge-readiness.mjs. What each proves in one line. So a reviewer runs 5 commands and sees the whole story."
     },
@@ -1348,6 +1348,9 @@
     },
     {
       "event": "m23 narrative-1 DONE: PORTFOLIO.md (relay hub) — the 2-min map: thesis (one self-hosted browser both products run on, no vendor), the 3 repos + ASCII of how they connect (anvil-client vendored byte-identical Relay->DataFaucet, parity-tested), whats proven LIVE (Relay e2e:live, DataFaucet e2e:anvil = 2nd product on anvil, e2e:faults, bench:latency, preflight, merge-readiness) with real test counts (anvil 637/relay 370/datafaucet 1823), honest status (proven+gated NOT deployed — owner: Oracle VM + PR#1 merge + gh-billing), + a 5-command Guided demo. Linked from README top. Cited real numbers, no invention."
+    },
+    {
+      "event": "m23 narrative-2 DONE: PORTFOLIO.md Guided demo fleshed out — added a clean-checkout Setup block (clone both repos side-by-side, mcp-forge checkout anvil-migration, npm ci, .env, start anvil) + a What-working-looks-like block with expected output per command (preflight GO 7/7, bench p50s, e2e:faults N/N, status UP sessions X/Y, merge-readiness READY). Reviewer now knows the exact commands AND what green looks like. Reiterated CI-safe SKIP semantics."
     }
   ],
   "roadmap": {
