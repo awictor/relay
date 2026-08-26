@@ -499,9 +499,9 @@
       "id": "sched-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m4] src/lib/schedule.ts: pure parse + store. parseSchedule(text)-> {kind:once|daily, whenMs|hourMin, task} or null (natural phrases: \"in 10 min\", \"tomorrow 9am\", \"every morning\"). ScheduleStore (JSON file, gitignored, like MemoryStore): add/list/remove/dueNow(nowMs). Unit-test parse + store + dueNow, offline, injectable clock."
+      "task": "[m4] src/lib/schedule.ts: pure parse + store. parseSchedule(text)-> {kind:once|daily, whenMs|hourMin, task} or null (natural phrases: \"in 10 min\", \"tomorrow 9am\", \"every morning\"). ScheduleStore (JSON file, gitignored, like MemoryStore): add/list/remove/dueNow(nowMs). Unit-test parse + store + dueNow, offline, injectable clock. [DONE: src/lib/schedule.ts parseSchedule (once/daily/tomorrow, null-safe) + ScheduleStore (file-persist, cap, dueNow, once-drop/daily-reschedule); 12 tests; 233 suite pass]"
     },
     {
       "id": "sched-2",
@@ -716,6 +716,9 @@
     },
     {
       "event": "AUTONOMOUS GOAL-ADVANCEMENT built in: added roadmap{current,milestones} to backlog + STAGE GOAL to /agent-loop command. m1-synergy=owner_blocked (code done, needs billing+merge), m2-relay-agent + m3-relay-harden=done. Advanced current to m4-scheduled (proactive/scheduled tasks — reactive->autonomous, the real Instinct-parity gap, fully advanceable on free infra). Seeded sched-1..4. Roadmap continues m5-channels, m6-anvil-depth. Loop now advances its own goal when a milestone converges/owner-gates instead of idling; exhausted roadmap => author the next milestone."
+    },
+    {
+      "event": "m4 sched-1 done: schedule parse + persistent store (src/lib/schedule.ts). parseSchedule handles relative (in N min/hr/day), daily (every morning / every day at 8pm), and tomorrow-at-time; returns null for non-schedule or task-less input. ScheduleStore JSON-file persisted (gitignored), per-chat cap, dueNow(now), complete() drops once / reschedules daily. 12 unit tests, full suite 233 pass, tsc clean. Next m4: sched-2 (runner that fires due schedules through runAgent + texts unprompted)."
     }
   ],
   "roadmap": {
