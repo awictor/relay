@@ -699,9 +699,9 @@
       "id": "anvil-retry-1",
       "stream": "anvil",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "anvil",
-      "task": "[m12] Transient-navigation retry in actions.ts navigate(): on a transient failure (timeout/ECONNRESET/net::ERR_/5xx-ish nav error) retry once with a short backoff before throwing; deterministic failures (blocked protocol, bad selector) throw immediately. Extract an isTransientNavError() helper (mirror Relay src/anvil.ts isTransientError taxonomy). Config bound ANVIL_NAV_RETRIES (default 1, min 0). Unit-test the classifier + that a retry happens once then succeeds / gives up (mock page.goto)."
+      "task": "[m12] Transient-navigation retry in actions.ts navigate(): on a transient failure (timeout/ECONNRESET/net::ERR_/5xx-ish nav error) retry once with a short backoff before throwing; deterministic failures (blocked protocol, bad selector) throw immediately. Extract an isTransientNavError() helper (mirror Relay src/anvil.ts isTransientError taxonomy). Config bound ANVIL_NAV_RETRIES (default 1, min 0). Unit-test the classifier + that a retry happens once then succeeds / gives up (mock page.goto). [DONE: navigate() retries once on transient nav error (ANVIL_NAV_RETRIES default 1); isTransientNavError mirrors Relay taxonomy; config wired; 3 classifier + config tests; 635 suite]"
     },
     {
       "id": "anvil-oplog-1",
@@ -980,6 +980,9 @@
     },
     {
       "event": "m11-consolidate COMPLETE: cons-1 README full-surface refresh, cons-2 whole-product journey test (features compose), cons-3 demo transcript (docs/DEMO.md). Relay is proven-composing, documented, launch-legible (336 tests). ROADMAP advanced -> AUTHORED m12-anvil-resilience (shift back to the shared engine: transient-navigation retry + per-op structured log; idle since m6). Seeded anvil-retry-1/oplog-1/retry-doc. 8th self-directed milestone. m1-synergy still owner_blocked."
+    },
+    {
+      "event": "m12 anvil-retry-1 done: transient-navigation retry in anvil. navigate() retries once (ANVIL_NAV_RETRIES default 1, clamp 0..5) on a transient nav error (timeout/net::ERR_/reset/5xx/frame-detached) before failing; deterministic (blocked-protocol/invalid-url/ERR_ABORTED) fail fast. isTransientNavError exported, mirrors Relay src/anvil.ts isTransientError so both sides share the taxonomy. config->app->SessionActions. build clean, 635 anvil suite pass. Next m12: anvil-oplog-1 (per-op structured [anvil] log)."
     }
   ],
   "roadmap": {
