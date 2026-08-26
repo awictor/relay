@@ -15,6 +15,7 @@
     "e2e:faults": "tsx scripts/e2e-faults.mjs",
     "status": "tsx scripts/status.mjs",
     "preflight": "node scripts/preflight.mjs",
+    "bench:latency": "tsx scripts/bench-latency.mjs",
     "clean": "rm -rf dist"
   },
   "dependencies": {

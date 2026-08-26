@@ -923,7 +923,7 @@
       "id": "thesis-1",
       "stream": "anvil",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m21] scripts/bench-latency.mjs: measure REAL anvil end-to-end latency for the canonical errands (session create+release, scrape example.com, fetch_json open-meteo, browse->read) over N runs (default 10), report p50/p95/avg per errand + cold-vs-warm if a pool is on. SKIP+exit0 if anvil down. Reuse relay src/anvil.ts. Print a clean table."
     },
@@ -1279,6 +1279,9 @@
     },
     {
       "event": "m20 preflight-3 DONE + m20-deploy-preflight COMPLETE. preflight-3: README Deploy-readiness section — table of all 7 checks + what each proves, SKIP-not-fail semantics, GREEN=code-ready(only host+secrets left), cross-link DEPLOY.md; added npm run preflight to Verify block. 369 unit pass, tsc clean. m20 done_when met: one GO/NO-GO across the whole stack, degrades offline, documented. ROADMAP advanced -> AUTHORED m21-thesis-proof (quantify no-vendor thesis with REAL measured anvil latency vs vendor pricing + honest break-even — credibility artifact). Seeded thesis-1/2/3. 17th self-directed milestone. NOTE: portfolio is mature — all deploy steps genuinely owner-gated (Oracle VM, merge PR#1, gh-billing); m21 is real GTM value, not filler, and fully offline-advanceable."
+    },
+    {
+      "event": "m21 thesis-1 DONE: scripts/bench-latency.mjs (npm run bench:latency) measures REAL anvil end-to-end latency via the product src/anvil.ts client, N runs (default 10), p50/p95/avg + min/max per errand, one warm-up not counted, SKIP+exit0 if anvil down. MEASURED (local anvil, 10 runs): session create+release p50 244ms, scrape(example.com) p50 923ms (incl anvils ~600ms client-render settle), fetch_json(open-meteo) p50 155ms, browse+read p50 326ms. tsc clean. call-tested TRUE. These are the real numbers thesis-2 THESIS.md will put against vendor per-session pricing."
     }
   ],
   "roadmap": {
