@@ -83,9 +83,9 @@
     {
       "id": "syn-1f",
       "repo": "datafaucet",
-      "status": "todo",
+      "status": "done",
       "value": "medium",
-      "task": "Harden anvil HAR capture: (1) verify vs a real API-heavy SPA (jsonplaceholder homepage is static -> only 1 endpoint captured); (2) the puppeteer path clicks safe buttons to trigger more XHRs — anvil path only navigates+reads links; decide if anvil needs click-through via /v1/actions/click behind a DANGEROUS guard, or if nav-only is acceptable."
+      "task": "Harden anvil HAR capture: (1) verify vs a real API-heavy SPA (jsonplaceholder homepage is static -> only 1 endpoint captured); (2) the puppeteer path clicks safe buttons to trigger more XHRs — anvil path only navigates+reads links; decide if anvil needs click-through via /v1/actions/click behind a DANGEROUS guard, or if nav-only is acceptable. [DONE: live-tested vs real XHR site (reqres.in) — nav-only captures XHRs, click-through NOT needed. Real gap was analytics leaking via DEV-0008 responseContentType; added NOISE patterns (google collect, segment/amplitude/mixpanel, *.stripe.com, ahrefs, /track, /pixel). 8 filter tests, 10 anvil+filter pass]"
     },
     {
       "id": "syn-3b",
@@ -249,9 +249,17 @@
       "id": "syn-1k",
       "stream": "synergy",
       "value": "low",
+      "status": "done",
+      "repo": "datafaucet",
+      "task": "Concurrent-loop work (DEV-0008) is UNCOMMITTED on anvil-migration: modified auto-scan/route.ts + capture-filter.ts + anvil-capture.test.ts to capture API requests by responseContentType (JSON response header) not just request markers. Verify that change: run its test, tsc, confirm browserbase path unchanged, then commit it to anvil-migration (do NOT leave dirty). If broken, fix or revert. [DONE (moot): DEV-0008 was committed by its own loop (a3672f93); branch clean, verified green]"
+    },
+    {
+      "id": "syn-1l",
+      "stream": "synergy",
+      "value": "low",
       "status": "todo",
       "repo": "datafaucet",
-      "task": "Concurrent-loop work (DEV-0008) is UNCOMMITTED on anvil-migration: modified auto-scan/route.ts + capture-filter.ts + anvil-capture.test.ts to capture API requests by responseContentType (JSON response header) not just request markers. Verify that change: run its test, tsc, confirm browserbase path unchanged, then commit it to anvil-migration (do NOT leave dirty). If broken, fix or revert."
+      "task": "Optional capture polish: the capture check-regex in verification over-flagged api.paritydeals.com (a real third-party deals API on reqres.in) as noise-ish. It was correctly KEPT by the actual filter (only a test-harness heuristic flagged it). No code bug — but consider whether cross-origin third-party APIs should be captured at all for an MCP built from ONE target site, or filtered to the target host + its api subdomain. Decide + document; low priority."
     }
   ],
   "history": [
@@ -328,6 +336,9 @@
     },
     {
       "event": "syn-1i done: anvil crawl coverage (tests/integration/anvil-crawl.test.ts) — multi-page enqueue, dedup, MAX_PAGES=10 bound, and session-create-500 error+no-leak. 2 tests, wired into test:unit, stable across 5 runs (one earlier fail was a flaky cold-start race, not reproduced). NOTE: found uncommitted DEV-0008 work (responseContentType capture) on the branch from a concurrent loop -> refilled syn-1k to verify+commit it. Also refilled syn-1j (make crawl settle interval configurable so the ~12s test runs sub-second)."
+    },
+    {
+      "event": "syn-1f done: live-tested anvil capture vs a real XHR-firing site (reqres.in) — nav-only DOES surface XHRs, so click-through is NOT needed (decision made on evidence). Found+fixed a real leak: DEV-0008 responseContentType classification let analytics beacons (that answer JSON) through; added NOISE host/path patterns (google collect, segment/amplitude/mixpanel/clarity/heap/datadog, *.stripe.com, ahrefs, /track, /pixel). Shared filter so browserbase path benefits too. 8 filter tests + 10 anvil pass. syn-1k marked done (moot — DEV-0008 committed by its own loop). Refilled syn-1l (cross-origin third-party API capture policy, low)."
     }
   ]
 }
