@@ -80,6 +80,16 @@ The live e2e needs `.env` filled (`GEMINI_API_KEY`) and anvil reachable at `ANVI
 (default `http://localhost:3000`). It drives the real agent, asserts it used a fetch tool +
 replied from real data, and exits non-zero on failure — a one-command deploy smoke test.
 
+## Shared anvil client (vendoring contract)
+
+`src/lib/anvil-client.ts` (session-URL builder + transient-error taxonomy) is the **canonical**
+copy of the anvil connect logic; it's **vendored byte-identical** into DataFaucet
+(`mcp-forge/src/lib/anvil-client.ts`) so both products connect to anvil the same way — the
+"one shared browser" thesis, deduplicated. It's a vendored copy (not an npm package) because
+the repos are separate + free-infra. **To change it: edit here, copy to mcp-forge, run both
+suites** — `test/anvil-client-parity.test.ts` (here) and `tests/unit/anvil-client-parity.test.ts`
+(there) fail if the two drift.
+
 ## Autonomous development
 
 This repo is developed by the `/relay-loop` command (see `../.claude/commands/relay-loop.md`),
