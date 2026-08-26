@@ -571,9 +571,33 @@
       "id": "anvil-bench-1",
       "stream": "anvil",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "anvil",
       "task": "[m6] Bench script (scripts/bench-pool.mjs or test) that times N sequential navigate+scrape ops with pooling on vs off against a real local page, prints the latency delta. Proves the pooling win is real, not assumed. Live (needs Chrome)."
+    },
+    {
+      "id": "recipe-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m7] src/lib/recipes.ts: RecipeStore (JSON file, gitignored, like ScheduleStore) — add(chatId,{name,task,schedule?})/get(chatId,name)/list(chatId)/remove(chatId,name); name unique per chat, cap per chat. Pure parse: parseRecipeCommand(text) recognizes \"save this as <name>\" / \"save <name>: <task>\" -> {name,task}. Unit-test store + parse offline."
+    },
+    {
+      "id": "recipe-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m7] Handler routing: \"save <name>: <task>\" -> recipeAdd (confirm); /recipes lists saved; /run <name> -> fetch recipe + runAgent(task) + reply (reuse the normal agent path); /forget <name> removes. All short-circuit before the generic agent. Optional deps on HandlerDeps (older wiring valid). HELP/START updated. Unit-test the handler branches (mock store)."
+    },
+    {
+      "id": "recipe-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m7] Scheduled recipes: if a recipe has a schedule, register it with ScheduleStore so the runner fires it (task = recipe task). \"every morning run <name>\" or save-with-schedule. Wire recipe->schedule at save time; a fired scheduled recipe texts the result unprompted. Unit-test the recipe->schedule bridge; live e2e (scripts/e2e-recipe.mjs): save a recipe w/ ~2s schedule -> runner fires it -> reply."
     }
   ],
   "history": [
@@ -788,10 +812,13 @@
     },
     {
       "event": "m6 anvil-pool-1 (verified already-built: BrowserPool warm-reuse behind ANVIL_POOL_SIZE, default off, 11 tests) + anvil-caps-1 done (per-session page cap ANVIL_MAX_PAGES_PER_SESSION default 20, openPage rejects over cap, protects shared deploy from runaway tabs; 614 anvil suite pass). Next m6: anvil-bench-1 (pooling latency bench, live/Chrome)."
+    },
+    {
+      "event": "m6-anvil-depth COMPLETE (pool verified + caps + bench: warm acquire ~198x faster than cold launch, proven live). ROADMAP EXHAUSTED (original m1-m6 all done/owner-blocked) -> AUTHORED m7-recipes: saved reusable task recipes (teach Relay once, re-run by name or schedule) — compounding product value on top of the scheduler+extract. Seeded recipe-1/2/3. This is STAGE GOAL step 3: loop invented its own next milestone with zero owner input. m1-synergy still owner_blocked (billing/merge)."
     }
   ],
   "roadmap": {
-    "current": "m6-anvil-depth",
+    "current": "m7-recipes",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -831,6 +858,13 @@
         "id": "m6-anvil-depth",
         "goal": "anvil depth both products need: session pooling/reuse, stealth hardening, per-session resource caps — measured against real sites",
         "done_when": "pooling + caps shipped with tests + a bench script showing reuse latency win",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m7-recipes",
+        "goal": "Relay saved recipes: a user teaches Relay a task once (\"track the price on <url>\" / \"summarize <site> daily\") and names it; Relay stores the recipe (task template + optional schedule) and can re-run it by name or on schedule. Compounding product value — turns one-off asks into reusable, personal automations. Builds on ScheduleStore + extract/compare. Free-infra: JSON file store like schedules.",
+        "done_when": "recipe parse/store (name+task+optional schedule) + /recipes list + /run <name> + \"save this as <name>\" routing + a scheduled recipe fires via the runner; offline unit+wiring tests + a live e2e",
         "status": "todo",
         "owner_gated": false
       }
