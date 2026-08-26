@@ -174,14 +174,6 @@
       "task": "Persist per-chat memory across restarts (currently in-memory Map, lost on restart). Simple JSON file or sqlite; bounded. Unit-test load/save. Keeps the agent context after a redeploy. [DONE (prior loop, DEV-0001): src/lib/memory-store.ts MemoryStore behind interface, wired into src/index.ts via RELAY_MEMORY_FILE=data/relay-memory.json (gitignored), write-through + maxTurns trim; test/memory-store.test.ts 6 tests green; full relay suite 29 pass]"
     },
     {
-      "id": "relay-mem-e2e",
-      "stream": "relay",
-      "value": "low",
-      "status": "todo",
-      "repo": "relay",
-      "task": "Prove memory persistence survives a real restart: script that (1) MemoryStore.set(chatA, turns) -> new MemoryStore instance on same file -> assert get(chatA) returns the turns (simulates process restart). Unit-level already covers load/save; this asserts the cross-instance file round-trip explicitly. Offline, no Telegram."
-    },
-    {
       "id": "relay-tools",
       "stream": "relay",
       "value": "medium",
@@ -345,9 +337,17 @@
       "id": "relay-mem-e2e",
       "stream": "relay",
       "value": "low",
+      "status": "done",
+      "repo": "relay",
+      "task": "Prove memory persistence survives a real restart: script that (1) MemoryStore.set(chatA, turns) -> new MemoryStore instance on same file -> assert get(chatA) returns the turns (simulates process restart). Unit-level already covers load/save; this asserts the cross-instance file round-trip explicitly. Offline, no Telegram. [DONE: base reload round-trip was already covered (test line 17); added eviction-survives-restart, updated-timestamp-survives-reload (LRU correct post-restart), and empty-set-clear-survives-restart; 9 mem tests, 104 suite pass]"
+    },
+    {
+      "id": "relay-index-test",
+      "stream": "relay",
+      "value": "low",
       "status": "todo",
       "repo": "relay",
-      "task": "[still open] Cross-instance restart round-trip proof for MemoryStore: set(chatA,turns) -> new MemoryStore on same file -> get(chatA) returns turns. Offline. (unit tests cover load/save; this asserts the process-restart survival explicitly.)"
+      "task": "src/index.ts (the message handler wiring: command check -> rate limit -> agent -> formatReply -> memory.set -> [out]/[metrics]) has no direct test. Extract the per-message handler into a testable function (deps injected: llm, memory, sendMessage, sendTyping) and unit-test the wiring: a command short-circuits the agent, a rate-limited chat gets the limit msg, a normal msg records a turn + persists memory. Offline."
     }
   ],
   "history": [
@@ -460,6 +460,9 @@
     },
     {
       "event": "relay-readme-status done: README updated from stale (scaffold/agent-unbuilt) to shipped reality — feature-complete Status block (6 tools + JSON-LD fallback, SSRF/rate/step caps + transient retry, persistent memory, SMS formatting, [out]/[metrics] observability, Gemini failover behind adapter, 100+ tests, DEPLOY.md runbook) + fixed architecture tools line + run note. Docs-only, suite 101 pass. Backlog now entirely [low] cleanup/proof items; owner-gated work (PR#1 merge, VM provision) unchanged."
+    },
+    {
+      "event": "relay-mem-e2e done: the base restart round-trip was already covered; added the untested durability interactions a 24/7 deploy relies on — eviction persists across restart (no resurrection), updated-timestamp survives reload (LRU ordering correct post-restart), empty-history clear survives restart. 3 new tests, 104 full suite pass. Deduped the double entry. Refilled relay-index-test (extract + unit-test the index.ts message-handler wiring — the one untested integration seam)."
     }
   ]
 }
