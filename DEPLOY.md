@@ -42,13 +42,22 @@ You need three secrets first (only you can create these — login walls):
    ANVIL_API_KEY=some-long-random-string
    ```
 
-6. **Launch**:
+6. **Verify the images build** (before launching — catches a missing/ignored `dist/`
+   without touching your running setup):
+   ```bash
+   docker compose build              # both images must assemble cleanly
+   ```
+   Gotcha: each image ships **pre-built** `dist/` — you must `npm run build` in BOTH
+   repos (step 4) AND `dist/` must NOT be in that repo's `.dockerignore`. If `dist/api.js`
+   / `dist/index.js` is absent at build time, the container starts with nothing to run.
+
+7. **Launch**:
    ```bash
    docker compose up -d --build
    docker compose logs -f relay      # watch it come up; "Relay polling Telegram…"
    ```
 
-7. **Test**: text your bot on Telegram ("top story on Hacker News"). It should
+8. **Test**: text your bot on Telegram ("top story on Hacker News"). It should
    reply after driving anvil.
 
 Auto-restart on reboot is handled by `restart: unless-stopped` in the compose file.
