@@ -515,9 +515,9 @@
       "id": "sched-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m4] Handler + commands: a /remind or natural \"remind me to X in 10m\" routes to schedule.add + confirms; /schedules lists pending; /cancel <n> removes. Update HELP/START + README. Unit-test the handler branch (mock store)."
+      "task": "[m4] Handler + commands: a /remind or natural \"remind me to X in 10m\" routes to schedule.add + confirms; /schedules lists pending; /cancel <n> removes. Update HELP/START + README. Unit-test the handler branch (mock store). [DONE: handler routes remind-me/every-X -> scheduleAdd (confirm/unparsed-fallthrough/capped), /schedules list, /cancel id|all; wired index.ts; HELP/START updated; 10 tests; 249 suite pass]"
     },
     {
       "id": "sched-4",
@@ -722,6 +722,9 @@
     },
     {
       "event": "m4 sched-2 done: scheduled-task runner (src/schedule-runner.ts). Polls ScheduleStore.dueNow, runs the agent on each due task, texts the chat UNPROMPTED (Reminder/Daily), drops once/reschedules daily. Re-entrancy guard prevents double-fire on a slow agent; a failed run completes (no storm). Injectable -> 6 unit tests w/ mock clock+agent. Wired into index.ts (RELAY_SCHED_TICK_MS default 30s, 0 disables) + stopped in shutdown. Added the 2 env vars to .env.example (DEV-0055 parity gate caught it). 239 full suite pass. Relay is now PROACTIVE — reactive->autonomous jump done at the engine level. Next m4: sched-3 (handler/commands: route remind-me + /schedules + /cancel)."
+    },
+    {
+      "event": "m4 sched-3 done: schedule commands + natural routing in the handler. remind me to X in 10m / every morning Y -> scheduleAdd (confirms; unparsed -> agent; capped -> warn); /schedules lists w/ ids; /cancel id|all removes. Wired in index.ts via parseSchedule + ScheduleStore; all schedule deps OPTIONAL on HandlerDeps so old wiring stays valid. HELP/START document it. 10 new handler tests, 249 full suite pass, tsc clean. m4 ~75% (3/4). Next: sched-4 (live e2e: schedule near-future task -> runner fires + replies)."
     }
   ],
   "roadmap": {
