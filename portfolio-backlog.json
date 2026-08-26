@@ -148,9 +148,9 @@
       "id": "syn-2c",
       "stream": "synergy",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "datafaucet",
-      "task": "Live-view interactivity: anvil /v1/view is read-only MJPEG (no click injection like Browserbase debugger). Either (a) document the read-only limit in inline-browser.tsx UI when backend=anvil, or (b) add a lightweight click-forward: overlay captures coords -> POST anvil /v1/actions/click-at (needs a new anvil endpoint by pixel). Decide + spec."
+      "task": "Live-view interactivity: anvil /v1/view is read-only MJPEG (no click injection like Browserbase debugger). Either (a) document the read-only limit in inline-browser.tsx UI when backend=anvil, or (b) add a lightweight click-forward: overlay captures coords -> POST anvil /v1/actions/click-at (needs a new anvil endpoint by pixel). Decide + spec. [DONE option-a: start route returns interactive:false in anvil mode; inline-browser.tsx shows a View-only note above the live panel; browserbase default unchanged; tsc+build green, anvil-browse test asserts it]"
     },
     {
       "id": "syn-3c",
@@ -603,6 +603,9 @@
     },
     {
       "event": "relay-tag-doc-status done: STATUS.md now references the deploy-v1 reproducible-deploy tags. NOTE: loop has CONVERGED — 46 items done, remaining 3 todos are datafaucet DESIGN decisions (syn-2c interactive live-view, syn-1l third-party API capture policy) best made by Alex, + df-owner-summary (blocked on gh-billing). Relay/anvil/migration all shipped, tested, CI-gated, tagged. Not refilling with cosmetic doc-about-doc; the productive autonomous surface is exhausted until an owner action (merge PR#1 / provision VM / fix billing) or a new goal opens work."
+    },
+    {
+      "event": "syn-2c done (option a - document the limit): anvil start route returns interactive:false; inline-browser.tsx renders a View-only note above the MJPEG panel so users arent confused that clicks dont register (anvil live-view is read-only, no click-injection). Browserbase omits the flag -> stays interactive, UI unchanged. tsc clean, next build green (1727 pages), anvil-browse test asserts interactive:false. Chose (a) over (b) click-forward: read-only view is fine for the capture use-case + avoids a new anvil pixel-click endpoint. Remaining: syn-1l (no-op, verification-only design note), df-owner-summary (blocked on gh-billing)."
     }
   ]
 }
