@@ -62,6 +62,9 @@ export interface HandlerDeps {
   redactText: (text: string) => string;
   hasModelKey: () => boolean;
   recordTurn: (t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean }) => void;
+  // Count a slash-command invocation (DEV-0108). Optional so existing callers/tests need not pass it;
+  // commands still short-circuit before the agent — this only tallies which are used.
+  recordCommand?: (name: string) => void;
   now: () => number;
   // Optional override so tests don't hit the real agent loop.
   runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array }>;
@@ -79,6 +82,9 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // /reset (alias /clear): wipe THIS chat's memory. Needs chatId, so it's handled here rather
     // than in the pure handleCommand. Short-circuits before rate-limit/agent, like other commands.
     const first = msg.text.trim().toLowerCase().split(/\s+/)[0]?.split("@")[0];
+    // DEV-0108: tally slash-command usage (a separate metrics axis; commands still short-circuit
+    // before the agent below). Any leading /token counts — /help, /start, /reset, /forget-digest, etc.
+    if (first && first.startsWith("/")) deps.recordCommand?.(first);
     if (first === "/reset" || first === "/clear") {
       const had = deps.memoryClear(msg.chatId);
       await deps.sendMessage(msg.chatId, had ? "Cleared our conversation — starting fresh." : "Nothing to clear — we've got no history yet.");

@@ -91,4 +91,35 @@ describe("handler smoke (real memory + metrics + commands)", () => {
     expect(sent[0]).toMatch(/what I can do/i); // real HELP text
     expect(metrics.summary().turns).toBe(0);
   });
+
+  // DEV-0108: slash commands are tallied via recordCommand (a separate axis from turns), and the
+  // agent path still records a turn, not a command.
+  it("records slash-command usage separately from agent turns", async () => {
+    const memory = new MemoryStore({ file: tmpFile() });
+    const metrics = new Metrics();
+    const handle = createHandler({
+      llm: {} as never,
+      memoryGet: (id) => memory.get(id) as LLMMessage[],
+      memorySet: (id, h) => memory.set(id, h),
+      memoryClear: (id) => memory.delete(id),
+      sendMessage: async () => {},
+      sendTyping: async () => {},
+      handleCommand,
+      checkRateLimit: () => ({ allowed: true }),
+      redactText: (t) => t,
+      hasModelKey: () => true,
+      recordTurn: (t) => metrics.record(t),
+      recordCommand: (name) => metrics.recordCommand(name),
+      now: () => 0,
+      runAgentFn: async () => ({ reply: "echo", steps: 1, tools: [] }),
+      log: () => {},
+    });
+    await handle(msg("/help"));
+    await handle(msg("/reset"));
+    await handle(msg("/help@relaybot")); // bot-suffix still normalizes to /help
+    await handle(msg("plain question")); // agent turn, NOT a command
+    const s = metrics.summary();
+    expect(s.commands).toEqual({ "/help": 2, "/reset": 1 });
+    expect(s.turns).toBe(1); // only the plain question
+  });
 });
