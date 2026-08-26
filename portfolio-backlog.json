@@ -217,9 +217,17 @@
       "id": "relay-onboarding",
       "stream": "relay",
       "value": "medium",
+      "status": "done",
+      "repo": "relay",
+      "task": "Update /help + /start (src/commands.ts) and README to advertise the new capabilities (extract, compare, search) with example texts a user can send (e.g. \"extract the price and title from <url>\", \"compare price across these 3 links\", \"find newest HN posts about X\"). Keeps the product legible to real users now that it does more than scrape. [DONE: /start + /help advertise extract/compare/search with example texts; README gains What-you-can-text-it section; commands test green]"
+    },
+    {
+      "id": "relay-reply-format",
+      "stream": "relay",
+      "value": "medium",
       "status": "todo",
       "repo": "relay",
-      "task": "Update /help + /start (src/commands.ts) and README to advertise the new capabilities (extract, compare, search) with example texts a user can send (e.g. \"extract the price and title from <url>\", \"compare price across these 3 links\", \"find newest HN posts about X\"). Keeps the product legible to real users now that it does more than scrape."
+      "task": "Reply formatting for SMS: extract/compare return JSON to the model, but the user gets a phone text. Add guidance (system prompt) + a light post-format so compare results become a short readable list (e.g. \"A: $10 | B: $20\") not raw JSON, and long extracts get trimmed. Unit-test a formatter that turns a compare JSON array into <=N lines. Keep it deterministic + LLM-agnostic."
     }
   ],
   "history": [
@@ -287,6 +295,9 @@
     },
     {
       "event": "relay-search-flow done: search tool + anvil.discoverLinks — open a listing/search URL, harvest result links (same-host preferred, drops search page, SSRF-filtered, capped 20), then extract/compare across them. User need not paste URLs. 4 new tests + 51 full suite pass, tsc clean, live e2e green (37 real hrefs harvested from HN). Relay now: scrape->extract->compare->search, a full data-fetch agent. Refilled relay-search-e2e (full chain e2e) + relay-onboarding (advertise new tools in /help + README)."
+    },
+    {
+      "event": "relay-onboarding done: /start + /help + README now advertise the extract/compare/search tools with concrete example texts a user can send. Product is legible again after 3 capability additions. commands test green, tsc clean. Refilled relay-reply-format (turn JSON tool output into readable SMS-friendly replies)."
     }
   ]
 }
