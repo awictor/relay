@@ -1,0 +1,18 @@
+# Keep the build context tiny + never ship local state/secrets to the daemon.
+# The Dockerfile only COPYs package*.json + dist/, but the whole context is still
+# uploaded without this — so exclude everything that isn't needed to build the image.
+node_modules
+data/
+.env
+.env.*
+!.env.example
+.git
+.github
+test/
+scripts/
+src/
+*.md
+.gitignore
+tsconfig.json
+vitest.config.*
+portfolio-backlog.json
