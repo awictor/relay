@@ -337,9 +337,17 @@
       "id": "relay-readme-status",
       "stream": "relay",
       "value": "low",
+      "status": "done",
+      "repo": "relay",
+      "task": "README currently says the full agent lands via the /relay-loop backlog — stale. Update the README status/architecture to reflect the shipped reality: 6 fetch tools (scrape/browse/extract/compare/search/fetch_json) + JSON-LD fallback, persistent memory, safety caps, SMS formatting, transient retry, per-turn [out] + [metrics] observability, 101 tests. Small doc-accuracy fix so the repo represents itself correctly to Alex/readers. [DONE: README Status + run note + architecture updated to shipped reality (6 tools, retry, memory, SMS format, [out]/[metrics], 101 tests, DEPLOY.md); suite 101 pass]"
+    },
+    {
+      "id": "relay-mem-e2e",
+      "stream": "relay",
+      "value": "low",
       "status": "todo",
       "repo": "relay",
-      "task": "README currently says the full agent lands via the /relay-loop backlog — stale. Update the README status/architecture to reflect the shipped reality: 6 fetch tools (scrape/browse/extract/compare/search/fetch_json) + JSON-LD fallback, persistent memory, safety caps, SMS formatting, transient retry, per-turn [out] + [metrics] observability, 101 tests. Small doc-accuracy fix so the repo represents itself correctly to Alex/readers."
+      "task": "[still open] Cross-instance restart round-trip proof for MemoryStore: set(chatA,turns) -> new MemoryStore on same file -> get(chatA) returns turns. Offline. (unit tests cover load/save; this asserts the process-restart survival explicitly.)"
     }
   ],
   "history": [
@@ -449,6 +457,9 @@
     },
     {
       "event": "relay-metrics done: rolling in-memory health metrics (src/lib/metrics.ts) — turns, ok/fail, avg steps, tool histogram, p50/p95 latency (bounded 500-sample ring, O(1) mem); index.ts records each turn + logs a [metrics] summary every RELAY_METRICS_EVERY (default 50). 5 tests + 101 full suite pass, tsc clean. Relay 24/7 deploy now has both per-turn + aggregate observability. Refilled relay-readme-status (README says the agent is unbuilt — stale; update to shipped reality)."
+    },
+    {
+      "event": "relay-readme-status done: README updated from stale (scaffold/agent-unbuilt) to shipped reality — feature-complete Status block (6 tools + JSON-LD fallback, SSRF/rate/step caps + transient retry, persistent memory, SMS formatting, [out]/[metrics] observability, Gemini failover behind adapter, 100+ tests, DEPLOY.md runbook) + fixed architecture tools line + run note. Docs-only, suite 101 pass. Backlog now entirely [low] cleanup/proof items; owner-gated work (PR#1 merge, VM provision) unchanged."
     }
   ]
 }
