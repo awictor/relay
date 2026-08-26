@@ -32,9 +32,11 @@ header). When unset, omit both.
 
 ## HAR capture (DataFaucet auto-scan path)
 `POST /v1/har/start`, `POST /v1/actions/navigate`, `POST /v1/actions/evaluate` (link discovery),
-`POST /v1/har/stop`, `GET /v1/har` → `{ entries: [{ url, method, requestHeaders, requestBody?,
-resourceType }] }`. HAR entries record request headers/body/resourceType; response content-type is
-NOT yet captured (DEV-0006 backlog) — consumers must re-fetch to classify a JSON endpoint until then.
+`POST /v1/har/stop`, `GET /v1/har` → `{ entries: [{ url, method, status, requestHeaders, requestBody?,
+resourceType, responseContentType?, responseBodyPreview? }] }`. HAR entries record request AND response
+detail (DEV-0006, anvil 429f570): `responseContentType` + a `responseBodyPreview` capped by
+`harBodyPreviewBytes` (default 2048, 0=off) — a consumer classifies a JSON endpoint from the capture
+alone, no re-fetch.
 
 ## Gotchas (each cost a real debugging session)
 - puppeteer `connect()` to anvil `/cdp` had a Target-closed bug; the HAR path (navigate + read
