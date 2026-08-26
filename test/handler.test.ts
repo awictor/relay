@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createHandler, type HandlerDeps } from "../src/handler.js";
 import type { InboundMessage } from "../src/telegram.js";
 import type { LLMMessage } from "../src/llm.js";
+import { formatReply } from "../src/lib/format-reply.js";
 
 // Build a handler with fakes; capture what got sent / recorded / persisted.
 function harness(over: Partial<HandlerDeps> = {}) {
@@ -145,6 +146,44 @@ describe("createHandler", () => {
     await handle(msg("pdf of HN", 12));
     expect(docs).toEqual([{ chatId: 12, len: 5, filename: "page.pdf", caption: "your PDF" }]);
     expect(sent).toHaveLength(0);
+  });
+
+  // DEV-0082: when the optional sendPhoto/sendDocument dep is absent, a photo/doc result must fall
+  // back to a plain text reply (back-compat) — the binary is dropped, not thrown away silently.
+  it("a photo result with NO sendPhoto dep falls back to a text reply", async () => {
+    const { handle, sent, photos } = harness({
+      sendPhoto: undefined,
+      runAgentFn: async () => ({ reply: "top of HN", steps: 1, tools: ["screenshot"], photo: new Uint8Array([1, 2, 3, 4]) }),
+    });
+    await handle(msg("screenshot HN", 13));
+    expect(photos).toHaveLength(0);
+    expect(sent).toEqual([{ chatId: 13, text: "top of HN" }]);
+  });
+
+  it("a doc result with NO sendDocument dep falls back to a text reply", async () => {
+    const { handle, sent, docs } = harness({
+      sendDocument: undefined,
+      runAgentFn: async () => ({ reply: "your PDF", steps: 1, tools: ["pdf"], doc: new Uint8Array([1, 2, 3]) }),
+    });
+    await handle(msg("pdf of HN", 14));
+    expect(docs).toHaveLength(0);
+    expect(sent).toEqual([{ chatId: 14, text: "your PDF" }]);
+  });
+
+  // DEV-0083: Telegram caps a caption at 1024 chars. A longer reply is sent as a sliced caption on the
+  // photo PLUS a separate full-text message, so nothing is truncated away.
+  it("a >1024-char reply with a photo sends a sliced caption + the full text separately", async () => {
+    // formatReply caps a reply well above 1024, so use a reply that stays long after formatting.
+    const long = "word ".repeat(300).trim(); // ~1499 chars of plain text, survives formatReply
+    const formatted = formatReply(long);
+    expect(formatted.length).toBeGreaterThan(1024); // precondition: still over the caption cap
+    const { handle, sent, photos } = harness({
+      runAgentFn: async () => ({ reply: long, steps: 1, tools: ["screenshot"], photo: new Uint8Array([9]) }),
+    });
+    await handle(msg("screenshot HN", 15));
+    expect(photos).toHaveLength(1);
+    expect(photos[0].caption!.length).toBe(1024); // caption sliced to the cap
+    expect(sent).toEqual([{ chatId: 15, text: formatted }]); // full (formatted) text sent as a follow-up
   });
 
   it("a normal message runs the agent, replies, persists memory, records an ok turn", async () => {
