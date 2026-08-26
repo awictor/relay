@@ -13,6 +13,10 @@ import { Metrics } from "./lib/metrics.js";
 import { createHandler } from "./handler.js";
 import { createShutdown, installSignalHandlers, installCrashHandlers } from "./shutdown.js";
 import { formatStatus, makeAnvilPinger } from "./lib/status.js";
+import { runAgent } from "./agent.js";
+import { formatReply } from "./lib/format-reply.js";
+import { ScheduleStore } from "./lib/schedule.js";
+import { makeScheduleRunner } from "./schedule-runner.js";
 
 const llm = new GeminiClient();
 
@@ -39,6 +43,16 @@ const MEMORY_TURNS = 6;
 const memory = new MemoryStore({
   file: process.env.RELAY_MEMORY_FILE ?? "data/relay-memory.json",
   maxTurns: MEMORY_TURNS * 2,
+});
+
+// Proactive/scheduled tasks (m4): persisted schedules + a runner that fires them through
+// the agent and texts the result unprompted. Free-infra: a JSON file + an interval, no cron.
+const schedules = new ScheduleStore({ file: process.env.RELAY_SCHEDULE_FILE ?? "data/relay-schedules.json" });
+const SCHED_TICK_MS = Number(process.env.RELAY_SCHED_TICK_MS ?? 30_000); // 0 disables
+const scheduleRunner = makeScheduleRunner({
+  store: schedules, llm, runAgent, send: sendMessage, formatReply,
+  now: () => Date.now(), periodMs: SCHED_TICK_MS,
+  log: (m) => console.log(m),
 });
 
 const handle = createHandler({
@@ -71,12 +85,15 @@ async function main() {
   if (!live) console.warn("WARNING: anvil-engine not reachable — browsing tools will fail until it's running.");
   if (!process.env.GEMINI_API_KEY) console.warn("WARNING: GEMINI_API_KEY not set — the agent can't run until it's provided.");
 
+  scheduleRunner.start();              // fire proactive/scheduled tasks (no-op if RELAY_SCHED_TICK_MS=0)
+  if (SCHED_TICK_MS > 0) console.log(`schedule runner on (${schedules.size()} pending, tick ${SCHED_TICK_MS}ms)`);
+
   console.log("Relay polling Telegram…");
   const poller = startPolling(handle);
   // Clean stop on docker stop / pm2 restart / Ctrl-C: halt polling, exit 0. Memory is
   // already durable (MemoryStore persists synchronously each turn).
   installSignalHandlers(createShutdown({
-    stopPolling: () => { poller.stop(); anvilPinger.stop(); },
+    stopPolling: () => { poller.stop(); anvilPinger.stop(); scheduleRunner.stop(); },
     onShutdown: () => console.log(metrics.format()), // flush the final metrics window (DEV-0041)
     log: (m) => console.log(m),
     exit: (code) => process.exit(code),
