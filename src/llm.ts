@@ -161,3 +161,108 @@ export class GeminiClient implements LLMClient {
     return { text };
   }
 }
+
+// ---- Claude (Anthropic Messages API) ---------------------------------------
+// Drop-in LLMClient so the agent brain swaps with one env var (LLM_PROVIDER=claude).
+// The Messages API differs from Gemini in shape: `system` is a top-level string (not a
+// turn), tool calls are `tool_use` content blocks, tool results are `tool_result` blocks
+// referenced by a tool_use_id, and tools carry an `input_schema` (our ToolSpec.parameters
+// is already a JSON Schema object, so it maps 1:1).
+
+interface ClaudeBlock {
+  type: "text" | "tool_use" | "tool_result";
+  text?: string;
+  id?: string;                       // tool_use id
+  name?: string;                     // tool_use name
+  input?: Record<string, unknown>;   // tool_use args
+  tool_use_id?: string;              // tool_result -> which call
+  content?: string;                  // tool_result body
+}
+interface ClaudeMessage {
+  role: "user" | "assistant";
+  content: string | ClaudeBlock[];
+}
+
+/** Map our neutral message list to Anthropic's { system, messages[] }. Exported for tests: a wrong
+ * mapping (esp. pairing a tool_result to its tool_use_id) silently breaks every Claude call. Our
+ * ToolCall has no per-call id (Gemini has none), so we derive a stable synthetic id from the tool
+ * name + its position, and the following tool turn reuses the most recent one. */
+export function toClaude(messages: LLMMessage[]): { system?: string; messages: ClaudeMessage[] } {
+  let system: string | undefined;
+  const out: ClaudeMessage[] = [];
+  let lastToolUseId: string | undefined;
+  let seq = 0;
+  for (const m of messages) {
+    if (m.role === "system") {
+      system = system ? `${system}\n\n${m.content}` : m.content;
+    } else if (m.role === "user") {
+      out.push({ role: "user", content: m.content });
+    } else if (m.role === "assistant") {
+      const blocks: ClaudeBlock[] = [];
+      if (m.content) blocks.push({ type: "text", text: m.content });
+      if (m.toolCall) {
+        lastToolUseId = `call_${++seq}_${m.toolCall.name}`;
+        blocks.push({ type: "tool_use", id: lastToolUseId, name: m.toolCall.name, input: m.toolCall.args });
+      }
+      out.push({ role: "assistant", content: blocks.length ? blocks : [{ type: "text", text: "" }] });
+    } else if (m.role === "tool") {
+      // Anthropic wants tool output as a tool_result block in a USER turn, tied to the tool_use id.
+      out.push({
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: lastToolUseId ?? `call_${seq}`, content: m.content }],
+      });
+    }
+  }
+  return { system, messages: out };
+}
+
+type Transport = (url: string, init: RequestInit) => Promise<Response>;
+
+export class ClaudeClient implements LLMClient {
+  private model: string;
+  // Injectable transport so tests exercise the request-shaping + response-parsing offline (no key,
+  // no network). Defaults to global fetch.
+  constructor(
+    private apiKey = process.env.ANTHROPIC_API_KEY ?? "",
+    opts: { model?: string; fetch?: Transport } = {}
+  ) {
+    this.model = opts.model ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
+    if (opts.fetch) this.transport = opts.fetch;
+  }
+  private transport: Transport = (url, init) => fetch(url, init);
+
+  async complete(messages: LLMMessage[], tools: ToolSpec[]): Promise<LLMResult> {
+    if (!this.apiKey) throw new Error("ANTHROPIC_API_KEY not set");
+    const { system, messages: msgs } = toClaude(messages);
+    const body: Record<string, unknown> = { model: this.model, max_tokens: 1024, messages: msgs };
+    if (system) body.system = system;
+    if (tools.length) {
+      // ToolSpec.parameters is already a JSON Schema object → Anthropic's input_schema 1:1.
+      body.tools = tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }));
+    }
+    const r = await this.transport("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": this.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30000),
+    }).catch((e) => new Response(JSON.stringify({ error: { message: String(e) } }), { status: 503 }));
+
+    if (!r.ok) {
+      // Surface status in the message so isTransientError can classify (5xx/429 transient).
+      const detail = (await r.text().catch(() => "")).slice(0, 160);
+      throw new Error(`Claude API ${r.status}: ${detail}`);
+    }
+    const j = (await r.json()) as { content?: ClaudeBlock[] };
+    const blocks = j.content ?? [];
+    const text = blocks.filter((b) => b.type === "text").map((b) => b.text).filter(Boolean).join("").trim() || undefined;
+    const use = blocks.find((b) => b.type === "tool_use");
+    if (use && use.name) {
+      return { text, toolCall: { name: use.name, args: (use.input as Record<string, unknown>) ?? {} } };
+    }
+    return { text };
+  }
+}

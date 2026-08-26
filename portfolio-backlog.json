@@ -995,7 +995,7 @@
       "id": "claude-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m24] Implement ClaudeClient in src/llm.ts behind LLMClient: map LLMMessage[] -> Anthropic Messages API (system separate, roles, tool_use/tool_result blocks), map TOOLS -> Anthropic tools schema, parse the response into LLMResult{text,toolCall}. Mirror GeminiClients structure. Read GeminiClient + toGemini first to match the exact interface + tool shapes. No live call yet."
     },
@@ -1003,7 +1003,7 @@
       "id": "claude-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m24] Unit-test ClaudeClient fully offline with a mocked fetch (injectable transport): assert request body shape (system/messages/tools), a tool_use response parses to LLMResult.toolCall{name,args}, a text-only response parses to LLMResult.text, and an API error surfaces as a transient-classifiable message. No ANTHROPIC_API_KEY needed."
     },
@@ -1378,6 +1378,9 @@
     },
     {
       "event": "m23 narrative-3 DONE + m23-portfolio-narrative COMPLETE. narrative-3: doc set is now a coherent cross-linked map — THESIS/DEPLOY/ANVIL-CONTRACT each got a top Part-of-portfolio pointer back to PORTFOLIO.md; PORTFOLIO links out to ANVIL-CONTRACT (+ already THESIS/DEPLOY); README->PORTFOLIO at top; mcp-forge anvil-migration-PR Before-you-merge. No doc is an island. m23 done_when met: single 2-min legible story + guided demo + linked. ROADMAP advanced -> AUTHORED m24-claude-adapter (make the Claude-swappable claim REAL — actual ClaudeClient behind LLMClient, offline-tested via mock fetch, LLM_PROVIDER selector; live call owner-gated on paid ANTHROPIC_API_KEY). Seeded claude-1/2/3. 20th self-directed milestone. This is real code+capability, not just docs — good sign the loop found fresh substance past the doc-saturation point."
+    },
+    {
+      "event": "m24 claude-1+2 DONE: ClaudeClient implements LLMClient (real Anthropic Messages API) — toClaude() maps neutral msgs -> {system top-level, messages[] with text/tool_use/tool_result blocks, synthetic tool_use_id tying tool turns}, TOOLS -> input_schema (ToolSpec.parameters is already JSON Schema, 1:1), response tool_use/text -> LLMResult. Injectable transport for offline testing. +7 tests (claude-client.test.ts: toClaude mapping incl tool_result<->tool_use id pairing + multi-system; request-shape body/headers, tool_use parse, text-only parse, API-error surfaces status for isTransientError, no-key throws) — ALL offline, no ANTHROPIC_API_KEY. Added ANTHROPIC_* + LLM_PROVIDER to .env.example (env-parity gate caught them). 379 pass, tsc clean. Claude-swappable claim is now REAL code. claude-3 = index selector + doc-claim update; live Claude call owner-gated (paid key)."
     }
   ],
   "roadmap": {
