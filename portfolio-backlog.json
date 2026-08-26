@@ -435,9 +435,17 @@
       "id": "relay-anvil-version-note",
       "stream": "quality",
       "value": "low",
+      "status": "done",
+      "repo": "relay",
+      "task": "DEPLOY.md clones anvil-engine + relay side by side but pins no versions/commits. For a reproducible deploy, note in DEPLOY.md that both repos should be at a known-good tag/commit (or add a git tag on anvil master + relay main at the current green state and reference it). Prevents a future anvil breaking change from silently affecting a redeploy. Doc + optional tag. [DONE: tagged anvil-engine + relay deploy-v1 at the current green state (pushed); DEPLOY.md shows checking out the paired tag for a reproducible deploy]"
+    },
+    {
+      "id": "relay-tag-doc-status",
+      "stream": "quality",
+      "value": "low",
       "status": "todo",
       "repo": "relay",
-      "task": "DEPLOY.md clones anvil-engine + relay side by side but pins no versions/commits. For a reproducible deploy, note in DEPLOY.md that both repos should be at a known-good tag/commit (or add a git tag on anvil master + relay main at the current green state and reference it). Prevents a future anvil breaking change from silently affecting a redeploy. Doc + optional tag."
+      "task": "Add the deploy-v1 tag reference to STATUS.md (Verify section) so the owner one-glance knows the exact reproducible-deploy point exists + how to use it (git checkout deploy-v1 in both repos). Doc-only, keeps STATUS.md the single source of truth."
     }
   ],
   "history": [
@@ -589,6 +597,9 @@
     },
     {
       "event": "deploy-dryrun-doc done: DEPLOY.md gained a build-verification step (docker compose build before up) + an explicit dist/ gotcha, closing the loop on the anvil .dockerignore bug so a first deploy cant silently ship an empty image. Doc-only. Remaining todos: syn-2c (interactive live-view design), syn-1l (third-party API capture policy), df-owner-summary (blocked on gh-billing)."
+    },
+    {
+      "event": "relay-anvil-version-note done: tagged BOTH anvil-engine (ca33d87) + relay (current) as deploy-v1 at the all-green state (anvil 529+build CI green incl dist fix; relay 117 CI green) and pushed the tags. DEPLOY.md now documents checking out the paired tag for a reproducible deploy + bumping both together after validating. Prevents a future anvil breaking change from silently affecting a redeploy. Remaining: syn-2c + syn-1l (datafaucet design), df-owner-summary (blocked on gh-billing)."
     }
   ]
 }
