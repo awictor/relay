@@ -675,6 +675,9 @@
     },
     {
       "event": "status-prefix-fix (reactive, found this run): concurrent loop DEV-0024 shipped /status but its formatStatus always prefixed ✅ even when browser DOWN — a contradictory health line. Fixed to ⚠️ when anvilOk false; updated 2 status tests to assert prefix-per-state. 148 full suite pass, tsc clean. Also confirmed /reset (DEV-0023) + /status (DEV-0024) both committed + consistent (statusLine wired in index.ts). df-owner-summary STILL blocked: mcp-forge Actions still billing-failing (4s job-wont-start on PR#1). No non-owner-gated work remains besides reactive fixes to concurrent commits."
+    },
+    {
+      "event": "PORTFOLIO INTEGRITY SWEEP + STOP: all 3 repos verified green/clean this run — relay 148 tests, anvil 547 tests (grew from 529 via concurrent /reset+/status work) + build clean, mcp-forge anvil-migration tsc clean. No new concurrent commits since last run (mcp-forge Actions still billing-blocked, last run 08:55 4s-fail). Backlog is genuinely DRY: the only remaining item df-owner-summary is HARD-BLOCKED on gh-billing. Per loop rule STOP is valid (reactive-clean + streams empty + refill yields only cosmetic). NOT padding with invented doc-work. Owner actions required to proceed: (1) fix mcp-forge GitHub billing, (2) merge PR#1, (3) provision VM + docker compose up (pin deploy-v1)."
     }
   ]
 }
