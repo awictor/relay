@@ -54,10 +54,14 @@ written up in **[THESIS.md](THESIS.md)**.
 - **Digests**: "define digest morning: weather, hn, btc" → one combined briefing, `/run morning` or scheduled.
 - **Alerts**: "watch btc: price of bitcoin when it changes by 1000" → it only pings you when it moves.
 
-It won't log in as you, pay, buy, or take destructive actions — it says so instead.
+It won't pay, buy, or take destructive actions — it says so instead. It stays logged-out on public
+pages by default; you can **authorize specific sites** by configuring host-scoped cookies
+(`RELAY_COOKIES`, opt-in + gitignored) so it can read a page you're entitled to — `/sites` lists which
+hosts you've authorized (names only), and the dangerous-action guard still blocks committing clicks.
+See [SECURITY.md](SECURITY.md).
 
-**Commands**: `/help` `/start` `/reset` (clear chat) `/status` (health) · `/schedules` `/cancel` ·
-`/recipes` `/run` `/forget` · `/digests` `/forget-digest` · `/alerts` `/forget-alert`.
+**Commands**: `/help` `/start` `/reset` (clear chat) `/status` (health) `/sites` (authorized hosts) ·
+`/schedules` `/cancel` · `/recipes` `/run` `/forget` · `/digests` `/forget-digest` · `/alerts` `/forget-alert`.
 
 Runs on Telegram by default, or a terminal (`RELAY_CHANNEL=console`) — the agent core is
 transport-agnostic (see `src/channel.ts`).

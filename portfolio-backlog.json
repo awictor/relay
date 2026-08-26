@@ -1155,7 +1155,7 @@
       "id": "sites-2",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m30] Add /sites to the help/command list + commands.ts if it enumerates commands, and document it in README (the bot can be given cookies for sites you authorize; /sites shows which). Ensure /sites short-circuits before the agent like other slash commands + is counted by recordCommand."
     },
@@ -1581,6 +1581,9 @@
     },
     {
       "event": "m30 sites-1 DONE: /sites command. cookie-jar jarHosts() -> distinct sorted hosts (leading dot stripped, deduped), NAMES only. handler /sites branch (deps.sitesLine, short-circuits before agent like /status, counted by the existing /-prefix recordCommand). index sitesLine: lists configured hosts or a clear no-logins-configured msg. Added /sites to commands.ts Commands: line + HELP (satisfies the discoverable-command + advertised-command-handled guards). +tests: jarHosts (distinct/sorted/no-value-leak/empty), handler /sites branch, commands harness stub. 493 pass, tsc clean. call-tested TRUE (offline). sites-2 = README doc; sites-3 = DataFaucet cookie-capture decision."
+    },
+    {
+      "event": "m30 sites-2 DONE: README documents /sites + the cookie-auth model. Reworded the wont-log-in-as-you line to reflect reality (stays logged-out by default; opt-in host-scoped RELAY_COOKIES authorizes specific sites; /sites lists them names-only; dangerous-action guard still blocks committing clicks; link SECURITY.md). Added /sites to the Commands line. (Also committed separately: concurrent dev-loop handler improvement — bare /forget|/forget-alert|/forget-digest now reply a usage hint not a silent no-op.) /sites already short-circuits + is recordCommand-tallied (sites-1). 493 pass. sites-3 = DataFaucet cookie-capture decision (closes m30)."
     }
   ],
   "roadmap": {
