@@ -23,16 +23,28 @@ Telegram user ──text──> Telegram Bot API ──long-poll──> Relay wo
 
 ## What you can text it
 
+**Fetch & read**
 - **Read**: send a link, or name a site + what you want — "top HN story", "weather in Paris".
-- **Extract** structured data: "extract the price and title from `<link>`" → clean JSON values, not prose.
+- **Extract** structured data: "extract the price and title from `<link>`" → clean JSON, not prose.
 - **Compare** across pages: "compare the price of X across these links" → one row per link.
 - **Search then fetch**: "find the newest listings for `<thing>`" → Relay opens the search page,
-  harvests the result links, and reads/extracts across them (no URL pasting needed).
+  harvests the result links, and reads/extracts across them (no URL pasting).
+- **JSON APIs**: hits a public JSON endpoint directly (no browser) when that's faster.
+- **See / save**: "screenshot the top of Hacker News" → an image; "save this as a PDF: `<link>`" → a doc.
+
+**Proactive (it messages you)**
+- **Reminders / schedules**: "remind me to stretch in 20 min", "every morning text me the weather".
+- **Recipes**: "save btc: check the price of bitcoin" → re-run with `/run btc` or `schedule btc every morning`.
+- **Digests**: "define digest morning: weather, hn, btc" → one combined briefing, `/run morning` or scheduled.
+- **Alerts**: "watch btc: price of bitcoin when it changes by 1000" → it only pings you when it moves.
 
 It won't log in as you, pay, buy, or take destructive actions — it says so instead.
 
-Commands: `/start`, `/help`, and `/reset` (alias `/clear`) to wipe the current chat's
-memory and start fresh.
+**Commands**: `/help` `/start` `/reset` (clear chat) `/status` (health) · `/schedules` `/cancel` ·
+`/recipes` `/run` `/forget` · `/digests` `/forget-digest` · `/alerts` `/forget-alert`.
+
+Runs on Telegram by default, or a terminal (`RELAY_CHANNEL=console`) — the agent core is
+transport-agnostic (see `src/channel.ts`).
 
 ## Setup
 
@@ -81,12 +93,21 @@ end to end on free infra.
 
 - **Agent tools**: `scrape`, `browse`/`click`/`type`/`read` (multi-step), `extract` (fields → clean
   JSON, with a JSON-LD/meta fallback for SPAs), `compare` (same fields across many URLs),
-  `search` (harvest result links, no URL pasting), `fetch_json` (direct JSON APIs, no browser).
-- **Robustness**: SSRF guard on every URL, dangerous-action refusal, per-chat rate limit,
-  bounded step/time caps, transient-error retry around anvil, secret redaction.
-- **Persistence**: per-chat memory across restarts (JSON file, gitignored).
+  `search` (harvest result links, no URL pasting), `fetch_json` (direct JSON APIs, no browser),
+  `screenshot` (image), `pdf` (document).
+- **Proactive**: scheduled tasks/reminders that fire unprompted; saved **recipes** (teach-once,
+  re-run by name or schedule); **digests** (bundle recipes into one briefing); **change-alerts**
+  (silent until a watched value moves, optional numeric threshold). All persisted, all
+  schedulable via one runner.
+- **Transport-agnostic**: a `Channel` interface (Telegram + a Console channel); pick with `RELAY_CHANNEL`.
+- **Robustness**: SSRF guard on every URL, dangerous-action refusal (inbound AND proactive),
+  per-chat rate limit, bounded step/time caps, transient-error retry around anvil, per-chat
+  proactive-send cap (anti-spam), secret redaction, graceful shutdown.
+- **Persistence**: per-chat memory + schedules + recipes + digests + alerts, all across restarts
+  (JSON files, gitignored).
 - **Replies**: SMS-friendly formatting — never dumps raw JSON at a user.
-- **Observability**: a `[out]` JSON line per turn + a rolling `[metrics]` summary.
+- **Observability**: `[out]` per turn + `[proactive]` per scheduled fire + a rolling `[metrics]` summary.
 - **Model**: Gemini free tier with a multi-model failover chain; behind an adapter so Claude is
   a one-line swap.
-- **Tests**: 100+ (`npm test`), offline (mock LLM + backend). See `DEPLOY.md` for the 24/7 runbook.
+- **Tests**: 330+ (`npm test`), offline (mock LLM + backend); plus live `scripts/e2e-*.mjs`.
+  See `DEPLOY.md` for the 24/7 runbook.
