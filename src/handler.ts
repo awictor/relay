@@ -42,6 +42,16 @@ export interface HandlerDeps {
   // Resolves the recipe's task + registers it with the scheduler. Optional.
   recipeSchedule?: (chatId: number, name: string, whenClause: string, now: number) =>
     { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" };
+  // Digests (m9 digest-3): bundle recipes into one briefing. All optional.
+  digestDefine?: (chatId: number, text: string) => { ok: true; name: string; members: number } | { ok: false; reason: "unparsed" | "capped" };
+  digestList?: (chatId: number) => Array<{ name: string; members: string[]; schedule?: string }>;
+  digestForget?: (chatId: number, name: string) => boolean;
+  // Is <name> a digest for this chat? (so /run + schedule dispatch digest vs recipe).
+  isDigest?: (chatId: number, name: string) => boolean;
+  // Run a digest NOW -> the composed briefing text (sent by the handler). null if unknown.
+  digestRun?: (chatId: number, name: string) => Promise<string | null>;
+  digestSchedule?: (chatId: number, name: string, whenClause: string, now: number) =>
+    { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" };
   checkRateLimit: (chatId: number) => { allowed: boolean; retryAfterSec?: number };
   redactText: (text: string) => string;
   hasModelKey: () => boolean;
@@ -121,13 +131,41 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       return;
     }
 
-    // "schedule <name> <when>" -> run a saved recipe on a cadence. No agent run.
-    if (deps.recipeSchedule && /^\s*schedule\s+\S+/i.test(msg.text)) {
+    // /digests: list saved digests. No agent run.
+    if (first === "/digests" && deps.digestList) {
+      const list = deps.digestList(msg.chatId);
+      if (!list.length) { await deps.sendMessage(msg.chatId, "No digests. Define one: \"define digest morning: weather, hn, btc\" (from saved recipes), then /run morning."); return; }
+      const lines = list.map((d) => `• ${d.name}${d.schedule ? ` (${d.schedule})` : ""} — ${d.members.join(", ")}`);
+      await deps.sendMessage(msg.chatId, `Your digests:\n${lines.join("\n")}\n\nRun with /run <name>, remove with /forget-digest <name>.`);
+      return;
+    }
+
+    // /forget-digest <name>: remove a digest. No agent run.
+    if (first === "/forget-digest" && deps.digestForget) {
+      const name = msg.text.trim().split(/\s+/).slice(1).join(" ").trim();
+      const removed = name ? deps.digestForget(msg.chatId, name) : false;
+      await deps.sendMessage(msg.chatId, removed ? `Forgot digest "${name}".` : "No digest by that name — see /digests.");
+      return;
+    }
+
+    // "define digest <name>: a, b, c" -> store a digest. No agent run.
+    if (deps.digestDefine && /^\s*(?:define\s+)?digest\s+[^:]+:\s*\S/i.test(msg.text)) {
+      const r = deps.digestDefine(msg.chatId, msg.text);
+      if (r.ok) { await deps.sendMessage(msg.chatId, `Saved digest "${r.name}" (${r.members} recipe${r.members === 1 ? "" : "s"}). Run it with /run ${r.name}.`); return; }
+      if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the digest limit — /forget-digest one first."); return; }
+      // unparsed: fall through
+    }
+
+    // "schedule <name> <when>" -> run a saved digest OR recipe on a cadence (digest first). No agent run.
+    if ((deps.recipeSchedule || deps.digestSchedule) && /^\s*schedule\s+\S+/i.test(msg.text)) {
       const m = msg.text.trim().match(/^schedule\s+(.+?)\s+((?:every|daily|in|tomorrow|at)\b.*)$/i);
       if (m) {
-        const r = deps.recipeSchedule(msg.chatId, m[1]!, m[2]!, deps.now());
-        if (r.ok) { await deps.sendMessage(msg.chatId, `Scheduled "${m[1]!.trim()}" to run ${r.kind === "daily" ? "daily" : "once"}. Manage with /schedules.`); return; }
-        const why = r.reason === "unknown" ? "No recipe by that name — see /recipes." : r.reason === "capped" ? "You've hit the scheduled-task limit — /cancel one first." : "I couldn't parse that time. Try \"schedule <name> every morning\".";
+        const name = m[1]!.trim();
+        const isDig = deps.isDigest?.(msg.chatId, name) && deps.digestSchedule;
+        const r = isDig ? deps.digestSchedule!(msg.chatId, name, m[2]!, deps.now())
+                        : deps.recipeSchedule?.(msg.chatId, name, m[2]!, deps.now());
+        if (r?.ok) { await deps.sendMessage(msg.chatId, `Scheduled "${name}" to run ${r.kind === "daily" ? "daily" : "once"}. Manage with /schedules.`); return; }
+        const why = r?.reason === "unknown" ? "No recipe or digest by that name." : r?.reason === "capped" ? "You've hit the scheduled-task limit — /cancel one first." : "I couldn't parse that time. Try \"schedule <name> every morning\".";
         await deps.sendMessage(msg.chatId, why); return;
       }
     }
@@ -140,12 +178,18 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       // unparsed: fall through
     }
 
-    // "/run <name>" / "run <name>" -> resolve the recipe to its task, then run it through the
-    // normal agent path by rewriting the message text (falls through below).
-    if (deps.recipeResolve && /^(\/run\b|run\s+)/i.test(msg.text)) {
-      const hit = deps.recipeResolve(msg.chatId, msg.text);
+    // "/run <name>" / "run <name>" -> DIGEST (compose+send now) or RECIPE (rewrite to its task,
+    // fall through to the agent). Digest checked first so a digest name wins.
+    if ((deps.recipeResolve || deps.digestRun) && /^(\/run\b|run\s+)/i.test(msg.text)) {
+      const nameOnly = msg.text.trim().replace(/^\/run\b\s*/i, "").replace(/^run\s+(recipe\s+)?/i, "").trim();
+      if (nameOnly && deps.isDigest?.(msg.chatId, nameOnly) && deps.digestRun) {
+        const composed = await deps.digestRun(msg.chatId, nameOnly);
+        await deps.sendMessage(msg.chatId, composed ?? "That digest is empty or gone — see /digests.");
+        return;
+      }
+      const hit = deps.recipeResolve?.(msg.chatId, msg.text);
       if (hit) { msg = { ...msg, text: hit.task }; } // run the saved task via the agent path below
-      else if (/^\/run\b/i.test(msg.text)) { await deps.sendMessage(msg.chatId, "No recipe by that name — see /recipes."); return; }
+      else if (/^\/run\b/i.test(msg.text)) { await deps.sendMessage(msg.chatId, "No recipe or digest by that name — see /recipes or /digests."); return; }
       // natural "run ..." with no match: fall through to the agent as a normal message.
     }
 

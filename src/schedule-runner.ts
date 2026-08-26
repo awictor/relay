@@ -25,6 +25,9 @@ export interface ScheduleRunnerDeps {
   // Anti-spam (m8 pobs-2): max proactive sends per chat per rolling hour. A misfiring daily
   // (or many due at once) must not flood a user. 0/absent = unlimited. Default set by index.
   maxPerChatPerHour?: number;
+  // Digests (m9 digest-3): a scheduled digest stores the task "digest:<name>"; when it fires,
+  // run the digest to a composed message instead of the agent. Optional.
+  digestRun?: (chatId: number, name: string) => Promise<string | null>;
 }
 
 export interface ScheduleRunner {
@@ -61,10 +64,22 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     // A scheduled task is a fresh, contextless agent run (no chat history) whose reply is
     // pushed to the user. Prefix so an unprompted message is understood as a reminder.
     const startedAt = deps.now();
-    const res = await deps.runAgent(s.task, { llm: deps.llm }, []);
-    const body = deps.formatReply(res.reply);
-    const label = s.kind === "daily" ? "⏰ Daily" : "⏰ Reminder";
-    await deps.send(s.chatId, `${label}: ${s.task}\n\n${body}`);
+    // A scheduled digest carries "digest:<name>" — run the digest to a composed briefing
+    // instead of the agent. Otherwise a normal scheduled/recipe agent run.
+    const digestMatch = s.task.match(/^digest:(.+)$/);
+    let res: { reply: string; steps?: number; tools?: string[] };
+    let sendText: string;
+    if (digestMatch && deps.digestRun) {
+      const composed = await deps.digestRun(s.chatId, digestMatch[1]!.trim());
+      res = { reply: composed ?? "(digest is empty or was removed)" };
+      sendText = deps.formatReply(res.reply); // digest text already labeled; no reminder prefix
+    } else {
+      res = await deps.runAgent(s.task, { llm: deps.llm }, []);
+      const body = deps.formatReply(res.reply);
+      const label = s.kind === "daily" ? "⏰ Daily" : "⏰ Reminder";
+      sendText = `${label}: ${s.task}\n\n${body}`;
+    }
+    await deps.send(s.chatId, sendText);
     noteSend(s.chatId, deps.now());
     deps.store.complete(s.id, deps.now());
     // Observability (m8): structured proactive-run line + Metrics record (same as inbound).

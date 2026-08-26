@@ -18,6 +18,8 @@ import { formatReply } from "./lib/format-reply.js";
 import { ScheduleStore, parseSchedule } from "./lib/schedule.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunCommand } from "./lib/recipes.js";
+import { DigestStore, parseDigestCommand } from "./lib/digests.js";
+import { runDigest } from "./digest-runner.js";
 import { parseScheduleFor } from "./lib/schedule.js";
 
 const llm = new GeminiClient();
@@ -58,6 +60,13 @@ const memory = new MemoryStore({
 // the agent and texts the result unprompted. Free-infra: a JSON file + an interval, no cron.
 const schedules = new ScheduleStore({ file: process.env.RELAY_SCHEDULE_FILE ?? "data/relay-schedules.json" });
 const recipes = new RecipeStore({ file: process.env.RELAY_RECIPE_FILE ?? "data/relay-recipes.json" });
+const digests = new DigestStore({ file: process.env.RELAY_DIGEST_FILE ?? "data/relay-digests.json" });
+// Run a digest -> composed briefing text (member recipes -> one message). Shared by /run + schedule.
+const digestRunText = (chatId: number, name: string): Promise<string | null> => {
+  const d = digests.get(chatId, name);
+  if (!d) return Promise.resolve(null);
+  return runDigest(d, { llm, resolveRecipe: (c, n) => { const r = recipes.get(c, n); return r ? { task: r.task } : null; }, runAgent, formatReply });
+};
 const SCHED_TICK_MS = Number(process.env.RELAY_SCHED_TICK_MS ?? 30_000); // 0 disables
 const scheduleRunner = makeScheduleRunner({
   store: schedules, llm, runAgent, send: sendMessage, formatReply,
@@ -65,6 +74,7 @@ const scheduleRunner = makeScheduleRunner({
   log: (m) => console.log(m),
   recordTurn, // proactive fires count in the same Metrics as inbound turns (m8)
   maxPerChatPerHour: Number(process.env.RELAY_PROACTIVE_MAX_PER_HOUR ?? 10), // anti-spam (m8)
+  digestRun: (chatId, name) => digestRunText(chatId, name), // scheduled digests (m9)
 });
 
 const handle = createHandler({
@@ -108,6 +118,27 @@ const handle = createHandler({
     const rec = recipes.get(chatId, name);
     if (!rec) return { ok: false, reason: "unknown" };
     const p = parseScheduleFor(whenClause, rec.task, now);
+    if (!p) return { ok: false, reason: "unparsed" };
+    const s = schedules.add(chatId, p, now);
+    if (!s) return { ok: false, reason: "capped" };
+    return { ok: true, kind: s.kind };
+  },
+  digestDefine: (chatId, text) => {
+    const p = parseDigestCommand(text);
+    if (!p) return { ok: false, reason: "unparsed" };
+    const rec = digests.add(chatId, p, Date.now());
+    if (!rec) return { ok: false, reason: "capped" };
+    return { ok: true, name: rec.name, members: rec.members.length };
+  },
+  digestList: (chatId) => digests.list(chatId).map((d) => ({ name: d.name, members: d.members, schedule: d.schedule })),
+  digestForget: (chatId, name) => digests.remove(chatId, name),
+  isDigest: (chatId, name) => !!digests.get(chatId, name),
+  digestRun: (chatId, name) => digestRunText(chatId, name),
+  digestSchedule: (chatId, name, whenClause, now) => {
+    const d = digests.get(chatId, name);
+    if (!d) return { ok: false, reason: "unknown" };
+    // Schedule a marker task; when it fires, the runner runs the digest. Encode as "digest:<name>".
+    const p = parseScheduleFor(whenClause, `digest:${d.name}`, now);
     if (!p) return { ok: false, reason: "unparsed" };
     const s = schedules.add(chatId, p, now);
     if (!s) return { ok: false, reason: "capped" };
