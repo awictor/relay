@@ -85,6 +85,17 @@ describe("handler — recipe routing", () => {
     expect(sent[0]).toMatch(/No recipe/i);
   });
 
+  // DEV-0114: a bare /forget (no name) must NOT imply the user named a missing recipe — it should
+  // show usage, and must not call recipeForget with an empty name.
+  it("bare /forget shows usage, not a misleading not-found (recipeForget not called empty)", async () => {
+    const seen: string[] = [];
+    const { handle, sent } = harness({ recipeForget: (_c, name) => { seen.push(name); return false; } });
+    await handle(msg("/forget"));
+    expect(sent[0]).toMatch(/usage/i);
+    expect(sent[0]).not.toMatch(/No recipe by that name/i);
+    expect(seen).toEqual([]); // never invoked with an empty name
+  });
+
   it("a normal message is unaffected by recipe routing", async () => {
     const { handle, agentTexts } = harness();
     await handle(msg("what's the weather"));
