@@ -122,9 +122,9 @@
       "id": "syn-1i",
       "stream": "synergy",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "datafaucet",
-      "task": "Extend the mock-anvil test (syn-1h) to cover multi-page crawl + MAX_PAGES bound: have /v1/actions/evaluate return same-host links on the first visit so the crawl enqueues+visits a 2nd page, and assert the route stops at MAX_PAGES and dedups already-visited URLs. Also add a failure case: mock /v1/sessions 500 -> assert an error SSE event + no unreleased session leak."
+      "task": "Extend the mock-anvil test (syn-1h) to cover multi-page crawl + MAX_PAGES bound: have /v1/actions/evaluate return same-host links on the first visit so the crawl enqueues+visits a 2nd page, and assert the route stops at MAX_PAGES and dedups already-visited URLs. Also add a failure case: mock /v1/sessions 500 -> assert an error SSE event + no unreleased session leak. [DONE: tests/integration/anvil-crawl.test.ts — multi-page enqueue+dedup+MAX_PAGES(10) + session-500 error/no-leak; 2 tests, wired into test:unit; verified stable across 5 runs (one earlier flaky cold-start fail not reproduced)]"
     },
     {
       "id": "syn-2b",
@@ -236,6 +236,22 @@
       "status": "todo",
       "repo": "relay",
       "task": "Single integration test that runs a scripted-LLM agent through search->compare->reply and asserts the FINAL formatReply output is readable lines (not JSON), proving the tools + formatter compose. Ties together relay-search-e2e intent with the new formatter. Offline (mock backend + scripted LLM)."
+    },
+    {
+      "id": "syn-1j",
+      "stream": "synergy",
+      "value": "low",
+      "status": "todo",
+      "repo": "datafaucet",
+      "task": "Speed up the anvil crawl test (syn-1i runs ~12s): the route sleeps 1200ms/page to let XHRs fire. Make that settle interval configurable via env (e.g. ANVIL_CRAWL_SETTLE_MS, default 1200) so the mock test can set it to ~0 and run in <1s. Keep prod default unchanged. Then the whole anvil suite is CI-fast."
+    },
+    {
+      "id": "syn-1k",
+      "stream": "synergy",
+      "value": "low",
+      "status": "todo",
+      "repo": "datafaucet",
+      "task": "Concurrent-loop work (DEV-0008) is UNCOMMITTED on anvil-migration: modified auto-scan/route.ts + capture-filter.ts + anvil-capture.test.ts to capture API requests by responseContentType (JSON response header) not just request markers. Verify that change: run its test, tsc, confirm browserbase path unchanged, then commit it to anvil-migration (do NOT leave dirty). If broken, fix or revert."
     }
   ],
   "history": [
@@ -309,6 +325,9 @@
     },
     {
       "event": "relay-reply-format done: SMS-friendly reply formatting (src/lib/format-reply.ts) — a reply that is/embeds JSON data becomes short readable lines (url/title lead, null -> dash), everything trimmed to phone size; wired into index.ts reply + memory-store form; system prompt tells the model to summarize not paste JSON (formatter is the safety net). 9 new tests + 64 full suite pass, tsc clean. Closes the last UX rough edge on the extract/compare/search features. Refilled relay-tools-e2e-full (search->compare->reply composition test)."
+    },
+    {
+      "event": "syn-1i done: anvil crawl coverage (tests/integration/anvil-crawl.test.ts) — multi-page enqueue, dedup, MAX_PAGES=10 bound, and session-create-500 error+no-leak. 2 tests, wired into test:unit, stable across 5 runs (one earlier fail was a flaky cold-start race, not reproduced). NOTE: found uncommitted DEV-0008 work (responseContentType capture) on the branch from a concurrent loop -> refilled syn-1k to verify+commit it. Also refilled syn-1j (make crawl settle interval configurable so the ~12s test runs sub-second)."
     }
   ]
 }
