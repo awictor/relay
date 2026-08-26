@@ -963,9 +963,33 @@
       "id": "merge-3",
       "stream": "datafaucet",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "mcp-forge",
       "task": "[m22] Document the merge-readiness procedure in docs/anvil-migration-PR.md (a Before you merge section): run the script, what GREEN means, that it never touches master. Cross-link from relays OWNER-blockers note. Closes m22."
+    },
+    {
+      "id": "narrative-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m23] Write PORTFOLIO.md (relay repo, the hub): the thesis (anvil = self-hosted browser both products run on, no vendor); the 3 repos (anvil-engine/Relay/DataFaucet) + how they connect (shared anvil-client, vendored byte-identical); the 2 products both live-proven on anvil; link THESIS.md for the measured numbers. Honest status: proven+gated, not yet deployed (owner: Oracle VM + PR#1 merge + gh-billing). Link from README."
+    },
+    {
+      "id": "narrative-2",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m23] Add a Guided demo section to PORTFOLIO.md: the exact command sequence to see it work end-to-end from a clean checkout — npm run preflight (whole-stack GO), npm run bench:latency (real numbers), npm run status (health), npm run e2e:faults (degradation), and (mcp-forge) node scripts/merge-readiness.mjs. What each proves in one line. So a reviewer runs 5 commands and sees the whole story."
+    },
+    {
+      "id": "narrative-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m23] Cross-link the whole doc set into a coherent map (README -> PORTFOLIO.md -> THESIS.md/DEPLOY.md/ANVIL-CONTRACT.md; mcp-forge anvil-migration-PR.md Before-you-merge). Add a one-line pointer in each so no doc is an island. Closes m23."
     }
   ],
   "history": [
@@ -1318,10 +1342,13 @@
     },
     {
       "event": "m22 merge-2 DONE (mcp-forge anvil-migration). merge-readiness.mjs now folds in the unit gate + default-unchanged proof for a single READY-TO-MERGE verdict: runs npm run test:unit on branch (green=CIs PR gate), proves browserbase default unchanged (browser-backend.ts is NEW not an edit + anvil-flag-gate invariant test passes = routes statically proven gated). VERIFIED: READY TO MERGE — 50 ahead/0 behind, no conflicts, gate 1823 pass/0 fail, default provably unchanged; tree clean, master untouched. call-tested TRUE. merge-3 = document the Before-you-merge procedure."
+    },
+    {
+      "event": "m22 merge-3 DONE + m22-merge-readiness COMPLETE. merge-3: Before-you-merge section at top of docs/anvil-migration-PR.md — one command (node scripts/merge-readiness.mjs) -> READY/NEEDS-ATTENTION over behind-master/conflicts/gate/default-unchanged, read-only of master, refuses dirty tree; recorded last run READY 50-ahead/1823-pass. m22 done_when met: owner has a zero-surprise pre-merge check for PR#1. ROADMAP advanced -> AUTHORED m23-portfolio-narrative (single 2-min legible story: PORTFOLIO.md thesis+3 repos+2 products+measured proof+one-command gates + guided demo; credibility artifact, offline). Seeded narrative-1/2/3. 19th self-directed milestone. HONEST NOTE: Relay/anvil hardening is saturating; m23 is real GTM/legibility value; after it, most non-owner-gated work is genuinely done — future milestones may legitimately thin out toward the deploy wall."
     }
   ],
   "roadmap": {
-    "current": "m22-merge-readiness",
+    "current": "m23-portfolio-narrative",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1473,6 +1500,13 @@
         "id": "m22-merge-readiness",
         "goal": "De-risk the one owner step that unlocks everything: merging PR #1 (anvil-migration -> master). The loop cannot merge (owner), but it CAN keep the branch mergeable and give the owner a one-command merge-readiness report: is anvil-migration behind master? are there conflicts? does the full unit gate pass on the branch? is the browserbase default still byte-identical to master? So when the owner sits down to merge, there are zero surprises. mcp-forge anvil-migration only, NEVER master; read-only of master.",
         "done_when": "a merge-readiness check (script or documented procedure on anvil-migration) reports: commits-behind-master, conflict presence (dry-run merge, no commit), test:unit pass/fail on the branch, and browserbase-default-unchanged confirmation — as a single readable summary; NEVER commits to master; documented so the owner runs it before merging PR #1",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m23-portfolio-narrative",
+        "goal": "Tie it together. 22 milestones built three linked repos + a proven thesis, but there is NO single artifact an outsider (or Alex, presenting) can read in 2 minutes to see the whole thing: the one-shared-browser thesis, the two products on it, the measured proof, and the one-command gates (preflight, merge-readiness, bench:latency, status). Write a top-level PORTFOLIO.md narrative + a guided demo path so the work is legible and credible without spelunking commits. Credibility/GTM artifact for an AE. Fully offline.",
+        "done_when": "a PORTFOLIO.md (in relay, the hub repo) tells the whole story: thesis, the 3 repos + how they connect, the 2 products both live-proven on anvil, the measured latency + cost thesis, and the one-command proofs (preflight/merge-readiness/bench:latency/status) with what each demonstrates; plus a short guided demo sequence someone can run start-to-finish; linked from README; honest about whats deployed (nothing yet — owner-gated) vs proven",
         "status": "todo",
         "owner_gated": false
       }
