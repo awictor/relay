@@ -915,9 +915,33 @@
       "id": "preflight-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m20] Document the preflight in README (a PREFLIGHT/Deploy-readiness section): what each check proves, that GREEN means code-ready so the only remaining unknowns are the Oracle host + secrets, and cross-link DEPLOY.md. Closes m20."
+    },
+    {
+      "id": "thesis-1",
+      "stream": "anvil",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m21] scripts/bench-latency.mjs: measure REAL anvil end-to-end latency for the canonical errands (session create+release, scrape example.com, fetch_json open-meteo, browse->read) over N runs (default 10), report p50/p95/avg per errand + cold-vs-warm if a pool is on. SKIP+exit0 if anvil down. Reuse relay src/anvil.ts. Print a clean table."
+    },
+    {
+      "id": "thesis-2",
+      "stream": "anvil",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m21] THESIS.md one-pager: take thesis-1s measured latency + Browserbase/Browserless published per-session (or per-minute) pricing, compute cost-per-1k-sessions self-hosted (Oracle Always Free = $0 infra) vs vendor, state the honest break-even and the caveat that compute/ops is the real self-hosted cost (not the per-call meter). Cite the measured numbers. No invented figures — mark any pricing as as-of-date + assumption."
+    },
+    {
+      "id": "thesis-3",
+      "stream": "anvil",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m21] Wire bench-latency into the story: add a npm run bench:latency script + link THESIS.md from README (a Why self-hosted section) and cross-link DEPLOY.md. Optionally fold a quick latency sanity line into preflight (advisory, never NO-GO). Closes m21."
     }
   ],
   "history": [
@@ -1252,10 +1276,13 @@
     },
     {
       "event": "m20 preflight-2 DONE: preflight.mjs extended cross-repo — now runs relay(test,e2e:live,e2e:faults,status) + mcp-forge(test:unit,e2e:anvil via cwd=../mcp-forge) + a direct anvil /v1/health probe, all folded into ONE GO/NO-GO. mcp-forge-absent -> those 2 checks SKIP with a note (relay stays self-contained). anvil-down -> health SKIP not FAIL. LIVE-VERIFIED full stack: GO 7/7 pass (relay 4 + datafaucet 2 + anvil health, sessions 0). exit 0. call-tested TRUE. One command now proves the WHOLE stack deploy-ready."
+    },
+    {
+      "event": "m20 preflight-3 DONE + m20-deploy-preflight COMPLETE. preflight-3: README Deploy-readiness section — table of all 7 checks + what each proves, SKIP-not-fail semantics, GREEN=code-ready(only host+secrets left), cross-link DEPLOY.md; added npm run preflight to Verify block. 369 unit pass, tsc clean. m20 done_when met: one GO/NO-GO across the whole stack, degrades offline, documented. ROADMAP advanced -> AUTHORED m21-thesis-proof (quantify no-vendor thesis with REAL measured anvil latency vs vendor pricing + honest break-even — credibility artifact). Seeded thesis-1/2/3. 17th self-directed milestone. NOTE: portfolio is mature — all deploy steps genuinely owner-gated (Oracle VM, merge PR#1, gh-billing); m21 is real GTM value, not filler, and fully offline-advanceable."
     }
   ],
   "roadmap": {
-    "current": "m20-deploy-preflight",
+    "current": "m21-thesis-proof",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1393,6 +1420,13 @@
         "id": "m20-deploy-preflight",
         "goal": "The whole stack is now live-proven but nothing is deployed — the remaining steps are owner-gated (provision Oracle VM, merge PR #1, fix gh-billing). Before the owner spends that effort, give them ONE preflight command that runs every automated live proof across the stack and reports a single GO/NO-GO: Relay unit + e2e:live + e2e:faults + status, DataFaucet test:unit + e2e:anvil, anvil /v1/health. So `provision the VM` is de-risked: green preflight = the code is ready, the only unknowns are host + secrets. Advanceable offline (each sub-proof already SKIPs when its dep is down).",
         "done_when": "a documented preflight (scripts/preflight.* in relay, or a README PREFLIGHT section) runs the full proof set across both repos + anvil, each sub-check reporting pass/skip/fail, and prints a single GO (all pass-or-skip) / NO-GO (any fail) verdict; SKIPs degrade gracefully offline; owner sees exactly what is verified vs what still needs a host/secret",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m21-thesis-proof",
+        "goal": "Quantify the thesis with REAL measured numbers, not claims. The whole portfolio argues self-hosted anvil beats a Browserbase/Browserless/Steel vendor — no per-session meter, no quota. But nowhere is that PROVEN with data: what is anvil actual end-to-end latency for the canonical errands, and what would the same volume cost on the vendor? Produce a credible, reproducible one-pager: measure anvil scrape/fetch/browse latency locally (script, real runs), put it against published vendor per-session pricing, and state the honest break-even. Credibility artifact for an AE — reproducible, no hand-waving. anvil is up locally so the latency half is measurable now.",
+        "done_when": "a reproducible bench script measures real anvil latency across the canonical errands (>=N runs, p50/p95) + a THESIS.md one-pager states measured latency vs vendor per-session cost with an honest break-even + the caveats (compute is the real cost, not the vendor); numbers are from actual runs, not invented; SKIPs/degrades if anvil is down",
         "status": "todo",
         "owner_gated": false
       }

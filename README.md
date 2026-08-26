@@ -76,6 +76,7 @@ npm test              # 350+ offline unit/wiring tests (no keys, no anvil)
 npm run e2e:live      # LIVE end-to-end: real Gemini + anvil across canonical errands
 npm run e2e:faults    # LIVE fault drills: induce real failures, assert it fails soft
 npm run status        # offline health: what's scheduled/saved/watched + is anvil up
+npm run preflight     # ONE GO/NO-GO across the whole stack (Relay + DataFaucet + anvil)
 ```
 
 `npm run e2e:live` (`scripts/e2e-live.mjs`) is the **CI-safe** live smoke test. It drives the
@@ -104,6 +105,31 @@ are stored (across how many chats), anvil health from its `/v1/health` (up + lat
 sessions, warm pool, and uptime when the running anvil build reports them), which keys are set (names
 only), and the last persisted metrics window (ok/fail, latency percentiles, tool mix). It needs
 **no keys** — counts come from the durable state files the runtime writes — and always exits 0.
+
+### Deploy readiness — `npm run preflight`
+
+`npm run preflight` (`scripts/preflight.mjs`) runs **every automated proof across the whole stack**
+and prints a single **GO / NO-GO**. It's the one command to run before spending effort on the
+deploy — GREEN means the code is ready and the only remaining unknowns are the **host** (Oracle VM)
+and **secrets**.
+
+The seven checks and what each proves:
+
+| Check | Proves |
+|-------|--------|
+| `relay: unit tests` (`npm test`) | 350+ pure logic/wiring units — all Relay behavior, offline. |
+| `relay: live e2e` (`npm run e2e:live`) | Real channel→agent→anvil→reply pipe (scrape, fetch_json, browse→read). |
+| `relay: fault drills` (`npm run e2e:faults`) | Degradation holds under real faults (anvil-down, blocked URL, mid-session death). |
+| `relay: operability` (`npm run status`) | The offline health/state view runs clean. |
+| `datafaucet: unit` (`npm run test:unit`, in `../mcp-forge`) | DataFaucet's suite incl. the anvil-migration paths (browserbase default unchanged). |
+| `datafaucet: anvil` (`npm run e2e:anvil`, in `../mcp-forge`) | The **second product** drives real anvil end to end (session→live view→release). |
+| `anvil: health` (`GET /v1/health`) | The shared engine is up + reports session capacity. |
+
+**SKIP is not a failure.** Each live check exits 0 with a `SKIP` note when its dependency is
+offline (anvil down, `GEMINI_API_KEY` unset, or `../mcp-forge` not checked out), so preflight runs
+anywhere — a fully offline machine still gets a GO on what it *can* prove. **NO-GO** fires only on a
+hard failure, and the failing check's output tail is printed inline. See `DEPLOY.md` for the host +
+secrets steps that a GREEN preflight leaves as the only remaining work.
 
 ## Shared anvil client (vendoring contract)
 
