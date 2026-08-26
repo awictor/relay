@@ -691,9 +691,33 @@
       "id": "cons-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m11] docs/DEMO.md: a realistic annotated transcript (user texts -> Relay replies) walking the whole surface (a lookup, an extract, a compare, a reminder, a recipe, a digest, an alert), so a reader/Alex sees the product in action. Reference scripts/e2e-*.mjs for live verification. Doc-only."
+    },
+    {
+      "id": "anvil-retry-1",
+      "stream": "anvil",
+      "value": "high",
+      "status": "todo",
+      "repo": "anvil",
+      "task": "[m12] Transient-navigation retry in actions.ts navigate(): on a transient failure (timeout/ECONNRESET/net::ERR_/5xx-ish nav error) retry once with a short backoff before throwing; deterministic failures (blocked protocol, bad selector) throw immediately. Extract an isTransientNavError() helper (mirror Relay src/anvil.ts isTransientError taxonomy). Config bound ANVIL_NAV_RETRIES (default 1, min 0). Unit-test the classifier + that a retry happens once then succeeds / gives up (mock page.goto)."
+    },
+    {
+      "id": "anvil-oplog-1",
+      "stream": "anvil",
+      "value": "medium",
+      "status": "todo",
+      "repo": "anvil",
+      "task": "[m12] Structured per-op log: a small helper that emits one [anvil] JSON line per action (session, op, ok, ms) from SessionActions.run(), so a consumer/deploy can see browser activity + latency without a debugger. Pure formatter unit-tested; wire into run() behind the existing logger. Dont log payloads/secrets."
+    },
+    {
+      "id": "anvil-retry-doc",
+      "stream": "anvil",
+      "value": "low",
+      "status": "todo",
+      "repo": "anvil",
+      "task": "[m12] Document ANVIL_NAV_RETRIES in README/config table + the config test (default 1); confirm the config-parity/defaults test covers it. Doc + test."
     }
   ],
   "history": [
@@ -953,10 +977,13 @@
     },
     {
       "event": "m11 cons-1 done: README refreshed to the real surface — fetch/read tools incl screenshot/pdf/fetch_json + the proactive half (reminders, recipes, digests, alerts), full Commands list, transport-agnostic note, updated Status (anti-spam, proactive-safety, per-store persistence, [proactive] obs, 330+ tests). Doc-only. Next m11: cons-3 (demo transcript) -> completes m11."
+    },
+    {
+      "event": "m11-consolidate COMPLETE: cons-1 README full-surface refresh, cons-2 whole-product journey test (features compose), cons-3 demo transcript (docs/DEMO.md). Relay is proven-composing, documented, launch-legible (336 tests). ROADMAP advanced -> AUTHORED m12-anvil-resilience (shift back to the shared engine: transient-navigation retry + per-op structured log; idle since m6). Seeded anvil-retry-1/oplog-1/retry-doc. 8th self-directed milestone. m1-synergy still owner_blocked."
     }
   ],
   "roadmap": {
-    "current": "m11-consolidate",
+    "current": "m12-anvil-resilience",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1031,6 +1058,13 @@
         "id": "m11-consolidate",
         "goal": "Consolidation + release-readiness. Relay grew 6 self-directed milestones (channels, scheduled tasks, recipes, digests, proactive-obs, alerts) on top of the core agent — 334 tests, but the README + a single whole-product proof lag. Refresh docs to the real surface, add one composed integration test that drives channel->handler->(recipe/digest/alert/schedule) end to end, and a demo transcript, so the assembled product is proven + legible for a real launch.",
         "done_when": "README + STATUS reflect the full feature set; a single composed offline integration test exercises the main user journeys through createHandler; a demo transcript doc; full suite green",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m12-anvil-resilience",
+        "goal": "anvil-engine resilience round 2 (the shared engine both products lean on; only touched in m6). Add a transient-navigation retry (a flaky goto/nav should retry once with backoff before failing a scrape), and a per-session structured request log / [anvil] op line so a consumer can see what the browser did. Free/local, flag-safe, must not regress the 500+ test suite. Prefer reusing Relay-side patterns (isTransientError) so both sides share the retry taxonomy.",
+        "done_when": "navigate retries once on a transient error (behind a small bound, default on but capped); a per-op structured log line; offline unit tests; anvil build + full suite green",
         "status": "todo",
         "owner_gated": false
       }
