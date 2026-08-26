@@ -273,9 +273,17 @@
       "id": "relay-tool-routing",
       "stream": "relay",
       "value": "medium",
+      "status": "done",
+      "repo": "relay",
+      "task": "Now that the agent has scrape/browse/extract/compare/search/fetch_json, add a couple of routing regression tests (scripted LLM) asserting the SYSTEM_PROMPT guidance leads to sensible tool choice on representative asks (weather -> fetch_json/scrape, price+title -> extract, multi-link -> compare). Not testing the model, testing that the tool set + descriptions are coherent + the loop dispatches each correctly. Guards against tool-wiring regressions as tools grow. [DONE: test/agent-dispatch.test.ts — tool-surface (10 names + valid desc/params) + per-tool dispatch to backend; 8 tests; 78 suite pass]"
+    },
+    {
+      "id": "relay-deploy-doc",
+      "stream": "relay",
+      "value": "medium",
       "status": "todo",
       "repo": "relay",
-      "task": "Now that the agent has scrape/browse/extract/compare/search/fetch_json, add a couple of routing regression tests (scripted LLM) asserting the SYSTEM_PROMPT guidance leads to sensible tool choice on representative asks (weather -> fetch_json/scrape, price+title -> extract, multi-link -> compare). Not testing the model, testing that the tool set + descriptions are coherent + the loop dispatches each correctly. Guards against tool-wiring regressions as tools grow."
+      "task": "Relay is feature-complete (6 fetch tools, memory, safety, SMS formatting, 78 tests) but only runs on Alex machine. Tighten DEPLOY.md into a copy-paste 24/7 runbook for the free Oracle Always Free VM: exact steps to install Node 22 + Chrome, run anvil (docker compose), run relay (pm2 or systemd unit incl. env + auto-restart), and a healthcheck. This is the last gap between built and live-for-users. (Actual provisioning stays owner-gated deploy-1.)"
     }
   ],
   "history": [
@@ -364,6 +372,9 @@
     },
     {
       "event": "relay-http-tool done: fetch_json tool for direct JSON API access (no browser) — SSRF-guarded, 200KB cap, JSON content-type required (else routes user to scrape), body-parse validated, no creds forwarded; injectable via BrowserBackend.fetchJson. 4 unit tests + 70 full suite pass, tsc clean, live e2e green (real GitHub API -> JSON status 200, full_name matched). Relay tool set now scrape/browse/extract/compare/search/fetch_json. Refilled relay-tool-routing [medium] (dispatch regression tests as the tool set grows)."
+    },
+    {
+      "event": "relay-tool-routing done: tool-surface + dispatch regression tests (test/agent-dispatch.test.ts) — asserts the 10-tool surface (names/desc/params) and that runAgent wires each tool to the right backend call. 8 tests, 78 full suite pass, tsc clean. Guards the growing tool set against wiring regressions. Refilled relay-deploy-doc [medium] — 24/7 runbook (last gap between built + live)."
     }
   ]
 }
