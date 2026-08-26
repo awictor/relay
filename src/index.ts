@@ -15,7 +15,7 @@ import { createShutdown, installSignalHandlers, installCrashHandlers } from "./s
 import { formatStatus, makeAnvilPinger } from "./lib/status.js";
 import { runAgent } from "./agent.js";
 import { formatReply } from "./lib/format-reply.js";
-import { ScheduleStore } from "./lib/schedule.js";
+import { ScheduleStore, parseSchedule } from "./lib/schedule.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
 
 const llm = new GeminiClient();
@@ -61,6 +61,22 @@ const handle = createHandler({
   memorySet: (id, history) => memory.set(id, history),
   memoryClear: (id) => memory.delete(id),
   statusLine: () => formatStatus({ uptimeMs: Date.now() - startMs, turns: metrics.summary().turns, anvilOk: anvilPinger.current() }),
+  scheduleAdd: (chatId, text, now) => {
+    const p = parseSchedule(text, now);
+    if (!p) return { ok: false, reason: "unparsed" };
+    const rec = schedules.add(chatId, p, now);
+    if (!rec) return { ok: false, reason: "capped" };
+    return { ok: true, kind: rec.kind, task: rec.task, whenMs: rec.dueMs };
+  },
+  scheduleList: (chatId) => schedules.list(chatId).map((s) => ({ id: s.id, kind: s.kind, task: s.task, dueMs: s.dueMs })),
+  scheduleCancel: (chatId, which) => {
+    if (which.toLowerCase() === "all") {
+      const all = schedules.list(chatId);
+      let n = 0; for (const s of all) if (schedules.remove(s.id, chatId)) n++;
+      return { removed: n };
+    }
+    return { removed: schedules.remove(which, chatId) ? 1 : 0 };
+  },
   sendMessage,
   sendPhoto,
   sendDocument,

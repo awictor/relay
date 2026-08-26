@@ -26,6 +26,11 @@ export interface HandlerDeps {
   // One-line health reply for /status (uptime + turns + browser reachability). Optional:
   // when absent, /status falls through to the agent (older wiring stays valid).
   statusLine?: () => string;
+  // Scheduled/proactive tasks (m4 sched-3). All optional so older wiring stays valid; when
+  // absent, a "remind me" message just falls through to the normal agent.
+  scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number } | { ok: false; reason: "unparsed" | "capped" };
+  scheduleList?: (chatId: number) => Array<{ id: string; kind: string; task: string; dueMs: number }>;
+  scheduleCancel?: (chatId: number, which: string) => { removed: number };
   checkRateLimit: (chatId: number) => { allowed: boolean; retryAfterSec?: number };
   redactText: (text: string) => string;
   hasModelKey: () => boolean;
@@ -57,6 +62,35 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     if (first === "/status" && deps.statusLine) {
       await deps.sendMessage(msg.chatId, deps.statusLine());
       return;
+    }
+
+    // /schedules: list this chat's pending scheduled tasks. No agent run.
+    if (first === "/schedules" && deps.scheduleList) {
+      const list = deps.scheduleList(msg.chatId);
+      if (!list.length) { await deps.sendMessage(msg.chatId, "No scheduled tasks. Try: \"remind me to stretch in 20 min\"."); return; }
+      const lines = list.map((s, i) => `${i + 1}. [${s.id}] ${s.kind === "daily" ? "daily" : "once"} — ${s.task}`);
+      await deps.sendMessage(msg.chatId, `Your scheduled tasks:\n${lines.join("\n")}\n\nCancel one with /cancel <id> (or /cancel all).`);
+      return;
+    }
+
+    // /cancel <id|all>: remove scheduled task(s). No agent run.
+    if (first === "/cancel" && deps.scheduleCancel) {
+      const which = msg.text.trim().split(/\s+/).slice(1).join(" ").trim() || "all";
+      const { removed } = deps.scheduleCancel(msg.chatId, which);
+      await deps.sendMessage(msg.chatId, removed > 0 ? `Cancelled ${removed} task${removed === 1 ? "" : "s"}.` : "Nothing matched — check /schedules for the id.");
+      return;
+    }
+
+    // Natural scheduling: "remind me to X in 10m", "every morning tell me Y". Detected before
+    // the agent so a schedule request is stored, not executed now. Falls through if unparsed.
+    if (deps.scheduleAdd && /\b(remind me|every day|every morning|every evening|every night|daily)\b|\bin \d+\s*(min|hour|day)/i.test(msg.text)) {
+      const r = deps.scheduleAdd(msg.chatId, msg.text, deps.now());
+      if (r.ok) {
+        await deps.sendMessage(msg.chatId, `Got it — I'll ${r.kind === "daily" ? "do this daily" : "remind you"}: "${r.task}". Manage with /schedules.`);
+        return;
+      }
+      if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the limit of scheduled tasks — cancel one with /schedules first."); return; }
+      // reason === "unparsed": fall through to the agent (it wasn't really a schedule request).
     }
 
     // Slash commands reply instantly — no rate-limit/agent.
