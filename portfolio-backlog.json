@@ -611,9 +611,9 @@
       "id": "pobs-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m8] Per-chat proactive-send rate cap: a misfiring daily (or many due at once) must not spam. Add a small token-bucket/counter (max proactive sends per chat per hour, env RELAY_PROACTIVE_MAX_PER_HOUR default ~10); when exceeded, skip+log rather than send, and complete the schedule so it doesnt storm. Injectable clock; unit-test the cap."
+      "task": "[m8] Per-chat proactive-send rate cap: a misfiring daily (or many due at once) must not spam. Add a small token-bucket/counter (max proactive sends per chat per hour, env RELAY_PROACTIVE_MAX_PER_HOUR default ~10); when exceeded, skip+log rather than send, and complete the schedule so it doesnt storm. Injectable clock; unit-test the cap. [DONE: runner tracks per-chat sends in a rolling hour; over RELAY_PROACTIVE_MAX_PER_HOUR (default 10, 0=unlimited) skips+completes+logs skipped:rate_cap; per-chat isolation; 3 tests; 291 suite]"
     },
     {
       "id": "pobs-3",
@@ -851,6 +851,9 @@
     },
     {
       "event": "m8 pobs-1 done: proactive-run observability. Scheduler fireOne now times each run, emits a structured [proactive] JSON line + records into the SAME Metrics as inbound (so /status + [metrics] count proactive fires); failures log ok:false + record a failed turn. runAgent return widened to carry steps/tools. 2 runner tests, 288 full suite pass, recipe e2e still green. Next m8: pobs-2 (per-chat hourly proactive-send cap, anti-spam)."
+    },
+    {
+      "event": "m8 pobs-2 done: per-chat hourly proactive-send cap. Runner tracks sends/chat in a rolling hour; over RELAY_PROACTIVE_MAX_PER_HOUR (default 10, 0=unlimited) it skips the send + completes the schedule (drop once/advance daily) + logs skipped:rate_cap. Per-chat (one floods -> others unaffected). 3 tests, .env.example doc, 291 full suite pass. A misfiring daily can no longer spam a user. Next m8: pobs-3 (confirm proactive runs respect the dangerous-action + step bounds; doc env vars; completes m8)."
     }
   ],
   "roadmap": {
