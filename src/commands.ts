@@ -10,7 +10,7 @@ Try:
 • "compare the price across these 3 links"
 • "find the newest HN posts about AI"
 
-Commands: /help  /start  /reset (clear our chat)`;
+Commands: /help  /start  /reset (clear our chat)  /status (am I up?)`;
 
 const HELP = `Relay — what I can do:
 • Read a page: send a link, or name a site + what you want. ("top HN story", "weather in Paris")

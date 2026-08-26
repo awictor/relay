@@ -12,8 +12,13 @@ import { MemoryStore } from "./lib/memory-store.js";
 import { Metrics } from "./lib/metrics.js";
 import { createHandler } from "./handler.js";
 import { createShutdown, installSignalHandlers } from "./shutdown.js";
+import { formatStatus } from "./lib/status.js";
 
 const llm = new GeminiClient();
+
+// Process start + last-known anvil reachability, for the /status command (DEV-0024).
+const startMs = Date.now();
+let anvilOk = false;
 
 // Rolling aggregate health; a summary line is emitted every N turns so the operator
 // sees ok/fail rate, avg steps, latency percentiles + tool mix without parsing [out].
@@ -39,6 +44,7 @@ const handle = createHandler({
   memoryGet: (id) => memory.get(id) as LLMMessage[],
   memorySet: (id, history) => memory.set(id, history),
   memoryClear: (id) => memory.delete(id),
+  statusLine: () => formatStatus({ uptimeMs: Date.now() - startMs, turns: metrics.summary().turns, anvilOk }),
   sendMessage,
   sendTyping,
   handleCommand,
@@ -55,6 +61,7 @@ async function main() {
     process.exit(1);
   }
   const live = await anvilLive();
+  anvilOk = live; // seed /status with boot-time reachability
   console.log(`anvil reachable: ${live} (ANVIL_BASE_URL=${process.env.ANVIL_BASE_URL ?? "http://localhost:3000"})`);
   if (!live) console.warn("WARNING: anvil-engine not reachable — browsing tools will fail until it's running.");
   if (!process.env.GEMINI_API_KEY) console.warn("WARNING: GEMINI_API_KEY not set — the agent can't run until it's provided.");

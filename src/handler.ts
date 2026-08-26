@@ -18,6 +18,9 @@ export interface HandlerDeps {
   handleCommand: (text: string) => string | null;
   // Clear this chat's stored history (/reset). Returns true if there was anything to clear.
   memoryClear: (chatId: number) => boolean;
+  // One-line health reply for /status (uptime + turns + browser reachability). Optional:
+  // when absent, /status falls through to the agent (older wiring stays valid).
+  statusLine?: () => string;
   checkRateLimit: (chatId: number) => { allowed: boolean; retryAfterSec?: number };
   redactText: (text: string) => string;
   hasModelKey: () => boolean;
@@ -42,6 +45,12 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     if (first === "/reset" || first === "/clear") {
       const had = deps.memoryClear(msg.chatId);
       await deps.sendMessage(msg.chatId, had ? "Cleared our conversation — starting fresh." : "Nothing to clear — we've got no history yet.");
+      return;
+    }
+
+    // /status: one-line health (uptime + tasks handled + browser reachability). No agent run.
+    if (first === "/status" && deps.statusLine) {
+      await deps.sendMessage(msg.chatId, deps.statusLine());
       return;
     }
 

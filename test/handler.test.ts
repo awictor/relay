@@ -16,6 +16,7 @@ function harness(over: Partial<HandlerDeps> = {}) {
     sendTyping: async () => {},
     handleCommand: () => null,
     memoryClear: (id) => mem.delete(id),
+    statusLine: () => "STATUS LINE",
     checkRateLimit: () => ({ allowed: true }),
     redactText: (t) => t,
     hasModelKey: () => true,
@@ -88,6 +89,17 @@ describe("createHandler", () => {
     await handle(msg("/clear", 3));
     expect(mem.has(3)).toBe(false);
     expect(sent[0]!.text).toMatch(/cleared/i);
+  });
+
+  it("/status replies the health line and does NOT run the agent (DEV-0024)", async () => {
+    let agentCalled = false;
+    const { handle, sent } = harness({
+      statusLine: () => "✅ Relay up 2h 3m · 5 tasks handled · browser connected.",
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("/status", 4));
+    expect(agentCalled).toBe(false);
+    expect(sent[0]!.text).toMatch(/Relay up/);
   });
 
   it("a rate-limited chat gets the limit message, no agent", async () => {
