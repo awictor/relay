@@ -955,7 +955,7 @@
       "id": "merge-2",
       "stream": "datafaucet",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "mcp-forge",
       "task": "[m22] Extend merge-readiness to run the gate + default-unchanged proof: npm run test:unit pass/fail, and git diff master -- <browserbase selection files> shows only flag-gated/additive changes (reuse the df-anvil-3 finding: browser-backend.ts new, routes anvil-gated, capture-filter extracted). Fold into the single GO/READY-TO-MERGE vs NEEDS-ATTENTION summary."
     },
@@ -1315,6 +1315,9 @@
     },
     {
       "event": "m22 merge-1 DONE (mcp-forge anvil-migration, NEVER master). Also committed a stray concurrent-dev-loop artifact: anvil-flag-gate.test.ts (DEV-0104 prod-safety: static scan asserting every anvil-only route call sits in if(USE_ANVIL) — 5/5 pass) + its package.json wiring. scripts/merge-readiness.mjs: READ-ONLY merge-readiness — commits behind/ahead master + conflict dry-run (git merge --no-commit --no-ff then ALWAYS --abort, refuses on dirty tree or off-branch so abort is safe), READY/NEEDS-ATTENTION verdict. VERIFIED: READY — 49 ahead, 0 behind, no conflicts; tree clean after + still on branch (master untouched, zero side effects). call-tested TRUE. merge-2 adds gate+default-unchanged."
+    },
+    {
+      "event": "m22 merge-2 DONE (mcp-forge anvil-migration). merge-readiness.mjs now folds in the unit gate + default-unchanged proof for a single READY-TO-MERGE verdict: runs npm run test:unit on branch (green=CIs PR gate), proves browserbase default unchanged (browser-backend.ts is NEW not an edit + anvil-flag-gate invariant test passes = routes statically proven gated). VERIFIED: READY TO MERGE — 50 ahead/0 behind, no conflicts, gate 1823 pass/0 fail, default provably unchanged; tree clean, master untouched. call-tested TRUE. merge-3 = document the Before-you-merge procedure."
     }
   ],
   "roadmap": {
