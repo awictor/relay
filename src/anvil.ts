@@ -245,3 +245,24 @@ export async function scrape(
     await releaseSession(session.id);
   }
 }
+
+/** Screenshot a URL: create a session, navigate, capture the viewport as JPEG bytes,
+ * release. SSRF-guarded like scrape. Returns the raw image bytes (for Telegram sendPhoto). */
+export async function screenshot(url: string): Promise<Uint8Array> {
+  const check = isUrlSafe(url);
+  if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
+  const session = await createSession();
+  try {
+    await navigate(session.id, url, "domcontentloaded");
+    await new Promise((r) => setTimeout(r, 600)); // brief settle for client-rendered content
+    const r = await fetch(`${BASE}/v1/screenshot?sessionId=${encodeURIComponent(session.id)}`, {
+      method: "GET",
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!r.ok) throw new Error(`anvil screenshot failed: ${r.status}`);
+    return new Uint8Array(await r.arrayBuffer());
+  } finally {
+    await releaseSession(session.id);
+  }
+}

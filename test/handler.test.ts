@@ -6,6 +6,7 @@ import type { LLMMessage } from "../src/llm.js";
 // Build a handler with fakes; capture what got sent / recorded / persisted.
 function harness(over: Partial<HandlerDeps> = {}) {
   const sent: Array<{ chatId: number; text: string }> = [];
+  const photos: Array<{ chatId: number; len: number; caption?: string }> = [];
   const recorded: Array<{ ok: boolean; steps: number; tools: string[] }> = [];
   const mem = new Map<number, LLMMessage[]>();
   const deps: HandlerDeps = {
@@ -13,6 +14,7 @@ function harness(over: Partial<HandlerDeps> = {}) {
     memoryGet: (id) => mem.get(id) ?? [],
     memorySet: (id, h) => { mem.set(id, h); },
     sendMessage: async (chatId, text) => { sent.push({ chatId, text }); },
+    sendPhoto: async (chatId, bytes, caption) => { photos.push({ chatId, len: bytes.length, caption }); },
     sendTyping: async () => {},
     handleCommand: () => null,
     memoryClear: (id) => mem.delete(id),
@@ -26,7 +28,7 @@ function harness(over: Partial<HandlerDeps> = {}) {
     log: () => {},
     ...over,
   };
-  return { handle: createHandler(deps), sent, recorded, mem };
+  return { handle: createHandler(deps), sent, photos, recorded, mem };
 }
 
 const msg = (text: string, chatId = 1): InboundMessage => ({ chatId, from: "u", text } as InboundMessage);
@@ -123,6 +125,15 @@ describe("createHandler", () => {
     await handle(msg("weather?"));
     expect(agentCalled).toBe(false);
     expect(sent[0]!.text).toMatch(/not fully configured/i);
+  });
+
+  it("a screenshot result is sent as a photo with the reply as caption (DEV-0027)", async () => {
+    const { handle, sent, photos } = harness({
+      runAgentFn: async () => ({ reply: "top of HN", steps: 1, tools: ["screenshot"], photo: new Uint8Array([1, 2, 3, 4]) }),
+    });
+    await handle(msg("screenshot HN", 11));
+    expect(photos).toEqual([{ chatId: 11, len: 4, caption: "top of HN" }]);
+    expect(sent).toHaveLength(0); // short caption -> no separate text message
   });
 
   it("a normal message runs the agent, replies, persists memory, records an ok turn", async () => {

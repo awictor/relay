@@ -82,6 +82,11 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "screenshot",
+    description: "Capture a web page as an IMAGE and send it to the user. Use when the user wants to SEE a page (\"show me\", \"screenshot\", \"what does X look like\") rather than read its text. After calling this, still call reply with a short caption.",
+    parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to capture" } }, required: ["url"] },
+  },
+  {
     name: "reply",
     description: "Send the final answer to the user and end the task. Call exactly once when done or when you must report you cannot complete it.",
     parameters: { type: "object", properties: { text: { type: "string", description: "Message to send the user" } }, required: ["text"] },
@@ -123,6 +128,9 @@ export interface BrowserBackend {
   // Optional: JSON-LD + meta tags a text scrape misses (SPAs/product pages). When
   // absent, extract just uses the text pass.
   extractStructured?(url: string): Promise<string>;
+  // Optional: capture a URL as image bytes (DEV-0027). When absent, the screenshot tool
+  // reports it can't take pictures rather than failing hard.
+  screenshot?(url: string): Promise<Uint8Array>;
 }
 
 const FETCH_JSON_MAX_BYTES = 200_000;
@@ -153,6 +161,7 @@ const defaultBackend: BrowserBackend = {
   discoverLinks: (url, limit) => anvil.discoverLinks(url, limit),
   fetchJson: (url) => defaultFetchJson(url),
   extractStructured: (url) => anvil.extractStructured(url),
+  screenshot: (url) => anvil.screenshot(url),
 };
 
 export interface AgentDeps {
@@ -166,12 +175,13 @@ export async function runAgent(
   userText: string,
   deps: AgentDeps,
   history: LLMMessage[] = []
-): Promise<{ reply: string; steps: number; tools: string[] }> {
+): Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array }> {
   const backend: BrowserBackend = deps.backend ?? {
     ...defaultBackend,
     ...(deps.scrapeFn ? { scrape: deps.scrapeFn } : {}),
   };
   const toolsUsed: string[] = []; // tool names invoked this turn (for observability)
+  let photo: Uint8Array | undefined; // last screenshot captured this turn, sent by the handler
 
   const messages: LLMMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -214,6 +224,20 @@ export async function runAgent(
           push("scrape", `TITLE: ${r.title || r.url}\n\n${r.content.slice(0, 6000)}`);
         } catch (e) {
           push("scrape", `ERROR fetching ${url}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "screenshot") {
+        const url = String(call.args.url ?? "");
+        const safe = isUrlSafe(url);
+        if (!safe.safe) { push("screenshot", `ERROR: refused (${safe.reason}).`); continue; }
+        if (!backend.screenshot) { push("screenshot", "ERROR: screenshots aren't available."); continue; }
+        try {
+          photo = await backend.screenshot(url);
+          push("screenshot", `Captured a screenshot of ${url} (${photo.length} bytes). It will be sent to the user; now call reply with a short caption.`);
+        } catch (e) {
+          push("screenshot", `ERROR capturing ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }
@@ -361,13 +385,13 @@ export async function runAgent(
       push(call.name, `ERROR: unknown tool "${call.name}".`);
     }
 
-    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed };
+    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed, photo };
 
     const finalRes = await deps.llm.complete(
       [...messages, { role: "user", content: "Step budget reached. Reply now with your best answer using what you have." }],
       []
     );
-    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: MAX_STEPS, tools: toolsUsed };
+    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: MAX_STEPS, tools: toolsUsed, photo };
   } finally {
     if (sessionId) await backend.releaseSession(sessionId).catch(() => {});
   }

@@ -9,6 +9,7 @@ Try:
 • "extract the price and title from <link>"
 • "compare the price across these 3 links"
 • "find the newest HN posts about AI"
+• "screenshot the top of Hacker News"
 
 Commands: /help  /start  /reset (clear our chat)  /status (am I up?)`;
 

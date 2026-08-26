@@ -2,7 +2,7 @@
 // Per-chat short memory so follow-ups have context. Falls back to a clear message
 // if keys/anvil are missing so it never hangs silently.
 
-import { startPolling, sendMessage, sendTyping, hasToken } from "./telegram.js";
+import { startPolling, sendMessage, sendPhoto, sendTyping, hasToken } from "./telegram.js";
 import { anvilLive } from "./anvil.js";
 import { GeminiClient } from "./llm.js";
 import type { LLMMessage } from "./llm.js";
@@ -48,6 +48,7 @@ const handle = createHandler({
   memoryClear: (id) => memory.delete(id),
   statusLine: () => formatStatus({ uptimeMs: Date.now() - startMs, turns: metrics.summary().turns, anvilOk: anvilPinger.current() }),
   sendMessage,
+  sendPhoto,
   sendTyping,
   handleCommand,
   checkRateLimit,

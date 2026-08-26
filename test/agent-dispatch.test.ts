@@ -29,6 +29,7 @@ function recordingBackend() {
     releaseSession: async () => { hits.push("releaseSession"); },
     discoverLinks: async (url) => { hits.push(`discoverLinks:${url}`); return ["https://x.com/a"]; },
     fetchJson: async (url) => { hits.push(`fetchJson:${url}`); return { status: 200, contentType: "application/json", text: "{}" }; },
+    screenshot: async (url) => { hits.push(`screenshot:${url}`); return new Uint8Array([1, 2, 3]); },
   };
   return { b, hits };
 }
@@ -37,7 +38,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "click", "compare", "extract", "fetch_json", "read", "reply", "scrape", "search", "type"].sort()
+      ["browse", "click", "compare", "extract", "fetch_json", "read", "reply", "scrape", "screenshot", "search", "type"].sort()
     );
   });
 
@@ -105,6 +106,30 @@ describe("runAgent dispatch", () => {
     ]);
     await runAgent("price", { llm, backend: b });
     expect(hits).toContain("scrape:https://x.com/i");
+  });
+
+  it("screenshot -> backend.screenshot, returns photo bytes (DEV-0027)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "screenshot", args: { url: "https://x.com/p" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "here it is" } } as ToolCall },
+    ]);
+    const r = await runAgent("show me x", { llm, backend: b });
+    expect(hits).toContain("screenshot:https://x.com/p");
+    expect(r.photo).toBeInstanceOf(Uint8Array);
+    expect(r.photo!.length).toBe(3);
+    expect(r.reply).toBe("here it is");
+  });
+
+  it("screenshot with no backend.screenshot reports unavailable, no photo", async () => {
+    const { b } = recordingBackend();
+    delete (b as { screenshot?: unknown }).screenshot;
+    const llm = new ScriptLLM([
+      { toolCall: { name: "screenshot", args: { url: "https://x.com/p" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "can't" } } as ToolCall },
+    ]);
+    const r = await runAgent("show me x", { llm, backend: b });
+    expect(r.photo).toBeUndefined();
   });
 
   it("click/type on the browsed session dispatch to backend.click/type", async () => {

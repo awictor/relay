@@ -33,6 +33,26 @@ export async function sendMessage(chatId: number, text: string): Promise<void> {
   }
 }
 
+/** Send a photo (raw image bytes) to a chat via multipart/form-data. Best-effort; logs on
+ * failure. Uses FormData + Blob so we don't hand-roll the multipart boundary. Optional caption. */
+export async function sendPhoto(chatId: number, bytes: Uint8Array, caption?: string): Promise<void> {
+  if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
+  try {
+    const form = new FormData();
+    form.set("chat_id", String(chatId));
+    if (caption) form.set("caption", caption.slice(0, 1024)); // Telegram caption cap
+    form.set("photo", new Blob([bytes], { type: "image/jpeg" }), "screenshot.jpg");
+    const r = await fetch(`${API}/sendPhoto`, {
+      method: "POST",
+      body: form, // fetch sets the multipart Content-Type + boundary itself
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!r.ok) console.error("telegram sendPhoto failed:", r.status, (await r.text().catch(() => "")).slice(0, 200));
+  } catch (e) {
+    console.error("telegram sendPhoto error:", e instanceof Error ? e.message : String(e));
+  }
+}
+
 /** Show the "typing…" indicator in a chat (best-effort, ~5s or until next message). */
 export async function sendTyping(chatId: number): Promise<void> {
   if (!TOKEN) return;

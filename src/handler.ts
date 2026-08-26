@@ -14,6 +14,9 @@ export interface HandlerDeps {
   memoryGet: (chatId: number) => LLMMessage[];
   memorySet: (chatId: number, history: LLMMessage[]) => void;
   sendMessage: (chatId: number, text: string) => Promise<unknown>;
+  // Send an image (screenshot tool, DEV-0027). Optional: when absent, a photo result is dropped
+  // and only the text reply goes out (older wiring stays valid).
+  sendPhoto?: (chatId: number, bytes: Uint8Array, caption?: string) => Promise<unknown>;
   sendTyping: (chatId: number) => Promise<unknown>;
   handleCommand: (text: string) => string | null;
   // Clear this chat's stored history (/reset). Returns true if there was anything to clear.
@@ -27,7 +30,7 @@ export interface HandlerDeps {
   recordTurn: (t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean }) => void;
   now: () => number;
   // Optional override so tests don't hit the real agent loop.
-  runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[] }>;
+  runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array }>;
   log?: (line: string) => void;
 }
 
@@ -73,9 +76,17 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     const startedAt = deps.now();
     try {
       await deps.sendTyping(msg.chatId);
-      const { reply, steps, tools } = await runIt(msg.text, { llm: deps.llm }, history);
+      const { reply, steps, tools, photo } = await runIt(msg.text, { llm: deps.llm }, history);
       const out = formatReply(reply);
-      await deps.sendMessage(msg.chatId, out);
+      // If the agent captured a screenshot, send the image first (with the reply as caption), then
+      // the text — so the user sees the picture even if the caption is long. Falls back to text-only
+      // when no sendPhoto is wired or no photo was taken.
+      if (photo && deps.sendPhoto) {
+        await deps.sendPhoto(msg.chatId, photo, out.slice(0, 1024));
+        if (out.length > 1024) await deps.sendMessage(msg.chatId, out);
+      } else {
+        await deps.sendMessage(msg.chatId, out);
+      }
 
       const next: LLMMessage[] = [...history, { role: "user", content: msg.text }, { role: "assistant", content: out }];
       deps.memorySet(msg.chatId, next);
