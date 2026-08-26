@@ -843,9 +843,33 @@
       "id": "anvil-ops-3",
       "stream": "anvil",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "anvil-engine",
       "task": "[m17] Wire Relays `relay status` to also probe anvils new health/metrics endpoint (not just /v1/live) and print sessions active/max + uptime, so one command shows the whole stacks health. Cross-repo read-only of anvils endpoint; Relay-side change only. Closes m17."
+    },
+    {
+      "id": "fault-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m18] scripts/e2e-faults.mjs skeleton + anvil-unreachable drill: point ANVIL_BASE_URL at a dead port, run the REAL agent on a scrape task through the handler-equivalent path (runAgent + friendlyError), assert the reply is the friendly browser-down line and NOT a raw ECONNREFUSED, and that it did not throw. SKIP+exit0 if no GEMINI_API_KEY. Wire npm run e2e:faults. Bounded LLM calls."
+    },
+    {
+      "id": "fault-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m18] Add a blocked/SSRF-URL drill: ask the agent to open a private/blocked URL (e.g. http://169.254.169.254 or http://10.0.0.1), assert the SSRF guard refuses it and the surfaced text is the friendly blocked-link message (not a raw Blocked-URL leak), agent still replies (no crash). Assert classifyFailure would tag it blocked."
+    },
+    {
+      "id": "fault-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m18] Add an anvil-dies-mid-session drill if feasible: start a real errand, kill/close the anvil session underneath (or simulate via a backend whose 2nd call throws a transient), assert the agents per-tool catch surfaces an error line to the model and the final reply degrades gracefully (no unhandled throw). Document npm run e2e:faults in README Verify. Closes m18."
     }
   ],
   "history": [
@@ -1159,10 +1183,13 @@
     },
     {
       "event": "m17 anvil-ops-1+2 DONE (anvil-engine, master). AUDIT: anvil already strong — installProcessHandlers (SIGINT/TERM->exit0, uncaught/unhandledRejection->stop()+exit1 for supervisor, re-entrancy guarded), per-route histogram /v1/metrics (p50/p95/p99, errorsByEndpoint), session counters (created/released/peakConcurrent/requestsServed/errorsCount), /v1/health + /v1/live + /v1/ready. GAP: /v1/health + /v1/metrics reported activeSessions but NOT the ceiling (maxSessions/poolSize/poolAvailable) — operator cant see exhaustion headroom. FIX (anvil-ops-2, same iteration since gap bounded): both endpoints now return maxSessions+poolSize+poolAvailable (additive, default path identical). Live-verified fresh build on :3199 (MAX=7,POOL=2) -> health+metrics both show maxSessions=7,poolSize=2,poolAvailable=2. anvil tsc clean, 637 tests (+2). Note: running :3000 instance is the OLD build until owner restarts it — new fields live only after restart (owner action, non-blocking)."
+    },
+    {
+      "event": "m17 anvil-ops-3 DONE + m17-anvil-ops COMPLETE. anvil-ops-3: relay status now probes anvil /v1/health (was /v1/live) and prints active/max sessions + warm pool + uptime when the running anvil build reports them; graceful subset for older builds. Live-verified: vs OLD :3000 build -> `sessions 0, up 49057s` (no max/pool, old build); vs NEW :3199 build (MAX=7,POOL=2) -> `sessions 0/7, pool 2/2, up 176s`. README updated. 368 pass, tsc clean. One command (npm run status) now shows the WHOLE stacks health. ROADMAP advanced -> AUTHORED m18-fault-drills (prove degradation under REAL induced failure, not unit mocks — kill anvil/feed blocked URL through the real agent path, assert friendly classification + no crash; CI-safe skip). Seeded fault-1/2/3. 14th self-directed milestone."
     }
   ],
   "roadmap": {
-    "current": "m17-anvil-ops",
+    "current": "m18-fault-drills",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1279,6 +1306,13 @@
         "id": "m17-anvil-ops",
         "goal": "Give anvil-engine the same operability + failure-mode discipline Relay now has. anvil is the SHARED browser both products depend on — if it is opaque, the whole stack is. Audit its health/observability surface (does /v1/live/metrics expose enough? are session leaks/pool exhaustion visible? does a crash log + exit for supervisor restart like Relay?), then close the biggest gap. Same bar as Relay m14/m16: fail soft, observable, tested. anvil-engine repo is local (C:/Users/acwic/anvil-engine, master) + already has a test suite.",
         "done_when": "anvil exposes an operator-legible health/metrics surface (sessions active/max, pool state, uptime) beyond a bare /v1/live, OR a documented crash/degradation gap is closed; change is tested (its vitest) + tsc clean; no behavior regression on the default path",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m18-fault-drills",
+        "goal": "Prove the degradation paths hold under REAL induced failure, not just unit mocks. m14 made Relay fail soft and unit-tested it with injected throwing deps; but nobody has killed anvil mid-errand against the live stack and confirmed the user gets the friendly line + the worker survives. Build a fault-injection drill harness (CI-safe skip like e2e-live) that induces real faults — anvil unreachable, anvil dies mid-session, a bad/blocked URL — through the REAL agent path and asserts the friendly classification + no crash. Closes the gap between unit-proven and deploy-proven for the failure modes.",
+        "done_when": "a `npm run e2e:faults` (scripts/e2e-faults.mjs) induces >=2 real faults (anvil-unreachable via a dead base URL; a blocked/SSRF URL) through the real agent + friendlyError path and asserts the correct friendly category came back, NOT a raw error/crash; SKIPs cleanly (exit 0) when GEMINI_API_KEY absent so offline CI is unaffected; documented in README Verify",
         "status": "todo",
         "owner_gated": false
       }

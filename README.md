@@ -92,7 +92,8 @@ feature-specific live/offline proofs; `e2e:live` is the consolidated deploy chec
 
 `npm run status` (`scripts/status.mjs`) is the offline **operability** view — ssh into the VM and
 run it to see, without reading logs or texting the bot: how many schedules/recipes/digests/alerts
-are stored (across how many chats), whether anvil is up (+ latency), which keys are set (names
+are stored (across how many chats), anvil health from its `/v1/health` (up + latency, plus active/max
+sessions, warm pool, and uptime when the running anvil build reports them), which keys are set (names
 only), and the last persisted metrics window (ok/fail, latency percentiles, tool mix). It needs
 **no keys** — counts come from the durable state files the runtime writes — and always exits 0.
 

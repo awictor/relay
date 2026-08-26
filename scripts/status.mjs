@@ -18,12 +18,18 @@ const STORES = [
   { label: "alerts",    file: paths.alerts },
 ];
 
+// anvil-ops-3: probe /v1/health (not just /v1/live) so one command shows the whole stack's health —
+// active/max sessions, warm pool, uptime. /v1/health returns those capacity fields (anvil-ops-2);
+// an older anvil build without them still answers 200 with a subset, so we just show what's present.
 async function probeAnvil() {
   const base = (process.env.ANVIL_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
   const started = Date.now();
   try {
-    const r = await fetch(`${base}/v1/live`, { signal: AbortSignal.timeout(4000) });
-    return { base, up: r.ok, status: r.status, ms: Date.now() - started };
+    const r = await fetch(`${base}/v1/health`, { signal: AbortSignal.timeout(4000) });
+    const ms = Date.now() - started;
+    let body = {};
+    try { body = await r.json(); } catch { /* non-JSON */ }
+    return { base, up: r.ok, status: r.status, ms, body };
   } catch (e) {
     return { base, up: false, err: e instanceof Error ? e.message : String(e), ms: Date.now() - started };
   }
@@ -51,7 +57,18 @@ if (snap) {
 }
 
 const anvil = await probeAnvil();
-console.log(`\nanvil (${anvil.base}): ${anvil.up ? `UP (${anvil.status}, ${anvil.ms}ms)` : `DOWN — ${anvil.err ?? anvil.status} (${anvil.ms}ms)`}`);
+if (anvil.up) {
+  const b = anvil.body ?? {};
+  // Capacity line, only for fields the running build actually reports (anvil-ops-2+).
+  const bits = [];
+  if (typeof b.sessions === "number") bits.push(`sessions ${b.sessions}${typeof b.maxSessions === "number" ? `/${b.maxSessions}` : ""}`);
+  if (typeof b.poolAvailable === "number") bits.push(`pool ${b.poolAvailable}${typeof b.poolSize === "number" ? `/${b.poolSize}` : ""}`);
+  if (typeof b.uptime === "number") bits.push(`up ${Math.round(b.uptime)}s`);
+  const caps = bits.length ? ` — ${bits.join(", ")}` : "";
+  console.log(`\nanvil (${anvil.base}): UP (${anvil.status}, ${anvil.ms}ms)${caps}`);
+} else {
+  console.log(`\nanvil (${anvil.base}): DOWN — ${anvil.err ?? anvil.status} (${anvil.ms}ms)`);
+}
 
 // Key presence (names only — never values), so the operator knows the bot can actually run.
 const keys = ["TELEGRAM_BOT_TOKEN", "GEMINI_API_KEY"].map((k) => `${k}=${process.env[k] ? "set" : "MISSING"}`);
