@@ -54,3 +54,21 @@ next getUpdates). Per-chat `checkRateLimit` guards abuse, not latency.
 
 Telegram long-poll, Gemini free tier, self-hosted anvil. No paid vendor. `.env` gitignored;
 never commit real keys.
+
+## Secret redaction (two independent layers — don't confuse them)
+
+Secrets are kept out of logs/replies by TWO functions in `src/safety.ts`, matching on different axes:
+- `redactText(s)` — VALUE-SHAPE regex over free text. Masks `Bearer <tok>`, `AIza…`, `sk-…`,
+  telegram bot tokens (`\d{8,10}:AA…`), and long hex (`[0-9a-f]{32,}`). Used on inbound message text
+  before it hits the log: `handler.ts:45` `log("[in] " + deps.redactText(msg.text).slice(0,120))`.
+  Wired in via `src/index.ts` (createHandler dep). Tested in `test/safety.test.ts`.
+- `redactObject(obj)` = `redactSecretsDeep(obj, ()=>"[redacted]", SENSITIVE_KEY_RE)` — KEY-NAME deep
+  redaction for structured tool args. Complements redactText: catches a secret whose VALUE doesn't
+  match a known shape but whose KEY is sensitive (e.g. `{password:"hunter2"}`). `redactSecretsDeep`
+  itself is pinned by `test/redact-secrets.test.ts` (DEV-0051); `redactObject`'s wrapper defaults were
+  only exercised via handler mock stubs — a direct test is the open gap (DEV-0052, rescoped).
+- **turn-log carries NO body.** `src/lib/turn-log.ts` `formatTurnLog` emits shape/metadata ONLY
+  (chat id, step count, deduped tool names, ms, replyChars, ok, truncated error) — never message text
+  or args. So there is nothing in the `[out]` line to redact; DEV-0052's original "turn-log redaction"
+  premise was wrong. The redaction that matters is on the `[in]` line (redactText) + tool-arg logging
+  (redactObject), not turn-log.
