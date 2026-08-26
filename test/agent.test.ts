@@ -58,4 +58,32 @@ describe("runAgent", () => {
     expect(typeof reply).toBe("string");
     expect(reply.length).toBeGreaterThan(0);
   });
+
+  // DEV-0042: after MAX_STEPS the loop makes ONE final forced-reply call (tools=[]) and returns its
+  // text — or a fallback if that's empty. The forever test only checked non-empty; pin the content.
+  it("MAX_STEPS exhausted -> returns the forced final-answer text", async () => {
+    // Each in-loop call returns a scrape toolCall; the LAST call (post-budget, tools=[]) returns text.
+    const llm: LLMClient = {
+      async complete(_m, tools) {
+        if (tools.length === 0) return { text: "best effort answer" }; // the forced final call
+        return { toolCall: { name: "scrape", args: { url: "https://x.com" } } };
+      },
+    };
+    const scrapeFn = async (url: string) => ({ title: "t", content: "c", url });
+    const { reply, steps } = await runAgent("loop", { llm, scrapeFn });
+    expect(reply).toBe("best effort answer");
+    expect(steps).toBe(8); // RELAY_MAX_STEPS default
+  });
+
+  it("MAX_STEPS exhausted with an empty forced answer -> the 'ran out of steps' fallback", async () => {
+    const llm: LLMClient = {
+      async complete(_m, tools) {
+        if (tools.length === 0) return { text: "   " }; // forced call yields blank
+        return { toolCall: { name: "scrape", args: { url: "https://x.com" } } };
+      },
+    };
+    const scrapeFn = async (url: string) => ({ title: "t", content: "c", url });
+    const { reply } = await runAgent("loop", { llm, scrapeFn });
+    expect(reply).toMatch(/ran out of steps/i);
+  });
 });
