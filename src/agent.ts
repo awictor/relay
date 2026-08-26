@@ -166,11 +166,12 @@ export async function runAgent(
   userText: string,
   deps: AgentDeps,
   history: LLMMessage[] = []
-): Promise<{ reply: string; steps: number }> {
+): Promise<{ reply: string; steps: number; tools: string[] }> {
   const backend: BrowserBackend = deps.backend ?? {
     ...defaultBackend,
     ...(deps.scrapeFn ? { scrape: deps.scrapeFn } : {}),
   };
+  const toolsUsed: string[] = []; // tool names invoked this turn (for observability)
 
   const messages: LLMMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -196,6 +197,7 @@ export async function runAgent(
 
       const call: ToolCall = res.toolCall;
       messages.push({ role: "assistant", content: res.text ?? "", toolCall: call });
+      if (call.name !== "reply") toolsUsed.push(call.name);
 
       if (call.name === "reply") {
         finalReply = String(call.args.text ?? "").trim() || "Done.";
@@ -359,13 +361,13 @@ export async function runAgent(
       push(call.name, `ERROR: unknown tool "${call.name}".`);
     }
 
-    if (finalReply !== null) return { reply: finalReply, steps: usedSteps };
+    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed };
 
     const finalRes = await deps.llm.complete(
       [...messages, { role: "user", content: "Step budget reached. Reply now with your best answer using what you have." }],
       []
     );
-    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: MAX_STEPS };
+    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: MAX_STEPS, tools: toolsUsed };
   } finally {
     if (sessionId) await backend.releaseSession(sessionId).catch(() => {});
   }

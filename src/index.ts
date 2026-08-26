@@ -11,6 +11,7 @@ import { checkRateLimit, redactText } from "./safety.js";
 import { handleCommand } from "./commands.js";
 import { MemoryStore } from "./lib/memory-store.js";
 import { formatReply } from "./lib/format-reply.js";
+import { formatTurnLog } from "./lib/turn-log.js";
 
 const llm = new GeminiClient();
 
@@ -42,18 +43,21 @@ async function handle(msg: InboundMessage): Promise<void> {
   }
 
   const history = memory.get(msg.chatId) as LLMMessage[];
+  const startedAt = Date.now();
   try {
     await sendTyping(msg.chatId); // show "typing…" while the agent works
-    const { reply } = await runAgent(msg.text, { llm }, history);
+    const { reply, steps, tools } = await runAgent(msg.text, { llm }, history);
     const out = formatReply(reply); // SMS-friendly: render stray JSON as lines, trim length
     await sendMessage(msg.chatId, out);
 
     // Append this turn to memory (user + assistant); the store trims to its maxTurns + persists.
     const next: LLMMessage[] = [...history, { role: "user", content: msg.text }, { role: "assistant", content: out }];
     memory.set(msg.chatId, next);
+    console.log(formatTurnLog({ chatId: msg.chatId, steps, tools, elapsedMs: Date.now() - startedAt, replyChars: out.length, ok: true }));
   } catch (e) {
     const emsg = e instanceof Error ? e.message : String(e);
     console.error("agent error:", emsg);
+    console.log(formatTurnLog({ chatId: msg.chatId, steps: 0, tools: [], elapsedMs: Date.now() - startedAt, replyChars: 0, ok: false, error: emsg }));
     // Friendlier message for the common transient model-overload case.
     if (/\b(503|429|UNAVAILABLE|high demand|overloaded|rate)/i.test(emsg)) {
       await sendMessage(msg.chatId, "My brain's overloaded right now (free-tier model is busy). Try again in a moment.");
