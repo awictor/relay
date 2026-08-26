@@ -125,6 +125,22 @@ export function parseUpdates(updates: TgUpdate[], offset: number): { messages: I
  * returned stop() is called. Uses Telegram's offset mechanism so each update is
  * delivered once. 30s long-poll keeps it near-idle with no external cost.
  */
+/**
+ * Dispatch a batch of inbound messages CONCURRENTLY (DEV-0037). The old code awaited each
+ * onMessage in sequence, so one chat's slow browse task head-of-line-blocked every other chat's
+ * reply. Firing them together isolates latency per chat; per-chat rate-limit still guards abuse.
+ * Each handler's error is caught individually (one throw never sinks the batch). Returns a promise
+ * that settles when ALL handlers finish — the caller awaits it before the next getUpdates so a
+ * genuinely stuck handler can't let the loop lap itself.
+ */
+export async function dispatchBatch(
+  messages: InboundMessage[],
+  onMessage: (msg: InboundMessage) => Promise<void>,
+  onError: (e: unknown) => void = (e) => console.error("onMessage handler error:", e instanceof Error ? e.message : String(e)),
+): Promise<void> {
+  await Promise.all(messages.map((msg) => onMessage(msg).catch(onError)));
+}
+
 export function startPolling(onMessage: (msg: InboundMessage) => Promise<void>): { stop: () => void } {
   if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
   let offset = 0;
@@ -143,13 +159,8 @@ export function startPolling(onMessage: (msg: InboundMessage) => Promise<void>):
         const j = (await r.json()) as { ok: boolean; result: TgUpdate[] };
         const { messages, nextOffset } = parseUpdates(j.result ?? [], offset);
         offset = nextOffset; // advance past ALL updates (incl. skipped) so none redeliver
-        for (const msg of messages) {
-          try {
-            await onMessage(msg);
-          } catch (e) {
-            console.error("onMessage handler error:", e instanceof Error ? e.message : String(e));
-          }
-        }
+        // Concurrent dispatch (DEV-0037): independent chats don't head-of-line-block each other.
+        await dispatchBatch(messages, onMessage);
       } catch {
         await sleep(2000); // transient network/timeout — back off and retry
       }
