@@ -19,3 +19,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # Real-process graceful-shutdown check. On this ubuntu runner SIGTERM is catchable,
+      # so the assertion actually runs (it self-skips only on Windows). Needs the build.
+      - run: npm run build
+      - run: node scripts/e2e-shutdown.mjs
