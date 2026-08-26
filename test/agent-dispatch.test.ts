@@ -49,6 +49,17 @@ describe("tool surface", () => {
       expect(t.parameters.type).toBe("object");
     }
   });
+
+  it("the system prompt lists screenshot + pdf so the model reaches for them (DEV-0035)", async () => {
+    // Guard against re-omission: a tool in TOOLS but absent from the prose menu is effectively
+    // dead — the model picks from the prompt. Assert both appear in the system message runAgent sends.
+    const { b } = recordingBackend();
+    const llm = new ScriptLLM([{ toolCall: { name: "reply", args: { text: "hi" } } as ToolCall }]);
+    await runAgent("hi", { llm, backend: b });
+    const sys = llm.calls[0]!.find((m) => m.role === "system")!.content;
+    expect(sys).toMatch(/"screenshot"/);
+    expect(sys).toMatch(/"pdf"/);
+  });
 });
 
 describe("runAgent dispatch", () => {

@@ -110,6 +110,8 @@ Tools:
 - "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
 - "compare" (urls, fields): fetch several pages and extract the same fields from each; returns a JSON array. Use when the user wants to compare data points across multiple links.
 - "search" (url): open a search/listing page and get candidate result links back. Use when the user knows WHAT they want but not the exact URLs — build the site's search URL, call search, then extract/compare across the returned links.
+- "screenshot" (url): capture a page as an IMAGE and send it. Use when the user wants to SEE a page ("show me", "screenshot", "what does X look like"), not read its text. Then call reply with a short caption.
+- "pdf" (url): render a page to a PDF and send it as a document. Use when the user wants to SAVE or KEEP a page ("save as PDF", "send me a PDF of X"). Then call reply with a short caption.
 - "reply" (text): finish.
 
 Rules:
