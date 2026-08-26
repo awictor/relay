@@ -104,9 +104,25 @@
     {
       "id": "syn-3b",
       "repo": "datafaucet",
-      "status": "todo",
+      "status": "done",
       "value": "medium",
       "task": "Finish syn-3: (1) add BROWSER_BACKEND + ANVIL_BASE_URL + ANVIL_API_KEY to .env.local.example with a note (default browserbase, set anvil to self-host); (2) write anvil-migration PR body summarizing the flag-gated anvil path (auto-scan HAR capture + shared capture-filter), how prod stays on browserbase until merge, and the anvil puppeteer.connect caveat. Do NOT merge to master — leave for Alex."
+    },
+    {
+      "id": "syn-2",
+      "stream": "synergy",
+      "value": "high",
+      "status": "todo",
+      "repo": "datafaucet",
+      "task": "Route the manual-browse routes (start/stop/debug) through BROWSER_BACKEND on anvil-migration. start/route.ts hard-503s without Browserbase creds and only speaks Browserbase session+debug API. Add an anvil branch: create session, build /cdp ws endpoint, return liveUrl from anvil /v1/view (MJPEG) instead of debuggerFullscreenUrl. Client inline-browser.tsx iframe expects a URL — anvil live-view is MJPEG, so decide iframe-able wrapper vs snapshot polling. Keep browserbase default identical."
+    },
+    {
+      "id": "syn-1g",
+      "stream": "synergy",
+      "value": "medium",
+      "status": "todo",
+      "repo": "datafaucet",
+      "task": "anvil-migration merge-readiness: open the actual GitHub PR from anvil-migration->master using docs/anvil-migration-PR.md as the body (gh pr create --draft), so Alex just reviews+merges. Do NOT merge. Draft only."
     }
   ],
   "history": [
@@ -141,6 +157,9 @@
     {
       "item": "syn-3 (partial)",
       "note": "Extracted shared capture-filter lib + 7 tests (both backends now provably identical filtering). Gate 1769 green, build green, branch anvil-migration. Remaining: .env doc + PR description."
+    },
+    {
+      "event": "syn-3b done: .env.local.example documents BROWSER_BACKEND/ANVIL_BASE_URL/ANVIL_API_KEY + docs/anvil-migration-PR.md written; branch merge-ready (3 commits, default browserbase unchanged). Refilled syn-2 (manual-browse routes + live-view) and syn-1g (open draft PR)."
     }
   ]
 }
