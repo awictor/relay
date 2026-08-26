@@ -59,6 +59,28 @@ interface TgUpdate {
 }
 
 /**
+ * PURE: map a batch of Telegram updates to InboundMessages + the next poll offset.
+ * Extracted from the poll loop so the delivery contract is unit-testable offline (DEV-0005):
+ *   - offset always advances to max(update_id)+1 across ALL updates — even ones we skip — so a
+ *     non-text/non-message update can't wedge the poll into redelivering it forever.
+ *   - only updates with a `message.text` become InboundMessages; edited messages, channel posts,
+ *     and text-less messages (stickers/photos) are dropped (offset still advances past them).
+ *   - `from` falls back username -> first_name -> the chat id as a string, for logs.
+ */
+export function parseUpdates(updates: TgUpdate[], offset: number): { messages: InboundMessage[]; nextOffset: number } {
+  const messages: InboundMessage[] = [];
+  let nextOffset = offset;
+  for (const u of updates ?? []) {
+    if (u.update_id + 1 > nextOffset) nextOffset = u.update_id + 1;
+    const m = u.message;
+    if (!m || !m.text) continue;
+    const from = m.from?.username || m.from?.first_name || String(m.chat.id);
+    messages.push({ chatId: m.chat.id, text: m.text, from, messageId: m.message_id });
+  }
+  return { messages, nextOffset };
+}
+
+/**
  * Long-poll loop. Calls onMessage for each inbound text message. Runs until the
  * returned stop() is called. Uses Telegram's offset mechanism so each update is
  * delivered once. 30s long-poll keeps it near-idle with no external cost.
@@ -79,13 +101,11 @@ export function startPolling(onMessage: (msg: InboundMessage) => Promise<void>):
           continue;
         }
         const j = (await r.json()) as { ok: boolean; result: TgUpdate[] };
-        for (const u of j.result ?? []) {
-          offset = u.update_id + 1;
-          const m = u.message;
-          if (!m || !m.text) continue;
-          const from = m.from?.username || m.from?.first_name || String(m.chat.id);
+        const { messages, nextOffset } = parseUpdates(j.result ?? [], offset);
+        offset = nextOffset; // advance past ALL updates (incl. skipped) so none redeliver
+        for (const msg of messages) {
           try {
-            await onMessage({ chatId: m.chat.id, text: m.text, from, messageId: m.message_id });
+            await onMessage(msg);
           } catch (e) {
             console.error("onMessage handler error:", e instanceof Error ? e.message : String(e));
           }
