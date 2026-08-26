@@ -707,9 +707,9 @@
       "id": "anvil-oplog-1",
       "stream": "anvil",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "anvil",
-      "task": "[m12] Structured per-op log: a small helper that emits one [anvil] JSON line per action (session, op, ok, ms) from SessionActions.run(), so a consumer/deploy can see browser activity + latency without a debugger. Pure formatter unit-tested; wire into run() behind the existing logger. Dont log payloads/secrets."
+      "task": "[m12] Structured per-op log: a small helper that emits one [anvil] JSON line per action (session, op, ok, ms) from SessionActions.run(), so a consumer/deploy can see browser activity + latency without a debugger. Pure formatter unit-tested; wire into run() behind the existing logger. Dont log payloads/secrets. [DONE: run() times+emits [anvil]{session,op,ok,ms}; op label param (navigate/scrape labeled); formatOpLog pure+tested; 636 suite]"
     },
     {
       "id": "anvil-retry-doc",
@@ -983,6 +983,9 @@
     },
     {
       "event": "m12 anvil-retry-1 done: transient-navigation retry in anvil. navigate() retries once (ANVIL_NAV_RETRIES default 1, clamp 0..5) on a transient nav error (timeout/net::ERR_/reset/5xx/frame-detached) before failing; deterministic (blocked-protocol/invalid-url/ERR_ABORTED) fail fast. isTransientNavError exported, mirrors Relay src/anvil.ts isTransientError so both sides share the taxonomy. config->app->SessionActions. build clean, 635 anvil suite pass. Next m12: anvil-oplog-1 (per-op structured [anvil] log)."
+    },
+    {
+      "event": "m12 anvil-oplog-1 done: per-op structured log. SessionActions.run() times each op + emits {anvil:op,session,op,ok,ms} via logger (no payloads/secrets); run() takes an optional op label, navigate+scrape pass theirs. formatOpLog pure+unit-tested. Build clean, 636 anvil suite pass. Next m12: anvil-retry-doc (document ANVIL_NAV_RETRIES; low) -> completes m12."
     }
   ],
   "roadmap": {
