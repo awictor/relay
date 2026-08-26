@@ -643,9 +643,33 @@
       "id": "digest-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m9] Handler + schedule integration: /digest lists; \"define digest ...\" stores; \"/run <digest>\" or \"schedule <digest> every morning\" runs/schedules it (dispatch a digest vs a recipe by name). HELP/START + .env doc. Live e2e (scripts/e2e-digest.mjs): 2 recipes -> a digest -> schedule ~2s -> one combined message fires."
+    },
+    {
+      "id": "alert-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m10] src/lib/alerts.ts: AlertStore (JSON file) — {name, task, lastValue?, threshold?} per chat; add/get/list/remove; setLast(name,value). parseAlertCommand: \"alert me <name>: <task>\" / \"watch <name>: <task>\" -> {name,task}; optional \"when it changes by <n>\" -> threshold. Pure compare helper: changed(prev,next,threshold) — string-diff for text, numeric-delta>=threshold when both parse as numbers. Unit-test parse+store+changed offline."
+    },
+    {
+      "id": "alert-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m10] Alert runner (or extend schedule runner): a scheduled alert runs its task via the agent, compares the reply to lastValue via changed(); only sends when changed (prefixed \"🔔 <name> changed:\"), always updates lastValue. First run (no lastValue) sends + seeds. Injectable; unit-test changed-sends / unchanged-silent / first-run-seeds with a mock agent."
+    },
+    {
+      "id": "alert-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m10] Handler + schedule integration: \"watch <name>: <task>\" defines + auto-schedules (default hourly or a given cadence); /alerts lists w/ lastValue; /forget-alert removes. Dispatch alert vs recipe vs digest by name in /run + schedule. HELP/START + .env doc. Live e2e (scripts/e2e-alert.mjs): value flips across two runs -> exactly one notify; a stable value -> silent."
     }
   ],
   "history": [
@@ -887,10 +911,13 @@
     },
     {
       "event": "m9 digest-2 done: digest runner. runDigest resolves each member recipe, runs its task via the agent, composes ONE labeled message (section per member, title). Fault-tolerant: unknown recipe or failed run -> fallback line, one bad source cant sink the digest; member count bounded. Injectable -> 4 tests, 303 full suite pass, tsc clean. Next m9: digest-3 (handler /digest + define + run/schedule dispatch (digest vs recipe by name) + live e2e; completes m9)."
+    },
+    {
+      "event": "m9-digest COMPLETE: digest-1 store/parse, digest-2 runner (one composed briefing, fault-tolerant), digest-3 handler+schedule (define/list/run/schedule, digest-vs-recipe dispatch, scheduled digest:<name> marker -> runDigest; live e2e verified one briefing w/ both members). recipes+scheduler+digests fully fused. ROADMAP advanced -> AUTHORED m10-alerts (change-detection: notify only when a watched result changes — watch-and-notify, the highest-value proactive pattern). Seeded alert-1/2/3. 6th self-directed milestone. m1-synergy still owner_blocked."
     }
   ],
   "roadmap": {
-    "current": "m9-digest",
+    "current": "m10-alerts",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -951,6 +978,13 @@
         "id": "m9-digest",
         "goal": "Digests: bundle several saved recipes into ONE named digest that runs them and sends a single combined message (\"morning briefing\" = weather + top HN + btc price, one text at 8am). Compounding on recipes+scheduler: instead of N separate proactive pings, the user gets one curated digest. Free-infra: a digest is a recipe-of-recipes in the same store.",
         "done_when": "digest define (name + member recipe names) + store; a digest run executes each member recipe + composes one message; schedulable like a recipe; handler commands (/digest, define/run) + offline unit+wiring tests + a live e2e",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m10-alerts",
+        "goal": "Change-alerts: a recipe/extract can run on a schedule but only NOTIFY when the result CHANGES from last time (\"tell me when the price of X drops\", \"alert me if this page changes\"). Stores the last result per alert; on each scheduled run, compares + only sends on a (optionally thresholded) change. Turns Relay from fetch-on-demand into a watch-and-notify assistant — the highest-value proactive pattern.",
+        "done_when": "alert define (task + optional numeric threshold) + last-value store; scheduled run compares new vs last + sends only on change; handler commands (/alerts, define/forget) + offline unit+wiring tests + live e2e (value changes -> notified; unchanged -> silent)",
         "status": "todo",
         "owner_gated": false
       }
