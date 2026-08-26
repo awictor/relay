@@ -971,7 +971,7 @@
       "id": "narrative-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m23] Write PORTFOLIO.md (relay repo, the hub): the thesis (anvil = self-hosted browser both products run on, no vendor); the 3 repos (anvil-engine/Relay/DataFaucet) + how they connect (shared anvil-client, vendored byte-identical); the 2 products both live-proven on anvil; link THESIS.md for the measured numbers. Honest status: proven+gated, not yet deployed (owner: Oracle VM + PR#1 merge + gh-billing). Link from README."
     },
@@ -1345,6 +1345,9 @@
     },
     {
       "event": "m22 merge-3 DONE + m22-merge-readiness COMPLETE. merge-3: Before-you-merge section at top of docs/anvil-migration-PR.md — one command (node scripts/merge-readiness.mjs) -> READY/NEEDS-ATTENTION over behind-master/conflicts/gate/default-unchanged, read-only of master, refuses dirty tree; recorded last run READY 50-ahead/1823-pass. m22 done_when met: owner has a zero-surprise pre-merge check for PR#1. ROADMAP advanced -> AUTHORED m23-portfolio-narrative (single 2-min legible story: PORTFOLIO.md thesis+3 repos+2 products+measured proof+one-command gates + guided demo; credibility artifact, offline). Seeded narrative-1/2/3. 19th self-directed milestone. HONEST NOTE: Relay/anvil hardening is saturating; m23 is real GTM/legibility value; after it, most non-owner-gated work is genuinely done — future milestones may legitimately thin out toward the deploy wall."
+    },
+    {
+      "event": "m23 narrative-1 DONE: PORTFOLIO.md (relay hub) — the 2-min map: thesis (one self-hosted browser both products run on, no vendor), the 3 repos + ASCII of how they connect (anvil-client vendored byte-identical Relay->DataFaucet, parity-tested), whats proven LIVE (Relay e2e:live, DataFaucet e2e:anvil = 2nd product on anvil, e2e:faults, bench:latency, preflight, merge-readiness) with real test counts (anvil 637/relay 370/datafaucet 1823), honest status (proven+gated NOT deployed — owner: Oracle VM + PR#1 merge + gh-billing), + a 5-command Guided demo. Linked from README top. Cited real numbers, no invention."
     }
   ],
   "roadmap": {

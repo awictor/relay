@@ -8,6 +8,9 @@ Browserbase / Browserless / Steel vendor** in the path, unlimited browser access
 MVP is **free infra**: Telegram (long-poll, no public URL), a free-tier LLM (Gemini), and
 self-hosted anvil-engine (real Chrome).
 
+> **New here?** [PORTFOLIO.md](PORTFOLIO.md) is the 2-minute map — the one-shared-browser thesis,
+> the three repos and how they connect, what's proven live, and a 5-command guided demo.
+
 ## Architecture
 
 ```
