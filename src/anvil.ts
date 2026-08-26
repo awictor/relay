@@ -131,6 +131,15 @@ async function action(sessionId: string, path: string, body: Record<string, unkn
 export async function navigate(sessionId: string, url: string, waitUntil = "domcontentloaded"): Promise<{ url: string; title: string }> {
   const check = isUrlSafe(url);
   if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
+  // m29 cookies-2: seed any env-jar cookies for THIS host before navigating, so the agent can read a
+  // page the operator is entitled to. Lazy import breaks the anvil<->cookie-jar cycle. Best-effort:
+  // a cookie-seed failure must not block the navigation (the page may just be public).
+  try {
+    const host = new URL(url).hostname;
+    const { cookiesForHost } = await import("./lib/cookie-jar.js");
+    const jar = cookiesForHost(host);
+    if (jar.length) await setCookies(sessionId, host, jar);
+  } catch { /* best-effort seeding */ }
   const r = await action(sessionId, "/v1/actions/navigate", { url, waitUntil });
   return { url: String(r.url ?? url), title: String(r.title ?? "") };
 }

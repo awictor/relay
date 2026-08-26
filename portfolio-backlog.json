@@ -1131,7 +1131,7 @@
       "id": "cookies-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m29] Env-seeded per-host cookie jar: RELAY_COOKIE_<HOST> (or a JSON RELAY_COOKIES file, gitignored) -> when the agent navigates to a matching host, seed those cookies into the session first. Host-match strict (exact host). Redact cookie VALUES from all logs (extend redactText/turn-log). Never send a hosts cookies to any other host. Unit-test the host-match + redaction offline."
     },
@@ -1548,6 +1548,9 @@
     },
     {
       "event": "m29 cookies-1 DONE: cookie support in src/anvil.ts. setCookies(sessionId,host,cookies) filters to HOST-SCOPED only (cookieMatchesHost) before POST /v1/cookies — a cookie whose domain doesnt match the target host is DROPPED, never forwarded (the SSRF-equivalent for cookies: one sites session cant leak to another). getCookies(sessionId) reads /v1/cookies. AnvilCookie type = puppeteer CookieParam (domain required). cookieMatchesHost handles exact + parent-domain (.x.com) + case-insensitive + rejects suffix-collision (notexample.com). +6 tests (all host-scoping cases + mixed-jar filter). Verified anvil cookie route shape from anvil-engine src/routes/content.ts (POST {cookies:[]}->{injected}, GET->{cookies}, X-Session-Id). 481 pass, tsc clean. Note: live cookie-injection needs a real logged-in target; the security-critical host-scoping is pure-tested. cookies-2 = env-seeded per-host jar + value redaction."
+    },
+    {
+      "event": "m29 cookies-2 DONE: env-seeded per-host cookie jar. src/lib/cookie-jar.ts — loadCookieJar/readJar (RELAY_COOKIES gitignored JSON {cookies:[]}, [] on absent/corrupt), cookiesForHost (host-scoped select via cookieMatchesHost), redactCookieValues (masks jar values >=4 chars -> [redacted-cookie]). navigate() now seeds matching-host cookies into the session BEFORE navigating (lazy import breaks anvil<->jar cycle; best-effort, cookie failure doesnt block nav) — so scrape/browse/discover/screenshot/pdf all inherit it via the navigate chokepoint. index.ts wraps redactText -> redactCookieValues(redactText(t)) so cookie values cant leak to logs/replies. Added RELAY_COOKIES to .env.example (env-parity gate caught it); data/ already gitignored. +8 jar tests. 489 pass, tsc clean. cookies-3 = doc the cookie security model in SECURITY.md, closes m29."
     }
   ],
   "roadmap": {

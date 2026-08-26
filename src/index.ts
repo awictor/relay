@@ -7,6 +7,7 @@ import { anvilLive } from "./anvil.js";
 import { GeminiClient, ClaudeClient } from "./llm.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
 import { checkRateLimit, redactText } from "./safety.js";
+import { redactCookieValues } from "./lib/cookie-jar.js";
 import { handleCommand } from "./commands.js";
 import { MemoryStore } from "./lib/memory-store.js";
 import { Metrics } from "./lib/metrics.js";
@@ -207,7 +208,8 @@ const handle = createHandler({
   sendTyping,
   handleCommand,
   checkRateLimit,
-  redactText,
+  // Redact secrets AND any seeded cookie values (m29 cookies-2) from logged/echoed text.
+  redactText: (t: string) => redactCookieValues(redactText(t)),
   hasModelKey: () => !!(LLM_PROVIDER === "claude" ? process.env.ANTHROPIC_API_KEY : process.env.GEMINI_API_KEY),
   recordTurn,
   recordCommand: (name) => metrics.recordCommand(name),
