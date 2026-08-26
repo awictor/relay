@@ -64,6 +64,28 @@ describe("Metrics", () => {
     expect(s.turns).toBe(1000);
   });
 
+  // DEV-0107: command usage is a separate axis from turns (commands short-circuit before the agent).
+  it("recordCommand tallies a commands histogram without touching turns/ok/fail", () => {
+    const m = new Metrics();
+    m.recordCommand("/status");
+    m.recordCommand("/status");
+    m.recordCommand("/recipes");
+    m.recordCommand(""); // ignored — no empty-name bucket
+    // A real agent turn alongside commands: turns count that, not the commands.
+    m.record({ steps: 1, tools: ["scrape"], elapsedMs: 20, ok: true });
+    const s = m.summary();
+    expect(s.commands).toEqual({ "/status": 2, "/recipes": 1 }); // sorted desc, no "" key
+    expect(s.turns).toBe(1);
+    expect(s.ok).toBe(1);
+    expect(s.tools).toEqual({ scrape: 1 });
+  });
+
+  it("commands histogram is empty-safe and included in summary + format", () => {
+    const m = new Metrics();
+    expect(m.summary().commands).toEqual({});
+    expect(JSON.parse(m.format().slice(10)).commands).toEqual({});
+  });
+
   // HARDEN: a partial overwrite must evict proportionally — record 500 slow, then 250 fast, so the
   // window is half fast / half slow and p50 lands at the boundary (fast), p95 stays slow.
   it("partial ring overwrite evicts the oldest half", () => {

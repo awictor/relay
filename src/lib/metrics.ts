@@ -13,6 +13,7 @@ export interface MetricsSummary {
   p50Ms: number;
   p95Ms: number;
   tools: Record<string, number>;
+  commands: Record<string, number>;
 }
 
 export class Metrics {
@@ -23,6 +24,17 @@ export class Metrics {
   private latencies: number[] = []; // ring buffer of recent elapsedMs
   private li = 0;
   private tools = new Map<string, number>();
+  private commands = new Map<string, number>();
+
+  /**
+   * Record one slash-command invocation. Commands short-circuit before the agent, so they are NOT
+   * counted by record()/turns — this histogram is a separate axis (which commands users actually
+   * use), pure/deterministic like the tools histogram.
+   */
+  recordCommand(name: string): void {
+    if (!name) return;
+    this.commands.set(name, (this.commands.get(name) ?? 0) + 1);
+  }
 
   /** Record one completed turn. */
   record(turn: { steps: number; tools: string[]; elapsedMs: number; ok: boolean }): void {
@@ -52,6 +64,7 @@ export class Metrics {
       p50Ms: this.percentile(50),
       p95Ms: this.percentile(95),
       tools: Object.fromEntries([...this.tools.entries()].sort((a, b) => b[1] - a[1])),
+      commands: Object.fromEntries([...this.commands.entries()].sort((a, b) => b[1] - a[1])),
     };
   }
 
