@@ -64,6 +64,25 @@ cd relay && cp .env.example .env   # fill TELEGRAM_BOT_TOKEN + GEMINI_API_KEY
 npm run build && npm start
 ```
 
+## Health & troubleshooting
+
+- **Is it up?** `docker compose ps` — both `anvil` and `relay` should be `running`
+  (anvil `healthy`). anvil's healthcheck probes `/v1/live`; relay waits for anvil to be
+  healthy before starting (`depends_on: condition: service_healthy`).
+- **Watch it work**: `docker compose logs -f relay` — on boot it prints `anvil
+  reachable: true` and starts polling. Each inbound text logs `[in] <chat>: …`.
+- **anvil check from the host** (only if you published its port): `curl
+  localhost:3000/v1/live` → `{"status":"ok"...}`. By default the port isn't published;
+  exec in instead: `docker compose exec anvil node -e "fetch('http://localhost:3000/v1/live').then(r=>r.text()).then(console.log)"`.
+- **Bot silent?** Check, in order: (1) `GEMINI_API_KEY` valid (logs show a model
+  error if not); (2) anvil `healthy` (`docker compose ps`); (3) the token is for the
+  bot you're texting (`getMe`). Relay auto-fails-over across Gemini models on quota/429.
+- **Model note**: don't set `GEMINI_MODEL=gemini-2.0-flash` — it's not valid for the
+  free `AQ.`/`AIza` key shape. Leave it unset to use Relay's failover chain
+  (`gemini-flash-lite-latest` first).
+- **Update**: `git -C anvil-engine pull && git -C relay pull && cd relay && npm ci &&
+  npm run build && docker compose up -d --build`.
+
 ## Notes / honest limits
 - **Compute, not vendor, is the wall.** Self-hosting removes Browserbase's per-call
   meter + quota, but you still run the Chrome fleet. The Micro shape handles a

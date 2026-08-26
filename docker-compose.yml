@@ -40,8 +40,19 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN in .env}
       GEMINI_API_KEY: ${GEMINI_API_KEY:?set GEMINI_API_KEY in .env}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+      # Leave unset to use Relay's own failover chain (gemini-flash-lite-latest ->
+      # flash-latest -> 2.5-flash-lite -> 2.5-flash). gemini-2.0-flash is NOT valid
+      # for this key shape — don't hardcode it here.
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-lite-latest}
       ANVIL_BASE_URL: http://anvil:3000
       ANVIL_API_KEY: ${ANVIL_API_KEY:-}
       RELAY_MAX_STEPS: ${RELAY_MAX_STEPS:-8}
       RELAY_RATE_LIMIT_PER_MIN: ${RELAY_RATE_LIMIT_PER_MIN:-10}
+    healthcheck:
+      # Relay long-polls (no inbound port), so healthcheck asserts the process is
+      # alive and its node is running rather than probing an HTTP port.
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 60s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
