@@ -419,9 +419,9 @@
       "id": "anvil-dockerignore",
       "stream": "quality",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "anvil",
-      "task": "Check anvil-engine has a .dockerignore (it ships via docker compose build in DEPLOY.md). If its Dockerfile does COPY . . or lacks .dockerignore, add one excluding node_modules/.git/test/dist-source-maps so the compose build is fast + clean. Verify build inputs kept."
+      "task": "Check anvil-engine has a .dockerignore (it ships via docker compose build in DEPLOY.md). If its Dockerfile does COPY . . or lacks .dockerignore, add one excluding node_modules/.git/test/dist-source-maps so the compose build is fast + clean. Verify build inputs kept. [DONE: found+fixed a deploy-BLOCKING bug — anvil .dockerignore excluded dist/ while the Dockerfile COPYs dist/, so docker compose --build shipped an empty image. Removed dist from ignore (+added .github); verified build inputs kept, dist/api.js present, CI green (run 32948232266)]"
     }
   ],
   "history": [
@@ -567,6 +567,9 @@
     },
     {
       "event": "relay-dockerignore done: added .dockerignore — Dockerfile COPY was already narrow (package*.json + dist only, no COPY . .), but the full build context (node_modules, data/ memory, .env, .git, src, test) still uploaded to the daemon. Now excluded; build inputs (package*.json, dist) verified kept. Deploy image build is smaller + never ships local state/secrets. Remaining todos: syn-2c + syn-1l (datafaucet design polish), df-owner-summary (blocked on gh-billing)."
+    },
+    {
+      "event": "anvil-dockerignore done: found + fixed a real deploy-blocking bug — anvil-engine .dockerignore listed dist/, but its Dockerfile does COPY dist/ ./dist/ (ships pre-built output). With dist ignored the image COPYd nothing -> DEPLOY.md docker compose up --build for anvil would produce a broken image. Removed dist from the ignore (kept node_modules/src/test/.git/.claude/docs; added .github). Verified package*.json+dist kept + dist/api.js present; anvil CI green (run 32948232266). This unblocks the compose deploy path Relay depends on."
     }
   ]
 }
