@@ -13,8 +13,9 @@ self-hosted anvil-engine (real Chrome).
 ```
 Telegram user ──text──> Telegram Bot API ──long-poll──> Relay worker (Node/TS)
                                                           ├─ agent loop (Gemini free tier; Claude-swappable)
-                                                          ├─ tools: scrape/browse/extract/compare/search via anvil, reply
-                                                          └─ per-chat memory + safety caps
+                                                          ├─ tools: scrape/browse/extract/compare/search/fetch_json, reply
+                                                          ├─ persistent per-chat memory + safety caps + SMS formatting
+                                                          └─ transient-retry + per-turn [out]/[metrics] logs
                                                                 │ puppeteer.connect / REST /v1/scrape
                                                                 ▼
                                                      anvil-engine (self-hosted Chrome)
@@ -50,8 +51,8 @@ npm run typecheck # tsc --noEmit
 npm test          # vitest (unit, no network)
 ```
 
-Then text your bot a link — it fetches the page via anvil and replies. The full agent
-(tell it an app + task) lands via the `/relay-loop` build backlog.
+Then text your bot a task in plain English — it plans over its tools, drives anvil, and
+texts back a phone-friendly answer.
 
 ## Autonomous development
 
@@ -61,5 +62,17 @@ verifies (tsc + vitest + real e2e when keys are present), commits, and pushes.
 
 ## Status
 
-Scaffold + anvil client + Telegram transport + stub handler done. Next: the Gemini agent loop
-(`backlog.json` item `agent-1`).
+**Feature-complete, live-verified.** The full pipe (Telegram → agent → anvil → reply) works
+end to end on free infra.
+
+- **Agent tools**: `scrape`, `browse`/`click`/`type`/`read` (multi-step), `extract` (fields → clean
+  JSON, with a JSON-LD/meta fallback for SPAs), `compare` (same fields across many URLs),
+  `search` (harvest result links, no URL pasting), `fetch_json` (direct JSON APIs, no browser).
+- **Robustness**: SSRF guard on every URL, dangerous-action refusal, per-chat rate limit,
+  bounded step/time caps, transient-error retry around anvil, secret redaction.
+- **Persistence**: per-chat memory across restarts (JSON file, gitignored).
+- **Replies**: SMS-friendly formatting — never dumps raw JSON at a user.
+- **Observability**: a `[out]` JSON line per turn + a rolling `[metrics]` summary.
+- **Model**: Gemini free tier with a multi-model failover chain; behind an adapter so Claude is
+  a one-line swap.
+- **Tests**: 100+ (`npm test`), offline (mock LLM + backend). See `DEPLOY.md` for the 24/7 runbook.
