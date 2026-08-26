@@ -31,6 +31,10 @@
     {
       "id": "gh-billing",
       "need": "mcp-forge GitHub Actions is billing-blocked (recent account payments failed / spending limit) — CI jobs on PR #1 (build/unit/e2e) queue but cannot start. Fix billing in GitHub settings to run the gate. The unit job config is correct + verified 1786 pass locally."
+    },
+    {
+      "id": "df-owner-summary",
+      "need": "After gh-billing fixed + PR #1 CI runs, capture the actual CI result into the migration doc. Depends on gh-billing + pr-1-merge — nothing the loop can do."
     }
   ],
   "items": [
@@ -403,7 +407,7 @@
       "id": "df-owner-summary",
       "stream": "quality",
       "value": "low",
-      "status": "todo",
+      "status": "owner_blocked",
       "repo": "datafaucet",
       "task": "Once gh billing is fixed + PR #1 CI runs, capture the actual CI result (build/unit/e2e pass) into the PR #1 body as the final merge-confidence line. Blocked on owner (gh-billing) — do only after Actions runs. Investigate/verify only; no mcp-forge master changes."
     },
@@ -1179,7 +1183,7 @@
       "id": "audit-2",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m31] Backlog hygiene: scan portfolio-backlog.json items[] for todos that are stale/superseded/duplicate/owner-gated-mislabeled; mark done/obsolete or convert to owner_blocker as appropriate. Confirm every roadmap milestone marked done actually meets its done_when (spot-check 3-4). Report discrepancies."
     },
@@ -1622,6 +1626,9 @@
     },
     {
       "event": "m31 audit-1 DONE: full-stack green pass. relay npm test 494 pass + tsc clean; anvil-engine npm test 659 pass; mcp-forge test:unit (anvil-migration) 1848 pass. TOTAL 3001 tests, 0 fail across all three repos. NOTE: npm run preflight itself times out at the 2min tool limit (it runs mcp-forge test:unit + relay suite + e2e serially = >2min wall) — thats a harness timeout not a failure; every constituent gate passes when run separately. Consider (audit refill) splitting preflight or bumping its per-check budget. Non-gated build surface confirmed exhausted + all green. audit-2 = backlog hygiene."
+    },
+    {
+      "event": "m31 audit-2 DONE: backlog hygiene. 4 open todos reviewed: audit-2/3/4 are the active m31 items (kept); df-owner-summary was MISLABELED as a normal todo but is gated on gh-billing + PR#1 CI (nothing the loop can do) -> converted to status owner_blocked + added to owner_blockers. Spot-checked 5 done milestones (m13/m15/m24/m28/m29) done_when vs reality by artifact existence — ALL present, no false-done. No stale/duplicate/orphaned buildable todos remain. After audit-2: only audit-3 (doc truth-check) + audit-4 (preflight-runtime DX, low) are non-gated; everything else is the 3 owner actions. audit-3 closes m31."
     }
   ],
   "roadmap": {
