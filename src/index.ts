@@ -12,8 +12,19 @@ import { handleCommand } from "./commands.js";
 import { MemoryStore } from "./lib/memory-store.js";
 import { formatReply } from "./lib/format-reply.js";
 import { formatTurnLog } from "./lib/turn-log.js";
+import { Metrics } from "./lib/metrics.js";
 
 const llm = new GeminiClient();
+
+// Rolling aggregate health; a summary line is emitted every N turns so the operator
+// sees ok/fail rate, avg steps, latency percentiles + tool mix without parsing [out].
+const metrics = new Metrics();
+const METRICS_EVERY = Number(process.env.RELAY_METRICS_EVERY ?? 50);
+let turnCount = 0;
+function recordTurn(t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean }) {
+  metrics.record(t);
+  if (++turnCount % METRICS_EVERY === 0) console.log(metrics.format());
+}
 
 // Per-chat rolling memory (last few turns). Bounded to keep prompts small, and PERSISTED to a local
 // JSON file (DEV-0001) so a redeploy/restart no longer wipes every conversation. Path is env-tunable;
@@ -53,11 +64,15 @@ async function handle(msg: InboundMessage): Promise<void> {
     // Append this turn to memory (user + assistant); the store trims to its maxTurns + persists.
     const next: LLMMessage[] = [...history, { role: "user", content: msg.text }, { role: "assistant", content: out }];
     memory.set(msg.chatId, next);
-    console.log(formatTurnLog({ chatId: msg.chatId, steps, tools, elapsedMs: Date.now() - startedAt, replyChars: out.length, ok: true }));
+    const elapsedMs = Date.now() - startedAt;
+    console.log(formatTurnLog({ chatId: msg.chatId, steps, tools, elapsedMs, replyChars: out.length, ok: true }));
+    recordTurn({ steps, tools, elapsedMs, ok: true });
   } catch (e) {
     const emsg = e instanceof Error ? e.message : String(e);
     console.error("agent error:", emsg);
-    console.log(formatTurnLog({ chatId: msg.chatId, steps: 0, tools: [], elapsedMs: Date.now() - startedAt, replyChars: 0, ok: false, error: emsg }));
+    const elapsedMs = Date.now() - startedAt;
+    console.log(formatTurnLog({ chatId: msg.chatId, steps: 0, tools: [], elapsedMs, replyChars: 0, ok: false, error: emsg }));
+    recordTurn({ steps: 0, tools: [], elapsedMs, ok: false });
     // Friendlier message for the common transient model-overload case.
     if (/\b(503|429|UNAVAILABLE|high demand|overloaded|rate)/i.test(emsg)) {
       await sendMessage(msg.chatId, "My brain's overloaded right now (free-tier model is busy). Try again in a moment.");
