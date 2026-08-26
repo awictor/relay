@@ -54,6 +54,17 @@ npm test          # vitest (unit, no network)
 Then text your bot a task in plain English — it plans over its tools, drives anvil, and
 texts back a phone-friendly answer.
 
+## Verify
+
+```bash
+npm test                              # 100+ offline unit/wiring tests (no keys, no anvil)
+npx tsx scripts/e2e-agent-chain.mjs   # LIVE end-to-end: real Gemini + anvil against a real site
+```
+
+The live e2e needs `.env` filled (`GEMINI_API_KEY`) and anvil reachable at `ANVIL_BASE_URL`
+(default `http://localhost:3000`). It drives the real agent, asserts it used a fetch tool +
+replied from real data, and exits non-zero on failure — a one-command deploy smoke test.
+
 ## Autonomous development
 
 This repo is developed by the `/relay-loop` command (see `../.claude/commands/relay-loop.md`),
