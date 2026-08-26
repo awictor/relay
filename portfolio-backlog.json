@@ -531,9 +531,9 @@
       "id": "chan-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m5] Extract a Channel interface (src/channel.ts): {name, start(onMessage), sendMessage(chatId,text), sendTyping?, sendPhoto?, sendDocument?, stop()}. Refactor src/telegram.ts to implement it (TelegramChannel) with NO behavior change. index.ts talks to a Channel, not telegram.ts directly. Prove the agent core is transport-agnostic. tsc + full suite still green (existing telegram tests unchanged)."
+      "task": "[m5] Extract a Channel interface (src/channel.ts): {name, start(onMessage), sendMessage(chatId,text), sendTyping?, sendPhoto?, sendDocument?, stop()}. Refactor src/telegram.ts to implement it (TelegramChannel) with NO behavior change. index.ts talks to a Channel, not telegram.ts directly. Prove the agent core is transport-agnostic. tsc + full suite still green (existing telegram tests unchanged). [DONE: src/channel.ts Channel interface + telegramChannel wrapper; index.ts talks to a Channel (ready/start/send derived); 3 tests incl fake-channel-drives-handler; 252 suite pass, no behavior change]"
     },
     {
       "id": "chan-2",
@@ -752,6 +752,9 @@
     },
     {
       "event": "m4-scheduled COMPLETE (auto-advanced by STAGE GOAL): sched-1..4 all done — parse+store, runner, commands, live e2e (scripts/e2e-schedule.mjs verified a real reminder fires unprompted). Relay is now a proactive assistant. Loop advanced roadmap.current -> m5-channels (Channel interface + 2nd transport, prove agent core is transport-agnostic) and seeded chan-1..3. This is the self-advancing roadmap working: a milestone converged, the loop marked it done + set the next goal + seeded work with zero owner input."
+    },
+    {
+      "event": "m5 chan-1 done: Channel interface + TelegramChannel. Extracted src/channel.ts {name,start,sendMessage,send*?,ready}; telegramChannel wraps existing telegram.ts (no behavior change); index.ts now channel-driven (channel.ready/start + send fns from it), not telegram-direct. 3 tests incl a fake in-memory Channel driving the SAME handler -> agent core proven transport-agnostic. tsc clean, 252 full suite pass. Next m5: chan-2 (2nd channel adapter, e.g. ConsoleChannel)."
     }
   ],
   "roadmap": {
