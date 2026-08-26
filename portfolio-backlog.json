@@ -20,8 +20,6 @@
     "quality": "Tests/e2e/robustness across all three."
   },
   "owner_blockers": [
-    "deploy-1 (relay): Oracle Always Free VM for 24/7 (DEPLOY.md). Owner-gated.",
-    "DataFaucet prod merge: after anvil-migration branch is proven, Alex decides when to merge + flip the flag.",
     {
       "id": "deploy-1",
       "need": "Provision Oracle Always Free VM + docker compose up (DEPLOY.md ready, model default + healthcheck fixed). Relay feature-complete (10 tools, 78 tests)."
@@ -397,9 +395,17 @@
       "id": "portfolio-status",
       "stream": "quality",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "Write a short STATUS.md at the relay repo root (or a top section in portfolio-backlog) summarizing the whole portfolio state for Alex: what shipped (Relay 6-tool agent + 117 tests + CI; anvil migration PR #1 with 1786-test unit gate; anvil 529 tests + CI), the 3 owner actions (fix gh billing, merge PR #1, provision VM), and the honest limits (read-only live-view, compute-not-vendor wall). One glance for the owner. Doc-only."
+      "task": "Write a short STATUS.md at the relay repo root (or a top section in portfolio-backlog) summarizing the whole portfolio state for Alex: what shipped (Relay 6-tool agent + 117 tests + CI; anvil migration PR #1 with 1786-test unit gate; anvil 529 tests + CI), the 3 owner actions (fix gh billing, merge PR #1, provision VM), and the honest limits (read-only live-view, compute-not-vendor wall). One glance for the owner. Doc-only. [DONE: STATUS.md at relay root — shipped summary (Relay 6 tools/117 tests/CI, migration PR#1 1786-gate, anvil 529/CI), 3 owner actions, honest limits, verify commands; cleaned 2 malformed owner_blocker entries]"
+    },
+    {
+      "id": "df-owner-summary",
+      "stream": "quality",
+      "value": "low",
+      "status": "todo",
+      "repo": "datafaucet",
+      "task": "Once gh billing is fixed + PR #1 CI runs, capture the actual CI result (build/unit/e2e pass) into the PR #1 body as the final merge-confidence line. Blocked on owner (gh-billing) — do only after Actions runs. Investigate/verify only; no mcp-forge master changes."
     }
   ],
   "history": [
@@ -536,6 +542,9 @@
     },
     {
       "event": "anvil-obs + syn-1e verified DONE (no code needed): live-checked GET /v1/metrics — full session counts + per-endpoint latency percentiles (p50/p95/p99), both products can monitor; README lists it. syn-1e responseContentType + responseBodyPreview already in anvil HAR + consumed by DataFaucet DEV-0008. Both were already satisfied; closed honestly rather than padding. Remaining backlog: syn-2c, syn-1l (low datafaucet polish), relay-e2e-doc (low). Owner-gated: gh-billing, PR#1 merge, VM provision."
+    },
+    {
+      "event": "portfolio-status done: wrote STATUS.md (relay root) — one-glance owner summary of the whole portfolio (what shipped across all 3 repos, the 3 owner actions gating go-live: fix gh billing / merge PR#1 / provision VM, honest limits, self-verify commands). Cleaned 2 malformed (undefined-id) owner_blocker entries. Backlog: 39 done, remaining are syn-2c/syn-1l/relay-e2e-doc (all low)."
     }
   ]
 }
