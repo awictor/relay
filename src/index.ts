@@ -15,6 +15,7 @@ import { createShutdown, installSignalHandlers, installCrashHandlers } from "./s
 import { formatStatus, makeAnvilPinger } from "./lib/status.js";
 import { runAgent } from "./agent.js";
 import { formatReply } from "./lib/format-reply.js";
+import { friendlyError } from "./lib/failure.js";
 import { ScheduleStore, parseSchedule } from "./lib/schedule.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunCommand } from "./lib/recipes.js";
@@ -87,6 +88,11 @@ const scheduleRunner = makeScheduleRunner({
   maxPerChatPerHour: Number(process.env.RELAY_PROACTIVE_MAX_PER_HOUR ?? 10), // anti-spam (m8)
   digestRun: (chatId, name) => digestRunText(chatId, name), // scheduled digests (m9)
   alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
+  // m14 degrade-4: a failed ONE-SHOT reminder shouldn't vanish silently — tell the user, once,
+  // with a friendly (non-leaking) line. A "daily" stays silent (it retries tomorrow; a misfiring
+  // daily must not storm the chat with failure pings).
+  failureNotice: (s, raw) =>
+    s.kind === "once" ? `⏰ I tried to run "${s.task}" but ${friendlyError(raw).charAt(0).toLowerCase()}${friendlyError(raw).slice(1)}` : null,
 });
 
 const handle = createHandler({

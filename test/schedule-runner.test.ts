@@ -114,6 +114,67 @@ describe("makeScheduleRunner.tick", () => {
     expect(errs).toHaveLength(1);        // the complete failure was reported, not swallowed silently
   });
 
+  // m14 degrade-4: a failed ONE-SHOT reminder must not vanish silently — when a failureNotice is
+  // wired, the user gets one friendly line. A daily stays silent (no misfire storm).
+  describe("failureNotice (degrade-4)", () => {
+    const notice = (s: { kind: string; task: string }, raw: string) =>
+      s.kind === "once" ? `couldn't run "${s.task}": ${raw}` : null;
+
+    it("a failed once-task sends the friendly failure notice", async () => {
+      const clock = { t: NOW };
+      const { store, runner, sent } = harness(clock, {
+        runAgent: async () => { throw new Error("anvil ECONNREFUSED"); },
+        failureNotice: notice,
+      });
+      store.add(7, { kind: "once", task: "check flight", dueMs: NOW - 1 }, NOW);
+      await runner.tick();
+      expect(sent).toHaveLength(1);
+      expect(sent[0]!.chatId).toBe(7);
+      expect(sent[0]!.text).toMatch(/couldn't run "check flight"/);
+      expect(store.list(7)).toHaveLength(0); // still completed (dropped), no storm
+    });
+
+    it("a failed daily-task stays silent (notice returns null) but still reschedules", async () => {
+      const clock = { t: NOW };
+      const { store, runner, sent } = harness(clock, {
+        runAgent: async () => { throw new Error("boom"); },
+        failureNotice: notice,
+      });
+      store.add(7, { kind: "daily", task: "weather", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+      await runner.tick();
+      expect(sent).toHaveLength(0);          // silent — no failure ping for a daily
+      const after = store.list(7);
+      expect(after).toHaveLength(1);
+      expect(after[0]!.dueMs).toBeGreaterThan(NOW); // advanced to tomorrow
+    });
+
+    it("the failure notice is suppressed when the chat is over its hourly cap", async () => {
+      const clock = { t: NOW };
+      const sent: Array<{ chatId: number }> = [];
+      const { store, runner } = harness(clock, {
+        maxPerChatPerHour: 1,
+        // First task succeeds (consumes the 1 allowed send); second fails and its notice is capped.
+        runAgent: async (task) => { if (task === "b") throw new Error("down"); return { reply: `did:${task}` }; },
+        send: async (chatId) => { sent.push({ chatId }); },
+        failureNotice: notice,
+      });
+      store.add(9, { kind: "once", task: "a", dueMs: NOW - 1 }, NOW);
+      store.add(9, { kind: "once", task: "b", dueMs: NOW - 1 }, NOW);
+      await runner.tick();
+      expect(sent).toHaveLength(1); // only the success send; the over-cap failure notice suppressed
+    });
+
+    it("no failureNotice dep = silent on failure (historical default)", async () => {
+      const clock = { t: NOW };
+      const { store, runner, sent } = harness(clock, {
+        runAgent: async () => { throw new Error("boom"); },
+      });
+      store.add(1, { kind: "once", task: "x", dueMs: NOW - 1 }, NOW);
+      await runner.tick();
+      expect(sent).toHaveLength(0);
+    });
+  });
+
   it("only fires each due task once even if ticks overlap (re-entrancy guard)", async () => {
     const clock = { t: NOW };
     let agentCalls = 0;

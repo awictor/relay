@@ -31,6 +31,12 @@ export interface ScheduleRunnerDeps {
   // Alerts (m10 alert-3): a scheduled alert stores "alert:<name>"; on fire, check it and get
   // back the notify message ONLY if it changed (null = silent, don't send). Optional.
   alertCheck?: (chatId: number, name: string) => Promise<string | null>;
+  // m14 degrade-4: what to tell the user when a scheduled fire FAILS. Default (absent) is silent
+  // (the historical contract — a failed run is a logged miss, not a message, so a misfiring daily
+  // can't storm). When provided, the runner sends its return value on failure; return null to stay
+  // silent for that case. index wires this to notify ONLY on a "once" task (an explicit "remind me
+  // to X" going dark is a black hole) with a friendlyError line, and stay silent on "daily".
+  failureNotice?: (s: Schedule, rawError: string) => string | null;
 }
 
 export interface ScheduleRunner {
@@ -133,8 +139,20 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         try { await fireOne(s); fired++; }
         catch (e) {
           deps.onError?.(e);
-          log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, error: (e instanceof Error ? e.message : String(e)).slice(0, 120) })}`);
+          const raw = e instanceof Error ? e.message : String(e);
+          log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, error: raw.slice(0, 120) })}`);
           deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: 0, ok: false });
+          // m14 degrade-4: optionally tell the user the run failed (default silent). A failed
+          // "once" reminder otherwise vanishes with no signal; index opts that case into a
+          // friendlyError line. Best-effort + subject to the same anti-spam cap; a send failure
+          // here must not stop us completing the schedule below.
+          if (deps.failureNotice && !overCap(s.chatId, deps.now())) {
+            const notice = deps.failureNotice(s, raw);
+            if (notice) {
+              try { await deps.send(s.chatId, notice); noteSend(s.chatId, deps.now()); }
+              catch (sendErr) { deps.onError?.(sendErr); }
+            }
+          }
           // Don't leave a failed once-task to retry forever every tick — complete it so it
           // drops (daily still advances). A failed run is reported by the miss, not a storm.
           safeComplete(s);
