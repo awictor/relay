@@ -43,3 +43,41 @@ export function installSignalHandlers(handler: (signal: string) => void): void {
     process.on(sig, () => handler(sig));
   }
 }
+
+export interface CrashDeps {
+  log: (msg: string) => void;
+  // Best-effort final flush before dying (same intent as ShutdownDeps.onShutdown). A throw here
+  // must not prevent the exit.
+  onFatal?: () => void;
+  // Injectable for tests; defaults to process.exit. A fatal error exits NON-ZERO (1) so a supervisor
+  // (pm2/docker/systemd) sees the crash and restarts, unlike the clean 0 of a signal shutdown.
+  exit?: (code: number) => void;
+}
+
+/**
+ * Last-breath handlers for the 24/7 worker. Without these, a stray throw or a rejected promise in a
+ * non-awaited path kills the process with NO log line — the deploy just goes dark, undiagnosable.
+ * Logs the error (name + message + truncated stack), runs the best-effort flush, then exits 1.
+ * Registered on BOTH `uncaughtException` and `unhandledRejection`.
+ */
+export function installCrashHandlers(deps: CrashDeps): void {
+  const exit = deps.exit ?? ((code: number) => process.exit(code));
+  let dying = false;
+  const onFatal = (kind: string, err: unknown): void => {
+    if (dying) return; // a rejection during the exception handler must not re-enter
+    dying = true;
+    const e = err instanceof Error ? err : new Error(String(err));
+    const stack = (e.stack ?? `${e.name}: ${e.message}`).slice(0, 1000);
+    deps.log(`[fatal] ${kind}: ${stack}`);
+    if (deps.onFatal) {
+      try {
+        deps.onFatal();
+      } catch (flushErr) {
+        deps.log(`[fatal] onFatal error (ignored): ${flushErr instanceof Error ? flushErr.message : String(flushErr)}`);
+      }
+    }
+    exit(1);
+  };
+  process.on("uncaughtException", (err) => onFatal("uncaughtException", err));
+  process.on("unhandledRejection", (reason) => onFatal("unhandledRejection", reason));
+}

@@ -11,7 +11,7 @@ import { handleCommand } from "./commands.js";
 import { MemoryStore } from "./lib/memory-store.js";
 import { Metrics } from "./lib/metrics.js";
 import { createHandler } from "./handler.js";
-import { createShutdown, installSignalHandlers } from "./shutdown.js";
+import { createShutdown, installSignalHandlers, installCrashHandlers } from "./shutdown.js";
 import { formatStatus, makeAnvilPinger } from "./lib/status.js";
 
 const llm = new GeminiClient();
@@ -81,6 +81,14 @@ async function main() {
     log: (m) => console.log(m),
     exit: (code) => process.exit(code),
   }));
+
+  // Last-breath handlers (DEV-0066): a stray throw / rejected promise otherwise kills the 24/7
+  // worker with no log. Emit the final metrics window + a [fatal] line, then exit 1 so the
+  // supervisor restarts.
+  installCrashHandlers({
+    log: (m) => console.error(m),
+    onFatal: () => console.log(metrics.format()),
+  });
 }
 
 main();
