@@ -899,7 +899,7 @@
       "id": "preflight-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m20] scripts/preflight.mjs: run Relays own proof set in sequence — npm test (unit), npm run e2e:live, npm run e2e:faults, npm run status — capture each ones exit code + a one-line pass/skip/fail, and print a GO/NO-GO summary (NO-GO if any hard fail; SKIP is not a fail). Wire npm run preflight. Each sub-proof already handles its own SKIP."
     },
@@ -1246,6 +1246,9 @@
     },
     {
       "event": "m19 df-anvil-3 DONE + m19-datafaucet-anvil-live COMPLETE. df-anvil-3: confirmed DEFAULT browserbase path byte-unchanged — browser-backend.ts is NEW (not on master), all route changes anvil-gated behind isAnvil(), the one browserbase-branch edit (if(!BB_API_KEY) -> if(!USE_ANVIL && (!BB_API_KEY))) is a no-op flag-off, 60 removed auto-scan lines were EXTRACTED to capture-filter.ts (tested) not deleted. npm run test:unit -> 1818 pass/0 fail. Updated docs/anvil-migration-PR.md with the m19 live re-verification + browserbase-unchanged proof (count 1786->1818). Committed to anvil-migration, pushed (NEVER master). m19 done_when met: 2nd product proven live on anvil, default unchanged, prod untouched. ROADMAP advanced -> AUTHORED m20-deploy-preflight (one GO/NO-GO command running every live proof across the stack, so the owners provision-VM step is de-risked). Seeded preflight-1/2/3. 16th self-directed milestone. Roadmap approaching real completion — remaining deploy steps are genuinely owner-gated (VM/merge/billing)."
+    },
+    {
+      "event": "m20 preflight-1 DONE: scripts/preflight.mjs (npm run preflight) runs Relays full proof set (npm test, e2e:live, e2e:faults, status) via spawnSync shell:true, classifies each PASS/SKIP/FAIL (SKIP = exit0 + SKIP in output, not a failure), prints single GO/NO-GO. GO only when zero hard-fails. VERIFIED both paths: anvil up -> GO 4/4 pass; anvil down (dead ANVIL_BASE_URL) -> e2e:live SKIP, still GO 3/4+1skip exit0 (fault-drills pass regardless, unit+status pass). Fixed initial bug: bare npm + shell:false failed empty on win -> shell:true with static cmd strings. call-tested TRUE."
     }
   ],
   "roadmap": {
