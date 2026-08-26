@@ -651,9 +651,9 @@
       "id": "alert-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m10] src/lib/alerts.ts: AlertStore (JSON file) — {name, task, lastValue?, threshold?} per chat; add/get/list/remove; setLast(name,value). parseAlertCommand: \"alert me <name>: <task>\" / \"watch <name>: <task>\" -> {name,task}; optional \"when it changes by <n>\" -> threshold. Pure compare helper: changed(prev,next,threshold) — string-diff for text, numeric-delta>=threshold when both parse as numbers. Unit-test parse+store+changed offline."
+      "task": "[m10] src/lib/alerts.ts: AlertStore (JSON file) — {name, task, lastValue?, threshold?} per chat; add/get/list/remove; setLast(name,value). parseAlertCommand: \"alert me <name>: <task>\" / \"watch <name>: <task>\" -> {name,task}; optional \"when it changes by <n>\" -> threshold. Pure compare helper: changed(prev,next,threshold) — string-diff for text, numeric-delta>=threshold when both parse as numbers. Unit-test parse+store+changed offline. [DONE: src/lib/alerts.ts AlertStore (add/get/list/setLast/remove, update-in-place cap-exempt) + parseAlertCommand (alert/watch + by-<n> threshold) + changed()/firstNumber; 9 tests; 322 suite]"
     },
     {
       "id": "alert-2",
@@ -914,6 +914,9 @@
     },
     {
       "event": "m9-digest COMPLETE: digest-1 store/parse, digest-2 runner (one composed briefing, fault-tolerant), digest-3 handler+schedule (define/list/run/schedule, digest-vs-recipe dispatch, scheduled digest:<name> marker -> runDigest; live e2e verified one briefing w/ both members). recipes+scheduler+digests fully fused. ROADMAP advanced -> AUTHORED m10-alerts (change-detection: notify only when a watched result changes — watch-and-notify, the highest-value proactive pattern). Seeded alert-1/2/3. 6th self-directed milestone. m1-synergy still owner_blocked."
+    },
+    {
+      "event": "m10 alert-1 done: alert parse + store + change-detection. AlertStore {name,task,lastValue?,threshold?} per chat; parseAlertCommand (alert me/watch <name>: <task> + by <n> threshold); changed(prev,next,threshold) text-diff or numeric-delta>=threshold (firstNumber handles $/commas). 9 tests, 322 full suite pass, tsc clean. Next m10: alert-2 (runner: run task, compare vs lastValue, notify only on change)."
     }
   ],
   "roadmap": {
