@@ -667,9 +667,33 @@
       "id": "alert-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m10] Handler + schedule integration: \"watch <name>: <task>\" defines + auto-schedules (default hourly or a given cadence); /alerts lists w/ lastValue; /forget-alert removes. Dispatch alert vs recipe vs digest by name in /run + schedule. HELP/START + .env doc. Live e2e (scripts/e2e-alert.mjs): value flips across two runs -> exactly one notify; a stable value -> silent."
+    },
+    {
+      "id": "cons-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m11] README refresh: update What-you-can-text-it + Commands + Status to the real surface (scrape/browse/extract/compare/search/fetch_json/screenshot/pdf tools; schedules/reminders; recipes; digests; alerts; channels telegram|console; observability; 334 tests). Fix any stale lines. Doc-only; keep it tight."
+    },
+    {
+      "id": "cons-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m11] One composed integration test (test/journey.test.ts): a single createHandler with REAL stores (memory/schedule/recipe/digest/alert) + faked llm/send, driving a user journey — save a recipe, define a digest of it, /run the digest, watch an alert, /schedules+/recipes+/digests+/alerts all reflect state. Proves the features compose, not just pass in isolation. Offline."
+    },
+    {
+      "id": "cons-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m11] docs/DEMO.md: a realistic annotated transcript (user texts -> Relay replies) walking the whole surface (a lookup, an extract, a compare, a reminder, a recipe, a digest, an alert), so a reader/Alex sees the product in action. Reference scripts/e2e-*.mjs for live verification. Doc-only."
     }
   ],
   "history": [
@@ -920,10 +944,13 @@
     },
     {
       "event": "m10 alert-2 done: alert runner. checkAlert runs the watched task, compares to lastValue via changed(threshold), notifies ONLY on change (first-run baseline + seed; unchanged silent but lastValue refreshed; changed -> notify msg); agent failure -> no notify/no spam. Injectable -> 5 tests, 327 full suite pass, tsc clean. Next m10: alert-3 (handler watch/alerts/forget-alert + auto-schedule + dispatch alert-vs-recipe-vs-digest; live e2e; completes m10)."
+    },
+    {
+      "event": "m10-alerts COMPLETE: alert-1 store/parse/change-detect, alert-2 notify-only-on-change runner, alert-3 handler+auto-schedule+silent-unless-changed (live e2e: baseline+change notify, unchanged silent). Relay is now watch-and-notify. ROADMAP advanced -> AUTHORED m11-consolidate (docs refresh + one composed whole-product integration test + demo transcript — prove the 6-milestone feature set composes + is launch-legible). Seeded cons-1/2/3. 7th self-directed milestone. m1-synergy still owner_blocked."
     }
   ],
   "roadmap": {
-    "current": "m10-alerts",
+    "current": "m11-consolidate",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -991,6 +1018,13 @@
         "id": "m10-alerts",
         "goal": "Change-alerts: a recipe/extract can run on a schedule but only NOTIFY when the result CHANGES from last time (\"tell me when the price of X drops\", \"alert me if this page changes\"). Stores the last result per alert; on each scheduled run, compares + only sends on a (optionally thresholded) change. Turns Relay from fetch-on-demand into a watch-and-notify assistant — the highest-value proactive pattern.",
         "done_when": "alert define (task + optional numeric threshold) + last-value store; scheduled run compares new vs last + sends only on change; handler commands (/alerts, define/forget) + offline unit+wiring tests + live e2e (value changes -> notified; unchanged -> silent)",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m11-consolidate",
+        "goal": "Consolidation + release-readiness. Relay grew 6 self-directed milestones (channels, scheduled tasks, recipes, digests, proactive-obs, alerts) on top of the core agent — 334 tests, but the README + a single whole-product proof lag. Refresh docs to the real surface, add one composed integration test that drives channel->handler->(recipe/digest/alert/schedule) end to end, and a demo transcript, so the assembled product is proven + legible for a real launch.",
+        "done_when": "README + STATUS reflect the full feature set; a single composed offline integration test exercises the main user journeys through createHandler; a demo transcript doc; full suite green",
         "status": "todo",
         "owner_gated": false
       }
