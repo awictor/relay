@@ -201,9 +201,25 @@
       "id": "relay-search-flow",
       "stream": "relay",
       "value": "medium",
+      "status": "done",
+      "repo": "relay",
+      "task": "Search-then-compare: let the agent take a query (not pre-known URLs), browse a search/listing page, harvest the top N result links (reuse the link-discovery evaluate pattern from anvil auto-scan), then compare/extract across them. So a user can text \"cheapest 3 listings for <item>\" without pasting URLs. Bound N, SSRF-filter harvested links, unit-test with a mock backend that returns a listing page + child pages. [DONE: anvil.discoverLinks + search tool; same-host-preferred, SSRF-filtered, capped 20; 4 tests; 51 suite pass; live e2e 37 hrefs from HN]"
+    },
+    {
+      "id": "relay-search-e2e",
+      "stream": "relay",
+      "value": "low",
       "status": "todo",
       "repo": "relay",
-      "task": "Search-then-compare: let the agent take a query (not pre-known URLs), browse a search/listing page, harvest the top N result links (reuse the link-discovery evaluate pattern from anvil auto-scan), then compare/extract across them. So a user can text \"cheapest 3 listings for <item>\" without pasting URLs. Bound N, SSRF-filter harvested links, unit-test with a mock backend that returns a listing page + child pages."
+      "task": "Full search->compare live e2e: script a real agent run (mock or real LLM) that calls search on a listing page then compare on 2-3 harvested links, asserting a final JSON array with fields. Proves the whole no-URL-needed flow end to end (unit tests cover the pieces; this covers the chain)."
+    },
+    {
+      "id": "relay-onboarding",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "Update /help + /start (src/commands.ts) and README to advertise the new capabilities (extract, compare, search) with example texts a user can send (e.g. \"extract the price and title from <url>\", \"compare price across these 3 links\", \"find newest HN posts about X\"). Keeps the product legible to real users now that it does more than scrape."
     }
   ],
   "history": [
@@ -268,6 +284,9 @@
     },
     {
       "event": "relay-tools-2 done: compare tool — extract same fields across multiple URLs into a JSON array (parallel fetch, dedup, SSRF-filter, cap 5, per-url failure -> all-null row). 4 new tests + 47 full suite pass, tsc clean, live e2e green (2 real URLs -> anvil scrape + Gemini extract -> shaped JSON array). Refilled relay-search-flow (search-then-compare so users need not paste URLs)."
+    },
+    {
+      "event": "relay-search-flow done: search tool + anvil.discoverLinks — open a listing/search URL, harvest result links (same-host preferred, drops search page, SSRF-filtered, capped 20), then extract/compare across them. User need not paste URLs. 4 new tests + 51 full suite pass, tsc clean, live e2e green (37 real hrefs harvested from HN). Relay now: scrape->extract->compare->search, a full data-fetch agent. Refilled relay-search-e2e (full chain e2e) + relay-onboarding (advertise new tools in /help + README)."
     }
   ]
 }
