@@ -659,9 +659,9 @@
       "id": "alert-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m10] Alert runner (or extend schedule runner): a scheduled alert runs its task via the agent, compares the reply to lastValue via changed(); only sends when changed (prefixed \"🔔 <name> changed:\"), always updates lastValue. First run (no lastValue) sends + seeds. Injectable; unit-test changed-sends / unchanged-silent / first-run-seeds with a mock agent."
+      "task": "[m10] Alert runner (or extend schedule runner): a scheduled alert runs its task via the agent, compares the reply to lastValue via changed(); only sends when changed (prefixed \"🔔 <name> changed:\"), always updates lastValue. First run (no lastValue) sends + seeds. Injectable; unit-test changed-sends / unchanged-silent / first-run-seeds with a mock agent. [DONE: src/alert-runner.ts checkAlert — run task, compare vs lastValue via changed(threshold), notify only on change/first-run, always setLast, failure=no-spam; 5 tests; 327 suite]"
     },
     {
       "id": "alert-3",
@@ -917,6 +917,9 @@
     },
     {
       "event": "m10 alert-1 done: alert parse + store + change-detection. AlertStore {name,task,lastValue?,threshold?} per chat; parseAlertCommand (alert me/watch <name>: <task> + by <n> threshold); changed(prev,next,threshold) text-diff or numeric-delta>=threshold (firstNumber handles $/commas). 9 tests, 322 full suite pass, tsc clean. Next m10: alert-2 (runner: run task, compare vs lastValue, notify only on change)."
+    },
+    {
+      "event": "m10 alert-2 done: alert runner. checkAlert runs the watched task, compares to lastValue via changed(threshold), notifies ONLY on change (first-run baseline + seed; unchanged silent but lastValue refreshed; changed -> notify msg); agent failure -> no notify/no spam. Injectable -> 5 tests, 327 full suite pass, tsc clean. Next m10: alert-3 (handler watch/alerts/forget-alert + auto-schedule + dispatch alert-vs-recipe-vs-digest; live e2e; completes m10)."
     }
   ],
   "roadmap": {
