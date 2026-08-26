@@ -627,9 +627,9 @@
       "id": "digest-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m9] Extend RecipeStore (or a DigestStore) to hold digests: {name, members:[recipeName], schedule?}. parseDigestCommand: \"define digest <name>: <recipe1>, <recipe2>, ...\". Store add/get/list/remove; validate member recipes exist at define time (warn on unknown). Unit-test parse + store offline."
+      "task": "[m9] Extend RecipeStore (or a DigestStore) to hold digests: {name, members:[recipeName], schedule?}. parseDigestCommand: \"define digest <name>: <recipe1>, <recipe2>, ...\". Store add/get/list/remove; validate member recipes exist at define time (warn on unknown). Unit-test parse + store offline. [DONE: src/lib/digests.ts DigestStore (add/get/list/remove, member cap, update-in-place cap-exempt) + parseDigestCommand; 6 tests; 299 suite]"
     },
     {
       "id": "digest-2",
@@ -881,6 +881,9 @@
     },
     {
       "event": "m8-proactive-obs COMPLETE: pobs-1 [proactive] log+Metrics, pobs-2 per-chat hourly send cap, pobs-3 proactive inherits dangerous-guard+step-bound (tested). The autonomous paths are now observable, rate-limited, and safe. ROADMAP advanced -> AUTHORED m9-digest (bundle recipes into one scheduled briefing — compounding on m4+m7). Seeded digest-1/2/3. 5th self-directed milestone. m1-synergy still owner_blocked."
+    },
+    {
+      "event": "m9 digest-1 done: digest parse + store. DigestStore (JSON file like RecipeStore) holds {name,members:[recipe],schedule?}; add (member-capped, update-in-place cap-exempt)/get/list/remove case-insensitive; parseDigestCommand (define digest <name>: a,b,c). 6 tests, 299 full suite pass, tsc clean. Next m9: digest-2 (digest runner: run each member recipe -> one composed message)."
     }
   ],
   "roadmap": {
