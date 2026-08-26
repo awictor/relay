@@ -523,9 +523,33 @@
       "id": "sched-4",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m4] Live e2e: scripts/e2e-schedule.mjs schedules a task ~5s out with real ScheduleStore + a stub send, asserts the runner fires it once + removes it. Offline (no Telegram). Proves the reactive->proactive loop end to end."
+    },
+    {
+      "id": "chan-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m5] Extract a Channel interface (src/channel.ts): {name, start(onMessage), sendMessage(chatId,text), sendTyping?, sendPhoto?, sendDocument?, stop()}. Refactor src/telegram.ts to implement it (TelegramChannel) with NO behavior change. index.ts talks to a Channel, not telegram.ts directly. Prove the agent core is transport-agnostic. tsc + full suite still green (existing telegram tests unchanged)."
+    },
+    {
+      "id": "chan-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m5] Second channel adapter behind the interface: a ConsoleChannel (stdin/stdout) or a minimal Discord-webhook stub that implements Channel + has unit tests (mock IO). Proves >1 transport works with the unchanged agent/handler. Pick whichever is fully free + testable offline; ConsoleChannel is the safe first (lets you drive the real agent from a terminal, a genuine dev/demo win)."
+    },
+    {
+      "id": "chan-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m5] index.ts selects the channel by env RELAY_CHANNEL (telegram default | console). Wire handler + scheduler send through the chosen channel.sendMessage so proactive tasks work on any channel. Document RELAY_CHANNEL in .env.example (env-parity gate). Unit-test the selection."
     }
   ],
   "history": [
@@ -725,10 +749,13 @@
     },
     {
       "event": "m4 sched-3 done: schedule commands + natural routing in the handler. remind me to X in 10m / every morning Y -> scheduleAdd (confirms; unparsed -> agent; capped -> warn); /schedules lists w/ ids; /cancel id|all removes. Wired in index.ts via parseSchedule + ScheduleStore; all schedule deps OPTIONAL on HandlerDeps so old wiring stays valid. HELP/START document it. 10 new handler tests, 249 full suite pass, tsc clean. m4 ~75% (3/4). Next: sched-4 (live e2e: schedule near-future task -> runner fires + replies)."
+    },
+    {
+      "event": "m4-scheduled COMPLETE (auto-advanced by STAGE GOAL): sched-1..4 all done — parse+store, runner, commands, live e2e (scripts/e2e-schedule.mjs verified a real reminder fires unprompted). Relay is now a proactive assistant. Loop advanced roadmap.current -> m5-channels (Channel interface + 2nd transport, prove agent core is transport-agnostic) and seeded chan-1..3. This is the self-advancing roadmap working: a milestone converged, the loop marked it done + set the next goal + seeded work with zero owner input."
     }
   ],
   "roadmap": {
-    "current": "m4-scheduled",
+    "current": "m5-channels",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -754,7 +781,7 @@
         "id": "m4-scheduled",
         "goal": "Relay proactive/scheduled tasks: user texts \"remind me\" or \"check X every morning\" -> Relay stores the schedule + fires the agent later, texting the result unprompted. First move from reactive bot to autonomous assistant (the real Instinct parity gap). Free-infra: in-process scheduler + persisted schedule file, no external cron.",
         "done_when": "schedule parse + persist + due-check + fire-agent wired behind an interface, offline unit+wiring tests, live e2e (schedule a near-future task -> it fires + replies)",
-        "status": "todo",
+        "status": "done",
         "owner_gated": false
       },
       {
