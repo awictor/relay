@@ -1059,7 +1059,7 @@
       "id": "safety-audit-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m26] Redaction + rate-limit sweep: confirm redact-secrets catches the key/token shapes the bot actually handles (Gemini AQ./AIza, Anthropic sk-ant, Telegram bot token) in agent output/logs, and the per-chat rate limit cant be trivially reset. Add any missing shape. Document the safety model (SSRF + dangerous-action + redaction + rate-limit + step caps) in a SECURITY.md, linked from PORTFOLIO. Closes m26."
     },
@@ -1070,6 +1070,30 @@
       "status": "todo",
       "repo": "mcp-forge",
       "task": "[m26] Mirror the trailing-dot SSRF fix to mcp-forge (url-validator.ts is vendored identical Relay<->DataFaucet per its header). On anvil-migration ONLY: apply the same hostname.replace(/.$/,\"\") strip in isUrlSafe + copy the ssrf-adversarial test; run test:unit; commit to anvil-migration, never master. Keeps the two copies identical so the fix merges back."
+    },
+    {
+      "id": "vendor-1",
+      "stream": "datafaucet",
+      "value": "high",
+      "status": "todo",
+      "repo": "mcp-forge",
+      "task": "[m27] Mirror the trailing-dot SSRF fix into mcp-forge url-validator.ts (anvil-migration only): add hostname.replace(/.$/,\"\") before the blocklist/IP checks, matching Relay. Copy test/ssrf-adversarial cases (adapt to node:test). Run test:unit. Commit anvil-migration, NEVER master. (supersedes safety-audit-4)"
+    },
+    {
+      "id": "vendor-2",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m27] Audit whether url-validator.ts + redact-secrets.ts are ACTUALLY vendored-identical Relay<->mcp-forge (headers claim so). Diff each pair; if they drifted (redactText got AQ./sk-ant in Relay only — is that shared or Relay-local?), decide: add a parity test like anvil-client-parity, or document the intentional divergence in each files header. Report the true state."
+    },
+    {
+      "id": "vendor-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m27] Document the cross-repo shared-lib map: which files are vendored-identical (parity-guarded), which are copied-then-diverged (Relay safety.ts DANGEROUS_ACTION_RE + redactText are Relay-local, not in mcp-forge), in PORTFOLIO or a SHARED.md. So future edits know which need mirroring. Closes m27."
     }
   ],
   "history": [
@@ -1455,10 +1479,13 @@
     },
     {
       "event": "m26 safety-audit-2 DONE: adversarial dangerous-action sweep (test/dangerous-action-adversarial.test.ts, 24 catch + 5 allow cases). FOUND 5 REAL GAPS in DANGEROUS_ACTION_RE — subscribe, bid, add to cart, book/booking, donate/donation — all committing/payment actions the agent could click autonomously; ADDED them. Casing/spacing variants already caught (i flag + \b). MUST_ALLOW (read more/next/search/view/show) still pass = no over-block. 448 pass (+29), tsc clean. call-tested TRUE (5 gaps proven open then closed). Note: unicode-homoglyph obfuscation is an accepted limit (regex cant catch semantic intent; the anvil-side + step caps + reply-only-on-reply are the backstop) — documented in safety-audit-3 SECURITY.md."
+    },
+    {
+      "event": "m26 safety-audit-3 DONE + m26-safety-audit COMPLETE. safety-audit-3: redaction sweep FOUND 2 real gaps — Gemini AQ. keys (unmatched) + Anthropic sk-ant- (generic sk- rule stopped at the hyphen) both survived redactText -> ADDED patterns. Rate-limit verified reset-resistant (hammering in-window stays blocked; recovers only after 60s). +10 tests. SECURITY.md written (SSRF+dangerous-action+redaction+rate-limit+step-caps, each linked to its adversarial test + accepted limits), linked from PORTFOLIO. 458 pass, tsc clean. m26 done_when met: all four surfaces swept, gaps fixed, documented. ROADMAP advanced -> AUTHORED m27-vendor-consistency (the safety fixes landed in Relay but url-validator is vendored-identical to mcp-forge -> copies now DIFFER = the exact drift parity tests catch; mirror + audit all shared libs). Seeded vendor-1/2/3. 23rd self-directed milestone."
     }
   ],
   "roadmap": {
-    "current": "m26-safety-audit",
+    "current": "m27-vendor-consistency",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1638,6 +1665,13 @@
         "id": "m26-safety-audit",
         "goal": "Adversarial audit of the agent tool surface. Relay drives a REAL browser for anyone who texts it — the SSRF url-validator + dangerous-action guard are the blast-radius controls, and they have unit tests but no ADVERSARIAL sweep. Systematically try to bypass them (SSRF: decimal/hex/octal IPs, IPv6, redirect-to-internal, DNS-rebind shapes, embedded creds, non-http protocols; dangerous-action: obfuscated pay/delete/submit labels) and fix any gap found. Consumer-trust + real-user-safety hardening — the highest-value non-gated work left now that the stack is proven.",
         "done_when": "an adversarial test sweep exercises the SSRF guard (isUrlSafe) + the dangerous-action guard (isDangerousAction) against a documented list of bypass shapes; any that get through are FIXED (or documented as accepted with rationale); tests pin every case so a regression cant reopen a hole; tsc + full suite green",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m27-vendor-consistency",
+        "goal": "Close the cross-repo drift the safety audit exposed + prove the vendoring contract actually holds. The trailing-dot SSRF fix + the redaction fixes landed in Relay but url-validator.ts is vendored identical into mcp-forge (per its header) — so the copies now DIFFER, which is exactly the drift the parity tests exist to catch. Mirror the safety fixes into mcp-forge (anvil-migration only), and do a repo-wide pass confirming every vendored/shared lib (anvil-client, url-validator, redact-secrets, capture heuristics) is either truly identical + parity-guarded, or documented as intentionally-diverged. Consistency + supply-chain hygiene across the stack.",
+        "done_when": "the trailing-dot SSRF fix (+ any redaction fix that applies) is mirrored into mcp-forge url-validator on anvil-migration with tests, test:unit green; a documented check confirms each cross-repo shared lib is identical+parity-guarded OR intentionally-diverged-with-reason; NEVER touch master",
         "status": "todo",
         "owner_gated": false
       }

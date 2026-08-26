@@ -44,6 +44,10 @@ transient-error taxonomy) lives once as `src/lib/anvil-client.ts` in Relay and i
 byte-identical** into DataFaucet, enforced by a parity test in both repos. One source of truth for
 how anything talks to anvil.
 
+**Safety:** Relay drives a real browser for anyone who texts it, so the blast radius is bounded by an
+SSRF guard, a dangerous-action guard, secret redaction, a per-chat rate limit, and step caps — each
+adversarially tested. See **[SECURITY.md](SECURITY.md)**.
+
 ## What's proven (live, not just typechecked)
 
 - **Relay on anvil** — `npm run e2e:live`: the real Telegram→agent→anvil→reply pipe drives live

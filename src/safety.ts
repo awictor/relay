@@ -53,6 +53,11 @@ export function redactText(s: string): string {
   return s
     .replace(/\bBearer\s+[A-Za-z0-9._\-]{8,}/gi, "Bearer [redacted]")
     .replace(/\bAIza[0-9A-Za-z_\-]{20,}/g, "[redacted-key]")
+    // Gemini AQ. keys (the newer key shape — DEPLOY.md notes these are what the free tier issues).
+    .replace(/\bAQ\.[A-Za-z0-9_\-]{20,}/g, "[redacted-key]")
+    // Anthropic keys: sk-ant-... (hyphenated — the generic sk- rule below stops at the first hyphen,
+    // so match this explicitly). m26 safety-audit-3.
+    .replace(/\bsk-ant-[A-Za-z0-9\-]{16,}/g, "[redacted-key]")
     .replace(/\bsk-[A-Za-z0-9]{16,}/g, "[redacted-key]")
     .replace(/\b\d{8,10}:AA[0-9A-Za-z_\-]{30,}/g, "[redacted-token]")
     .replace(/\b[0-9a-f]{32,}\b/gi, "[redacted-hex]");
