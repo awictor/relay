@@ -763,7 +763,7 @@
       "id": "degrade-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m14] Process-level safety: index.ts installs crash handlers (installCrashHandlers exists) — confirm an unhandledRejection/uncaughtException logs + does NOT take down the long-poll worker (or exits cleanly for the supervisor to restart). Add a unit test for the crash-handler wiring (mock process.on). Doc the failure-mode matrix (anvil down / LLM down / store unwritable -> behavior) in DEPLOY.md or a FAILURE-MODES note."
     },
@@ -1060,6 +1060,9 @@
     },
     {
       "event": "m14 degrade-2 DONE: proactive-path resilience. Audit found schedule-runner already per-schedule try/catch (failed task completed not retried-forever), digest-runner already per-member (couldnt fetch), alert-runner already catch->notify:false, stores persist() already best-effort. REMAINING gap fixed: store.complete() in tick (inner catch + overCap branch) was UNGUARDED — an unwritable-store complete() would escape the loop and abort the rest of the due batch, losing other due tasks. Added safeComplete() wrapper (swallow+log+onError). Test: flaky store whose complete() throws mid-batch -> both due tasks still attempted, tick doesnt throw. 354 pass, tsc clean. call-tested via injected flaky store (offline)."
+    },
+    {
+      "event": "m14 degrade-3 DONE: crash-handler wiring was ALREADY tested (crash-handlers.test.ts DEV-0067: uncaughtException/unhandledRejection -> log [fatal]+stack, onFatal flush, exit NON-ZERO 1 so supervisor restarts; re-entrancy guarded; onFatal-throw swallowed). Remaining part = the FAILURE-MODES doc. Added a matrix to DEPLOY.md: anvil-down/LLM-down/blocked-URL/store-unwritable/uncaught-throw -> exact inbound + proactive behavior, pointing at failure.ts + shutdown.ts + the tests. m14 done_when now fully met (anvil-down+LLM-error+unwritable-store degrade w/ tests each; no unhandled rejection crashes the worker; failure-mode doc). degrade-4 (proactive user-facing text through friendlyError) remains a valid todo -> keep m14 current, do it next run rather than force-advance. 354 pass."
     }
   ],
   "roadmap": {

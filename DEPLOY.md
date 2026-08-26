@@ -100,6 +100,23 @@ npm run build && npm start
 - **Update**: `git -C anvil-engine pull && git -C relay pull && cd relay && npm ci &&
   npm run build && docker compose up -d --build`.
 
+## Failure modes (what Relay does when a dependency is down) — m14
+
+Relay is built to **fail soft**: a downed dependency degrades to a clear message (inbound) or a
+logged skip (proactive), never a crash, a hang, or a raw error leaked to the user.
+
+| Dependency down | Inbound (user texted) | Proactive (scheduled/recipe/digest/alert) |
+|---|---|---|
+| **anvil / browser** (unreachable, refused) | Friendly reply: *"My browser's having trouble right now — give it a moment and try again."* Raw error (ECONNREFUSED/host) is **logged, never sent**. | The run's per-task `try/catch` logs a `[proactive] …"ok":false` line, records a failed turn, and **completes the schedule** (a `once` drops, a `daily` still advances) so it never storms-retries. Other due tasks in the same tick are unaffected. |
+| **LLM** (Gemini 429/503/quota/overload) | Friendly reply: *"My brain's overloaded right now (free-tier model is busy). Try again in a moment."* Relay also auto-fails-over across Gemini models first. | Same as above — logged skip, schedule completed, batch continues. |
+| **Blocked / unsafe URL** (SSRF guard) | *"I can't open that link — it looks unsafe or points somewhere private."* | Same handling; the run just fails soft. |
+| **Store unwritable** (`.json` state file, EACCES/read-only disk) | Persist is **best-effort** (`try/catch` in every store's `persist()`); the reply still goes out, only durability is lost until the disk recovers. | `store.complete()` is wrapped in `safeComplete()` — a write failure is logged and **cannot abort the rest of the due batch**. |
+| **Uncaught throw / unhandled rejection** anywhere | `installCrashHandlers` logs `[fatal] <kind>: <stack>` and exits **non-zero (1)** so the supervisor (docker `restart: unless-stopped` / pm2) **restarts** the worker — vs. the clean exit 0 of a SIGTERM shutdown. Memory is durable (synchronous `writeFileSync` per turn), so a restart loses no conversation state. |
+
+Failure classification lives in `src/lib/failure.ts` (`classifyFailure` → `browser|llm|blocked|generic`,
+`friendlyError`). The crash/shutdown wiring is in `src/shutdown.ts`. All paths are unit-tested
+(`test/failure.test.ts`, `test/crash-handlers.test.ts`, `test/schedule-runner.test.ts`).
+
 ## Notes / honest limits
 - **Compute, not vendor, is the wall.** Self-hosting removes Browserbase's per-call
   meter + quota, but you still run the Chrome fleet. The Micro shape handles a
