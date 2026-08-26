@@ -947,7 +947,7 @@
       "id": "merge-1",
       "stream": "datafaucet",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "mcp-forge",
       "task": "[m22] On anvil-migration: scripts/merge-readiness.mjs (or .sh) — report commits behind master (git rev-list --count anvil-migration..master), a DRY-RUN merge conflict check (git merge --no-commit --no-ff master then --abort; NEVER leave it merged, NEVER touch master), and print a clean summary. Read-only of master. cd C:/Users/acwic/mcp-forge; commit to anvil-migration only."
     },
@@ -1312,6 +1312,9 @@
     },
     {
       "event": "m21 thesis-3 DONE + m21-thesis-proof COMPLETE. thesis-3: README Why self-hosted section links THESIS.md (measured sub-second latency + $0 marginal), DEPLOY.md honest-limits cross-links THESIS.md + bench:latency. Skipped optional preflight-latency-line (low value, THESIS+bench already deliver it). 369 pass, tsc clean. m21 done_when met: reproducible bench + THESIS.md one-pager, real numbers, honest break-even+caveats. ROADMAP advanced -> AUTHORED m22-merge-readiness (de-risk the owner PR#1 merge — one-command readiness report: behind-master? conflicts? gate pass? default unchanged?; NEVER touches master). Seeded merge-1/2/3. 18th self-directed milestone. Portfolio deeply mature; every remaining DEPLOY step owner-gated; m22 makes the owners single unlock action zero-surprise."
+    },
+    {
+      "event": "m22 merge-1 DONE (mcp-forge anvil-migration, NEVER master). Also committed a stray concurrent-dev-loop artifact: anvil-flag-gate.test.ts (DEV-0104 prod-safety: static scan asserting every anvil-only route call sits in if(USE_ANVIL) — 5/5 pass) + its package.json wiring. scripts/merge-readiness.mjs: READ-ONLY merge-readiness — commits behind/ahead master + conflict dry-run (git merge --no-commit --no-ff then ALWAYS --abort, refuses on dirty tree or off-branch so abort is safe), READY/NEEDS-ATTENTION verdict. VERIFIED: READY — 49 ahead, 0 behind, no conflicts; tree clean after + still on branch (master untouched, zero side effects). call-tested TRUE. merge-2 adds gate+default-unchanged."
     }
   ],
   "roadmap": {
