@@ -483,9 +483,9 @@
       "id": "relay-reset-onboarding",
       "stream": "relay",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "README What-you-can-text-it / HELP already updated by DEV-0023? Verify /reset (+/clear) is documented in README (commands list) same as /start /help. If HELP shows it but README doesnt, add a one-liner so the command surface is consistent across README + in-bot help. Doc-only."
+      "task": "README What-you-can-text-it / HELP already updated by DEV-0023? Verify /reset (+/clear) is documented in README (commands list) same as /start /help. If HELP shows it but README doesnt, add a one-liner so the command surface is consistent across README + in-bot help. Doc-only. [DONE: README Commands line documents /start /help /reset(+/clear); matches in-bot HELP]"
     }
   ],
   "history": [
@@ -661,6 +661,9 @@
     },
     {
       "event": "relay-shutdown-ci done: ci.yml now runs the graceful-shutdown e2e on the ubuntu runner (build + node scripts/e2e-shutdown.mjs) — CI green (run 32951526666), so the SIGTERM path is regression-locked on the real deploy platform, not just unit-tested. ALSO: a concurrent loop shipped /reset (+/clear) [DEV-0023] across index/handler/commands/memory-store with memory-store+smoke tests; I added the missing handler-branch coverage (3 tests). Full suite 141 pass. Only df-owner-summary remains (blocked gh-billing)."
+    },
+    {
+      "event": "relay-reset-onboarding done: README now documents /reset (+/clear) in a Commands line, consistent with the in-bot HELP/START (DEV-0023). Doc-only. NOW GENUINELY DRY: only df-owner-summary remains and it is BLOCKED on gh-billing (cant capture PR#1 CI result until Actions runs). All buildable/testable/doc work across all 3 repos is complete. Not refilling with invented cosmetic work — per loop rules, STOP and name the owner-blocker."
     }
   ]
 }
