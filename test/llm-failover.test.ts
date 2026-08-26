@@ -44,3 +44,48 @@ describe("GeminiClient model failover", () => {
     expect(calls).toBe(1); // primary only, no extra model calls
   });
 });
+
+// DEV-0040 (HARDEN): the RESPONSE-PARSE side of complete() — a functionCall part -> {toolCall}
+// (incl thoughtSignature lifted from the fcPart OR a sibling), multi-text join, and functionCall
+// taking precedence over text. A Gemini response-shape change must not silently drop tool calls.
+describe("GeminiClient response parse (DEV-0040)", () => {
+  const parts = (p: unknown[]) => ({ status: 200, body: { candidates: [{ content: { parts: p } }] } });
+
+  it("a functionCall part becomes toolCall {name,args}", async () => {
+    vi.stubGlobal("fetch", stubFetch(() => parts([{ functionCall: { name: "scrape", args: { url: "u" } } }])));
+    const res = await new GeminiClient("k").complete([{ role: "user", content: "x" }], []);
+    expect(res.toolCall).toEqual({ name: "scrape", args: { url: "u" } });
+  });
+
+  it("thoughtSignature on the functionCall part is carried onto the toolCall", async () => {
+    vi.stubGlobal("fetch", stubFetch(() => parts([{ functionCall: { name: "read", args: {} }, thoughtSignature: "SIG" }])));
+    const res = await new GeminiClient("k").complete([{ role: "user", content: "x" }], []);
+    expect(res.toolCall?.thoughtSignature).toBe("SIG");
+  });
+
+  it("thoughtSignature on a SIBLING part is still lifted onto the toolCall", async () => {
+    vi.stubGlobal("fetch", stubFetch(() => parts([{ thoughtSignature: "SIB" }, { functionCall: { name: "read", args: {} } }])));
+    const res = await new GeminiClient("k").complete([{ role: "user", content: "x" }], []);
+    expect(res.toolCall?.thoughtSignature).toBe("SIB");
+  });
+
+  it("functionCall takes precedence over text (returns toolCall, not a bare text)", async () => {
+    vi.stubGlobal("fetch", stubFetch(() => parts([{ text: "let me look" }, { functionCall: { name: "scrape", args: { url: "u" } } }])));
+    const res = await new GeminiClient("k").complete([{ role: "user", content: "x" }], []);
+    expect(res.toolCall?.name).toBe("scrape");
+    expect(res.text).toBe("let me look"); // text still surfaced alongside
+  });
+
+  it("multiple text parts are joined; args default to {} when absent", async () => {
+    vi.stubGlobal("fetch", stubFetch(() => parts([{ text: "a" }, { text: "b" }])));
+    const res = await new GeminiClient("k").complete([{ role: "user", content: "x" }], []);
+    expect(res.text).toBe("ab");
+    expect(res.toolCall).toBeUndefined();
+  });
+
+  it("a functionCall with no args yields args:{}", async () => {
+    vi.stubGlobal("fetch", stubFetch(() => parts([{ functionCall: { name: "read" } }])));
+    const res = await new GeminiClient("k").complete([{ role: "user", content: "x" }], []);
+    expect(res.toolCall).toEqual({ name: "read", args: {} });
+  });
+});
