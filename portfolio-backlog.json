@@ -683,9 +683,9 @@
       "id": "cons-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m11] One composed integration test (test/journey.test.ts): a single createHandler with REAL stores (memory/schedule/recipe/digest/alert) + faked llm/send, driving a user journey — save a recipe, define a digest of it, /run the digest, watch an alert, /schedules+/recipes+/digests+/alerts all reflect state. Proves the features compose, not just pass in isolation. Offline."
+      "task": "[m11] One composed integration test (test/journey.test.ts): a single createHandler with REAL stores (memory/schedule/recipe/digest/alert) + faked llm/send, driving a user journey — save a recipe, define a digest of it, /run the digest, watch an alert, /schedules+/recipes+/digests+/alerts all reflect state. Proves the features compose, not just pass in isolation. Offline. [DONE: test/journey.test.ts — real stores through createHandler, full user journey (recipe->digest->run->alert->lists) + cross-instance persistence; 2 tests; 336 suite]"
     },
     {
       "id": "cons-3",
@@ -947,6 +947,9 @@
     },
     {
       "event": "m10-alerts COMPLETE: alert-1 store/parse/change-detect, alert-2 notify-only-on-change runner, alert-3 handler+auto-schedule+silent-unless-changed (live e2e: baseline+change notify, unchanged silent). Relay is now watch-and-notify. ROADMAP advanced -> AUTHORED m11-consolidate (docs refresh + one composed whole-product integration test + demo transcript — prove the 6-milestone feature set composes + is launch-legible). Seeded cons-1/2/3. 7th self-directed milestone. m1-synergy still owner_blocked."
+    },
+    {
+      "event": "m11 cons-2 done: whole-product journey test. REAL Memory/Recipe/Digest/Alert stores wired through createHandler as index does (only llm/send faked); drives lookup->save recipes->define digest->/run briefing->watch alert->/run recipe->all lists reflect state + cross-instance persistence. Proves the 6 self-directed feature milestones COMPOSE. 336 full suite pass, tsc clean. Next m11: cons-1 (README refresh) then cons-3 (demo transcript) -> completes m11."
     }
   ],
   "roadmap": {
