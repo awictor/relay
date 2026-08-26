@@ -9,12 +9,18 @@ import { GeminiClient } from "./llm.js";
 import type { LLMMessage } from "./llm.js";
 import { checkRateLimit, redactText } from "./safety.js";
 import { handleCommand } from "./commands.js";
+import { MemoryStore } from "./lib/memory-store.js";
 
 const llm = new GeminiClient();
 
-// Per-chat rolling memory (last few turns). Bounded to keep prompts small.
+// Per-chat rolling memory (last few turns). Bounded to keep prompts small, and PERSISTED to a local
+// JSON file (DEV-0001) so a redeploy/restart no longer wipes every conversation. Path is env-tunable;
+// the file is gitignored. Free-infra: a plain file, no DB.
 const MEMORY_TURNS = 6;
-const memory = new Map<number, LLMMessage[]>();
+const memory = new MemoryStore({
+  file: process.env.RELAY_MEMORY_FILE ?? "data/relay-memory.json",
+  maxTurns: MEMORY_TURNS * 2,
+});
 
 async function handle(msg: InboundMessage): Promise<void> {
   console.log(`[in] ${msg.from}: ${redactText(msg.text).slice(0, 120)}`);
@@ -34,15 +40,15 @@ async function handle(msg: InboundMessage): Promise<void> {
     return;
   }
 
-  const history = memory.get(msg.chatId) ?? [];
+  const history = memory.get(msg.chatId) as LLMMessage[];
   try {
     await sendTyping(msg.chatId); // show "typing…" while the agent works
     const { reply } = await runAgent(msg.text, { llm }, history);
     await sendMessage(msg.chatId, reply);
 
-    // Append this turn to memory (user + assistant), trim to MEMORY_TURNS.
+    // Append this turn to memory (user + assistant); the store trims to its maxTurns + persists.
     const next: LLMMessage[] = [...history, { role: "user", content: msg.text }, { role: "assistant", content: reply }];
-    memory.set(msg.chatId, next.slice(-MEMORY_TURNS * 2));
+    memory.set(msg.chatId, next);
   } catch (e) {
     const emsg = e instanceof Error ? e.message : String(e);
     console.error("agent error:", emsg);
