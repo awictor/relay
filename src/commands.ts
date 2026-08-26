@@ -32,7 +32,7 @@ Schedule me: "remind me to X in 10 min" or "every morning tell me Y" — I'll te
 
 Save recipes: "save <name>: <task>" stores a task you can re-run with /run <name>. /recipes lists them, /forget <name> removes one.
 
-Bundle into a briefing: "define digest morning: weather, hn, btc" then /run morning (or schedule morning every morning) for one combined message. /digests lists them.
+Bundle into a briefing: "define digest morning: weather, hn, btc" then /run morning (or schedule morning every morning) for one combined message. /digests lists them, /forget-digest <name> removes one.
 
 Watch for changes: "watch btc: price of bitcoin when it changes by 1000" — I only ping you when it moves. /alerts lists them, /forget-alert <name> stops one.
 

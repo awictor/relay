@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { handleCommand } from "../src/commands.js";
 import { createHandler } from "../src/handler.js";
 import type { InboundMessage } from "../src/telegram.js";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("handleCommand", () => {
   it("handles /start and /help (with bot suffix + case)", () => {
@@ -77,5 +82,22 @@ describe("handleCommand", () => {
       expect(agentCalls, `${cmd} fell through to the agent instead of being handled`).toBe(0);
       expect(sent.length, `${cmd} produced no reply`).toBeGreaterThan(0);
     }
+  });
+
+  // DEV-0105: the INVERSE of the guard above found a live bug — /forget-digest was dispatched by the
+  // handler (a first=== branch) but mentioned NOWHERE user-facing, so users couldn't discover it.
+  // Every dispatched slash command must appear in the /help or /start text (minus pure aliases the
+  // user never needs advertised, e.g. /clear is an alias of /reset).
+  it("every handler-dispatched slash command is discoverable in /help or /start", () => {
+    const handlerSrc = readFileSync(join(ROOT, "src", "handler.ts"), "utf8");
+    const dispatched = new Set(
+      (handlerSrc.match(/first === "(\/[a-z-]+)"/g) ?? []).map((m) => m.replace(/first === "|"/g, "")),
+    );
+    expect(dispatched.size, "scanner found the handler's first=== commands").toBeGreaterThan(5);
+
+    const ALIASES = new Set(["/clear"]); // /clear is an alias of /reset; not advertised on purpose
+    const discoverable = (handleCommand("/help")! + "\n" + handleCommand("/start")!).toLowerCase();
+    const undiscoverable = [...dispatched].filter((c) => !ALIASES.has(c) && !discoverable.includes(c.toLowerCase()));
+    expect(undiscoverable, `dispatched but undiscoverable (add to HELP/START): ${undiscoverable.join(", ")}`).toEqual([]);
   });
 });
