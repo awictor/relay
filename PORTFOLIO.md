@@ -13,7 +13,7 @@ yourself see [Guided demo](#guided-demo).
                   ┌──────────────────────────────┐
                   │  anvil-engine (awictor/…)     │   self-hosted real Chrome
                   │  REST + CDP proxy + MCP        │   /v1/sessions, /v1/scrape, /v1/view …
-                  │  pooling, caps, /v1/health     │   637 tests
+                  │  pooling, caps, /v1/health     │   659 tests
                   └──────────────┬─────────────────┘
                                  │  same connect logic, vendored byte-identical
              ┌───────────────────┴───────────────────┐
@@ -23,7 +23,7 @@ yourself see [Guided demo](#guided-demo).
    │ text-a-bot agent       │              │ dev/MCP capture layer      │
    │ Telegram → agent →     │              │ auto-scan/browse routes    │
    │ anvil → reply          │              │ BROWSER_BACKEND=anvil flag │
-   │ 370 tests, live-proven │              │ 1823 tests, anvil path live │
+   │ 494 tests, live-proven │              │ 1848 tests, anvil path live │
    └───────────────────────┘              └────────────────────────────┘
 ```
 
@@ -123,6 +123,6 @@ Every live command is **CI-safe**: absent anvil/key/`../mcp-forge` → SKIP (exi
 fail, so the demo runs anywhere and only exercises what the environment supports.
 
 ---
-*Developed autonomously by a self-advancing dev loop (`/agent-loop`): 21 milestones shipped, each
+*Developed autonomously by a self-advancing dev loop (`/agent-loop`): 30+ milestones shipped, each
 picked, built, verified, and committed by the loop; the roadmap advances itself and authors its own
 next milestone. See `portfolio-backlog.json` for the full history.*

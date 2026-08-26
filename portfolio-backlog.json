@@ -1191,7 +1191,7 @@
       "id": "audit-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m31] Doc/claim truth-check: spot-check PORTFOLIO.md + README + THESIS + SECURITY + SHARED against the code (test counts, command list, shared-lib sections, cookie model). Fix anything drifted. Then write the closing summary: non-gated roadmap complete, remaining = deploy-1 (Oracle VM) + pr-1-merge + gh-billing. Closes m31."
     },
@@ -1629,6 +1629,9 @@
     },
     {
       "event": "m31 audit-2 DONE: backlog hygiene. 4 open todos reviewed: audit-2/3/4 are the active m31 items (kept); df-owner-summary was MISLABELED as a normal todo but is gated on gh-billing + PR#1 CI (nothing the loop can do) -> converted to status owner_blocked + added to owner_blockers. Spot-checked 5 done milestones (m13/m15/m24/m28/m29) done_when vs reality by artifact existence — ALL present, no false-done. No stale/duplicate/orphaned buildable todos remain. After audit-2: only audit-3 (doc truth-check) + audit-4 (preflight-runtime DX, low) are non-gated; everything else is the 3 owner actions. audit-3 closes m31."
+    },
+    {
+      "event": "m31 audit-3 DONE + m31-final-audit COMPLETE. audit-3: doc/claim truth-check found stale test counts in PORTFOLIO.md (anvil 637->659, relay 370->494, DataFaucet 1823->1848) + milestone footer (21->30+) -> FIXED to match the audit-1 measured reality. Honest-status section already accurate (proven+gated, owner-only work named). CLOSING SUMMARY: the non-gated roadmap is COMPLETE. 30 milestones resolved (29 done + m1-synergy owner_blocked); full stack green (3001 tests: relay 494 + anvil 659 + mcp-forge 1848); both products live-proven on anvil; agent has auth(cookies)+safety(SSRF/dangerous-action/redaction/rate-limit)+degradation+ops+2 LLM adapters; thesis quantified (THESIS.md); shared libs parity-guarded bidirectionally; deploy fully de-risked (preflight + merge-readiness). REMAINING = ONLY 3 owner actions: deploy-1 (provision Oracle Always Free VM + docker compose up), pr-1-merge (merge anvil-migration->master, merge-readiness READY), gh-billing (fix mcp-forge Actions billing so PR#1 CI runs). audit-4 (preflight-runtime DX, low) is the sole remaining non-gated nicety. m31 done_when met."
     }
   ],
   "roadmap": {
@@ -1847,7 +1850,7 @@
         "id": "m31-final-audit",
         "goal": "Honest end-of-roadmap audit. After 30 milestones the non-gated build surface is essentially exhausted — both products live-proven on anvil, agent has auth+safety+degradation+ops, thesis quantified, docs complete, deploy fully de-risked. Before declaring the non-gated roadmap DONE, verify the portfolio has no unproven claim, stale/orphaned backlog item, or dead code: run every gate green, confirm each `done` milestones done_when actually holds, spot-check that docs match reality. Then state plainly what remains = ONLY the 3 owner actions. This is verification, not building — the right final move when honest work runs out.",
         "done_when": "a full-stack verification pass is green (relay npm test + preflight, mcp-forge test:unit, anvil tests); the backlog is checked for stale/duplicate/orphaned todos (cleaned or noted); any doc/claim that no longer matches code is fixed; a closing summary states the non-gated roadmap is complete and names the exact remaining owner-gated work; if a real new direction surfaces during the audit, seed it instead of stopping",
-        "status": "todo",
+        "status": "done",
         "owner_gated": false
       }
     ]
