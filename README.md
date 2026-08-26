@@ -21,6 +21,15 @@ Telegram user ──text──> Telegram Bot API ──long-poll──> Relay wo
                                                      anvil-engine (self-hosted Chrome)
 ```
 
+## Why self-hosted (no browser vendor)
+
+Relay and DataFaucet both run their browsing on self-hosted **anvil-engine** instead of a
+Browserbase / Browserless / Steel meter. That's not just a preference — it's **measured**:
+`npm run bench:latency` shows sub-second latency on every canonical errand (fast path ~155 ms),
+and the marginal cost of a session is **$0** on an Oracle Always-Free VM. The honest trade (a
+concurrency ceiling + ops ownership, both instrumented here) and a reproducible cost model are
+written up in **[THESIS.md](THESIS.md)**.
+
 ## What you can text it
 
 **Fetch & read**

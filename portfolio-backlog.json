@@ -939,9 +939,33 @@
       "id": "thesis-3",
       "stream": "anvil",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m21] Wire bench-latency into the story: add a npm run bench:latency script + link THESIS.md from README (a Why self-hosted section) and cross-link DEPLOY.md. Optionally fold a quick latency sanity line into preflight (advisory, never NO-GO). Closes m21."
+    },
+    {
+      "id": "merge-1",
+      "stream": "datafaucet",
+      "value": "high",
+      "status": "todo",
+      "repo": "mcp-forge",
+      "task": "[m22] On anvil-migration: scripts/merge-readiness.mjs (or .sh) — report commits behind master (git rev-list --count anvil-migration..master), a DRY-RUN merge conflict check (git merge --no-commit --no-ff master then --abort; NEVER leave it merged, NEVER touch master), and print a clean summary. Read-only of master. cd C:/Users/acwic/mcp-forge; commit to anvil-migration only."
+    },
+    {
+      "id": "merge-2",
+      "stream": "datafaucet",
+      "value": "high",
+      "status": "todo",
+      "repo": "mcp-forge",
+      "task": "[m22] Extend merge-readiness to run the gate + default-unchanged proof: npm run test:unit pass/fail, and git diff master -- <browserbase selection files> shows only flag-gated/additive changes (reuse the df-anvil-3 finding: browser-backend.ts new, routes anvil-gated, capture-filter extracted). Fold into the single GO/READY-TO-MERGE vs NEEDS-ATTENTION summary."
+    },
+    {
+      "id": "merge-3",
+      "stream": "datafaucet",
+      "value": "medium",
+      "status": "todo",
+      "repo": "mcp-forge",
+      "task": "[m22] Document the merge-readiness procedure in docs/anvil-migration-PR.md (a Before you merge section): run the script, what GREEN means, that it never touches master. Cross-link from relays OWNER-blockers note. Closes m22."
     }
   ],
   "history": [
@@ -1285,10 +1309,13 @@
     },
     {
       "event": "m21 thesis-2 DONE: THESIS.md one-pager. Measured-latency table from bench-latency (session 244ms/fetch_json 155ms/browse+read 326ms/scrape 923ms p50, reproducible via npm run bench:latency). Cost model as a REPRODUCIBLE FORMULA (vendor = N x price_per_session linear; self-hosted = $0 marginal on Oracle Always Free within concurrency ceiling) with a worked example using a FLAGGED placeholder price $P (did NOT fabricate live vendor pricing — no lookup available; explicitly told reader to substitute current published rate). Honest caveat section: compute+ops is the real cost not the meter, concurrency ceiling, offset by the status/preflight/crash/degradation work. Credibility artifact — no invented figures. Break-even: immediate on free tier marginal cost."
+    },
+    {
+      "event": "m21 thesis-3 DONE + m21-thesis-proof COMPLETE. thesis-3: README Why self-hosted section links THESIS.md (measured sub-second latency + $0 marginal), DEPLOY.md honest-limits cross-links THESIS.md + bench:latency. Skipped optional preflight-latency-line (low value, THESIS+bench already deliver it). 369 pass, tsc clean. m21 done_when met: reproducible bench + THESIS.md one-pager, real numbers, honest break-even+caveats. ROADMAP advanced -> AUTHORED m22-merge-readiness (de-risk the owner PR#1 merge — one-command readiness report: behind-master? conflicts? gate pass? default unchanged?; NEVER touches master). Seeded merge-1/2/3. 18th self-directed milestone. Portfolio deeply mature; every remaining DEPLOY step owner-gated; m22 makes the owners single unlock action zero-surprise."
     }
   ],
   "roadmap": {
-    "current": "m21-thesis-proof",
+    "current": "m22-merge-readiness",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1433,6 +1460,13 @@
         "id": "m21-thesis-proof",
         "goal": "Quantify the thesis with REAL measured numbers, not claims. The whole portfolio argues self-hosted anvil beats a Browserbase/Browserless/Steel vendor — no per-session meter, no quota. But nowhere is that PROVEN with data: what is anvil actual end-to-end latency for the canonical errands, and what would the same volume cost on the vendor? Produce a credible, reproducible one-pager: measure anvil scrape/fetch/browse latency locally (script, real runs), put it against published vendor per-session pricing, and state the honest break-even. Credibility artifact for an AE — reproducible, no hand-waving. anvil is up locally so the latency half is measurable now.",
         "done_when": "a reproducible bench script measures real anvil latency across the canonical errands (>=N runs, p50/p95) + a THESIS.md one-pager states measured latency vs vendor per-session cost with an honest break-even + the caveats (compute is the real cost, not the vendor); numbers are from actual runs, not invented; SKIPs/degrades if anvil is down",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m22-merge-readiness",
+        "goal": "De-risk the one owner step that unlocks everything: merging PR #1 (anvil-migration -> master). The loop cannot merge (owner), but it CAN keep the branch mergeable and give the owner a one-command merge-readiness report: is anvil-migration behind master? are there conflicts? does the full unit gate pass on the branch? is the browserbase default still byte-identical to master? So when the owner sits down to merge, there are zero surprises. mcp-forge anvil-migration only, NEVER master; read-only of master.",
+        "done_when": "a merge-readiness check (script or documented procedure on anvil-migration) reports: commits-behind-master, conflict presence (dry-run merge, no commit), test:unit pass/fail on the branch, and browserbase-default-unchanged confirmation — as a single readable summary; NEVER commits to master; documented so the owner runs it before merging PR #1",
         "status": "todo",
         "owner_gated": false
       }

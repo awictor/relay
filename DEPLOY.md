@@ -121,7 +121,8 @@ Failure classification lives in `src/lib/failure.ts` (`classifyFailure` → `bro
 - **Compute, not vendor, is the wall.** Self-hosting removes Browserbase's per-call
   meter + quota, but you still run the Chrome fleet. The Micro shape handles a
   couple concurrent sessions; the Ampere A1 shape handles many. Tune
-  `ANVIL_MAX_SESSIONS`.
+  `ANVIL_MAX_SESSIONS`. The measured latency + a reproducible cost/break-even model are
+  in [THESIS.md](THESIS.md) (run `npm run bench:latency` to reproduce the numbers).
 - **anvil auth**: set `ANVIL_API_KEY` so only Relay can drive the browser. Relay
   reads the same var and sends it automatically.
 - **Secrets**: `.env` is gitignored — never commit it. On the VM it lives only on disk.
