@@ -2,12 +2,13 @@
 // Per-chat short memory so follow-ups have context. Falls back to a clear message
 // if keys/anvil are missing so it never hangs silently.
 
-import { startPolling, sendMessage, hasToken, type InboundMessage } from "./telegram.js";
+import { startPolling, sendMessage, sendTyping, hasToken, type InboundMessage } from "./telegram.js";
 import { anvilLive } from "./anvil.js";
 import { runAgent } from "./agent.js";
 import { GeminiClient } from "./llm.js";
 import type { LLMMessage } from "./llm.js";
 import { checkRateLimit, redactText } from "./safety.js";
+import { handleCommand } from "./commands.js";
 
 const llm = new GeminiClient();
 
@@ -17,6 +18,10 @@ const memory = new Map<number, LLMMessage[]>();
 
 async function handle(msg: InboundMessage): Promise<void> {
   console.log(`[in] ${msg.from}: ${redactText(msg.text).slice(0, 120)}`);
+
+  // Slash commands (/start, /help) reply instantly, no rate-limit/agent needed.
+  const cmd = handleCommand(msg.text);
+  if (cmd) { await sendMessage(msg.chatId, cmd); return; }
 
   const rl = checkRateLimit(msg.chatId);
   if (!rl.allowed) {
@@ -31,6 +36,7 @@ async function handle(msg: InboundMessage): Promise<void> {
 
   const history = memory.get(msg.chatId) ?? [];
   try {
+    await sendTyping(msg.chatId); // show "typing…" while the agent works
     const { reply } = await runAgent(msg.text, { llm }, history);
     await sendMessage(msg.chatId, reply);
 

@@ -65,9 +65,9 @@
     },
     {
       "id": "polish-1",
-      "status": "todo",
+      "status": "done",
       "value": "low",
-      "task": "UX: typing indicator (sendChatAction), /start + /help commands, friendly errors, truncation notices, basic usage log."
+      "task": "DONE: src/commands.ts (/start + /help canned replies, pure+unit-tested, handles @botsuffix + case + leading-only) wired into index before rate-limit/agent; telegram.sendTyping (sendChatAction \"typing\") shown while the agent works; agent errors already friendly. 2 new tests, 20/20 green, tsc clean."
     }
   ],
   "history": [
@@ -94,6 +94,10 @@
     {
       "item": "deploy-1 (prep)",
       "note": "Dockerfile + docker-compose + DEPLOY.md written and verified. Actual VM provisioning + tokens remain owner-gated."
+    },
+    {
+      "item": "polish-1",
+      "note": "/start + /help commands, typing indicator; last buildable offline item. All non-owner-gated backlog now done."
     }
   ]
 }

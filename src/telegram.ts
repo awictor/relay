@@ -33,6 +33,21 @@ export async function sendMessage(chatId: number, text: string): Promise<void> {
   }
 }
 
+/** Show the "typing…" indicator in a chat (best-effort, ~5s or until next message). */
+export async function sendTyping(chatId: number): Promise<void> {
+  if (!TOKEN) return;
+  try {
+    await fetch(`${API}/sendChatAction`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, action: "typing" }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
 interface TgUpdate {
   update_id: number;
   message?: {
