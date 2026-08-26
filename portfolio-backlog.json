@@ -161,9 +161,17 @@
       "id": "syn-4",
       "stream": "synergy",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "datafaucet",
-      "task": "Mark draft PR #1 ready-for-review (gh pr ready 1) ONLY as an explicit owner action prompt — do NOT auto-flip. Instead: post a single summary PR comment listing what is proven (capture+browse on anvil, 1779 gate green, both live e2e, prod default unchanged) and the one known limit (read-only live-view, syn-2c), so Alex has a one-glance merge decision. Keep it a draft."
+      "task": "Mark draft PR #1 ready-for-review (gh pr ready 1) ONLY as an explicit owner action prompt — do NOT auto-flip. Instead: post a single summary PR comment listing what is proven (capture+browse on anvil, 1779 gate green, both live e2e, prod default unchanged) and the one known limit (read-only live-view, syn-2c), so Alex has a one-glance merge decision. Keep it a draft. [DONE: posted merge-decision summary comment on PR #1 (proven/known-limit/enable-steps); kept draft]"
+    },
+    {
+      "id": "relay-mem",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[re-prioritized: synergy stream near-exhausted, diversify to Relay] Persist per-chat agent memory across worker restarts. Currently src/index.ts holds a per-chat 6-turn buffer in-process; a restart wipes it. Add a tiny JSON-file store (data/chat-memory.json, gitignored) behind an interface (loadMemory/saveMemory) so Claude/Gemini swap is unaffected; cap total size + per-chat turns; write-through on each turn. Unit-test the store offline (no Telegram/LLM)."
     }
   ],
   "history": [
@@ -216,6 +224,9 @@
     },
     {
       "event": "syn-3c done: full test:unit gate run = 1779 pass / 0 fail with 4 anvil suites wired in; audited process.env mutation for cross-suite bleed — all anvil suites snapshot+restore, route modules cache-busted with ?v=, no leak. PR #1 body updated with gate result + both live e2e. Migration is functionally complete + fully CI-verifiable. Refilled syn-4 (post merge-decision summary comment on PR, keep draft)."
+    },
+    {
+      "event": "syn-4 done: posted a merge-decision summary comment on draft PR #1 — proven surface (capture+browse on anvil, 1779 gate, both live e2e, prod default unchanged), the one known limit (read-only live-view), and enable-after-merge steps. Kept draft (merge is owner call). Synergy stream now near-exhausted at high value; re-prioritized relay-mem to diversify into the Relay product stream next."
     }
   ]
 }
