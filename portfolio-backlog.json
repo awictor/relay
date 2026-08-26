@@ -201,9 +201,9 @@
       "id": "relay-extract-tune",
       "stream": "relay",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "extractFields currently scrapes text only (document.body.innerText). For data-heavy SPAs the value may be in attributes/meta/JSON-LD. Add an option to also pass the page HTML (or <script type=application/ld+json>) into the extraction prompt when text extraction yields all-null. Guard prompt size."
+      "task": "extractFields currently scrapes text only (document.body.innerText). For data-heavy SPAs the value may be in attributes/meta/JSON-LD. Add an option to also pass the page HTML (or <script type=application/ld+json>) into the extraction prompt when text extraction yields all-null. Guard prompt size. [DONE: anvil.extractStructured (JSON-LD + meta) + extractFieldsResult allNull flag; extract retries structured when text pass all-null; 5 tests; 88 suite pass; live e2e GitHub 3022/MDN 712 chars meta]"
     },
     {
       "id": "relay-search-flow",
@@ -300,6 +300,14 @@
       "status": "owner_blocked",
       "repo": "relay",
       "task": "[OWNER ACTION] Provision Oracle Cloud Always Free VM + run stack per DEPLOY.md (docker compose up -d). Only Alex can create the VM + hold the 3 secrets. Then loop can do a real inbound-text e2e. Last step to live-for-users."
+    },
+    {
+      "id": "relay-compare-fallback",
+      "stream": "relay",
+      "value": "low",
+      "status": "todo",
+      "repo": "relay",
+      "task": "Wire the same JSON-LD/meta fallback into the compare tool (per-URL): compare currently calls extractFields (text only). Refactor its per-row extraction to reuse the extract handler path (text -> structured fallback) so multi-page compares also benefit on SPA/product pages. Keep parallel fetch + all-null-row-on-failure. Add a test."
     }
   ],
   "history": [
@@ -394,6 +402,9 @@
     },
     {
       "event": "relay-deploy-doc done: fixed a real deploy bug (compose defaulted GEMINI_MODEL to invalid gemini-2.0-flash -> gemini-flash-lite-latest), added relay liveness healthcheck + DEPLOY.md Health/troubleshooting section; compose parses clean. Relay deploy-ready. Remaining high-value work is OWNER-GATED: provision VM (deploy-1) + merge PR #1. Recorded both owner_blockers."
+    },
+    {
+      "event": "relay-extract-tune done: JSON-LD/meta fallback for extract — when the text pass is all-null, retry over anvil.extractStructured (ld+json scripts + og/twitter/meta tags). extractFieldsResult exposes allNull; fallback only fires when text found nothing; extractStructured optional on BrowserBackend. extractFields back-compat kept. 5 tests + 88 full suite pass, tsc clean, live e2e green (GitHub 3022 / MDN 712 chars of meta captured). Refilled relay-compare-fallback (extend same fallback to the compare tool)."
     }
   ]
 }
