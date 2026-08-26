@@ -39,13 +39,6 @@
       "task": "PARTIAL: extracted capture-filter.ts (isNoise/isApiRequest/redactUrlParams/filterHeaders) shared by both backends + 7 unit tests wired into gate (1769 green). Branch anvil-migration b15922d5. STILL TODO for syn-3: document BROWSER_BACKEND in .env.local.example + write the PR description for the eventual master merge (do NOT merge)."
     },
     {
-      "id": "relay-mem",
-      "repo": "relay",
-      "status": "todo",
-      "value": "medium",
-      "task": "Persist per-chat memory across restarts (currently in-memory Map, lost on restart). Simple JSON file or sqlite; bounded. Unit-test load/save. Keeps the agent context after a redeploy."
-    },
-    {
       "id": "anvil-obs",
       "repo": "anvil",
       "status": "todo",
@@ -167,11 +160,26 @@
     },
     {
       "id": "relay-mem",
+      "repo": "relay",
+      "status": "done",
+      "value": "medium",
+      "task": "Persist per-chat memory across restarts (currently in-memory Map, lost on restart). Simple JSON file or sqlite; bounded. Unit-test load/save. Keeps the agent context after a redeploy. [DONE (prior loop, DEV-0001): src/lib/memory-store.ts MemoryStore behind interface, wired into src/index.ts via RELAY_MEMORY_FILE=data/relay-memory.json (gitignored), write-through + maxTurns trim; test/memory-store.test.ts 6 tests green; full relay suite 29 pass]"
+    },
+    {
+      "id": "relay-mem-e2e",
+      "stream": "relay",
+      "value": "low",
+      "status": "todo",
+      "repo": "relay",
+      "task": "Prove memory persistence survives a real restart: script that (1) MemoryStore.set(chatA, turns) -> new MemoryStore instance on same file -> assert get(chatA) returns the turns (simulates process restart). Unit-level already covers load/save; this asserts the cross-instance file round-trip explicitly. Offline, no Telegram."
+    },
+    {
+      "id": "relay-tools",
       "stream": "relay",
       "value": "medium",
       "status": "todo",
       "repo": "relay",
-      "task": "[re-prioritized: synergy stream near-exhausted, diversify to Relay] Persist per-chat agent memory across worker restarts. Currently src/index.ts holds a per-chat 6-turn buffer in-process; a restart wipes it. Add a tiny JSON-file store (data/chat-memory.json, gitignored) behind an interface (loadMemory/saveMemory) so Claude/Gemini swap is unaffected; cap total size + per-chat turns; write-through on each turn. Unit-test the store offline (no Telegram/LLM)."
+      "task": "Broaden Relay agent capability beyond browse/scrape: add a structured extract tool (given a URL + a natural-language field list, drive anvil to load the page then return JSON with those fields) so a user can text \"get me the price and title from <url>\" and get clean data, not prose. Reuse src/anvil.ts readCurrent/scrape; keep the LLM behind the adapter; bound steps; unit-test with a mock BrowserBackend."
     }
   ],
   "history": [
@@ -227,6 +235,9 @@
     },
     {
       "event": "syn-4 done: posted a merge-decision summary comment on draft PR #1 — proven surface (capture+browse on anvil, 1779 gate, both live e2e, prod default unchanged), the one known limit (read-only live-view), and enable-after-merge steps. Kept draft (merge is owner call). Synergy stream now near-exhausted at high value; re-prioritized relay-mem to diversify into the Relay product stream next."
+    },
+    {
+      "event": "relay-mem verified DONE (built prior loop as DEV-0001, backlog was stale): MemoryStore persists per-chat turns to data/relay-memory.json (gitignored), wired into index.ts, 6 dedicated tests + 29 relay tests green, tsc clean. Deduped the double relay-mem entry. Refilled relay-mem-e2e (cross-instance restart round-trip proof) + relay-tools (structured extract tool for the consumer product)."
     }
   ]
 }
