@@ -478,6 +478,14 @@
       "status": "done",
       "repo": "relay",
       "task": "Wire scripts/e2e-shutdown.mjs into CI so the SIGTERM assertion actually runs on Linux (the workflow runner). Add a step to .github/workflows/ci.yml after npm test: npm run build && node scripts/e2e-shutdown.mjs. On ubuntu it exercises the real signal path (skips only on Windows). Small — locks graceful-shutdown against regression on the deploy platform. [DONE: ci.yml runs npm run build + node scripts/e2e-shutdown.mjs on ubuntu; CI green (run 32951526666) — shutdown e2e executed non-skipped on Linux]"
+    },
+    {
+      "id": "relay-reset-onboarding",
+      "stream": "relay",
+      "value": "low",
+      "status": "todo",
+      "repo": "relay",
+      "task": "README What-you-can-text-it / HELP already updated by DEV-0023? Verify /reset (+/clear) is documented in README (commands list) same as /start /help. If HELP shows it but README doesnt, add a one-liner so the command surface is consistent across README + in-bot help. Doc-only."
     }
   ],
   "history": [
