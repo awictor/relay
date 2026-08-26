@@ -96,7 +96,7 @@ npm test              # 350+ offline unit/wiring tests (no keys, no anvil)
 npm run e2e:live      # LIVE end-to-end: real Gemini + anvil across canonical errands
 npm run e2e:faults    # LIVE fault drills: induce real failures, assert it fails soft
 npm run status        # offline health: what's scheduled/saved/watched + is anvil up
-npm run preflight     # ONE GO/NO-GO across the whole stack (Relay + DataFaucet + anvil)
+npm run preflight     # ONE GO/NO-GO across the whole stack (~3-4 min; add -- --fast for a quick check)
 ```
 
 `npm run e2e:live` (`scripts/e2e-live.mjs`) is the **CI-safe** live smoke test. It drives the

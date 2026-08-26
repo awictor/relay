@@ -3,7 +3,8 @@
 // owner-gated (provision the Oracle VM, merge PR #1, fix gh-billing). This de-risks that effort — a
 // GREEN preflight means the code is ready and the only unknowns left are the host + secrets.
 //
-//   npm run preflight
+//   npm run preflight          full stack (~3-4 min: serial relay suite + DataFaucet test:unit + e2e)
+//   npm run preflight -- --fast quick GO check — skips the heaviest cross-repo gate (DataFaucet unit)
 //
 // Each sub-proof owns its own SKIP (e.g. e2e:live exits 0 with a SKIP note when anvil/keys absent),
 // so preflight degrades gracefully offline: SKIP is not a failure. NO-GO only when a check hard-fails.
@@ -17,17 +18,19 @@ import { join } from "path";
 const RELAY = process.cwd();
 const MCP_FORGE = join(RELAY, "..", "mcp-forge"); // sits beside relay under C:/Users/acwic
 const ANVIL = (process.env.ANVIL_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
+const FAST = process.argv.includes("--fast"); // audit-4: skip the heaviest gate for a quick check
 
 // A check: label + npm command + the repo dir to run it in. `skipIf()` (optional) short-circuits to
 // SKIP without running — used when the other repo isn't checked out (relay stays self-contained).
+// `heavy` checks are skipped under --fast (the ~1800-test DataFaucet gate dominates the runtime).
 // Commands are static, trusted strings (no interpolation), so shell:true is safe + portable.
 const CHECKS = [
   { label: "relay: unit tests   (npm test)",            cmd: "npm test",           cwd: RELAY },
   { label: "relay: live e2e     (npm run e2e:live)",    cmd: "npm run e2e:live",   cwd: RELAY },
   { label: "relay: fault drills (npm run e2e:faults)",  cmd: "npm run e2e:faults", cwd: RELAY },
   { label: "relay: operability  (npm run status)",      cmd: "npm run status",     cwd: RELAY },
-  { label: "datafaucet: unit    (npm run test:unit)",   cmd: "npm run test:unit",  cwd: MCP_FORGE,
-    skipIf: () => !fsExists(MCP_FORGE) && "mcp-forge not checked out beside relay" },
+  { label: "datafaucet: unit    (npm run test:unit)",   cmd: "npm run test:unit",  cwd: MCP_FORGE, heavy: true,
+    skipIf: () => (!fsExists(MCP_FORGE) && "mcp-forge not checked out beside relay") || (FAST && "--fast: heaviest gate skipped") },
   { label: "datafaucet: anvil   (npm run e2e:anvil)",   cmd: "npm run e2e:anvil",  cwd: MCP_FORGE,
     skipIf: () => !fsExists(MCP_FORGE) && "mcp-forge not checked out beside relay" },
 ];

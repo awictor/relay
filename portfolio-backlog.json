@@ -1199,7 +1199,7 @@
       "id": "audit-4",
       "stream": "relay",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m31] preflight runtime: the full run exceeds a 2min wall (serial mcp-forge test:unit + relay suite + live e2e). Either note the expected ~3-4min runtime in the preflight output/README, or add a --fast subset flag (skip the heaviest cross-repo gate) for a quick GO check. Minor DX; the checks themselves all pass."
     }
@@ -1632,10 +1632,13 @@
     },
     {
       "event": "m31 audit-3 DONE + m31-final-audit COMPLETE. audit-3: doc/claim truth-check found stale test counts in PORTFOLIO.md (anvil 637->659, relay 370->494, DataFaucet 1823->1848) + milestone footer (21->30+) -> FIXED to match the audit-1 measured reality. Honest-status section already accurate (proven+gated, owner-only work named). CLOSING SUMMARY: the non-gated roadmap is COMPLETE. 30 milestones resolved (29 done + m1-synergy owner_blocked); full stack green (3001 tests: relay 494 + anvil 659 + mcp-forge 1848); both products live-proven on anvil; agent has auth(cookies)+safety(SSRF/dangerous-action/redaction/rate-limit)+degradation+ops+2 LLM adapters; thesis quantified (THESIS.md); shared libs parity-guarded bidirectionally; deploy fully de-risked (preflight + merge-readiness). REMAINING = ONLY 3 owner actions: deploy-1 (provision Oracle Always Free VM + docker compose up), pr-1-merge (merge anvil-migration->master, merge-readiness READY), gh-billing (fix mcp-forge Actions billing so PR#1 CI runs). audit-4 (preflight-runtime DX, low) is the sole remaining non-gated nicety. m31 done_when met."
+    },
+    {
+      "event": "audit-4 DONE + ROADMAP COMPLETE. audit-4: preflight --fast flag (skips the heaviest ~1800-test DataFaucet gate) -> quick GO in ~90s (verified GO 6/7, DataFaucet-unit skipped, rest green incl live e2e + anvil health); README notes the ~3-4min full runtime + --fast. HONEST STOP: per the loops own rule, I can genuinely no longer conceive a valuable NON-gated next milestone AND all remaining work is owner-gated -> roadmap.complete=true, current=null. 30 milestones resolved, full stack green (relay 494 + anvil 659 + mcp-forge 1848 = 3001 tests, 0 fail), both products live-proven on anvil, thesis quantified, deploy fully de-risked. REMAINING (owner-only): deploy-1 Oracle VM, pr-1-merge (READY), gh-billing. Loop should re-arm when an owner action lands, not spin on filler. 28th self-directed milestone was m31; this iteration closes the roadmap."
     }
   ],
   "roadmap": {
-    "current": "m31-final-audit",
+    "current": null,
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1853,6 +1856,8 @@
         "status": "done",
         "owner_gated": false
       }
-    ]
+    ],
+    "complete": true,
+    "completion_note": "Non-gated roadmap COMPLETE (m1-m31). All buildable/provable-without-owner work is done + green (3001 tests). Remaining = 3 owner actions only: deploy-1 (Oracle Always Free VM + docker compose up), pr-1-merge (anvil-migration->master, merge-readiness READY), gh-billing (mcp-forge Actions billing so PR#1 CI runs). The loop should NOT manufacture filler; re-arm when an owner action lands (a key/host/merge appears) — then verify the newly-unblocked path live."
   }
 }
