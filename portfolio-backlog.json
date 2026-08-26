@@ -723,9 +723,9 @@
       "id": "shared-1",
       "stream": "synergy",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m13] In Relay, carve the pure, dependency-light connect helpers into src/lib/anvil-client.ts: buildConnectUrls(baseUrl,sessionId,apiKey)-> {connectUrl(cdp ws), liveUrl(/v1/view)} + isTransientError (already in src/anvil.ts) + a documented header block marking it the CANONICAL shared client. Re-point src/anvil.ts to import from it (no behavior change). Unit-test the URL builder (scheme/token/encoding, https->wss) + keep existing anvil tests green."
+      "task": "[m13] In Relay, carve the pure, dependency-light connect helpers into src/lib/anvil-client.ts: buildConnectUrls(baseUrl,sessionId,apiKey)-> {connectUrl(cdp ws), liveUrl(/v1/view)} + isTransientError (already in src/anvil.ts) + a documented header block marking it the CANONICAL shared client. Re-point src/anvil.ts to import from it (no behavior change). Unit-test the URL builder (scheme/token/encoding, https->wss) + keep existing anvil tests green. [DONE: src/lib/anvil-client.ts canonical (buildConnectUrls + isTransientError, pure); src/anvil.ts re-points to it, no behavior change; 6 tests; 342 suite]"
     },
     {
       "id": "shared-2",
@@ -1013,6 +1013,9 @@
     },
     {
       "event": "m12-anvil-resilience COMPLETE: anvil-retry-1 (transient nav retry), anvil-oplog-1 (per-op [anvil] log), anvil-retry-doc (env table). Shared engine now self-heals + is observable, matching Relay m8. ROADMAP advanced -> AUTHORED m13-shared-client (extract the canonical anvil connect client so Relay + DataFaucet stop hand-rolling the same logic — the real one-shared-browser synergy; vendored + parity-tested, free-infra, no npm). Seeded shared-1/2/3. 9th self-directed milestone. m1-synergy still owner_blocked (billing/merge)."
+    },
+    {
+      "event": "m13 shared-1 done: canonical shared anvil-client. src/lib/anvil-client.ts (pure, dependency-light): buildConnectUrls(base,id,key) -> {connectUrl cdp-ws, liveUrl /v1/view} + isTransientError, marked CANONICAL for vendoring. src/anvil.ts re-points (createSession uses it, isTransientError re-exported), no behavior change. 6 tests, 342 full suite pass, tsc clean. Next m13: shared-2 (vendor the file into mcp-forge anvil-migration + byte-parity test; re-point anvilConnectUrls)."
     }
   ],
   "roadmap": {
