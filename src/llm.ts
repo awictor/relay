@@ -95,12 +95,25 @@ export class GeminiClient implements LLMClient {
     // Auth via X-goog-api-key header (works for both classic AIza keys and the
     // newer AQ.* keys; the ?key= query param 404s newer keys against some models).
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-    const r = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-goog-api-key": this.apiKey },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30000),
-    });
+    // Free tier 503s ("high demand") + 429s (rate limit) are common and transient.
+    // Retry with exponential backoff before giving up.
+    const RETRYABLE = new Set([429, 500, 503, 504]);
+    const MAX_ATTEMPTS = 4;
+    let r!: Response;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-goog-api-key": this.apiKey },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30000),
+      }).catch((e) => {
+        // Network/timeout — treat as retryable via a synthetic 503-like Response.
+        return new Response(JSON.stringify({ error: { message: String(e) } }), { status: 503 });
+      });
+      if (r.ok || !RETRYABLE.has(r.status) || attempt === MAX_ATTEMPTS) break;
+      r.body?.cancel?.();
+      await new Promise((res) => setTimeout(res, 800 * 2 ** (attempt - 1))); // 0.8s, 1.6s, 3.2s
+    }
     if (!r.ok) throw new Error(`Gemini ${r.status}: ${(await r.text().catch(() => "")).slice(0, 200)}`);
     const j = (await r.json()) as {
       candidates?: { content?: { parts?: GeminiPart[] } }[];

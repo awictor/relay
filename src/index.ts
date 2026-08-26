@@ -44,8 +44,14 @@ async function handle(msg: InboundMessage): Promise<void> {
     const next: LLMMessage[] = [...history, { role: "user", content: msg.text }, { role: "assistant", content: reply }];
     memory.set(msg.chatId, next.slice(-MEMORY_TURNS * 2));
   } catch (e) {
-    console.error("agent error:", e instanceof Error ? e.message : String(e));
-    await sendMessage(msg.chatId, `Sorry — something went wrong: ${e instanceof Error ? e.message : "unknown error"}`);
+    const emsg = e instanceof Error ? e.message : String(e);
+    console.error("agent error:", emsg);
+    // Friendlier message for the common transient model-overload case.
+    if (/\b(503|429|UNAVAILABLE|high demand|overloaded|rate)/i.test(emsg)) {
+      await sendMessage(msg.chatId, "My brain's overloaded right now (free-tier model is busy). Try again in a moment.");
+    } else {
+      await sendMessage(msg.chatId, `Sorry — something went wrong: ${emsg}`);
+    }
   }
 }
 

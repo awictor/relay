@@ -102,6 +102,10 @@
     {
       "item": "live-verify + gemini fixes",
       "note": "GEMINI_API_KEY (AQ.* key) validated live. Fixed 2 real bugs: (1) auth via X-goog-api-key header not ?key=, default model gemini-2.0-flash(dead)->gemini-flash-latest; (2) Gemini 2.5 thoughtSignature must be echoed on the assistant functionCall turn or multi-step 400s — threaded through ToolCall. VERIFIED FULL LOOP LIVE: \"top HN story\" -> Gemini scrape -> anvil real Chrome -> Gemini summary -> reply with current data (2 steps). Telegram token still invalid = only remaining gap."
+    },
+    {
+      "item": "live telegram e2e + gemini retry",
+      "note": "Telegram token valid (@Awinstinctbot). FULL PIPE CONFIRMED live: /start + a real question reached the agent (worker log shows [in] messages). Only failure was Gemini free-tier 503 high-demand (transient, not our bug). Added retry w/ exponential backoff (429/500/503/504, 4 attempts) in GeminiClient + friendly overload message in index catch. tsc+20 green."
     }
   ]
 }
