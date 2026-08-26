@@ -225,9 +225,17 @@
       "id": "relay-reply-format",
       "stream": "relay",
       "value": "medium",
+      "status": "done",
+      "repo": "relay",
+      "task": "Reply formatting for SMS: extract/compare return JSON to the model, but the user gets a phone text. Add guidance (system prompt) + a light post-format so compare results become a short readable list (e.g. \"A: $10 | B: $20\") not raw JSON, and long extracts get trimmed. Unit-test a formatter that turns a compare JSON array into <=N lines. Keep it deterministic + LLM-agnostic. [DONE: src/lib/format-reply.ts renders stray JSON->lines, trims to phone size; wired into index.ts + system prompt; 9 tests; 64 suite pass]"
+    },
+    {
+      "id": "relay-tools-e2e-full",
+      "stream": "relay",
+      "value": "low",
       "status": "todo",
       "repo": "relay",
-      "task": "Reply formatting for SMS: extract/compare return JSON to the model, but the user gets a phone text. Add guidance (system prompt) + a light post-format so compare results become a short readable list (e.g. \"A: $10 | B: $20\") not raw JSON, and long extracts get trimmed. Unit-test a formatter that turns a compare JSON array into <=N lines. Keep it deterministic + LLM-agnostic."
+      "task": "Single integration test that runs a scripted-LLM agent through search->compare->reply and asserts the FINAL formatReply output is readable lines (not JSON), proving the tools + formatter compose. Ties together relay-search-e2e intent with the new formatter. Offline (mock backend + scripted LLM)."
     }
   ],
   "history": [
@@ -298,6 +306,9 @@
     },
     {
       "event": "relay-onboarding done: /start + /help + README now advertise the extract/compare/search tools with concrete example texts a user can send. Product is legible again after 3 capability additions. commands test green, tsc clean. Refilled relay-reply-format (turn JSON tool output into readable SMS-friendly replies)."
+    },
+    {
+      "event": "relay-reply-format done: SMS-friendly reply formatting (src/lib/format-reply.ts) — a reply that is/embeds JSON data becomes short readable lines (url/title lead, null -> dash), everything trimmed to phone size; wired into index.ts reply + memory-store form; system prompt tells the model to summarize not paste JSON (formatter is the safety net). 9 new tests + 64 full suite pass, tsc clean. Closes the last UX rough edge on the extract/compare/search features. Refilled relay-tools-e2e-full (search->compare->reply composition test)."
     }
   ]
 }
