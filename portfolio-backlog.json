@@ -547,9 +547,33 @@
       "id": "chan-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m5] index.ts selects the channel by env RELAY_CHANNEL (telegram default | console). Wire handler + scheduler send through the chosen channel.sendMessage so proactive tasks work on any channel. Document RELAY_CHANNEL in .env.example (env-parity gate). Unit-test the selection."
+    },
+    {
+      "id": "anvil-pool-1",
+      "stream": "anvil",
+      "value": "high",
+      "status": "todo",
+      "repo": "anvil",
+      "task": "[m6] Session pooling: anvil creates a fresh Chrome context per session; add an opt-in pool that reuses warm contexts (behind a flag/config, default off so current behavior is byte-identical). Measure create-latency with vs without. Interface + unit tests with a mock launcher; do NOT regress the 547-test suite."
+    },
+    {
+      "id": "anvil-caps-1",
+      "stream": "anvil",
+      "value": "medium",
+      "status": "todo",
+      "repo": "anvil",
+      "task": "[m6] Per-session resource caps: max pages/tabs + max total bytes downloaded per session, enforced in actions.ts, returning a clear 4xx when exceeded. Protects a shared/free-infra deploy from a runaway task. Unit-test the cap logic; default limits generous so normal use is unaffected."
+    },
+    {
+      "id": "anvil-bench-1",
+      "stream": "anvil",
+      "value": "medium",
+      "status": "todo",
+      "repo": "anvil",
+      "task": "[m6] Bench script (scripts/bench-pool.mjs or test) that times N sequential navigate+scrape ops with pooling on vs off against a real local page, prints the latency delta. Proves the pooling win is real, not assumed. Live (needs Chrome)."
     }
   ],
   "history": [
@@ -758,10 +782,13 @@
     },
     {
       "event": "m5 chan-2 done: ConsoleChannel — 2nd transport behind Channel. makeConsoleChannel(injectable onLine/write) + nodeConsoleChannel (real readline). Line -> InboundMessage -> unchanged handler; reply written to stdout. Drives the real agent from a terminal (dev/demo). 6 unit tests (no real stdin), 258 full suite pass, tsc clean. Two transports now share one agent core. Next m5: chan-3 (index selects channel by RELAY_CHANNEL, .env.example doc, completes m5)."
+    },
+    {
+      "event": "m5-channels COMPLETE (auto-advanced): chan-1 Channel interface + TelegramChannel, chan-2 ConsoleChannel (2nd transport), chan-3 selectChannel(RELAY_CHANNEL). Agent core is transport-agnostic, proven with 2 real adapters + env selection. 259 suite. Loop advanced roadmap.current -> m6-anvil-depth (session pooling + resource caps + bench) and seeded anvil-pool-1/anvil-caps-1/anvil-bench-1. 3rd self-directed milestone jump (m4->m5->m6) with zero owner input. m1-synergy still owner_blocked (billing/merge)."
     }
   ],
   "roadmap": {
-    "current": "m5-channels",
+    "current": "m6-anvil-depth",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -794,7 +821,7 @@
         "id": "m5-channels",
         "goal": "Second channel behind a Channel interface (Discord or WhatsApp-web via anvil) so Relay is not Telegram-only — proves the agent core is transport-agnostic",
         "done_when": "Channel interface extracted, Telegram refactored onto it, a 2nd channel adapter (even stub+tests) added, agent core unchanged",
-        "status": "todo",
+        "status": "done",
         "owner_gated": false
       },
       {
