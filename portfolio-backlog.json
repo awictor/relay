@@ -907,7 +907,7 @@
       "id": "preflight-2",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m20] Extend preflight to the cross-repo proofs: shell out to mcp-forge `npm run e2e:anvil` (DataFaucet second-product live) + `npm run test:unit`, and probe anvil /v1/health directly, folding their results into the same GO/NO-GO. Handle mcp-forge-absent gracefully (skip, note it). Read-only of the other repo."
     },
@@ -1249,6 +1249,9 @@
     },
     {
       "event": "m20 preflight-1 DONE: scripts/preflight.mjs (npm run preflight) runs Relays full proof set (npm test, e2e:live, e2e:faults, status) via spawnSync shell:true, classifies each PASS/SKIP/FAIL (SKIP = exit0 + SKIP in output, not a failure), prints single GO/NO-GO. GO only when zero hard-fails. VERIFIED both paths: anvil up -> GO 4/4 pass; anvil down (dead ANVIL_BASE_URL) -> e2e:live SKIP, still GO 3/4+1skip exit0 (fault-drills pass regardless, unit+status pass). Fixed initial bug: bare npm + shell:false failed empty on win -> shell:true with static cmd strings. call-tested TRUE."
+    },
+    {
+      "event": "m20 preflight-2 DONE: preflight.mjs extended cross-repo — now runs relay(test,e2e:live,e2e:faults,status) + mcp-forge(test:unit,e2e:anvil via cwd=../mcp-forge) + a direct anvil /v1/health probe, all folded into ONE GO/NO-GO. mcp-forge-absent -> those 2 checks SKIP with a note (relay stays self-contained). anvil-down -> health SKIP not FAIL. LIVE-VERIFIED full stack: GO 7/7 pass (relay 4 + datafaucet 2 + anvil health, sessions 0). exit 0. call-tested TRUE. One command now proves the WHOLE stack deploy-ready."
     }
   ],
   "roadmap": {
