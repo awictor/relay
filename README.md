@@ -72,13 +72,22 @@ texts back a phone-friendly answer.
 ## Verify
 
 ```bash
-npm test                              # 100+ offline unit/wiring tests (no keys, no anvil)
-npx tsx scripts/e2e-agent-chain.mjs   # LIVE end-to-end: real Gemini + anvil against a real site
+npm test              # 350+ offline unit/wiring tests (no keys, no anvil)
+npm run e2e:live      # LIVE end-to-end: real Gemini + anvil across canonical errands
 ```
 
-The live e2e needs `.env` filled (`GEMINI_API_KEY`) and anvil reachable at `ANVIL_BASE_URL`
-(default `http://localhost:3000`). It drives the real agent, asserts it used a fetch tool +
-replied from real data, and exits non-zero on failure — a one-command deploy smoke test.
+`npm run e2e:live` (`scripts/e2e-live.mjs`) is the **CI-safe** live smoke test. It drives the
+real agent (Gemini + anvil) through the canonical errands — a deterministic **scrape**
+(example.com), a **fetch_json** against a public no-key API (open-meteo), and a multi-step
+**browse→read** — and asserts real content came back plus the expected tool was used.
+
+- It **SKIPs cleanly (exit 0)** when anvil is unreachable or `GEMINI_API_KEY` is unset, so it's
+  safe to run in an offline pipeline — hence it's the deploy smoke test to run once the VM is up.
+- Needs `.env` filled (`GEMINI_API_KEY`) + anvil reachable at `ANVIL_BASE_URL`
+  (default `http://localhost:3000`) to actually exercise the pipe; exits non-zero if a live case fails.
+
+The older `scripts/e2e-*.mjs` (agent-chain, schedule, recipe, digest, alert, shutdown) are
+feature-specific live/offline proofs; `e2e:live` is the consolidated deploy check.
 
 ## Shared anvil client (vendoring contract)
 

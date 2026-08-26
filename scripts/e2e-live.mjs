@@ -47,6 +47,17 @@ const cases = [
     assert: (reply) => /-?\d+(\.\d+)?\s*(°|deg|c\b|celsius)/i.test(reply) || /\d/.test(reply),
     why: "reply surfaces a real numeric temperature pulled from the JSON",
   },
+  {
+    name: "multi-step browse->read",
+    // The persistent-session path: open a page with browse, then read its rendered text in a
+    // second step (vs one-shot scrape). example.com stays the deterministic target so the
+    // content assertion is stable; the point here is that the browse+read pair actually drove a
+    // held anvil session and the read text reached the reply.
+    task: "Open https://example.com in the browser, then read the page and tell me exactly what the body paragraph says.",
+    fetchTools: ["browse", "read", "scrape", "extract"],
+    assert: (reply) => /example domain|for use in (documentation|illustrative)|without .*permission/i.test(reply),
+    why: "reply carries example.com's body text read from a live browsed session",
+  },
 ];
 
 let ok = 0;

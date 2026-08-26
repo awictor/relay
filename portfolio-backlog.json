@@ -795,9 +795,33 @@
       "id": "e2e-live-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m15] Add a real MULTI-STEP browse errand (browse->read) to e2e-live.mjs against a stable page, asserting the read content flows into the reply. Then document `npm run e2e:live` in README Verify (what it needs, that it SKIPs offline). Closes m15 done_when."
+    },
+    {
+      "id": "ops-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m16] scripts/status.mjs: read the durable JSON state files (schedule/recipe/digest/alert stores — same paths index.ts uses via env or defaults), count per-chat + total, and print a summary table. Probe anvil /v1/live (up/down + latency). No GEMINI/TELEGRAM key needed. Wire npm run status. Handle a missing store file as 0 (not a crash)."
+    },
+    {
+      "id": "ops-2",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m16] Factor the store-file paths + a readStore(file) helper (safe JSON parse, [] on absent/corrupt) into a small src/lib/state-paths.ts reused by BOTH index.ts and status.mjs, so the CLI reads exactly what the runtime writes (no path drift). Unit-test the helper. "
+    },
+    {
+      "id": "ops-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m16] status.mjs prints the last metrics window if the runtime persisted one (it currently only logs metrics; add a best-effort metrics snapshot file write on the metrics tick + shutdown, read it here). Document npm run status in README (what it shows, that it needs no keys). Closes m16."
     }
   ],
   "history": [
@@ -1096,10 +1120,13 @@
     },
     {
       "event": "m15 e2e-live-2 DONE: added a real fetch_json errand to e2e-live.mjs — agent hits open-meteo (public no-key JSON API) via the fetch_json tool and surfaces a live temperature number. Added requireTool support so this case PINS fetch_json specifically (not just any fetch). Live temp varies so assertion checks tool-use + a real number in the reply, not an exact value. LIVE-VERIFIED 2/2: scrape->Example Domain (chose extract this run, robust), fetch_json->24.1C, exit 0. tsc clean, 358 unit pass. call-tested TRUE."
+    },
+    {
+      "event": "m15 e2e-live-3 DONE + m15-live-e2e COMPLETE. Added multi-step browse->read case to e2e-live.mjs (LIVE 3/3: scrape->Example Domain, fetch_json->24.1C, browse,read steps=3->body text; exit 0) + documented npm run e2e:live in README Verify (CI-safe SKIP, canonical errands, the deploy smoke test). The real channel->agent->anvil->reply pipe is now proven end-to-end, not just typechecked. ROADMAP advanced -> AUTHORED m16-operability (offline `relay status` CLI reading durable stores + anvil probe so the VM operator can see health w/o logs/bot). Seeded ops-1/2/3. 12th self-directed milestone."
     }
   ],
   "roadmap": {
-    "current": "m15-live-e2e",
+    "current": "m16-operability",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1202,6 +1229,13 @@
         "id": "m15-live-e2e",
         "goal": "Prove the REAL pipe, not just types. The channel->agent->anvil->reply path is heavily unit-tested (358) but the existing scripts/e2e-*.mjs are offline/stubbed. anvil is reachable locally; build a real live-e2e harness that drives the actual agent + real anvil for the canonical errands (scrape a page, fetch_json an API, multi-step browse) and ASSERTS real output. So the day Alex provisions the VM, the deploy path is verified working, not just green on tsc. Bounded (few LLM calls; skip cleanly when keys/anvil absent so CI stays offline).",
         "done_when": "a `npm run e2e:live` (or scripts/e2e-live.mjs) drives real anvil end-to-end for >=2 canonical errands and asserts real content; skips gracefully (exit 0 + SKIP note) when ANVIL is down or GEMINI_API_KEY absent so offline CI is unaffected; documented in README Verify",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m16-operability",
+        "goal": "Make the 24/7 deploy OPERABLE from outside the process. Relay tracks metrics + /status internally (Telegram-only), but an operator running it on the VM has no way to SEE health without reading logs or texting the bot. Add an offline-inspectable operability surface: a `relay status` CLI (or npm script) that reads the DURABLE state files (schedules, recipes, digests, alerts, last metrics) + probes anvil, and prints a health summary + counts — no bot, no keys needed for the counts. So the operator can ssh in and run one command to see whats scheduled, whats watched, and whether anvil is up.",
+        "done_when": "a `npm run status` (scripts/status.mjs) reads the durable stores + probes anvil and prints a health/counts summary (pending schedules, saved recipes/digests/alerts, anvil up/down, last metrics window if present); runs with NO keys (counts are file-based) and degrades cleanly when a store file is absent; documented in README",
         "status": "todo",
         "owner_gated": false
       }
