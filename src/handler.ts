@@ -147,7 +147,8 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // /forget <name>: remove a saved recipe. No agent run.
     if (first === "/forget" && deps.recipeForget) {
       const name = msg.text.trim().split(/\s+/).slice(1).join(" ").trim();
-      const removed = name ? deps.recipeForget(msg.chatId, name) : false;
+      if (!name) { await deps.sendMessage(msg.chatId, "Usage: /forget <name> — see /recipes for the names."); return; }
+      const removed = deps.recipeForget(msg.chatId, name);
       await deps.sendMessage(msg.chatId, removed ? `Forgot "${name}".` : "No recipe by that name — see /recipes.");
       return;
     }
@@ -164,7 +165,8 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // /forget-alert <name>: remove an alert. No agent run.
     if (first === "/forget-alert" && deps.alertForget) {
       const name = msg.text.trim().split(/\s+/).slice(1).join(" ").trim();
-      const removed = name ? deps.alertForget(msg.chatId, name) : false;
+      if (!name) { await deps.sendMessage(msg.chatId, "Usage: /forget-alert <name> — see /alerts for the names."); return; }
+      const removed = deps.alertForget(msg.chatId, name);
       await deps.sendMessage(msg.chatId, removed ? `Stopped watching "${name}".` : "No alert by that name — see /alerts.");
       return;
     }
@@ -189,7 +191,8 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // /forget-digest <name>: remove a digest. No agent run.
     if (first === "/forget-digest" && deps.digestForget) {
       const name = msg.text.trim().split(/\s+/).slice(1).join(" ").trim();
-      const removed = name ? deps.digestForget(msg.chatId, name) : false;
+      if (!name) { await deps.sendMessage(msg.chatId, "Usage: /forget-digest <name> — see /digests for the names."); return; }
+      const removed = deps.digestForget(msg.chatId, name);
       await deps.sendMessage(msg.chatId, removed ? `Forgot digest "${name}".` : "No digest by that name — see /digests.");
       return;
     }
