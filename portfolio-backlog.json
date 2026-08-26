@@ -422,6 +422,14 @@
       "status": "done",
       "repo": "anvil",
       "task": "Check anvil-engine has a .dockerignore (it ships via docker compose build in DEPLOY.md). If its Dockerfile does COPY . . or lacks .dockerignore, add one excluding node_modules/.git/test/dist-source-maps so the compose build is fast + clean. Verify build inputs kept. [DONE: found+fixed a deploy-BLOCKING bug — anvil .dockerignore excluded dist/ while the Dockerfile COPYs dist/, so docker compose --build shipped an empty image. Removed dist from ignore (+added .github); verified build inputs kept, dist/api.js present, CI green (run 32948232266)]"
+    },
+    {
+      "id": "deploy-dryrun-doc",
+      "stream": "quality",
+      "value": "low",
+      "status": "todo",
+      "repo": "relay",
+      "task": "The anvil dist/-ignore bug (deploy-blocking, invisible until docker build) shows DEPLOY.md needs a build-verification step. Add to DEPLOY.md: after clone+build, run `docker compose build` (not up) FIRST to confirm both images assemble, and note the gotcha that dist/ must be built (npm run build) AND not dockerignored. Cheap insurance against a broken first deploy. Doc-only."
     }
   ],
   "history": [
