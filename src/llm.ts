@@ -38,7 +38,18 @@ export interface LLMClient {
 
 // ---- Gemini (free tier) ----------------------------------------------------
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
+// Failover chain of free models. First = primary (GEMINI_MODEL env, default the
+// -lite tier for its higher free-tier request cap). On a 429/quota, we advance to
+// the next model instead of failing — one exhausted bucket won't kill the bot.
+// Each has an independent free quota. Set GEMINI_MODELS (comma-list) to override.
+const GEMINI_MODELS: string[] = (
+  process.env.GEMINI_MODELS ??
+  [process.env.GEMINI_MODEL ?? "gemini-flash-lite-latest", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.5-flash"].join(",")
+)
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean)
+  .filter((m, i, a) => a.indexOf(m) === i); // de-dupe
 
 interface GeminiPart {
   text?: string;
@@ -92,29 +103,45 @@ export class GeminiClient implements LLMClient {
     if (tools.length) {
       body.tools = [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })) }];
     }
-    // Auth via X-goog-api-key header (works for both classic AIza keys and the
-    // newer AQ.* keys; the ?key= query param 404s newer keys against some models).
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-    // Free tier 503s ("high demand") + 429s (rate limit) are common and transient.
-    // Retry with exponential backoff before giving up.
-    const RETRYABLE = new Set([429, 500, 503, 504]);
-    const MAX_ATTEMPTS = 4;
+    // Transient (retry same model w/ backoff) vs quota (fail over to next model now).
+    const TRANSIENT = new Set([500, 503, 504]);
+    const MAX_ATTEMPTS = 3;
     let r!: Response;
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      r = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-goog-api-key": this.apiKey },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(30000),
-      }).catch((e) => {
-        // Network/timeout — treat as retryable via a synthetic 503-like Response.
-        return new Response(JSON.stringify({ error: { message: String(e) } }), { status: 503 });
-      });
-      if (r.ok || !RETRYABLE.has(r.status) || attempt === MAX_ATTEMPTS) break;
-      r.body?.cancel?.();
-      await new Promise((res) => setTimeout(res, 800 * 2 ** (attempt - 1))); // 0.8s, 1.6s, 3.2s
+    let lastErr = "";
+
+    // Outer loop: models (failover). Inner loop: transient retries on one model.
+    outer: for (let mi = 0; mi < GEMINI_MODELS.length; mi++) {
+      const model = GEMINI_MODELS[mi]!;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        r = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-goog-api-key": this.apiKey },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(30000),
+        }).catch((e) => new Response(JSON.stringify({ error: { message: String(e) } }), { status: 503 }));
+
+        if (r.ok) break outer;
+
+        // 429/quota (or 403 quota) → don't retry this model; fail over immediately.
+        if (r.status === 429 || r.status === 403) {
+          lastErr = `${model} ${r.status}`;
+          r.body?.cancel?.();
+          continue outer;
+        }
+        // Transient → backoff + retry same model.
+        if (TRANSIENT.has(r.status) && attempt < MAX_ATTEMPTS) {
+          r.body?.cancel?.();
+          await new Promise((res) => setTimeout(res, 800 * 2 ** (attempt - 1)));
+          continue;
+        }
+        // Non-retryable (e.g. 400/404) or out of attempts → try next model.
+        lastErr = `${model} ${r.status}`;
+        r.body?.cancel?.();
+        continue outer;
+      }
     }
-    if (!r.ok) throw new Error(`Gemini ${r.status}: ${(await r.text().catch(() => "")).slice(0, 200)}`);
+    if (!r.ok) throw new Error(`Gemini all models failed (${lastErr}): ${(await r.text().catch(() => "")).slice(0, 160)}`);
     const j = (await r.json()) as {
       candidates?: { content?: { parts?: GeminiPart[] } }[];
     };
