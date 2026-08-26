@@ -160,6 +160,51 @@ export async function readCurrent(sessionId: string): Promise<{ content: string;
   };
 }
 
+// ---- cookies (m29): let the agent act on a page the user is entitled to ----
+// A cookie for anvil's /v1/cookies (puppeteer CookieParam shape). `domain` is required so a cookie
+// is HOST-SCOPED — we never inject a cookie whose domain doesn't match the target host, so one
+// site's session can't leak to another.
+export interface AnvilCookie {
+  name: string;
+  value: string;
+  domain: string;       // host the cookie belongs to (must match the page being visited)
+  path?: string;
+  httpOnly?: boolean;
+  secure?: boolean;
+  expires?: number;
+}
+
+/** True if `cookie.domain` applies to `host` (exact host or a parent-domain cookie like ".x.com"). */
+export function cookieMatchesHost(cookieDomain: string, host: string): boolean {
+  const d = cookieDomain.replace(/^\./, "").toLowerCase();
+  const h = host.toLowerCase();
+  return h === d || h.endsWith("." + d);
+}
+
+/** Inject cookies into a session before navigating. Only cookies whose domain matches `host` are
+ * sent (cross-origin cookies are dropped, not forwarded) — the caller passes the target host so a
+ * mismatched jar can't exfiltrate a session to another site. Returns how many were injected. */
+export async function setCookies(sessionId: string, host: string, cookies: AnvilCookie[]): Promise<number> {
+  const scoped = cookies.filter((c) => c.domain && cookieMatchesHost(c.domain, host));
+  if (scoped.length === 0) return 0;
+  const r = await action(sessionId, "/v1/cookies", { cookies: scoped });
+  return Number((r as { injected?: unknown }).injected ?? scoped.length);
+}
+
+/** Read the session's current cookies (for debugging/inspection). anvil returns { cookies: [] }. */
+export async function getCookies(sessionId: string): Promise<AnvilCookie[]> {
+  const r = await withRetry(async () => {
+    const res = await fetch(`${BASE}/v1/cookies`, {
+      method: "GET",
+      headers: { "X-Session-Id": sessionId, ...authHeaders() },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`anvil /v1/cookies failed: ${res.status}`);
+    return (await res.json().catch(() => ({}))) as { cookies?: AnvilCookie[] };
+  }, "/v1/cookies");
+  return Array.isArray(r.cookies) ? r.cookies : [];
+}
+
 /**
  * Harvest anchor hrefs from a page. Creates a session, navigates, evaluates the
  * DOM for links, releases. Returns absolute URLs (best-effort, deduped, capped).

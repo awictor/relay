@@ -1123,7 +1123,7 @@
       "id": "cookies-1",
       "stream": "anvil",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m29] Add cookie support to Relays anvil client (src/anvil.ts): setCookies(sessionId, cookies) + getCookies(sessionId) hitting anvils /v1/cookies (see ANVIL-CONTRACT.md for the exact shape). Host-scope each cookie (domain must match the target). Unit-test against a mock anvil (injectable fetch), assert the POST body shape + that a cross-origin cookie is rejected before send."
     },
@@ -1545,6 +1545,9 @@
     },
     {
       "event": "m28 parity-3 DONE + m28-parity-guards COMPLETE. parity-3: mirrored the shared-lib parity guard into mcp-forge (tests/unit/shared-lib-parity.test.ts, same code-only compare, skips if relay absent), wired into test:unit (1847 pass). Guard now BIDIRECTIONAL like anvil-client-parity — url-validator + redact-secrets drift fails CI in whichever repo runs. SHARED.md updated: moved both files from section-2-manual to section-1-guarded, fixed rule-of-thumb. m28 done_when met: kept-identical contract now ENFORCED not manual, proven-to-bite. ROADMAP advanced -> AUTHORED m29-agent-cookies (real product depth: safe opt-in host-scoped cookie passing so the agent can read authorized logged-in pages — the #1 demo->useful gap; SSRF+dangerous-action guards stay, cookies redacted). Seeded cookies-1/2/3. 25th self-directed milestone. NOTE: verified relay CI (ci.yml) already runs typecheck+full suite+build+shutdown-e2e — no gap there; m29 is genuine capability, not busywork."
+    },
+    {
+      "event": "m29 cookies-1 DONE: cookie support in src/anvil.ts. setCookies(sessionId,host,cookies) filters to HOST-SCOPED only (cookieMatchesHost) before POST /v1/cookies — a cookie whose domain doesnt match the target host is DROPPED, never forwarded (the SSRF-equivalent for cookies: one sites session cant leak to another). getCookies(sessionId) reads /v1/cookies. AnvilCookie type = puppeteer CookieParam (domain required). cookieMatchesHost handles exact + parent-domain (.x.com) + case-insensitive + rejects suffix-collision (notexample.com). +6 tests (all host-scoping cases + mixed-jar filter). Verified anvil cookie route shape from anvil-engine src/routes/content.ts (POST {cookies:[]}->{injected}, GET->{cookies}, X-Session-Id). 481 pass, tsc clean. Note: live cookie-injection needs a real logged-in target; the security-critical host-scoping is pure-tested. cookies-2 = env-seeded per-host jar + value redaction."
     }
   ],
   "roadmap": {
