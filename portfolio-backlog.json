@@ -137,9 +137,9 @@
       "id": "syn-2b",
       "stream": "synergy",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "datafaucet",
-      "task": "Add offline mock-anvil integration tests for the manual-browse routes (mirror syn-1h): tests/integration/anvil-browse.test.ts stands up a mock anvil and asserts start(BROWSER_BACKEND=anvil) returns {sessionId, liveUrl=/v1/view, connectUrl=ws.../cdp}, stop releases the session + returns {requests:[],count:0}, debug returns {count:0,available:false}. Confirm default browserbase 503 still fires when creds missing + flag unset. Wire into test:unit gate."
+      "task": "Add offline mock-anvil integration tests for the manual-browse routes (mirror syn-1h): tests/integration/anvil-browse.test.ts stands up a mock anvil and asserts start(BROWSER_BACKEND=anvil) returns {sessionId, liveUrl=/v1/view, connectUrl=ws.../cdp}, stop releases the session + returns {requests:[],count:0}, debug returns {count:0,available:false}. Confirm default browserbase 503 still fires when creds missing + flag unset. Wire into test:unit gate. [DONE: tests/integration/anvil-browse.test.ts 4 tests + browser-anvil-lifecycle.test.ts; 10 anvil integration tests green; wired into test:unit]"
     },
     {
       "id": "syn-2c",
@@ -148,6 +148,14 @@
       "status": "todo",
       "repo": "datafaucet",
       "task": "Live-view interactivity: anvil /v1/view is read-only MJPEG (no click injection like Browserbase debugger). Either (a) document the read-only limit in inline-browser.tsx UI when backend=anvil, or (b) add a lightweight click-forward: overlay captures coords -> POST anvil /v1/actions/click-at (needs a new anvil endpoint by pixel). Decide + spec."
+    },
+    {
+      "id": "syn-3c",
+      "stream": "synergy",
+      "value": "medium",
+      "status": "todo",
+      "repo": "datafaucet",
+      "task": "Run the FULL test:unit gate once end-to-end on anvil-migration (npm run test:unit) and record pass/fail count in the PR body — the branch added anvil-capture, anvil-browse, browser-anvil-lifecycle + capture-filter tests to the gate; confirm no cross-test env-var bleed (the browse tests mutate BROWSER_BACKEND/BB creds via process.env; make sure their after() restore leaves later suites clean). If bleed found, isolate via child-process or explicit restore."
     }
   ],
   "history": [
@@ -194,6 +202,9 @@
     },
     {
       "event": "syn-2 done: manual-browse start/stop/debug all flag-gated onto anvil (start=DEV-0002 committed earlier; stop+debug committed this run). liveUrl now anvil /v1/view MJPEG (iframe renders as-is). Live e2e green: start->real jpeg frame->stop release, zero Browserbase. PR #1 body updated. Refilled syn-2b (offline mock tests for browse routes) + syn-2c (live-view interactivity decision)."
+    },
+    {
+      "event": "syn-2b done: offline mock-anvil tests for manual-browse routes (anvil-browse.test.ts, 4 tests: start/stop/debug anvil paths + browserbase-503-default). Also committed a stray browser-anvil-lifecycle.test.ts a concurrent run left untracked but wired into the gate. 10 anvil integration tests green. PR #1 now fully CI-verifiable (capture + browse). Refilled syn-3c (full-gate run + env-bleed audit)."
     }
   ]
 }
