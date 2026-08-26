@@ -587,9 +587,9 @@
       "id": "recipe-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m7] Handler routing: \"save <name>: <task>\" -> recipeAdd (confirm); /recipes lists saved; /run <name> -> fetch recipe + runAgent(task) + reply (reuse the normal agent path); /forget <name> removes. All short-circuit before the generic agent. Optional deps on HandlerDeps (older wiring valid). HELP/START updated. Unit-test the handler branches (mock store)."
+      "task": "[m7] Handler routing: \"save <name>: <task>\" -> recipeAdd (confirm); /recipes lists saved; /run <name> -> fetch recipe + runAgent(task) + reply (reuse the normal agent path); /forget <name> removes. All short-circuit before the generic agent. Optional deps on HandlerDeps (older wiring valid). HELP/START updated. Unit-test the handler branches (mock store). [DONE: handler save/recipes/run/forget; /run rewrites to saved task->agent; wired index.ts (RecipeStore); HELP/START/.env updated; 9 tests; 283 suite]"
     },
     {
       "id": "recipe-3",
@@ -818,6 +818,9 @@
     },
     {
       "event": "m7 recipe-1 done: recipe parse + store. RecipeStore (JSON file like ScheduleStore) add/get/list/remove, names unique per chat + case-insensitive, update-in-place (cap-exempt); parseRecipeCommand (save <name>: <task>) + parseRunCommand (/run|run <name>). 9 tests, 274 full suite pass, tsc clean. Next m7: recipe-2 (handler routing: save/list/run/forget)."
+    },
+    {
+      "event": "m7 recipe-2 done: recipe commands wired. save <name>: <task> stores; /recipes lists; /run <name> resolves saved task + runs it via the agent path (text rewrite); /forget removes. index.ts RecipeStore + parse fns; deps optional on HandlerDeps; HELP/START + RELAY_RECIPE_FILE documented. 9 handler tests, 283 full suite pass, tsc clean. Users can now teach-once/re-run. Next m7: recipe-3 (scheduled recipes: recipe w/ schedule -> ScheduleStore, runner fires it; live e2e)."
     }
   ],
   "roadmap": {
