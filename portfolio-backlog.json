@@ -153,9 +153,17 @@
       "id": "syn-3c",
       "stream": "synergy",
       "value": "medium",
+      "status": "done",
+      "repo": "datafaucet",
+      "task": "Run the FULL test:unit gate once end-to-end on anvil-migration (npm run test:unit) and record pass/fail count in the PR body — the branch added anvil-capture, anvil-browse, browser-anvil-lifecycle + capture-filter tests to the gate; confirm no cross-test env-var bleed (the browse tests mutate BROWSER_BACKEND/BB creds via process.env; make sure their after() restore leaves later suites clean). If bleed found, isolate via child-process or explicit restore. [DONE: npm run test:unit = 1779/1779 pass 0 fail; env-bleed audited (all anvil suites snapshot+restore, routes cache-busted); PR #1 body records it]"
+    },
+    {
+      "id": "syn-4",
+      "stream": "synergy",
+      "value": "medium",
       "status": "todo",
       "repo": "datafaucet",
-      "task": "Run the FULL test:unit gate once end-to-end on anvil-migration (npm run test:unit) and record pass/fail count in the PR body — the branch added anvil-capture, anvil-browse, browser-anvil-lifecycle + capture-filter tests to the gate; confirm no cross-test env-var bleed (the browse tests mutate BROWSER_BACKEND/BB creds via process.env; make sure their after() restore leaves later suites clean). If bleed found, isolate via child-process or explicit restore."
+      "task": "Mark draft PR #1 ready-for-review (gh pr ready 1) ONLY as an explicit owner action prompt — do NOT auto-flip. Instead: post a single summary PR comment listing what is proven (capture+browse on anvil, 1779 gate green, both live e2e, prod default unchanged) and the one known limit (read-only live-view, syn-2c), so Alex has a one-glance merge decision. Keep it a draft."
     }
   ],
   "history": [
@@ -205,6 +213,9 @@
     },
     {
       "event": "syn-2b done: offline mock-anvil tests for manual-browse routes (anvil-browse.test.ts, 4 tests: start/stop/debug anvil paths + browserbase-503-default). Also committed a stray browser-anvil-lifecycle.test.ts a concurrent run left untracked but wired into the gate. 10 anvil integration tests green. PR #1 now fully CI-verifiable (capture + browse). Refilled syn-3c (full-gate run + env-bleed audit)."
+    },
+    {
+      "event": "syn-3c done: full test:unit gate run = 1779 pass / 0 fail with 4 anvil suites wired in; audited process.env mutation for cross-suite bleed — all anvil suites snapshot+restore, route modules cache-busted with ?v=, no leak. PR #1 body updated with gate result + both live e2e. Migration is functionally complete + fully CI-verifiable. Refilled syn-4 (post merge-decision summary comment on PR, keep draft)."
     }
   ]
 }
