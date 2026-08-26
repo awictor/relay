@@ -387,9 +387,9 @@
       "id": "relay-e2e-doc",
       "stream": "relay",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "Reference the new scripts/e2e-agent-chain.mjs + scripts/e2e-extract.* in README (a short Verify section): how to run the live agent e2e (npx tsx scripts/e2e-agent-chain.mjs with .env + anvil), so a human validating the deploy has the one command. Doc-only."
+      "task": "Reference the new scripts/e2e-agent-chain.mjs + scripts/e2e-extract.* in README (a short Verify section): how to run the live agent e2e (npx tsx scripts/e2e-agent-chain.mjs with .env + anvil), so a human validating the deploy has the one command. Doc-only. [DONE: README Verify section — npm test + npx tsx scripts/e2e-agent-chain.mjs (live deploy smoke)]"
     },
     {
       "id": "portfolio-status",
@@ -545,6 +545,9 @@
     },
     {
       "event": "portfolio-status done: wrote STATUS.md (relay root) — one-glance owner summary of the whole portfolio (what shipped across all 3 repos, the 3 owner actions gating go-live: fix gh billing / merge PR#1 / provision VM, honest limits, self-verify commands). Cleaned 2 malformed (undefined-id) owner_blocker entries. Backlog: 39 done, remaining are syn-2c/syn-1l/relay-e2e-doc (all low)."
+    },
+    {
+      "event": "relay-e2e-doc done: README gained a Verify section documenting the offline suite (npm test) + the live deploy smoke test (npx tsx scripts/e2e-agent-chain.mjs, needs .env + anvil). Doc-only. Remaining todos all [low] + owner-gated: syn-2c (interactive live-view), syn-1l (third-party API capture policy), df-owner-summary (post-CI, blocked on gh billing)."
     }
   ]
 }
