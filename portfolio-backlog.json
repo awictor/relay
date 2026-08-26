@@ -603,9 +603,9 @@
       "id": "pobs-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m8] Scheduler runner observability: makeScheduleRunner takes optional log + recordTurn deps; on each fire emit a structured [proactive] line (id, kind, task-length, steps, elapsedMs, ok) and call recordTurn (same Metrics as inbound) so /status + [metrics] count proactive runs too. Runner already returns fired count; thread steps/ms out of runAgent. Unit-test the log+record on a fire (mock)."
+      "task": "[m8] Scheduler runner observability: makeScheduleRunner takes optional log + recordTurn deps; on each fire emit a structured [proactive] line (id, kind, task-length, steps, elapsedMs, ok) and call recordTurn (same Metrics as inbound) so /status + [metrics] count proactive runs too. Runner already returns fired count; thread steps/ms out of runAgent. Unit-test the log+record on a fire (mock). [DONE: fireOne emits [proactive] JSON log (id/kind/steps/ms/ok) + recordTurn into shared Metrics; failures log ok:false+record fail; runAgent return widened for steps/tools; index wires recordTurn; 2 tests; 288 suite; recipe e2e green]"
     },
     {
       "id": "pobs-2",
@@ -848,6 +848,9 @@
     },
     {
       "event": "m7-recipes COMPLETE: recipe-1 store/parse, recipe-2 save/list/run/forget, recipe-3 scheduled recipes (schedule <name> <when> -> runner fires the recipe task; parseScheduleFor; live e2e verified). Users can teach-once + run by name or schedule. ROADMAP advanced -> AUTHORED m8-proactive-obs (observability + rate-cap + safety for the scheduler/recipe proactive paths, which today have no [out]/[metrics] and no anti-spam cap). Seeded pobs-1/2/3. 4th self-directed milestone jump. m1-synergy still owner_blocked."
+    },
+    {
+      "event": "m8 pobs-1 done: proactive-run observability. Scheduler fireOne now times each run, emits a structured [proactive] JSON line + records into the SAME Metrics as inbound (so /status + [metrics] count proactive fires); failures log ok:false + record a failed turn. runAgent return widened to carry steps/tools. 2 runner tests, 288 full suite pass, recipe e2e still green. Next m8: pobs-2 (per-chat hourly proactive-send cap, anti-spam)."
     }
   ],
   "roadmap": {
