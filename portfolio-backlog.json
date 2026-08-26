@@ -369,9 +369,17 @@
       "id": "anvil-ci",
       "stream": "quality",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "anvil",
-      "task": "anvil-engine has no CI. Add .github/workflows/ci.yml mirroring relay: Node 22, npm ci + build + whatever test/lint it has, offline. anvil is the shared engine both products depend on — a green gate on it protects Relay + the DataFaucet migration. Check anvil package.json scripts first; only run what exists."
+      "task": "anvil-engine has no CI. Add .github/workflows/ci.yml mirroring relay: Node 22, npm ci + build + whatever test/lint it has, offline. anvil is the shared engine both products depend on — a green gate on it protects Relay + the DataFaucet migration. Check anvil package.json scripts first; only run what exists. [DONE: anvil .github/workflows/ci.yml Node22 npm ci->build->test (e2e excluded, Chrome-free); build clean + 529 pass locally; triggered on push (run 32945453024)]"
+    },
+    {
+      "id": "df-ci-note",
+      "stream": "quality",
+      "value": "low",
+      "status": "todo",
+      "repo": "datafaucet",
+      "task": "Check whether mcp-forge has CI running the test:unit gate (incl the anvil-migration suites) on PRs. If yes, note it in the PR #1 body so a reviewer sees the gate is enforced, not just runnable. If no CI exists, that is an owner decision for the prod repo (do NOT add a workflow to mcp-forge without Alex) — record as owner_blocker instead. Investigate only; no mcp-forge master changes."
     }
   ],
   "history": [
@@ -496,6 +504,9 @@
     },
     {
       "event": "relay-ci done: GitHub Actions CI (.github/workflows/ci.yml) — Node 22, npm ci -> typecheck -> test, fully offline (mocked LLM+backend, no keys). Verified locally (typecheck clean, 117 pass, lockfile present) + confirmed the workflow triggered and is running on push (run 32945013071). The 117-test suite is now regression-locked on every push. Refilled anvil-ci (same gate for the shared engine)."
+    },
+    {
+      "event": "anvil-ci done: GitHub Actions CI for anvil-engine — Node22 npm ci->build->test; default npm test excludes test/e2e (real Chrome) via vitest.config so it runs on a bare runner. Verified locally (build clean, 529 pass) + confirmed e2e is Chrome-gated (skipIf chromeAvailable) and the non-e2e launch references are symbolic (defined-checks/temp-dir), not spawns. Triggered on push (run 32945453024). Both Relay (117) + anvil (529) now CI-gated; DataFaucet migration lives on the mcp-forge test:unit gate. Full portfolio regression-locked."
     }
   ]
 }
