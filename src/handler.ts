@@ -27,6 +27,9 @@ export interface HandlerDeps {
   // One-line health reply for /status (uptime + turns + browser reachability). Optional:
   // when absent, /status falls through to the agent (older wiring stays valid).
   statusLine?: () => string;
+  // /sites reply (m30): the hosts the cookie jar authorizes the agent for — NAMES only, never
+  // values. Optional; absent -> /sites falls through to the agent.
+  sitesLine?: () => string;
   // Scheduled/proactive tasks (m4 sched-3). All optional so older wiring stays valid; when
   // absent, a "remind me" message just falls through to the normal agent.
   scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number } | { ok: false; reason: "unparsed" | "capped" };
@@ -94,6 +97,12 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // /status: one-line health (uptime + tasks handled + browser reachability). No agent run.
     if (first === "/status" && deps.statusLine) {
       await deps.sendMessage(msg.chatId, deps.statusLine());
+      return;
+    }
+
+    // /sites: which hosts the cookie jar authorizes the agent for (names only). No agent run.
+    if (first === "/sites" && deps.sitesLine) {
+      await deps.sendMessage(msg.chatId, deps.sitesLine());
       return;
     }
 

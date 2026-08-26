@@ -1147,7 +1147,7 @@
       "id": "sites-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m30] cookie-jar: add jarHosts() -> distinct sorted host list from the jar (strip leading dot, dedupe). Handler: add a /sites command that replies with the configured hosts (names only) or a clear no-cookies-configured message. Wire in index.ts via a cookieHosts dep (like statusLine). Unit-test jarHosts + the handler /sites branch (empty + populated), asserting NO cookie value ever appears."
     },
@@ -1578,6 +1578,9 @@
     },
     {
       "event": "m29 cookies-3 DONE + m29-agent-cookies COMPLETE. cookies-3: SECURITY.md control #6 (cookie jar) — host-scoped (never cross-origin, suffix-collision rejected), redacted (values masked in logs/replies), read-oriented (dangerous-action guard still blocks acting), user-authorized+local (opt-in gitignored file, off by default). m29 done_when met: agent can read authorized logged-in pages via host-scoped seeded cookies, values redacted, guards intact, tested+documented. ROADMAP advanced -> AUTHORED m30-cookie-ux (/sites command listing which hosts the jar covers — names only — so the auth capability is auditable from chat; closes the UX loop). Seeded sites-1/2/3. 26th self-directed milestone. NOTE: substance genuinely thinning — m30 is a real transparency win on top of m29; after it, honestly reassess whether remaining non-gated work justifies continuing vs parking on the 3 owner-blockers."
+    },
+    {
+      "event": "m30 sites-1 DONE: /sites command. cookie-jar jarHosts() -> distinct sorted hosts (leading dot stripped, deduped), NAMES only. handler /sites branch (deps.sitesLine, short-circuits before agent like /status, counted by the existing /-prefix recordCommand). index sitesLine: lists configured hosts or a clear no-logins-configured msg. Added /sites to commands.ts Commands: line + HELP (satisfies the discoverable-command + advertised-command-handled guards). +tests: jarHosts (distinct/sorted/no-value-leak/empty), handler /sites branch, commands harness stub. 493 pass, tsc clean. call-tested TRUE (offline). sites-2 = README doc; sites-3 = DataFaucet cookie-capture decision."
     }
   ],
   "roadmap": {

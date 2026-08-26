@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { readJar, cookiesForHost, redactCookieValues } from "../src/lib/cookie-jar.js";
+import { readJar, cookiesForHost, redactCookieValues, jarHosts } from "../src/lib/cookie-jar.js";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -38,6 +38,24 @@ describe("cookiesForHost (host-scoped selection)", () => {
   });
   it("returns nothing for an unrelated host", () => {
     expect(cookiesForHost("other.com", jar)).toEqual([]);
+  });
+});
+
+describe("jarHosts (m30 — names only, never values)", () => {
+  const jar = [
+    { name: "sid", value: "aaaa", domain: "example.com" },
+    { name: "x", value: "bbbb", domain: ".example.com" },   // dedupes with example.com
+    { name: "y", value: "cccc", domain: "another.io" },
+  ];
+  it("returns distinct sorted hosts, leading dot stripped", () => {
+    expect(jarHosts(jar)).toEqual(["another.io", "example.com"]);
+  });
+  it("never includes a cookie value", () => {
+    const out = jarHosts(jar).join(" ");
+    for (const c of jar) expect(out).not.toContain(c.value);
+  });
+  it("empty jar -> []", () => {
+    expect(jarHosts([])).toEqual([]);
   });
 });
 

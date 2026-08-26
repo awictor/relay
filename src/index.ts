@@ -7,7 +7,7 @@ import { anvilLive } from "./anvil.js";
 import { GeminiClient, ClaudeClient } from "./llm.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
 import { checkRateLimit, redactText } from "./safety.js";
-import { redactCookieValues } from "./lib/cookie-jar.js";
+import { redactCookieValues, jarHosts } from "./lib/cookie-jar.js";
 import { handleCommand } from "./commands.js";
 import { MemoryStore } from "./lib/memory-store.js";
 import { Metrics } from "./lib/metrics.js";
@@ -128,6 +128,13 @@ const handle = createHandler({
     const cmds = Object.entries(metrics.summary().commands);
     const topCommand = cmds.length ? { name: cmds[0]![0], count: cmds[0]![1] } : undefined;
     return formatStatus({ uptimeMs: Date.now() - startMs, turns: metrics.summary().turns, anvilOk: anvilPinger.current(), topCommand });
+  },
+  // /sites (m30): hosts the cookie jar authorizes the agent for — names only, never values.
+  sitesLine: () => {
+    const hosts = jarHosts();
+    return hosts.length
+      ? `I'm signed in for these sites (via cookies you configured):\n${hosts.map((h) => `• ${h}`).join("\n")}`
+      : "No site logins configured — I can only read public pages. (Set RELAY_COOKIES to authorize sites.)";
   },
   scheduleAdd: (chatId, text, now) => {
     const p = parseSchedule(text, now);

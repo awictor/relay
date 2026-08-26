@@ -107,6 +107,17 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/Relay up/);
   });
 
+  it("/sites replies the cookie-hosts line and does NOT run the agent (m30)", async () => {
+    let agentCalled = false;
+    const { handle, sent } = harness({
+      sitesLine: () => "I'm signed in for these sites:\n• example.com",
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("/sites", 4));
+    expect(agentCalled).toBe(false);
+    expect(sent[0]!.text).toMatch(/example\.com/);
+  });
+
   it("a rate-limited chat gets the limit message, no agent", async () => {
     let agentCalled = false;
     const { handle, sent, recorded } = harness({

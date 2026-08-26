@@ -64,6 +64,7 @@ describe("handleCommand", () => {
         now: () => 0,
         // Every optional capability stubbed so its branch is reachable.
         statusLine: () => "status",
+        sitesLine: () => "sites",
         scheduleList: () => [],
         scheduleCancel: () => ({ removed: 0 }),
         recipeList: () => [],

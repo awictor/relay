@@ -48,5 +48,12 @@ export function redactCookieValues(text: string, jar: AnvilCookie[] = loadCookie
   return out;
 }
 
+/** Distinct, sorted host names the jar covers (leading dot stripped) — NAMES only, never values.
+ * Powers /sites (m30) so a user can audit which sites the bot is authorized for. */
+export function jarHosts(jar: AnvilCookie[] = loadCookieJar()): string[] {
+  const set = new Set(jar.map((c) => c.domain.replace(/^\./, "").toLowerCase()).filter(Boolean));
+  return [...set].sort();
+}
+
 /** Test hook: reset the cached jar so a test can re-load with a different file. */
 export function _resetCookieJarCache(): void { loaded = null; }

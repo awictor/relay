@@ -16,7 +16,7 @@ Or schedule me: "remind me to stretch in 20 min", "every morning text me the wea
 
 Save a recipe: "save btc: check the price of bitcoin", then /run btc anytime.
 
-Commands: /help  /start  /reset  /status  /schedules  /cancel  /recipes  /run  /forget  /digests  /alerts`;
+Commands: /help  /start  /reset  /status  /sites  /schedules  /cancel  /recipes  /run  /forget  /digests  /alerts`;
 
 const HELP = `Relay — what I can do:
 • Read a page: send a link, or name a site + what you want. ("top HN story", "weather in Paris")
@@ -35,6 +35,8 @@ Save recipes: "save <name>: <task>" stores a task you can re-run with /run <name
 Bundle into a briefing: "define digest morning: weather, hn, btc" then /run morning (or schedule morning every morning) for one combined message. /digests lists them, /forget-digest <name> removes one.
 
 Watch for changes: "watch btc: price of bitcoin when it changes by 1000" — I only ping you when it moves. /alerts lists them, /forget-alert <name> stops one.
+
+Sites I'm signed in for: /sites lists the hosts you've authorized me for (via cookies you configure) — I only read public pages otherwise.
 
 Start over anytime: /reset clears our conversation history.
 
