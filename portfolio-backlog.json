@@ -459,9 +459,9 @@
       "id": "relay-graceful-shutdown",
       "stream": "relay",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "Graceful shutdown: on SIGTERM/SIGINT (docker stop, pm2 restart) the long-poll worker should stop getUpdates, flush the in-flight memory.persist, and exit 0 — so a redeploy never drops a half-written memory file or an in-progress reply. Add a signal handler in index.ts; unit-test the shutdown fn (mock the poller + memory). Real 24/7 resilience, not cosmetic."
+      "task": "Graceful shutdown: on SIGTERM/SIGINT (docker stop, pm2 restart) the long-poll worker should stop getUpdates, flush the in-flight memory.persist, and exit 0 — so a redeploy never drops a half-written memory file or an in-progress reply. Add a signal handler in index.ts; unit-test the shutdown fn (mock the poller + memory). Real 24/7 resilience, not cosmetic. [DONE: src/shutdown.ts createShutdown+installSignalHandlers wired in index.ts; idempotent, exits 0 even if stopPolling throws; memory already sync-durable; 3 tests; 134 suite pass]"
     }
   ],
   "history": [
@@ -628,6 +628,9 @@
     },
     {
       "event": "LOOP CONVERGED: 49 items done. All 3 repos shipped/tested/CI-gated/tagged (deploy-v1). Only owner-gated work blocks go-live: (1) fix mcp-forge gh-billing, (2) merge PR#1, (3) provision VM + docker compose up. df-owner-summary stays blocked until billing lets CI run. Refilled ONE genuine robustness item (relay-graceful-shutdown) rather than cosmetic doc-polish; if the next run finds only cosmetic work it should STOP and name the owner-blocker."
+    },
+    {
+      "event": "relay-graceful-shutdown done: SIGTERM/SIGINT handler stops the poller + exits 0 (docker stop / pm2 restart / Ctrl-C no longer kills mid-fetch). src/shutdown.ts (idempotent, throw-safe); memory needs no flush (MemoryStore is sync-durable per turn). 3 tests, 134 full suite pass, tsc clean. Only df-owner-summary remains (blocked on gh-billing). Loop is at genuine convergence — recommend pausing cron until an owner action (fix billing / merge PR#1 / provision VM)."
     }
   ]
 }
