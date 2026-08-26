@@ -82,6 +82,14 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   return async function handle(msg: InboundMessage): Promise<void> {
     log(`[in] ${msg.from}: ${deps.redactText(msg.text).slice(0, 120)}`);
 
+    // DEV-0124: a photo-only / sticker / blank inbound arrives with empty text. It matches no command
+    // and would otherwise burn an LLM call on an empty prompt (and reply confusingly). Nudge + return
+    // before rate-limit/agent.
+    if (!msg.text.trim()) {
+      await deps.sendMessage(msg.chatId, "Send me a task in words — e.g. \"top HN story\" or \"weather in Paris\".");
+      return;
+    }
+
     // /reset (alias /clear): wipe THIS chat's memory. Needs chatId, so it's handled here rather
     // than in the pure handleCommand. Short-circuits before rate-limit/agent, like other commands.
     const first = msg.text.trim().toLowerCase().split(/\s+/)[0]?.split("@")[0];

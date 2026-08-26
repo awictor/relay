@@ -122,4 +122,32 @@ describe("handler smoke (real memory + metrics + commands)", () => {
     expect(s.commands).toEqual({ "/help": 2, "/reset": 1 });
     expect(s.turns).toBe(1); // only the plain question
   });
+
+  // DEV-0124: a blank / whitespace-only inbound (photo-only, sticker) must nudge, not burn an agent call.
+  it("an empty or whitespace-only message nudges without hitting the agent", async () => {
+    const memory = new MemoryStore({ file: tmpFile() });
+    let agentCalls = 0;
+    const sent: string[] = [];
+    const handle = createHandler({
+      llm: {} as never,
+      memoryGet: (id) => memory.get(id) as LLMMessage[],
+      memorySet: (id, h) => memory.set(id, h),
+      memoryClear: (id) => memory.delete(id),
+      sendMessage: async (_id, text) => { sent.push(text); },
+      sendTyping: async () => {},
+      handleCommand,
+      checkRateLimit: () => ({ allowed: true }),
+      redactText: (t) => t,
+      hasModelKey: () => true,
+      recordTurn: () => {},
+      now: () => 0,
+      runAgentFn: async () => { agentCalls++; return { reply: "x", steps: 1, tools: [] }; },
+      log: () => {},
+    });
+    await handle(msg(""));
+    await handle(msg("   \n  "));
+    expect(agentCalls).toBe(0);
+    expect(sent.length).toBe(2);
+    expect(sent[0]).toMatch(/task in words/i);
+  });
 });
