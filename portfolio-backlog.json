@@ -1043,7 +1043,7 @@
       "id": "safety-audit-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m26] SSRF sweep: read src/lib/url-validator.ts (isUrlSafe), enumerate bypass shapes — decimal IP (2130706433), hex/octal octets, IPv6 (::1, ::ffff:127.0.0.1, fc00::/7 ULA), 0.0.0.0, 169.254.169.254 metadata, embedded creds (http://x@internal), non-http(s) protocols (file:/gopher:/data:), and trailing-dot/case host tricks. Write an adversarial test asserting each is refused; FIX any that pass. Report which bypasses existed."
     },
@@ -1062,6 +1062,14 @@
       "status": "todo",
       "repo": "relay",
       "task": "[m26] Redaction + rate-limit sweep: confirm redact-secrets catches the key/token shapes the bot actually handles (Gemini AQ./AIza, Anthropic sk-ant, Telegram bot token) in agent output/logs, and the per-chat rate limit cant be trivially reset. Add any missing shape. Document the safety model (SSRF + dangerous-action + redaction + rate-limit + step caps) in a SECURITY.md, linked from PORTFOLIO. Closes m26."
+    },
+    {
+      "id": "safety-audit-4",
+      "stream": "datafaucet",
+      "value": "medium",
+      "status": "todo",
+      "repo": "mcp-forge",
+      "task": "[m26] Mirror the trailing-dot SSRF fix to mcp-forge (url-validator.ts is vendored identical Relay<->DataFaucet per its header). On anvil-migration ONLY: apply the same hostname.replace(/.$/,\"\") strip in isUrlSafe + copy the ssrf-adversarial test; run test:unit; commit to anvil-migration, never master. Keeps the two copies identical so the fix merges back."
     }
   ],
   "history": [
@@ -1441,6 +1449,9 @@
     },
     {
       "event": "m25 demo-3 DONE + m25-console-demo COMPLETE. demo-3: README top now has a Want to just see it? npm run demo pointer (lowest-friction product view, needs key+anvil, degrades w/ notice); PORTFOLIO guided demo gained Step 0 - feel the product (npm run demo) before the 5 proof commands. m25 done_when met: one-command zero-Telegram drive of the real agent, exits clean, notice if unconfigured, documented. ROADMAP advanced -> AUTHORED m26-safety-audit (adversarial sweep of SSRF url-validator + dangerous-action guard + redaction/rate-limit; fix gaps, pin with tests, SECURITY.md). Seeded safety-audit-1/2/3. 22nd self-directed milestone. Real user-safety hardening — highest-value non-gated work left now the stack is proven+feelable."
+    },
+    {
+      "event": "m26 safety-audit-1 DONE: adversarial SSRF sweep (test/ssrf-adversarial.test.ts, 31 bypass shapes across loopback/private/numeric-encodings/IPv6-mapped-ULA-linklocal/embedded-creds/non-http-protocols/trailing-dot/internal-ports + a no-over-block sanity). FOUND A REAL BYPASS: http://localhost./ (trailing dot) resolved to localhost but slipped the exact-match blocklist -> FIXED by stripping a FQDN trailing dot from hostname before checks. All other 30 already blocked (numeric-encoding rule catches decimal/hex/octal; URL/protocol parse catches file/gopher/data/ftp; creds ignored by hostname check). 419 pass (+31), tsc clean. Refill safety-audit-4: mirror the fix to mcp-forge vendored copy (kept-identical contract). call-tested TRUE (real bypass proven+closed)."
     }
   ],
   "roadmap": {

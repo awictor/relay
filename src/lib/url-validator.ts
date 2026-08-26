@@ -80,7 +80,9 @@ export function isUrlSafe(urlString: string): { safe: boolean; reason?: string }
     return { safe: false, reason: `Blocked protocol: ${parsed.protocol}` };
   }
 
-  const hostname = parsed.hostname.toLowerCase();
+  // Strip a fully-qualified trailing dot ("localhost." / "127.0.0.1.") — DNS treats it as the same
+  // host, so it must not slip past the exact-match blocklist (m26 safety-audit-1).
+  const hostname = parsed.hostname.toLowerCase().replace(/\.$/, "");
 
   if (BLOCKED_HOSTNAMES.includes(hostname)) {
     return { safe: false, reason: `Blocked hostname: ${hostname}` };
