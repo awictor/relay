@@ -31,6 +31,9 @@ Telegram user ──text──> Telegram Bot API ──long-poll──> Relay wo
 
 It won't log in as you, pay, buy, or take destructive actions — it says so instead.
 
+Commands: `/start`, `/help`, and `/reset` (alias `/clear`) to wipe the current chat's
+memory and start fresh.
+
 ## Setup
 
 ```bash
