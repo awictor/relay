@@ -803,7 +803,7 @@
       "id": "ops-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m16] scripts/status.mjs: read the durable JSON state files (schedule/recipe/digest/alert stores — same paths index.ts uses via env or defaults), count per-chat + total, and print a summary table. Probe anvil /v1/live (up/down + latency). No GEMINI/TELEGRAM key needed. Wire npm run status. Handle a missing store file as 0 (not a crash)."
     },
@@ -1123,6 +1123,9 @@
     },
     {
       "event": "m15 e2e-live-3 DONE + m15-live-e2e COMPLETE. Added multi-step browse->read case to e2e-live.mjs (LIVE 3/3: scrape->Example Domain, fetch_json->24.1C, browse,read steps=3->body text; exit 0) + documented npm run e2e:live in README Verify (CI-safe SKIP, canonical errands, the deploy smoke test). The real channel->agent->anvil->reply pipe is now proven end-to-end, not just typechecked. ROADMAP advanced -> AUTHORED m16-operability (offline `relay status` CLI reading durable stores + anvil probe so the VM operator can see health w/o logs/bot). Seeded ops-1/2/3. 12th self-directed milestone."
+    },
+    {
+      "event": "m16 ops-1 DONE: scripts/status.mjs — offline operability CLI (npm run status). Reads the durable {v:1,items:[]} stores (schedule/recipe/digest/alert, same env-defaulted paths as index.ts), counts per-store + total + distinct chats, probes anvil /v1/live (up/down+latency), shows key presence (names only). NO GEMINI/TELEGRAM key needed for counts; missing/corrupt store -> 0 not a crash; always exit 0 (informational). VERIFIED: empty (all 0, no-file notes, anvil UP 200 28ms) + seeded (2 sched+1 recipe=3 across 2 chats, anvil-down path clean). tsc clean, 358 unit pass. call-tested TRUE."
     }
   ],
   "roadmap": {
