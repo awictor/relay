@@ -94,4 +94,45 @@ describe("createHandler", () => {
     await handle(msg("go"));
     expect(sent[0]!.text).toMatch(/overloaded/i);
   });
+
+  // DEV-0021: the memory-poison guard under a PRE-EXISTING conversation. The error branch is
+  // reached AFTER memoryGet but BEFORE memorySet, so a failed turn must leave the prior history
+  // exactly as it was — not cleared, not extended with a dangling user/assistant turn.
+  it("an error on a chat WITH history leaves the prior history untouched", async () => {
+    const prior: LLMMessage[] = [
+      { role: "user", content: "earlier" },
+      { role: "assistant", content: "earlier reply" },
+    ];
+    const { handle, mem } = harness({
+      memoryGet: () => prior,
+      runAgentFn: async () => { throw new Error("boom"); },
+    });
+    await handle(msg("this one fails", 5));
+    // memorySet was never called, so the store has no entry for 5 (prior lives in the closure only)
+    expect(mem.has(5)).toBe(false);
+    // and the prior array itself was not mutated (no half-turn appended)
+    expect(prior).toHaveLength(2);
+    expect(prior[prior.length - 1]).toEqual({ role: "assistant", content: "earlier reply" });
+  });
+
+  it("a failed turn then a successful one: success persists a clean user+assistant pair", async () => {
+    let calls = 0;
+    const { handle, mem, sent } = harness({
+      runAgentFn: async (text) => {
+        calls++;
+        if (calls === 1) throw new Error("boom");
+        return { reply: `ok:${text}`, steps: 1, tools: [] };
+      },
+    });
+    await handle(msg("fails", 8));
+    await handle(msg("works", 8));
+    expect(sent[0]!.text).toMatch(/something went wrong/i);
+    expect(sent[1]!.text).toBe("ok:works");
+    // memory holds ONLY the successful turn — the failed one left nothing behind
+    const h = mem.get(8)!;
+    expect(h).toEqual([
+      { role: "user", content: "works" },
+      { role: "assistant", content: "ok:works" },
+    ]);
+  });
 });
