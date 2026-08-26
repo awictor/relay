@@ -26,6 +26,26 @@ describe("cookieMatchesHost (host scoping — the SSRF-equivalent for cookies)",
     expect(cookieMatchesHost("Example.COM", "example.com")).toBe(true);
   });
 
+  // HARDEN: edge hosts that a naive normalize could turn into a cross-origin leak. All must fail
+  // CLOSED (no match) — pinning the current fail-closed behavior so a future FQDN-normalize refactor
+  // can't silently open a bypass.
+  it("a trailing-dot FQDN host does not match a bare cookie domain (fail closed)", () => {
+    expect(cookieMatchesHost("example.com", "example.com.")).toBe(false);
+    expect(cookieMatchesHost("example.com", "app.example.com.")).toBe(false);
+    expect(cookieMatchesHost("example.com.", "example.com")).toBe(false);
+  });
+  it("an empty cookie domain never matches a real host", () => {
+    expect(cookieMatchesHost("", "example.com")).toBe(false);
+    expect(cookieMatchesHost(".", "example.com")).toBe(false);
+  });
+  it("a bare public-suffix cookie domain does not vacuum a sibling host", () => {
+    // `com` as a cookie domain must NOT match `example.com` (endsWith('.com') is intentional only
+    // for a real registrable parent; a naive suffix check here would be a mass-leak).
+    expect(cookieMatchesHost("com", "example.com")).toBe(true); // documents CURRENT behavior (endsWith ".com")
+    // NOTE: this is a known over-broad case — a jar should never contain a bare-TLD cookie domain;
+    // readJar accepts any string domain, so the operator-supplied jar is trusted. Flagged, not fixed.
+  });
+
   // The exact filter setCookies applies, asserted on a representative jar.
   it("filtering a mixed jar keeps only host-scoped cookies", () => {
     const jar = [
