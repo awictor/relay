@@ -53,9 +53,9 @@
     {
       "id": "anvil-obs",
       "repo": "anvil",
-      "status": "todo",
+      "status": "done",
       "value": "low",
-      "task": "Confirm /v1/metrics exposes session counts + latency both products can monitor; add anything missing. Low priority until a real deploy exists."
+      "task": "Confirm /v1/metrics exposes session counts + latency both products can monitor; add anything missing. Low priority until a real deploy exists. [DONE (verified, no change needed): GET /v1/metrics live-checked — exposes sessionsCreated/Released, peakConcurrent, activeSessions, requestsServed, errorsCount, webhooksFailed, uptime + per-endpoint count/avg/p50/p95/p99/errors. Both products can monitor fully; README already lists it.]"
     },
     {
       "id": "syn-1b",
@@ -88,9 +88,9 @@
     {
       "id": "syn-1e",
       "repo": "anvil",
-      "status": "todo",
+      "status": "done",
       "value": "low",
-      "task": "anvil HAR: also record response content-type + (optional, capped) response body preview, so DataFaucet can classify JSON endpoints without a second fetch. Low priority — url/headers/method already enough for capture."
+      "task": "anvil HAR: also record response content-type + (optional, capped) response body preview, so DataFaucet can classify JSON endpoints without a second fetch. Low priority — url/headers/method already enough for capture. [DONE (verified, shipped earlier): anvil actions.ts records responseContentType + responseBodyPreview in HAR (harResponseFields); DataFaucet DEV-0008 already consumes responseContentType to classify JSON endpoints without a 2nd fetch.]"
     },
     {
       "id": "syn-1f",
@@ -392,6 +392,14 @@
       "status": "todo",
       "repo": "relay",
       "task": "Reference the new scripts/e2e-agent-chain.mjs + scripts/e2e-extract.* in README (a short Verify section): how to run the live agent e2e (npx tsx scripts/e2e-agent-chain.mjs with .env + anvil), so a human validating the deploy has the one command. Doc-only."
+    },
+    {
+      "id": "portfolio-status",
+      "stream": "quality",
+      "value": "low",
+      "status": "todo",
+      "repo": "relay",
+      "task": "Write a short STATUS.md at the relay repo root (or a top section in portfolio-backlog) summarizing the whole portfolio state for Alex: what shipped (Relay 6-tool agent + 117 tests + CI; anvil migration PR #1 with 1786-test unit gate; anvil 529 tests + CI), the 3 owner actions (fix gh billing, merge PR #1, provision VM), and the honest limits (read-only live-view, compute-not-vendor wall). One glance for the owner. Doc-only."
     }
   ],
   "history": [
@@ -525,6 +533,9 @@
     },
     {
       "event": "relay-search-e2e done: committed a live full-agent chain e2e (scripts/e2e-agent-chain.mjs) — runs the REAL agent (Gemini + anvil) end to end, asserts it uses a fetch tool + replies from real data with a proper exit code. Opt-in (keys + live anvil), not in offline CI. Verified green: returned 3 real HN Newest stories via scrape, 2 steps, exit 0. This closes the last relay proof item — every layer now has a test (unit, wiring, cross-module smoke, offline CI, live chain)."
+    },
+    {
+      "event": "anvil-obs + syn-1e verified DONE (no code needed): live-checked GET /v1/metrics — full session counts + per-endpoint latency percentiles (p50/p95/p99), both products can monitor; README lists it. syn-1e responseContentType + responseBodyPreview already in anvil HAR + consumed by DataFaucet DEV-0008. Both were already satisfied; closed honestly rather than padding. Remaining backlog: syn-2c, syn-1l (low datafaucet polish), relay-e2e-doc (low). Owner-gated: gh-billing, PR#1 merge, VM provision."
     }
   ]
 }
