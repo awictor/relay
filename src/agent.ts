@@ -120,6 +120,9 @@ export interface BrowserBackend {
   releaseSession(sessionId: string): Promise<void>;
   discoverLinks(url: string, limit?: number): Promise<string[]>;
   fetchJson(url: string): Promise<{ status: number; contentType: string; text: string }>;
+  // Optional: JSON-LD + meta tags a text scrape misses (SPAs/product pages). When
+  // absent, extract just uses the text pass.
+  extractStructured?(url: string): Promise<string>;
 }
 
 const FETCH_JSON_MAX_BYTES = 200_000;
@@ -149,6 +152,7 @@ const defaultBackend: BrowserBackend = {
   releaseSession: (id) => anvil.releaseSession(id),
   discoverLinks: (url, limit) => anvil.discoverLinks(url, limit),
   fetchJson: (url) => defaultFetchJson(url),
+  extractStructured: (url) => anvil.extractStructured(url),
 };
 
 export interface AgentDeps {
@@ -271,7 +275,16 @@ export async function runAgent(
         if (fields.length === 0) { push("extract", "ERROR: no fields given. Provide the field names to extract."); continue; }
         try {
           const r = await backend.scrape(url);
-          const json = await extractFields(deps.llm, r.content.slice(0, 8000), fields);
+          let { json, allNull } = await extractFieldsResult(deps.llm, r.content.slice(0, 8000), fields);
+          // Fallback: if the visible text yielded nothing, many SPA/product pages carry
+          // the data in JSON-LD / meta tags a text scrape drops. Retry over those.
+          if (allNull && backend.extractStructured) {
+            const structured = await backend.extractStructured(url).catch(() => "");
+            if (structured.trim()) {
+              const retry = await extractFieldsResult(deps.llm, structured.slice(0, 8000), fields);
+              if (!retry.allNull) json = retry.json;
+            }
+          }
           push("extract", `EXTRACTED from ${r.title || url}:\n${json}`);
         } catch (e) {
           push("extract", `ERROR extracting from ${url}: ${e instanceof Error ? e.message : String(e)}`);
@@ -374,7 +387,17 @@ export async function runAgent(
 // on any parse failure returns a JSON object with all fields null so the caller still
 // gets valid, shaped output rather than prose.
 export async function extractFields(llm: LLMClient, pageText: string, fields: string[]): Promise<string> {
-  const nullObj = () => JSON.stringify(Object.fromEntries(fields.map((f) => [f, null])), null, 2);
+  return (await extractFieldsResult(llm, pageText, fields)).json;
+}
+
+/** Like extractFields but also reports whether every field came back null — lets the
+ * caller decide to retry with richer input (e.g. JSON-LD/meta) before giving up. */
+export async function extractFieldsResult(
+  llm: LLMClient,
+  pageText: string,
+  fields: string[]
+): Promise<{ json: string; allNull: boolean }> {
+  const nullOut = { json: JSON.stringify(Object.fromEntries(fields.map((f) => [f, null])), null, 2), allNull: true };
   const prompt = `From the page content below, extract these fields: ${fields.join(", ")}.
 Respond with ONLY a JSON object whose keys are exactly those field names. If a field is not present, use null. No prose, no code fence.
 
@@ -388,15 +411,14 @@ ${pageText}`;
     []
   );
   const raw = (res.text ?? "").trim();
-  // Tolerate a stray code fence or leading prose: grab the first {...} block.
   const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return nullObj();
+  if (!match) return nullOut;
   try {
     const parsed = JSON.parse(match[0]) as Record<string, unknown>;
-    // Normalize to exactly the requested fields (drop extras, fill missing with null).
     const out = Object.fromEntries(fields.map((f) => [f, f in parsed ? parsed[f] : null]));
-    return JSON.stringify(out, null, 2);
+    const allNull = fields.every((f) => out[f] === null);
+    return { json: JSON.stringify(out, null, 2), allNull };
   } catch {
-    return nullObj();
+    return nullOut;
   }
 }

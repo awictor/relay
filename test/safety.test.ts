@@ -45,6 +45,23 @@ describe("redactText", () => {
   it("leaves normal text intact", () => {
     expect(redactText("the weather in Paris is 20C")).toBe("the weather in Paris is 20C");
   });
+  // DEV-0010: pin the shapes not already covered so a regex change can't silently start leaking them.
+  it("masks an sk- API key", () => {
+    const out = redactText("my key is sk-" + "A1b2C3d4E5f6G7h8" + " ok");
+    expect(out).not.toContain("sk-A1b2C3d4E5f6G7h8");
+    expect(out).toContain("[redacted-key]");
+  });
+  it("masks a long hex secret (32+ chars)", () => {
+    const hex = "a".repeat(40);
+    const out = redactText(`session ${hex} end`);
+    expect(out).not.toContain(hex);
+    expect(out).toContain("[redacted-hex]");
+  });
+  it("masks multiple secrets in one string", () => {
+    const out = redactText("Bearer abcdefgh12345678 and sk-" + "Z".repeat(20));
+    expect(out).not.toMatch(/abcdefgh12345678/);
+    expect(out).not.toMatch(/sk-Z{20}/);
+  });
 });
 
 describe("redactObject", () => {
@@ -53,5 +70,21 @@ describe("redactObject", () => {
     expect(JSON.stringify(out)).not.toContain("Bearer z");
     expect(JSON.stringify(out)).not.toContain("abc");
     expect(JSON.stringify(out)).toContain("https://x.com");
+  });
+  // DEV-0010: recursion depth + arrays + non-secret preservation.
+  it("recurses into nested objects and arrays", () => {
+    const out = redactObject({
+      level1: { level2: { token: "deep-secret-xyz", note: "keep-me" } },
+      items: [{ apiKey: "arr-secret" }, { label: "keep-too" }],
+    });
+    const s = JSON.stringify(out);
+    expect(s).not.toContain("deep-secret-xyz");
+    expect(s).not.toContain("arr-secret");
+    expect(s).toContain("keep-me");
+    expect(s).toContain("keep-too");
+  });
+  it("leaves a fully non-secret object untouched", () => {
+    const input = { city: "Paris", temp: 20, nested: { ok: true } };
+    expect(redactObject(input)).toEqual(input);
   });
 });

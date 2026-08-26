@@ -164,6 +164,34 @@ export async function discoverLinks(url: string, limit = 30): Promise<string[]> 
 }
 
 /**
+ * Extract structured data blocks a text scrape misses: the page's JSON-LD
+ * (<script type="application/ld+json">) plus key <meta> tags (og:*, twitter:*,
+ * name/property + content). Many SPAs/product pages put the real data here rather
+ * than in visible text. Creates a session, navigates, evaluates, releases. Returns a
+ * single string (concatenated) — empty if none. SSRF-guarded.
+ */
+export async function extractStructured(url: string): Promise<string> {
+  const check = isUrlSafe(url);
+  if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
+  const session = await createSession();
+  try {
+    await navigate(session.id, url, "domcontentloaded");
+    await new Promise((r) => setTimeout(r, 600));
+    const script = `(() => {
+      const ld = Array.from(document.querySelectorAll('script[type="application/ld+json"]')).map(s => s.textContent || "").join("\\n");
+      const metas = Array.from(document.querySelectorAll('meta[property],meta[name]'))
+        .map(m => { const k = m.getAttribute('property') || m.getAttribute('name'); const v = m.getAttribute('content'); return k && v ? k + ": " + v : ""; })
+        .filter(Boolean).join("\\n");
+      return (ld ? "JSON-LD:\\n" + ld + "\\n\\n" : "") + (metas ? "META:\\n" + metas : "");
+    })()`;
+    const r = await action(session.id, "/v1/actions/evaluate", { script });
+    return typeof r === "string" ? r : String((r as { value?: unknown })?.value ?? "");
+  } finally {
+    await releaseSession(session.id);
+  }
+}
+
+/**
  * Fetch a page's text: create a session, navigate (domcontentloaded — fast, and
  * avoids the networkidle2 hang that anvil's REST /v1/scrape forces with a 60s cap),
  * read the rendered text, release. SSRF-guarded first. Returns { content, title, url }.
