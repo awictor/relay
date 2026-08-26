@@ -20,9 +20,13 @@ export function formatUptime(ms: number): string {
   return `${sec}s`;
 }
 
-/** One-line status reply for /status. Plain text (phone-friendly), no markdown. */
+/** One-line status reply for /status. Plain text (phone-friendly), no markdown.
+ * Prefix reflects health: ✅ when the browser is connected, ⚠️ when it's down (the
+ * process is up but degraded — browsing tools will fail), so the emoji never contradicts
+ * the body. */
 export function formatStatus(info: StatusInfo): string {
   const browser = info.anvilOk ? "browser connected" : "browser DOWN";
   const turns = info.turns === 1 ? "1 task" : `${info.turns} tasks`;
-  return `✅ Relay up ${formatUptime(info.uptimeMs)} · ${turns} handled · ${browser}.`;
+  const prefix = info.anvilOk ? "✅" : "⚠️";
+  return `${prefix} Relay up ${formatUptime(info.uptimeMs)} · ${turns} handled · ${browser}.`;
 }

@@ -20,15 +20,18 @@ describe("formatUptime", () => {
 });
 
 describe("formatStatus", () => {
-  it("reports up + tasks + browser connected", () => {
+  it("reports up + tasks + browser connected with a ✅ prefix", () => {
     const s = formatStatus({ uptimeMs: 3600_000, turns: 5, anvilOk: true });
     expect(s).toMatch(/up 1h 0m/);
     expect(s).toMatch(/5 tasks/);
     expect(s).toMatch(/browser connected/);
+    expect(s.startsWith("✅")).toBe(true);
   });
-  it("singular task + browser down", () => {
+  it("singular task + browser down uses a ⚠️ prefix (emoji must not contradict the body)", () => {
     const s = formatStatus({ uptimeMs: 30_000, turns: 1, anvilOk: false });
     expect(s).toMatch(/1 task\b/);
     expect(s).toMatch(/browser DOWN/);
+    expect(s.startsWith("⚠")).toBe(true);
+    expect(s.startsWith("✅")).toBe(false);
   });
 });
