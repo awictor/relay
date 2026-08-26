@@ -635,9 +635,9 @@
       "id": "digest-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m9] Digest runner: given a digest, run each member recipe task through the agent, compose ONE message (labeled sections per member), send once. Reuse the agent path; bound total members; a failed member becomes a \"(couldn t fetch)\" line, not a whole failure. Injectable; unit-test the compose with a mock agent."
+      "task": "[m9] Digest runner: given a digest, run each member recipe task through the agent, compose ONE message (labeled sections per member), send once. Reuse the agent path; bound total members; a failed member becomes a \"(couldn t fetch)\" line, not a whole failure. Injectable; unit-test the compose with a mock agent. [DONE: src/digest-runner.ts runDigest — resolve+run each member recipe, compose one labeled message; unknown/failed member -> fallback line, member cap; 4 tests; 303 suite]"
     },
     {
       "id": "digest-3",
@@ -884,6 +884,9 @@
     },
     {
       "event": "m9 digest-1 done: digest parse + store. DigestStore (JSON file like RecipeStore) holds {name,members:[recipe],schedule?}; add (member-capped, update-in-place cap-exempt)/get/list/remove case-insensitive; parseDigestCommand (define digest <name>: a,b,c). 6 tests, 299 full suite pass, tsc clean. Next m9: digest-2 (digest runner: run each member recipe -> one composed message)."
+    },
+    {
+      "event": "m9 digest-2 done: digest runner. runDigest resolves each member recipe, runs its task via the agent, composes ONE labeled message (section per member, title). Fault-tolerant: unknown recipe or failed run -> fallback line, one bad source cant sink the digest; member count bounded. Injectable -> 4 tests, 303 full suite pass, tsc clean. Next m9: digest-3 (handler /digest + define + run/schedule dispatch (digest vs recipe by name) + live e2e; completes m9)."
     }
   ],
   "roadmap": {
