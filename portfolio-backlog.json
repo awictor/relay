@@ -715,9 +715,33 @@
       "id": "anvil-retry-doc",
       "stream": "anvil",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "anvil",
       "task": "[m12] Document ANVIL_NAV_RETRIES in README/config table + the config test (default 1); confirm the config-parity/defaults test covers it. Doc + test."
+    },
+    {
+      "id": "shared-1",
+      "stream": "synergy",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m13] In Relay, carve the pure, dependency-light connect helpers into src/lib/anvil-client.ts: buildConnectUrls(baseUrl,sessionId,apiKey)-> {connectUrl(cdp ws), liveUrl(/v1/view)} + isTransientError (already in src/anvil.ts) + a documented header block marking it the CANONICAL shared client. Re-point src/anvil.ts to import from it (no behavior change). Unit-test the URL builder (scheme/token/encoding, https->wss) + keep existing anvil tests green."
+    },
+    {
+      "id": "shared-2",
+      "stream": "synergy",
+      "value": "high",
+      "status": "todo",
+      "repo": "datafaucet",
+      "task": "[m13] Vendor the same anvil-client.ts into mcp-forge (anvil-migration branch) alongside the existing browser-backend.ts, and re-point anvilConnectUrls to use buildConnectUrls from it (behavior identical). Add tests/unit/anvil-client-parity.test.ts that reads BOTH files (relay + mcp-forge copies) and asserts they are byte-identical (the vendoring contract). Full test:unit green; browserbase path unchanged."
+    },
+    {
+      "id": "shared-3",
+      "stream": "synergy",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m13] Add the mirror parity guard in Relay: test/anvil-client-parity.test.ts reads relay src/lib/anvil-client.ts + the mcp-forge vendored copy and asserts identical (skips gracefully if the mcp-forge path is absent, so relay CI stays self-contained). Document the vendoring contract (edit one -> copy to the other -> parity test enforces) in a header comment + README note."
     }
   ],
   "history": [
@@ -986,10 +1010,13 @@
     },
     {
       "event": "m12 anvil-oplog-1 done: per-op structured log. SessionActions.run() times each op + emits {anvil:op,session,op,ok,ms} via logger (no payloads/secrets); run() takes an optional op label, navigate+scrape pass theirs. formatOpLog pure+unit-tested. Build clean, 636 anvil suite pass. Next m12: anvil-retry-doc (document ANVIL_NAV_RETRIES; low) -> completes m12."
+    },
+    {
+      "event": "m12-anvil-resilience COMPLETE: anvil-retry-1 (transient nav retry), anvil-oplog-1 (per-op [anvil] log), anvil-retry-doc (env table). Shared engine now self-heals + is observable, matching Relay m8. ROADMAP advanced -> AUTHORED m13-shared-client (extract the canonical anvil connect client so Relay + DataFaucet stop hand-rolling the same logic — the real one-shared-browser synergy; vendored + parity-tested, free-infra, no npm). Seeded shared-1/2/3. 9th self-directed milestone. m1-synergy still owner_blocked (billing/merge)."
     }
   ],
   "roadmap": {
-    "current": "m12-anvil-resilience",
+    "current": "m13-shared-client",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1071,6 +1098,13 @@
         "id": "m12-anvil-resilience",
         "goal": "anvil-engine resilience round 2 (the shared engine both products lean on; only touched in m6). Add a transient-navigation retry (a flaky goto/nav should retry once with backoff before failing a scrape), and a per-session structured request log / [anvil] op line so a consumer can see what the browser did. Free/local, flag-safe, must not regress the 500+ test suite. Prefer reusing Relay-side patterns (isTransientError) so both sides share the retry taxonomy.",
         "done_when": "navigate retries once on a transient error (behind a small bound, default on but capped); a per-op structured log line; offline unit tests; anvil build + full suite green",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m13-shared-client",
+        "goal": "Kill the anvil-client drift: Relay (src/anvil.ts) and DataFaucet (auto-scan + browser routes) each hand-roll the SAME anvil connect logic (session create, build CDP ws + /v1/view URLs, release, transient-retry taxonomy). Extract a single canonical, tested client so both consume ONE module — the real synergy of \"one shared browser\". Free-infra: a small vendored TS module (copied into each repo with a parity test), NOT an npm publish, since the repos are separate + free. The parity test asserts the two copies stay byte-identical.",
+        "done_when": "a canonical anvil-client module (createSession/connectUrls/release/isTransientError) lives in Relay + is vendored into mcp-forge anvil-migration with a checked-in parity test in each repo that fails if they drift; both suites green; prod byte-identical",
         "status": "todo",
         "owner_gated": false
       }
