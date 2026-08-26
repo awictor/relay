@@ -1,33 +1,39 @@
-// Relay entrypoint. Telegram long-poll -> handle -> reply.
-// MVP handler is a stub: echoes, and if the message contains a URL it fetches the
-// page via anvil (proving the channel -> agent -> self-hosted-browser -> reply pipe
-// works end-to-end). The Gemini agent loop (src/agent.ts) replaces this stub.
+// Relay entrypoint. Telegram long-poll -> agent (Gemini + anvil browser) -> reply.
+// Per-chat short memory so follow-ups have context. Falls back to a clear message
+// if keys/anvil are missing so it never hangs silently.
 
 import { startPolling, sendMessage, hasToken, type InboundMessage } from "./telegram.js";
-import { scrape, anvilLive } from "./anvil.js";
+import { anvilLive } from "./anvil.js";
+import { runAgent } from "./agent.js";
+import { GeminiClient } from "./llm.js";
+import type { LLMMessage } from "./llm.js";
 
-const URL_RE = /https?:\/\/[^\s]+/i;
+const llm = new GeminiClient();
+
+// Per-chat rolling memory (last few turns). Bounded to keep prompts small.
+const MEMORY_TURNS = 6;
+const memory = new Map<number, LLMMessage[]>();
 
 async function handle(msg: InboundMessage): Promise<void> {
   console.log(`[in] ${msg.from}: ${msg.text.slice(0, 120)}`);
-  const urlMatch = msg.text.match(URL_RE);
 
-  if (urlMatch) {
-    await sendMessage(msg.chatId, "On it — fetching that page…");
-    try {
-      const res = await scrape(urlMatch[0], { format: "text" });
-      const summary = `${res.title || res.url}\n\n${res.content.slice(0, 1500)}`;
-      await sendMessage(msg.chatId, summary);
-    } catch (e) {
-      await sendMessage(msg.chatId, `Couldn't fetch that: ${e instanceof Error ? e.message : String(e)}`);
-    }
+  if (!process.env.GEMINI_API_KEY) {
+    await sendMessage(msg.chatId, "I'm not fully configured yet (missing model key). Try again soon.");
     return;
   }
 
-  await sendMessage(
-    msg.chatId,
-    "Hi — I'm Relay. Send me a link and I'll fetch it. (Full agent coming: tell me an app + task and I'll go do it.)"
-  );
+  const history = memory.get(msg.chatId) ?? [];
+  try {
+    const { reply } = await runAgent(msg.text, { llm }, history);
+    await sendMessage(msg.chatId, reply);
+
+    // Append this turn to memory (user + assistant), trim to MEMORY_TURNS.
+    const next: LLMMessage[] = [...history, { role: "user", content: msg.text }, { role: "assistant", content: reply }];
+    memory.set(msg.chatId, next.slice(-MEMORY_TURNS * 2));
+  } catch (e) {
+    console.error("agent error:", e instanceof Error ? e.message : String(e));
+    await sendMessage(msg.chatId, `Sorry — something went wrong: ${e instanceof Error ? e.message : "unknown error"}`);
+  }
 }
 
 async function main() {
@@ -37,7 +43,8 @@ async function main() {
   }
   const live = await anvilLive();
   console.log(`anvil reachable: ${live} (ANVIL_BASE_URL=${process.env.ANVIL_BASE_URL ?? "http://localhost:3000"})`);
-  if (!live) console.warn("WARNING: anvil-engine not reachable — URL fetches will fail until it's running.");
+  if (!live) console.warn("WARNING: anvil-engine not reachable — browsing tools will fail until it's running.");
+  if (!process.env.GEMINI_API_KEY) console.warn("WARNING: GEMINI_API_KEY not set — the agent can't run until it's provided.");
 
   console.log("Relay polling Telegram…");
   startPolling(handle);

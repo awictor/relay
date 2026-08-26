@@ -87,8 +87,10 @@ export async function withBrowser<T>(fn: (browser: import("puppeteer-core").Brow
 }
 
 /**
- * Fetch a page's text (or html) via anvil's REST /v1/scrape — no CDP driving needed.
- * SSRF-guarded before the call. Returns { content, title, url }.
+ * Fetch a page's text (or html) via anvil's REST /v1/scrape.
+ * anvil's /v1/scrape targets an existing session (no auto-create), so we create a
+ * session, scrape with X-Session-Id, and always release. SSRF-guarded first.
+ * Returns { content, title, url }.
  */
 export async function scrape(
   url: string,
@@ -96,14 +98,19 @@ export async function scrape(
 ): Promise<{ content: string; title: string; url: string }> {
   const check = isUrlSafe(url);
   if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
-  const r = await fetch(`${BASE}/v1/scrape`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ url, format: opts.format ?? "text", waitForSelector: opts.waitForSelector }),
-    signal: AbortSignal.timeout(45000),
-  });
-  if (!r.ok) {
-    throw new Error(`anvil scrape failed: ${r.status} ${await r.text().catch(() => "")}`.slice(0, 300));
+  const session = await createSession();
+  try {
+    const r = await fetch(`${BASE}/v1/scrape`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Session-Id": session.id, ...authHeaders() },
+      body: JSON.stringify({ url, format: opts.format ?? "text", waitForSelector: opts.waitForSelector }),
+      signal: AbortSignal.timeout(45000),
+    });
+    if (!r.ok) {
+      throw new Error(`anvil scrape failed: ${r.status} ${await r.text().catch(() => "")}`.slice(0, 300));
+    }
+    return (await r.json()) as { content: string; title: string; url: string };
+  } finally {
+    await releaseSession(session.id);
   }
-  return (await r.json()) as { content: string; title: string; url: string };
 }
