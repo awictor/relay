@@ -100,6 +100,7 @@ Rules:
 - Prefer "scrape" for read-only lookups; use "browse" only when you must click or type.
 - I will REFUSE destructive/committing clicks (pay, buy, delete, submit, logout, transfer). Don't attempt them; tell the user instead.
 - Take few steps. When you have enough, call "reply".
+- The user is on a phone. In "reply", write a short plain-text answer — never paste raw JSON. If you extracted/compared data, summarize it in a line or two (e.g. "A is $10, B is $20"). No markdown tables.
 - If something needs a login or a paid/irreversible action, call "reply" and say so plainly. Never invent data you didn't retrieve.`;
 
 // Injectable browser backend so tests run offline without anvil.

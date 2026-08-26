@@ -10,6 +10,7 @@ import type { LLMMessage } from "./llm.js";
 import { checkRateLimit, redactText } from "./safety.js";
 import { handleCommand } from "./commands.js";
 import { MemoryStore } from "./lib/memory-store.js";
+import { formatReply } from "./lib/format-reply.js";
 
 const llm = new GeminiClient();
 
@@ -44,10 +45,11 @@ async function handle(msg: InboundMessage): Promise<void> {
   try {
     await sendTyping(msg.chatId); // show "typing…" while the agent works
     const { reply } = await runAgent(msg.text, { llm }, history);
-    await sendMessage(msg.chatId, reply);
+    const out = formatReply(reply); // SMS-friendly: render stray JSON as lines, trim length
+    await sendMessage(msg.chatId, out);
 
     // Append this turn to memory (user + assistant); the store trims to its maxTurns + persists.
-    const next: LLMMessage[] = [...history, { role: "user", content: msg.text }, { role: "assistant", content: reply }];
+    const next: LLMMessage[] = [...history, { role: "user", content: msg.text }, { role: "assistant", content: out }];
     memory.set(msg.chatId, next);
   } catch (e) {
     const emsg = e instanceof Error ? e.message : String(e);
