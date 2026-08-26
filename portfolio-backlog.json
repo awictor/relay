@@ -185,9 +185,9 @@
       "id": "relay-tools-2",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "Add a multi-page extract: let extract accept an array of URLs (or a search-then-extract flow) and return a JSON array, so a user can text \"compare the price of X across these 3 links\". Reuse extractFields per page; cap page count; dedup; keep steps bounded. Unit-test with mock backend returning distinct pages."
+      "task": "Add a multi-page extract: let extract accept an array of URLs (or a search-then-extract flow) and return a JSON array, so a user can text \"compare the price of X across these 3 links\". Reuse extractFields per page; cap page count; dedup; keep steps bounded. Unit-test with mock backend returning distinct pages. [DONE: compare tool in src/agent.ts — multi-URL parallel extract, dedup+SSRF-filter+cap5, all-null row on per-url failure; 4 tests; 47 suite pass; live e2e 2 URLs green]"
     },
     {
       "id": "relay-extract-tune",
@@ -196,6 +196,14 @@
       "status": "todo",
       "repo": "relay",
       "task": "extractFields currently scrapes text only (document.body.innerText). For data-heavy SPAs the value may be in attributes/meta/JSON-LD. Add an option to also pass the page HTML (or <script type=application/ld+json>) into the extraction prompt when text extraction yields all-null. Guard prompt size."
+    },
+    {
+      "id": "relay-search-flow",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "Search-then-compare: let the agent take a query (not pre-known URLs), browse a search/listing page, harvest the top N result links (reuse the link-discovery evaluate pattern from anvil auto-scan), then compare/extract across them. So a user can text \"cheapest 3 listings for <item>\" without pasting URLs. Bound N, SSRF-filter harvested links, unit-test with a mock backend that returns a listing page + child pages."
     }
   ],
   "history": [
@@ -257,6 +265,9 @@
     },
     {
       "event": "relay-tools done: shipped structured extract tool (text a URL + fields -> clean JSON). extract agent tool + extractFields() focused LLM sub-call (tolerant JSON parse, all-null fallback, normalized to requested fields). ToolSpec extended for array params. 7 new tests + 43 full suite pass, tsc clean, live e2e green (real anvil scrape -> real Gemini extract -> shaped JSON). Broadens Relay beyond browse/scrape = real consumer-product growth vs Instinct. Refilled relay-tools-2 (multi-URL compare extract) + relay-extract-tune (HTML/JSON-LD fallback for SPAs)."
+    },
+    {
+      "event": "relay-tools-2 done: compare tool — extract same fields across multiple URLs into a JSON array (parallel fetch, dedup, SSRF-filter, cap 5, per-url failure -> all-null row). 4 new tests + 47 full suite pass, tsc clean, live e2e green (2 real URLs -> anvil scrape + Gemini extract -> shaped JSON array). Refilled relay-search-flow (search-then-compare so users need not paste URLs)."
     }
   ]
 }
