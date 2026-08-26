@@ -15,6 +15,9 @@ export interface ToolSpec {
 export interface ToolCall {
   name: string;
   args: Record<string, unknown>;
+  // Gemini 2.5+ returns a thoughtSignature on functionCall parts that MUST be
+  // echoed back on the assistant turn, or the next call 400s. Opaque; carried through.
+  thoughtSignature?: string;
 }
 
 export interface LLMMessage {
@@ -35,10 +38,11 @@ export interface LLMClient {
 
 // ---- Gemini (free tier) ----------------------------------------------------
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
 
 interface GeminiPart {
   text?: string;
+  thoughtSignature?: string;
   functionCall?: { name: string; args: Record<string, unknown> };
   functionResponse?: { name: string; response: Record<string, unknown> };
 }
@@ -59,7 +63,12 @@ function toGemini(messages: LLMMessage[]): { system?: string; contents: GeminiCo
     } else if (m.role === "assistant") {
       const parts: GeminiPart[] = [];
       if (m.content) parts.push({ text: m.content });
-      if (m.toolCall) parts.push({ functionCall: { name: m.toolCall.name, args: m.toolCall.args } });
+      if (m.toolCall) {
+        const fcPart: GeminiPart = { functionCall: { name: m.toolCall.name, args: m.toolCall.args } };
+        // Echo the thoughtSignature back on the functionCall part (Gemini 2.5+ requires it).
+        if (m.toolCall.thoughtSignature) fcPart.thoughtSignature = m.toolCall.thoughtSignature;
+        parts.push(fcPart);
+      }
       contents.push({ role: "model", parts: parts.length ? parts : [{ text: "" }] });
     } else if (m.role === "tool") {
       // Gemini expects tool output as a functionResponse in a "user"-role turn.
@@ -83,10 +92,12 @@ export class GeminiClient implements LLMClient {
     if (tools.length) {
       body.tools = [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })) }];
     }
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`;
+    // Auth via X-goog-api-key header (works for both classic AIza keys and the
+    // newer AQ.* keys; the ?key= query param 404s newer keys against some models).
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
     const r = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-goog-api-key": this.apiKey },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(30000),
     });
@@ -95,9 +106,16 @@ export class GeminiClient implements LLMClient {
       candidates?: { content?: { parts?: GeminiPart[] } }[];
     };
     const parts = j.candidates?.[0]?.content?.parts ?? [];
-    const fc = parts.find((p) => p.functionCall)?.functionCall;
+    const fcPart = parts.find((p) => p.functionCall);
+    const fc = fcPart?.functionCall;
     const text = parts.map((p) => p.text).filter(Boolean).join("").trim() || undefined;
-    if (fc) return { text, toolCall: { name: fc.name, args: fc.args ?? {} } };
+    if (fc) {
+      const tc: ToolCall = { name: fc.name, args: fc.args ?? {} };
+      // thoughtSignature can sit on the functionCall part or a sibling part.
+      const sig = fcPart?.thoughtSignature ?? parts.find((p) => p.thoughtSignature)?.thoughtSignature;
+      if (sig) tc.thoughtSignature = sig;
+      return { text, toolCall: tc };
+    }
     return { text };
   }
 }

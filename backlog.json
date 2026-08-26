@@ -9,8 +9,8 @@
     "LLM behind an adapter interface so Claude swaps in for Gemini in one line."
   ],
   "owner_blockers": [
+    "TELEGRAM_BOT_TOKEN: last one was Unauthorized — regenerate via @BotFather /mybots -> API Token -> Revoke; only gap left for full Telegram e2e.",
     "TELEGRAM_BOT_TOKEN in .env (from @BotFather) — needed for any live/e2e test.",
-    "GEMINI_API_KEY in .env (aistudio.google.com/apikey) — needed for the agent loop.",
     "anvil-engine running + reachable at ANVIL_BASE_URL (local `docker run -p 3000:3000 anvil-engine`, or deployed) — needed for browser fetches.",
     "Hosting decision for 24/7 (Oracle Always Free VM recommended) — item deploy-1."
   ],
@@ -98,6 +98,10 @@
     {
       "item": "polish-1",
       "note": "/start + /help commands, typing indicator; last buildable offline item. All non-owner-gated backlog now done."
+    },
+    {
+      "item": "live-verify + gemini fixes",
+      "note": "GEMINI_API_KEY (AQ.* key) validated live. Fixed 2 real bugs: (1) auth via X-goog-api-key header not ?key=, default model gemini-2.0-flash(dead)->gemini-flash-latest; (2) Gemini 2.5 thoughtSignature must be echoed on the assistant functionCall turn or multi-step 400s — threaded through ToolCall. VERIFIED FULL LOOP LIVE: \"top HN story\" -> Gemini scrape -> anvil real Chrome -> Gemini summary -> reply with current data (2 steps). Telegram token still invalid = only remaining gap."
     }
   ]
 }
