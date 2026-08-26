@@ -446,6 +446,14 @@
       "status": "done",
       "repo": "relay",
       "task": "Add the deploy-v1 tag reference to STATUS.md (Verify section) so the owner one-glance knows the exact reproducible-deploy point exists + how to use it (git checkout deploy-v1 in both repos). Doc-only, keeps STATUS.md the single source of truth. [DONE: STATUS.md Reproducible-deploy-point section referencing deploy-v1 tags]"
+    },
+    {
+      "id": "df-pr-body-syn2c",
+      "stream": "synergy",
+      "value": "low",
+      "status": "todo",
+      "repo": "datafaucet",
+      "task": "Update docs/anvil-migration-PR.md known-limit section: the read-only live-view is now LABELED in the UI (interactive:false -> View-only note), not just a silent limit. Tighten the wording so a reviewer sees it is handled, not outstanding. Doc-only on the branch."
     }
   ],
   "history": [
