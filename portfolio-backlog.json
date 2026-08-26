@@ -739,9 +739,33 @@
       "id": "shared-3",
       "stream": "synergy",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m13] Add the mirror parity guard in Relay: test/anvil-client-parity.test.ts reads relay src/lib/anvil-client.ts + the mcp-forge vendored copy and asserts identical (skips gracefully if the mcp-forge path is absent, so relay CI stays self-contained). Document the vendoring contract (edit one -> copy to the other -> parity test enforces) in a header comment + README note."
+    },
+    {
+      "id": "degrade-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m14] Inbound degradation: when anvil is unreachable, a browsing task should reply with a clear \"my browser is down, try again shortly\" instead of a raw error or hang; when the LLM errors non-transiently, a clear apology. Audit handler/agent error paths; add handler tests driving runAgentFn that throws anvil-ish vs llm-ish errors -> assert the right friendly message + a failed turn recorded (not a throw)."
+    },
+    {
+      "id": "degrade-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m14] Proactive degradation: a scheduled/recipe/digest/alert run whose dependency is down must SKIP cleanly (already partly: runner catches + completes) but verify digest member failure, alert-check failure, and a store whose persist() throws all degrade without crashing the tick loop or losing other due items. Add runner tests: one member/alert throwing doesnt block the rest; a persist failure is swallowed. "
+    },
+    {
+      "id": "degrade-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m14] Process-level safety: index.ts installs crash handlers (installCrashHandlers exists) — confirm an unhandledRejection/uncaughtException logs + does NOT take down the long-poll worker (or exits cleanly for the supervisor to restart). Add a unit test for the crash-handler wiring (mock process.on). Doc the failure-mode matrix (anvil down / LLM down / store unwritable -> behavior) in DEPLOY.md or a FAILURE-MODES note."
     }
   ],
   "history": [
@@ -1019,10 +1043,13 @@
     },
     {
       "event": "m13 shared-2 done: vendored the canonical anvil-client.ts into mcp-forge (anvil-migration, byte-identical); anvilConnectUrls now delegates to buildConnectUrls (behavior identical, browserbase untouched). tests/unit/anvil-client-parity.test.ts guards the vendoring contract (byte-identical vs the Relay copy; skips gracefully in CI where relay isnt checked out), wired into test:unit. 19 backend/anvil tests green. The connect logic now has ONE source across both repos, drift-guarded. Next m13: shared-3 (Relay-side mirror parity guard + doc the contract) -> completes m13."
+    },
+    {
+      "event": "m13-shared-client COMPLETE: shared-1 canonical anvil-client in Relay, shared-2 vendored into mcp-forge + parity guard, shared-3 Relay-side mirror guard + vendoring-contract doc. The one-shared-browser connect logic now has ONE source, byte-parity-guarded both ways. ROADMAP advanced -> AUTHORED m14-degradation (graceful degradation under partial failure across ALL Relay paths — anvil/LLM/store down -> fail soft + tested, no crash/hang). Seeded degrade-1/2/3. 10th self-directed milestone. m1-synergy still owner_blocked (billing/merge)."
     }
   ],
   "roadmap": {
-    "current": "m13-shared-client",
+    "current": "m14-degradation",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1111,6 +1138,13 @@
         "id": "m13-shared-client",
         "goal": "Kill the anvil-client drift: Relay (src/anvil.ts) and DataFaucet (auto-scan + browser routes) each hand-roll the SAME anvil connect logic (session create, build CDP ws + /v1/view URLs, release, transient-retry taxonomy). Extract a single canonical, tested client so both consume ONE module — the real synergy of \"one shared browser\". Free-infra: a small vendored TS module (copied into each repo with a parity test), NOT an npm publish, since the repos are separate + free. The parity test asserts the two copies stay byte-identical.",
         "done_when": "a canonical anvil-client module (createSession/connectUrls/release/isTransientError) lives in Relay + is vendored into mcp-forge anvil-migration with a checked-in parity test in each repo that fails if they drift; both suites green; prod byte-identical",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m14-degradation",
+        "goal": "Graceful degradation under partial failure. Relay has many paths (inbound + scheduler + recipes + digests + alerts) but its behavior when a DEPENDENCY is down (anvil unreachable, LLM 5xx/quota, memory-file unwritable) is only partly tested. Make every path fail soft with a clear user message + a logged reason, never a crash or silent hang, and pin it with tests. Consumer-trust + 24/7-deploy hardening on the WHOLE surface, not just the happy path.",
+        "done_when": "anvil-down + LLM-error + unwritable-store degrade to a clear reply (inbound) or a logged skip (proactive) with tests for each; no unhandled rejection can crash the worker; a doc note on the failure modes",
         "status": "todo",
         "owner_gated": false
       }
