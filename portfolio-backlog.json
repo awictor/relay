@@ -313,9 +313,17 @@
       "id": "relay-anvil-retry",
       "stream": "relay",
       "value": "low",
+      "status": "done",
+      "repo": "relay",
+      "task": "Resilience: a single anvil hiccup (session create/navigate timeout) currently fails a scrape/extract outright. Add one bounded retry (backoff) around the anvil scrape/navigate in src/anvil.ts for transient errors (timeout, ECONNRESET, 5xx) — NOT for SSRF/4xx. Cap attempts, keep total time sane. Unit-test with a mock that fails once then succeeds. [DONE: withRetry wraps createSession+action; transient (timeout/ECONNRESET/5xx/408/429) retried w/ backoff, deterministic (SSRF/4xx) throws; ANVIL_RETRY_ATTEMPTS env; isTransientError exported+tested; 3 tests; 92 suite pass; live scrape ok]"
+    },
+    {
+      "id": "relay-obs",
+      "stream": "relay",
+      "value": "low",
       "status": "todo",
       "repo": "relay",
-      "task": "Resilience: a single anvil hiccup (session create/navigate timeout) currently fails a scrape/extract outright. Add one bounded retry (backoff) around the anvil scrape/navigate in src/anvil.ts for transient errors (timeout, ECONNRESET, 5xx) — NOT for SSRF/4xx. Cap attempts, keep total time sane. Unit-test with a mock that fails once then succeeds."
+      "task": "Lightweight per-turn observability: index.ts already logs [in]. Add a one-line [out] log per turn with steps taken, tools used (names), elapsed ms, and reply length (redacted) so a 24/7 deploy is debuggable from logs alone. runAgent already returns steps; thread back the tool-name list. Keep it structured (JSON line) + secret-redacted. Unit-test the log formatting."
     }
   ],
   "history": [
@@ -416,6 +424,9 @@
     },
     {
       "event": "relay-compare-fallback done: refactored the extract text->JSON-LD/meta fallback into a shared extractOne() helper; both extract and compare use it, so multi-page compares are SPA-robust (per-row fallback, only when the text pass was all-null). 1 new test + 89 full suite pass, tsc clean. Refilled relay-anvil-retry (bounded transient-error retry around anvil scrape/navigate)."
+    },
+    {
+      "event": "relay-anvil-retry done: bounded transient-error retry around anvil createSession + action (navigate/click/type/read/evaluate) — timeouts/ECONNRESET/5xx/408/429 retried with backoff, SSRF/4xx throw immediately; ANVIL_RETRY_ATTEMPTS env (default 2). isTransientError exported + unit-tested. 3 new tests + 92 full suite pass, tsc clean, live scrape verified through the wrapper. Relay is now resilient to a single anvil hiccup. Refilled relay-obs (per-turn [out] structured log for 24/7 debuggability)."
     }
   ]
 }
