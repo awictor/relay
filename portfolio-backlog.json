@@ -486,6 +486,14 @@
       "status": "done",
       "repo": "relay",
       "task": "README What-you-can-text-it / HELP already updated by DEV-0023? Verify /reset (+/clear) is documented in README (commands list) same as /start /help. If HELP shows it but README doesnt, add a one-liner so the command surface is consistent across README + in-bot help. Doc-only. [DONE: README Commands line documents /start /help /reset(+/clear); matches in-bot HELP]"
+    },
+    {
+      "id": "status-prefix-fix",
+      "stream": "relay",
+      "value": "low",
+      "status": "done",
+      "repo": "relay",
+      "task": "Fix concurrent DEV-0024 /status bug: prefix was always ✅ even when browser DOWN (emoji contradicted body). Now ⚠️ when anvilOk false. [DONE: src/lib/status.ts prefix per-state; 2 tests assert it; 148 suite pass]"
     }
   ],
   "history": [
@@ -664,6 +672,9 @@
     },
     {
       "event": "relay-reset-onboarding done: README now documents /reset (+/clear) in a Commands line, consistent with the in-bot HELP/START (DEV-0023). Doc-only. NOW GENUINELY DRY: only df-owner-summary remains and it is BLOCKED on gh-billing (cant capture PR#1 CI result until Actions runs). All buildable/testable/doc work across all 3 repos is complete. Not refilling with invented cosmetic work — per loop rules, STOP and name the owner-blocker."
+    },
+    {
+      "event": "status-prefix-fix (reactive, found this run): concurrent loop DEV-0024 shipped /status but its formatStatus always prefixed ✅ even when browser DOWN — a contradictory health line. Fixed to ⚠️ when anvilOk false; updated 2 status tests to assert prefix-per-state. 148 full suite pass, tsc clean. Also confirmed /reset (DEV-0023) + /status (DEV-0024) both committed + consistent (statusLine wired in index.ts). df-owner-summary STILL blocked: mcp-forge Actions still billing-failing (4s job-wont-start on PR#1). No non-owner-gated work remains besides reactive fixes to concurrent commits."
     }
   ]
 }
