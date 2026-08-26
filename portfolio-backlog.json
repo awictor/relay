@@ -21,7 +21,15 @@
   },
   "owner_blockers": [
     "deploy-1 (relay): Oracle Always Free VM for 24/7 (DEPLOY.md). Owner-gated.",
-    "DataFaucet prod merge: after anvil-migration branch is proven, Alex decides when to merge + flip the flag."
+    "DataFaucet prod merge: after anvil-migration branch is proven, Alex decides when to merge + flip the flag.",
+    {
+      "id": "deploy-1",
+      "need": "Provision Oracle Always Free VM + docker compose up (DEPLOY.md ready, model default + healthcheck fixed). Relay feature-complete (10 tools, 78 tests)."
+    },
+    {
+      "id": "pr-1-merge",
+      "need": "Review + merge draft PR #1 (anvil-migration): capture+browse on anvil, 1779 gate green, prod-safe. Migration done."
+    }
   ],
   "items": [
     {
@@ -281,9 +289,17 @@
       "id": "relay-deploy-doc",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "Relay is feature-complete (6 fetch tools, memory, safety, SMS formatting, 78 tests) but only runs on Alex machine. Tighten DEPLOY.md into a copy-paste 24/7 runbook for the free Oracle Always Free VM: exact steps to install Node 22 + Chrome, run anvil (docker compose), run relay (pm2 or systemd unit incl. env + auto-restart), and a healthcheck. This is the last gap between built and live-for-users. (Actual provisioning stays owner-gated deploy-1.)"
+      "task": "Relay is feature-complete (6 fetch tools, memory, safety, SMS formatting, 78 tests) but only runs on Alex machine. Tighten DEPLOY.md into a copy-paste 24/7 runbook for the free Oracle Always Free VM: exact steps to install Node 22 + Chrome, run anvil (docker compose), run relay (pm2 or systemd unit incl. env + auto-restart), and a healthcheck. This is the last gap between built and live-for-users. (Actual provisioning stays owner-gated deploy-1.) [DONE: fixed compose GEMINI_MODEL default (invalid gemini-2.0-flash -> gemini-flash-lite-latest), added relay healthcheck, DEPLOY.md Health/troubleshooting section; compose parses clean]"
+    },
+    {
+      "id": "deploy-1",
+      "stream": "relay",
+      "value": "medium",
+      "status": "owner_blocked",
+      "repo": "relay",
+      "task": "[OWNER ACTION] Provision Oracle Cloud Always Free VM + run stack per DEPLOY.md (docker compose up -d). Only Alex can create the VM + hold the 3 secrets. Then loop can do a real inbound-text e2e. Last step to live-for-users."
     }
   ],
   "history": [
@@ -375,6 +391,9 @@
     },
     {
       "event": "relay-tool-routing done: tool-surface + dispatch regression tests (test/agent-dispatch.test.ts) — asserts the 10-tool surface (names/desc/params) and that runAgent wires each tool to the right backend call. 8 tests, 78 full suite pass, tsc clean. Guards the growing tool set against wiring regressions. Refilled relay-deploy-doc [medium] — 24/7 runbook (last gap between built + live)."
+    },
+    {
+      "event": "relay-deploy-doc done: fixed a real deploy bug (compose defaulted GEMINI_MODEL to invalid gemini-2.0-flash -> gemini-flash-lite-latest), added relay liveness healthcheck + DEPLOY.md Health/troubleshooting section; compose parses clean. Relay deploy-ready. Remaining high-value work is OWNER-GATED: provision VM (deploy-1) + merge PR #1. Recorded both owner_blockers."
     }
   ]
 }
