@@ -42,7 +42,8 @@ yourself see [Guided demo](#guided-demo).
 **The connection is literal, not aspirational:** the anvil connect logic (session-URL builder +
 transient-error taxonomy) lives once as `src/lib/anvil-client.ts` in Relay and is **vendored
 byte-identical** into DataFaucet, enforced by a parity test in both repos. One source of truth for
-how anything talks to anvil.
+how anything talks to anvil. The full map of what's shared vs Relay-local is in
+**[SHARED.md](SHARED.md)**.
 
 **Safety:** Relay drives a real browser for anyone who texts it, so the blast radius is bounded by an
 SSRF guard, a dangerous-action guard, secret redaction, a per-chat rate limit, and step caps — each

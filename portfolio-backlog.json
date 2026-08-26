@@ -1091,9 +1091,33 @@
       "id": "vendor-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m27] Document the cross-repo shared-lib map: which files are vendored-identical (parity-guarded), which are copied-then-diverged (Relay safety.ts DANGEROUS_ACTION_RE + redactText are Relay-local, not in mcp-forge), in PORTFOLIO or a SHARED.md. So future edits know which need mirroring. Closes m27."
+    },
+    {
+      "id": "parity-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m28] Decide the guard strategy for url-validator.ts + redact-secrets.ts: they differ only in comments/docstrings today. EITHER (a) make them truly byte-identical (reconcile the header + docstrings to one version in both repos) then reuse the anvil-client-parity byte-compare, OR (b) write a parity test that strips comments/whitespace before comparing CODE. Pick (a) if the comment reconciliation is small; else (b). Read test/anvil-client-parity.test.ts for the pattern + the two file pairs first; report the choice."
+    },
+    {
+      "id": "parity-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m28] Implement test/shared-lib-parity.test.ts: assert Relay url-validator.ts + redact-secrets.ts match ../mcp-forge copies per the parity-1 strategy; skip gracefully if ../mcp-forge absent (relay CI self-contained), like anvil-client-parity. Verify it PASSES now (post-m27 alignment) and would FAIL on a deliberate 1-char drift (prove the guard bites)."
+    },
+    {
+      "id": "parity-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m28] Mirror the parity test into mcp-forge (anvil-migration) so BOTH repos guard the pair (like anvil-client-parity is bidirectional), wire into test:unit, and update SHARED.md moving url-validator + redact-secrets from section 2 (manual) to section 1 (guarded). Closes m28. mcp-forge anvil-migration only, NEVER master."
     }
   ],
   "history": [
@@ -1488,10 +1512,13 @@
     },
     {
       "event": "m27 vendor-2 DONE: audited the vendored pairs. url-validator.ts Relay<->mcp-forge: CODE identical (trailing-dot fix now in both), only comment/docstring differences — OK. redact-secrets.ts: REAL DRIFT found — Relays SENSITIVE_KEY_RE caught authorization|^auth$|_auth$|bearer, mcp-forges did NOT (a captured Authorization/bearer body field would leak). FIXED mcp-forge (anvil-migration): aligned the regex to Relays superset; consequence: auth object now redacted wholesale (safer); updated nested test to non-auth key + added auth/bearer coverage. test:unit 1843 pass. NOTE: redactText AQ./sk-ant additions from m26 live in Relays safety.ts (Relay-LOCAL, not the shared redact-secrets lib) so no mirror needed there. call-tested TRUE. vendor-3 = document the shared-lib map (identical+guarded vs Relay-local)."
+    },
+    {
+      "event": "m27 vendor-3 DONE + m27-vendor-consistency COMPLETE. vendor-3: SHARED.md written — the cross-repo shared-lib map: (1) vendored-identical+parity-guarded = anvil-client.ts; (2) copied-and-must-mirror (no guard yet) = url-validator.ts + redact-secrets.ts; (3) Relay-local = safety.ts (isDangerousAction/redactText/checkRateLimit). Linked from PORTFOLIO. m27 done_when met: SSRF fix mirrored (vendor-1), redact-secrets drift found+aligned (vendor-2), shared-lib state documented (vendor-3). ROADMAP advanced -> AUTHORED m28-parity-guards (enforce the kept-identical contract for url-validator+redact-secrets with parity tests like anvil-client, so drift fails CI not silently — SHARED.md itself flagged this as the follow-up). Seeded parity-1/2/3. 24th self-directed milestone."
     }
   ],
   "roadmap": {
-    "current": "m27-vendor-consistency",
+    "current": "m28-parity-guards",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1678,6 +1705,13 @@
         "id": "m27-vendor-consistency",
         "goal": "Close the cross-repo drift the safety audit exposed + prove the vendoring contract actually holds. The trailing-dot SSRF fix + the redaction fixes landed in Relay but url-validator.ts is vendored identical into mcp-forge (per its header) — so the copies now DIFFER, which is exactly the drift the parity tests exist to catch. Mirror the safety fixes into mcp-forge (anvil-migration only), and do a repo-wide pass confirming every vendored/shared lib (anvil-client, url-validator, redact-secrets, capture heuristics) is either truly identical + parity-guarded, or documented as intentionally-diverged. Consistency + supply-chain hygiene across the stack.",
         "done_when": "the trailing-dot SSRF fix (+ any redaction fix that applies) is mirrored into mcp-forge url-validator on anvil-migration with tests, test:unit green; a documented check confirms each cross-repo shared lib is identical+parity-guarded OR intentionally-diverged-with-reason; NEVER touch master",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m28-parity-guards",
+        "goal": "Make the kept-identical contract ENFORCED, not manual. m27 documented (SHARED.md) that url-validator.ts + redact-secrets.ts are copied-and-must-mirror between Relay and DataFaucet with NO automated guard — and the audit found they had actually drifted. anvil-client already has a byte-parity test in both repos; give these two the same treatment so a future edit that forgets to mirror fails CI instead of silently splitting the SSRF/redaction behavior across the two products. The change is test-only + additive (no runtime behavior change).",
+        "done_when": "a parity test in Relay asserts url-validator.ts + redact-secrets.ts match the mcp-forge copies (skips gracefully if ../mcp-forge absent, like anvil-client-parity); if a byte-diff is too strict for the doc-comment differences, the guard normalizes comments OR the files are made truly byte-identical; tsc + suite green; SHARED.md updated to move these from manual to guarded",
         "status": "todo",
         "owner_gated": false
       }
