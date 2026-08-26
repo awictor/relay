@@ -74,6 +74,7 @@ texts back a phone-friendly answer.
 ```bash
 npm test              # 350+ offline unit/wiring tests (no keys, no anvil)
 npm run e2e:live      # LIVE end-to-end: real Gemini + anvil across canonical errands
+npm run e2e:faults    # LIVE fault drills: induce real failures, assert it fails soft
 npm run status        # offline health: what's scheduled/saved/watched + is anvil up
 ```
 
@@ -86,6 +87,13 @@ real agent (Gemini + anvil) through the canonical errands — a deterministic **
   safe to run in an offline pipeline — hence it's the deploy smoke test to run once the VM is up.
 - Needs `.env` filled (`GEMINI_API_KEY`) + anvil reachable at `ANVIL_BASE_URL`
   (default `http://localhost:3000`) to actually exercise the pipe; exits non-zero if a live case fails.
+
+`npm run e2e:faults` (`scripts/e2e-faults.mjs`) is the **fault-injection** counterpart: it induces
+REAL failures through the live agent and asserts the bot fails *soft* — anvil unreachable (dead base
+URL), a blocked/SSRF URL, and anvil dying mid-session (browse ok, then the read throws). Each drill
+asserts the user-facing reply carries no raw internals (ECONNREFUSED/host/`Blocked URL`/stack) and
+that nothing crashes. Same CI-safe skip (exit 0 without `GEMINI_API_KEY`). This is what turns the
+m14 degradation guarantees from unit-mock-proven into deploy-proven.
 
 The older `scripts/e2e-*.mjs` (agent-chain, schedule, recipe, digest, alert, shutdown) are
 feature-specific live/offline proofs; `e2e:live` is the consolidated deploy check.

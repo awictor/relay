@@ -69,5 +69,39 @@ console.log("\nDRILL 2: blocked/SSRF URL");
   check("friendlyError(blocked) is the unsafe-link line", /unsafe|can't open/i.test(friendlyError("Blocked URL: x")));
 }
 
+// --- Drill 3: anvil dies MID-SESSION (browse ok, then read throws transiently) -----------------
+// A flaky backend: createSession + navigate (browse) succeed, then readCurrent throws a transient
+// error — simulating anvil dropping the session underneath a multi-step task. The agent's per-tool
+// catch must surface an ERROR line to the model (not throw out of runAgent), and the final reply
+// must degrade cleanly with no raw leak.
+console.log("\nDRILL 3: anvil dies mid-session (browse ok -> read throws)");
+{
+  let navigated = false;
+  const flakyBackend = {
+    scrape: async () => { throw new Error("socket hang up"); },
+    createSession: async () => ({ id: "drill-sess" }),
+    navigate: async (_id, url) => { navigated = true; return { url, title: "Example" }; },
+    click: async () => {},
+    type: async () => {},
+    readCurrent: async () => { throw new Error("read failed: ECONNRESET (anvil session gone)"); },
+    releaseSession: async () => {},
+    discoverLinks: async () => [],
+    fetchJson: async () => { throw new Error("socket hang up"); },
+  };
+  let threw = false, reply = "";
+  try {
+    const res = await runAgent("Open https://example.com then read the page and summarize it.", { llm, backend: flakyBackend });
+    reply = res.reply;
+  } catch (e) {
+    threw = true;
+    reply = friendlyError(e instanceof Error ? e.message : String(e));
+  }
+  console.log(`  navigated=${navigated} reply: ${String(reply).slice(0, 160).replace(/\n/g, " ")}`);
+  check("browse succeeded before the mid-session failure", navigated);
+  check("runAgent did not throw (per-tool catch handled the dead read)", !threw);
+  check("final reply leaks no raw ECONNRESET/session internals", !RAW_LEAK.test(String(reply)) && !/ECONNRESET|session gone/i.test(String(reply)), reply);
+  check("a mid-session transient classifies as 'browser'", classifyFailure("read failed: ECONNRESET") === "browser");
+}
+
 console.log(`\n${ok}/${total} fault assertions passed.`);
 process.exit(ok === total ? 0 : 1);

@@ -867,9 +867,33 @@
       "id": "fault-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m18] Add an anvil-dies-mid-session drill if feasible: start a real errand, kill/close the anvil session underneath (or simulate via a backend whose 2nd call throws a transient), assert the agents per-tool catch surfaces an error line to the model and the final reply degrades gracefully (no unhandled throw). Document npm run e2e:faults in README Verify. Closes m18."
+    },
+    {
+      "id": "df-anvil-1",
+      "stream": "datafaucet",
+      "value": "high",
+      "status": "todo",
+      "repo": "mcp-forge",
+      "task": "[m19] AUDIT mcp-forge anvil-migration: cd C:/Users/acwic/mcp-forge, git checkout anvil-migration (create off master if missing — but it exists per PR #1). Read browser-backend.ts + the browser routes; confirm how BROWSER_BACKEND=anvil selects the anvil path + what the anvil session/connect flow is (should mirror Relays src/anvil.ts / the vendored anvil-client.ts). List the exact call path a live probe must drive. NEVER commit to master."
+    },
+    {
+      "id": "df-anvil-2",
+      "stream": "datafaucet",
+      "value": "high",
+      "status": "todo",
+      "repo": "mcp-forge",
+      "task": "[m19] Write a CI-safe live probe (scripts/anvil-live-probe.* on anvil-migration) that sets BROWSER_BACKEND=anvil + ANVIL_BASE_URL, probes /v1/live (SKIP+exit0 if down), then drives the real anvil-backed path (start session -> navigate/scrape a deterministic page like example.com -> release) and asserts real content. Report call-tested. Commit to anvil-migration, push origin anvil-migration (NEVER master)."
+    },
+    {
+      "id": "df-anvil-3",
+      "stream": "datafaucet",
+      "value": "medium",
+      "status": "todo",
+      "repo": "mcp-forge",
+      "task": "[m19] Confirm the DEFAULT (browserbase) path is byte-unchanged when BROWSER_BACKEND is unset/browserbase — run the unit gate (npm run test:unit) on anvil-migration + assert the flag-off code path is identical to master (git diff master -- the browser-backend selection). Document the live-anvil verification result. Closes m19."
     }
   ],
   "history": [
@@ -1189,10 +1213,13 @@
     },
     {
       "event": "m18 fault-1+2 DONE: scripts/e2e-faults.mjs (npm run e2e:faults) — real fault-injection drills through the REAL agent, CI-safe SKIP if no GEMINI_API_KEY. Drill 1 anvil-unreachable: set ANVIL_BASE_URL to a dead port BEFORE importing agent (anvil.ts captures BASE at load), run a real scrape errand -> agent degraded gracefully (reply: network error, try again), NO crash, NO raw ECONNREFUSED/host leak. Drill 2 blocked/SSRF (169.254.169.254 metadata) -> agent refused cleanly, no raw Blocked-URL leak. Both also assert classifyFailure/friendlyError tag browser/blocked correctly. LIVE 8/8 assertions pass, exit 0. tsc clean, 368 unit pass. call-tested TRUE. Proves degradation is deploy-proven, not just unit-mock-proven."
+    },
+    {
+      "event": "m18 fault-3 DONE + m18-fault-drills COMPLETE. fault-3: anvil-dies-mid-session drill added to e2e-faults.mjs — injected flaky backend (createSession+navigate OK, readCurrent throws ECONNRESET), real Gemini run -> browse succeeded, runAgent did NOT throw (per-tool catch handled dead read), final reply degraded cleanly no raw leak. README documents npm run e2e:faults (3 drills: anvil-unreachable, blocked/SSRF, mid-session-death). LIVE 12/12 assertions, exit 0. 368 unit pass, tsc clean. Degradation now DEPLOY-proven across all 3 fault classes. ROADMAP advanced -> AUTHORED m19-datafaucet-anvil-live (prove the SECOND product runs on anvil live, on anvil-migration branch + flag-gated, prod sacred). Seeded df-anvil-1/2/3 — re-engages the flagship shared-browser thesis for DataFaucet without needing the owner PR merge. 15th self-directed milestone."
     }
   ],
   "roadmap": {
-    "current": "m18-fault-drills",
+    "current": "m19-datafaucet-anvil-live",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1316,6 +1343,13 @@
         "id": "m18-fault-drills",
         "goal": "Prove the degradation paths hold under REAL induced failure, not just unit mocks. m14 made Relay fail soft and unit-tested it with injected throwing deps; but nobody has killed anvil mid-errand against the live stack and confirmed the user gets the friendly line + the worker survives. Build a fault-injection drill harness (CI-safe skip like e2e-live) that induces real faults — anvil unreachable, anvil dies mid-session, a bad/blocked URL — through the REAL agent path and asserts the friendly classification + no crash. Closes the gap between unit-proven and deploy-proven for the failure modes.",
         "done_when": "a `npm run e2e:faults` (scripts/e2e-faults.mjs) induces >=2 real faults (anvil-unreachable via a dead base URL; a blocked/SSRF URL) through the real agent + friendlyError path and asserts the correct friendly category came back, NOT a raw error/crash; SKIPs cleanly (exit 0) when GEMINI_API_KEY absent so offline CI is unaffected; documented in README Verify",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m19-datafaucet-anvil-live",
+        "goal": "Prove the SECOND product actually runs on anvil — live, not just typechecked. DataFaucets anvil backend (BROWSER_BACKEND=anvil) exists on the anvil-migration branch behind the flag, but the loop has only ever live-verified Relay<->anvil. The shared-browser thesis (both products, no vendor) is unproven for DataFaucet until its anvil path drives real anvil and returns real output. Do it on the anvil-migration branch ONLY, flag-gated, browserbase default byte-identical — a CI-safe live probe (skip if anvil down) that flips BROWSER_BACKEND=anvil and exercises the real capture/browse path against local anvil. NEVER touch master.",
+        "done_when": "a CI-safe live probe on mcp-forge anvil-migration flips BROWSER_BACKEND=anvil, drives the real anvil-backed browser path (session create -> navigate/scrape -> release) against local anvil, and asserts real output; SKIPs (exit 0) when anvil down; the DEFAULT browserbase path is confirmed unchanged (flag off = untouched); prod/master never touched",
         "status": "todo",
         "owner_gated": false
       }
