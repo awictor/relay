@@ -71,14 +71,14 @@
       "repo": "datafaucet",
       "status": "todo",
       "value": "high",
-      "task": "ELEVATED to THE migration path (puppeteer.connect blocked). VERIFIED anvil HAR works via pure REST: create session -> POST /v1/har/start -> POST /v1/actions/navigate -> /v1/har/stop -> GET /v1/har returned 18 entries for jsonplaceholder, no puppeteer.connect. NEXT: on branch anvil-migration, add an anvil-HAR capture path to auto-scan that (1) navigates the crawl pages via /v1/actions/navigate, (2) collects requests from HAR, (3) maps HAR entries -> the scan output {method,url,headers,body} DataFaucet expects. First: confirm exact HAR entry shape (my probe hit e.request undefined — GET /v1/har and log one entry’s keys)."
+      "task": "UNBLOCKED (syn-1d done): anvil HAR now returns requestHeaders+requestBody+resourceType+url+method. BUILD on branch anvil-migration: when BROWSER_BACKEND=anvil, capture via HAR instead of puppeteer.connect — POST /v1/har/start, drive the crawl via /v1/actions/navigate (+link discovery via /v1/actions/evaluate document.querySelectorAll(a)), /v1/har/stop, GET /v1/har, then map entries -> the scan output DataFaucet emits (filter isApi like auto-scan NOISE/isApi rules, redact secrets, dedupe). This replaces the puppeteer request-interception the browserbase path uses. Reuse auto-scan filtering heuristics."
     },
     {
       "id": "syn-1d",
       "repo": "datafaucet",
-      "status": "todo",
+      "status": "done",
       "value": "medium",
-      "task": "Prereq for syn-1c: dump one anvil HAR entry’s full shape (GET /v1/har after a navigate) and document the field path to method/url/headers/postData, so the HAR->scan mapping in syn-1c is exact. anvil HAR is standard HAR 1.2 (log.entries[].request.{method,url,headers[],postData.text}) — confirm against live output."
+      "task": "DONE: anvil HAR was flat (url/method/status/size/timing only — no headers/body). ENHANCED anvil (4271aeb) so HAR entries now include requestHeaders + requestBody(postData) + resourceType. Verified live: 17 request headers on a doc fetch. anvil HAR entry shape: {url,method,status,duration,responseSize,timestamp,requestHeaders:{}, requestBody?:string, resourceType}. This gives DataFaucet capture everything it needs (auth headers + POST bodies), unblocking syn-1c."
     },
     {
       "id": "relay-quota",
@@ -86,6 +86,13 @@
       "status": "done",
       "value": "medium",
       "task": "DONE: switched default model to gemini-flash-lite-latest (higher free cap) + automatic model FAILOVER in GeminiClient — on 429/403 quota it advances through a chain (lite -> flash-latest -> 2.5-flash-lite -> 2.5-flash), each with its own free quota; transient 503/504/500 still retry w/ backoff on the same model. GEMINI_MODELS env overrides the chain. 3 failover unit tests. 23/23 green."
+    },
+    {
+      "id": "syn-1e",
+      "repo": "anvil",
+      "status": "todo",
+      "value": "low",
+      "task": "anvil HAR: also record response content-type + (optional, capped) response body preview, so DataFaucet can classify JSON endpoints without a second fetch. Low priority — url/headers/method already enough for capture."
     }
   ],
   "history": [
@@ -108,6 +115,10 @@
     {
       "item": "model failover",
       "note": "Gemini free-tier quota exhausted on flash. Fix: default to -lite (higher cap) + automatic failover chain on 429 across independent-quota models. 3 tests. Worker restarted."
+    },
+    {
+      "item": "syn-1d",
+      "note": "anvil HAR was flat; enhanced anvil (4271aeb) to include requestHeaders/requestBody/resourceType — verified live. Unblocks syn-1c (HAR-based DataFaucet capture now has headers+body)."
     }
   ]
 }
