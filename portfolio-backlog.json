@@ -1099,7 +1099,7 @@
       "id": "parity-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m28] Decide the guard strategy for url-validator.ts + redact-secrets.ts: they differ only in comments/docstrings today. EITHER (a) make them truly byte-identical (reconcile the header + docstrings to one version in both repos) then reuse the anvil-client-parity byte-compare, OR (b) write a parity test that strips comments/whitespace before comparing CODE. Pick (a) if the comment reconciliation is small; else (b). Read test/anvil-client-parity.test.ts for the pattern + the two file pairs first; report the choice."
     },
@@ -1107,7 +1107,7 @@
       "id": "parity-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m28] Implement test/shared-lib-parity.test.ts: assert Relay url-validator.ts + redact-secrets.ts match ../mcp-forge copies per the parity-1 strategy; skip gracefully if ../mcp-forge absent (relay CI self-contained), like anvil-client-parity. Verify it PASSES now (post-m27 alignment) and would FAIL on a deliberate 1-char drift (prove the guard bites)."
     },
@@ -1515,6 +1515,9 @@
     },
     {
       "event": "m27 vendor-3 DONE + m27-vendor-consistency COMPLETE. vendor-3: SHARED.md written — the cross-repo shared-lib map: (1) vendored-identical+parity-guarded = anvil-client.ts; (2) copied-and-must-mirror (no guard yet) = url-validator.ts + redact-secrets.ts; (3) Relay-local = safety.ts (isDangerousAction/redactText/checkRateLimit). Linked from PORTFOLIO. m27 done_when met: SSRF fix mirrored (vendor-1), redact-secrets drift found+aligned (vendor-2), shared-lib state documented (vendor-3). ROADMAP advanced -> AUTHORED m28-parity-guards (enforce the kept-identical contract for url-validator+redact-secrets with parity tests like anvil-client, so drift fails CI not silently — SHARED.md itself flagged this as the follow-up). Seeded parity-1/2/3. 24th self-directed milestone."
+    },
+    {
+      "event": "m28 parity-1+2 DONE. parity-1 STRATEGY: comment-strip CODE compare (NOT byte-identical — each repos header legitimately differs: Relays says Copied-from-mcp-forge). parity-2: test/shared-lib-parity.test.ts — codeOnly() strips //+block comments+blank lines+collapses whitespace, then url-validator.ts + redact-secrets.ts CODE must match ../mcp-forge; skips if mcp-forge absent (self-contained CI) like anvil-client-parity. Found + fixed one last cosmetic drift: redact-secrets urlencoded key parse (const [key]=split vs const key=split[0]??\"\") — aligned mcp-forge to Relays safer form (committed anvil-migration). PROVED THE GUARD BITES: injected 1-char drift -> FAIL, restored -> pass. Relay 475 pass, mcp-forge 1843 pass, tsc clean. call-tested TRUE. parity-3 = mirror the guard into mcp-forge (bidirectional) + move url-validator/redact-secrets from SHARED.md section-2-manual to section-1-guarded."
     }
   ],
   "roadmap": {
