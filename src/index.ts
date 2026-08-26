@@ -2,7 +2,7 @@
 // Per-chat short memory so follow-ups have context. Falls back to a clear message
 // if keys/anvil are missing so it never hangs silently.
 
-import { startPolling, sendMessage, sendPhoto, sendDocument, sendTyping, hasToken } from "./telegram.js";
+import { telegramChannel, type Channel } from "./channel.js";
 import { anvilLive } from "./anvil.js";
 import { GeminiClient } from "./llm.js";
 import type { LLMMessage } from "./llm.js";
@@ -19,6 +19,13 @@ import { ScheduleStore, parseSchedule } from "./lib/schedule.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
 
 const llm = new GeminiClient();
+
+// The transport Relay runs on (m5). Telegram today; a Channel-selecting env comes in chan-3.
+const channel: Channel = telegramChannel;
+const sendMessage = (chatId: number, text: string) => channel.sendMessage(chatId, text);
+const sendTyping = (chatId: number) => channel.sendTyping ? channel.sendTyping(chatId) : Promise.resolve();
+const sendPhoto = channel.sendPhoto ? channel.sendPhoto.bind(channel) : undefined;
+const sendDocument = channel.sendDocument ? channel.sendDocument.bind(channel) : undefined;
 
 // Process start, for /status uptime (DEV-0024). Anvil reachability is kept fresh by a periodic
 // pinger (DEV-0025) instead of a boot-only seed, so /status doesn't go stale when the browser drops.
@@ -90,8 +97,8 @@ const handle = createHandler({
 });
 
 async function main() {
-  if (!hasToken()) {
-    console.error("TELEGRAM_BOT_TOKEN not set — copy .env.example to .env and fill it in.");
+  if (!channel.ready()) {
+    console.error(`Channel "${channel.name}" not configured (e.g. TELEGRAM_BOT_TOKEN) — copy .env.example to .env and fill it in.`);
     process.exit(1);
   }
   await anvilPinger.tick();            // seed reachability now
@@ -104,8 +111,8 @@ async function main() {
   scheduleRunner.start();              // fire proactive/scheduled tasks (no-op if RELAY_SCHED_TICK_MS=0)
   if (SCHED_TICK_MS > 0) console.log(`schedule runner on (${schedules.size()} pending, tick ${SCHED_TICK_MS}ms)`);
 
-  console.log("Relay polling Telegram…");
-  const poller = startPolling(handle);
+  console.log(`Relay listening on ${channel.name}…`);
+  const poller = channel.start(handle);
   // Clean stop on docker stop / pm2 restart / Ctrl-C: halt polling, exit 0. Memory is
   // already durable (MemoryStore persists synchronously each turn).
   installSignalHandlers(createShutdown({
