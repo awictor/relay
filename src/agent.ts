@@ -65,6 +65,18 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "search",
+    description: "Open a search or listing page and get back candidate result links (deduped, same-site preferred, capped). Use when the user names WHAT they want but not the exact URLs — then extract/compare across the returned links. Provide a search-results URL (build the site's query URL, e.g. https://news.ycombinator.com/newest or a site search).",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Absolute http(s) URL of a search/listing page" },
+        limit: { type: "number", description: "Max links to return (default 10, max 20)" },
+      },
+      required: ["url"],
+    },
+  },
+  {
     name: "reply",
     description: "Send the final answer to the user and end the task. Call exactly once when done or when you must report you cannot complete it.",
     parameters: { type: "object", properties: { text: { type: "string", description: "Message to send the user" } }, required: ["text"] },
@@ -72,6 +84,7 @@ export const TOOLS: ToolSpec[] = [
 ];
 
 const MAX_COMPARE_URLS = 5;
+const MAX_SEARCH_LINKS = 20;
 
 const SYSTEM_PROMPT = `You are Relay, an assistant reached over text message. A user texts a task; use tools to accomplish it, then call "reply" with a concise, friendly answer (they're on a phone — keep it short, no markdown tables).
 
@@ -80,6 +93,7 @@ Tools:
 - "browse" (url) then "click"/"type"/"read": for tasks needing interaction (search a site, fill a form, page through results). "read" returns the current page after your actions.
 - "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
 - "compare" (urls, fields): fetch several pages and extract the same fields from each; returns a JSON array. Use when the user wants to compare data points across multiple links.
+- "search" (url): open a search/listing page and get candidate result links back. Use when the user knows WHAT they want but not the exact URLs — build the site's search URL, call search, then extract/compare across the returned links.
 - "reply" (text): finish.
 
 Rules:
@@ -97,6 +111,7 @@ export interface BrowserBackend {
   type(sessionId: string, selector: string, text: string): Promise<void>;
   readCurrent(sessionId: string): Promise<{ title: string; content: string; url: string }>;
   releaseSession(sessionId: string): Promise<void>;
+  discoverLinks(url: string, limit?: number): Promise<string[]>;
 }
 
 const defaultBackend: BrowserBackend = {
@@ -107,6 +122,7 @@ const defaultBackend: BrowserBackend = {
   type: (id, sel, text) => anvil.type(id, sel, text),
   readCurrent: (id) => anvil.readCurrent(id),
   releaseSession: (id) => anvil.releaseSession(id),
+  discoverLinks: (url, limit) => anvil.discoverLinks(url, limit),
 };
 
 export interface AgentDeps {
@@ -248,6 +264,36 @@ export async function runAgent(
         const note = skipped.length || rawUrls.length > MAX_COMPARE_URLS
           ? ` (skipped ${skipped.length} unsafe; capped at ${MAX_COMPARE_URLS})` : "";
         push("compare", `COMPARED ${rows.length} pages${note}:\n${JSON.stringify(rows, null, 2)}`);
+        continue;
+      }
+
+      if (call.name === "search") {
+        const url = String(call.args.url ?? "");
+        const limit = Math.max(1, Math.min(MAX_SEARCH_LINKS, Number(call.args.limit) || 10));
+        const safe = isUrlSafe(url);
+        if (!safe.safe) { push("search", `ERROR: refused (${safe.reason}).`); continue; }
+        try {
+          const found = await backend.discoverLinks(url, MAX_SEARCH_LINKS * 2);
+          // Prefer same-host result links (drop nav/offsite noise); SSRF-filter; dedup; cap.
+          let host = "";
+          try { host = new URL(url).hostname; } catch {}
+          const sameHost = found.filter((h) => { try { return new URL(h).hostname === host; } catch { return false; } });
+          const pool = sameHost.length >= 3 ? sameHost : found; // fall back to all if same-host too thin
+          const seenL = new Set<string>();
+          const links: string[] = [];
+          for (const h of pool) {
+            if (h.split("?")[0] === url.split("?")[0]) continue; // skip the search page itself
+            if (seenL.has(h)) continue;
+            seenL.add(h);
+            if (!isUrlSafe(h).safe) continue;
+            links.push(h);
+            if (links.length >= limit) break;
+          }
+          if (links.length === 0) { push("search", `No candidate links found on ${url}.`); continue; }
+          push("search", `FOUND ${links.length} links on ${url}:\n${JSON.stringify(links, null, 2)}\nUse extract/compare on these.`);
+        } catch (e) {
+          push("search", `ERROR searching ${url}: ${e instanceof Error ? e.message : String(e)}`);
+        }
         continue;
       }
 

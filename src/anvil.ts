@@ -137,6 +137,33 @@ export async function readCurrent(sessionId: string): Promise<{ content: string;
 }
 
 /**
+ * Harvest anchor hrefs from a page. Creates a session, navigates, evaluates the
+ * DOM for links, releases. Returns absolute URLs (best-effort, deduped, capped).
+ * SSRF-guarded on the entry url; callers must still SSRF-filter harvested links.
+ */
+export async function discoverLinks(url: string, limit = 30): Promise<string[]> {
+  const check = isUrlSafe(url);
+  if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
+  const session = await createSession();
+  try {
+    await navigate(session.id, url, "domcontentloaded");
+    await new Promise((r) => setTimeout(r, 600));
+    const script = `Array.from(document.querySelectorAll('a[href]')).map(a=>a.href).filter(h=>/^https?:/.test(h)).slice(0, ${Math.max(1, Math.min(200, limit))})`;
+    const r = await action(session.id, "/v1/actions/evaluate", { script });
+    const links = Array.isArray(r) ? r : [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const h of links) {
+      const s = String(h).split("#")[0]!;
+      if (!seen.has(s)) { seen.add(s); out.push(s); }
+    }
+    return out;
+  } finally {
+    await releaseSession(session.id);
+  }
+}
+
+/**
  * Fetch a page's text: create a session, navigate (domcontentloaded — fast, and
  * avoids the networkidle2 hang that anvil's REST /v1/scrape forces with a 60s cap),
  * read the rendered text, release. SSRF-guarded first. Returns { content, title, url }.
