@@ -69,9 +69,9 @@
     {
       "id": "syn-1c",
       "repo": "datafaucet",
-      "status": "todo",
+      "status": "done",
       "value": "high",
-      "task": "UNBLOCKED (syn-1d done): anvil HAR now returns requestHeaders+requestBody+resourceType+url+method. BUILD on branch anvil-migration: when BROWSER_BACKEND=anvil, capture via HAR instead of puppeteer.connect — POST /v1/har/start, drive the crawl via /v1/actions/navigate (+link discovery via /v1/actions/evaluate document.querySelectorAll(a)), /v1/har/stop, GET /v1/har, then map entries -> the scan output DataFaucet emits (filter isApi like auto-scan NOISE/isApi rules, redact secrets, dedupe). This replaces the puppeteer request-interception the browserbase path uses. Reuse auto-scan filtering heuristics."
+      "task": "DONE + VERIFIED LIVE: HAR-based capture in auto-scan for BROWSER_BACKEND=anvil. har/start -> crawl via /v1/actions/navigate + link-discovery via evaluate -> har/stop -> GET /v1/har -> shared processRequest() (same NOISE/isApi/redact/dedup as puppeteer path). Default browserbase path unchanged. Ran DataFaucet :3100 in anvil mode vs jsonplaceholder (10 pages) -> captured endpoint via HAR, zero Browserbase, no puppeteer.connect. Branch anvil-migration b827cfd1."
     },
     {
       "id": "syn-1d",
@@ -93,6 +93,13 @@
       "status": "todo",
       "value": "low",
       "task": "anvil HAR: also record response content-type + (optional, capped) response body preview, so DataFaucet can classify JSON endpoints without a second fetch. Low priority — url/headers/method already enough for capture."
+    },
+    {
+      "id": "syn-1f",
+      "repo": "datafaucet",
+      "status": "todo",
+      "value": "medium",
+      "task": "Harden anvil HAR capture: (1) verify vs a real API-heavy SPA (jsonplaceholder homepage is static -> only 1 endpoint captured); (2) the puppeteer path clicks safe buttons to trigger more XHRs — anvil path only navigates+reads links; decide if anvil needs click-through via /v1/actions/click behind a DANGEROUS guard, or if nav-only is acceptable."
     }
   ],
   "history": [
@@ -119,6 +126,10 @@
     {
       "item": "syn-1d",
       "note": "anvil HAR was flat; enhanced anvil (4271aeb) to include requestHeaders/requestBody/resourceType — verified live. Unblocks syn-1c (HAR-based DataFaucet capture now has headers+body)."
+    },
+    {
+      "item": "syn-1c",
+      "note": "HAR-based DataFaucet capture on anvil verified live end-to-end (jsonplaceholder, anvil mode, no Browserbase/puppeteer.connect). Core synergy works. Remaining: syn-2 (start/stop/debug routes + live-view), syn-3 (tests + PR), syn-1f (harden)."
     }
   ]
 }
