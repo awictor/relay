@@ -18,7 +18,7 @@
     { "id": "scaffold", "status": "done", "value": "high", "task": "TS project (package.json/tsconfig/gitignore/.env.example), copied libs (redact-secrets, url-validator), anvil client, telegram transport, stub index, unit test, backlog, README. Pushed to awictor/relay." },
     { "id": "anvil-1", "status": "done", "value": "high", "task": "anvil client: createSession (builds CDP ws endpoint correctly), releaseSession, withBrowser (puppeteer connect+release), scrape (REST), anvilLive probe. src/anvil.ts." },
     { "id": "tg-1", "status": "done", "value": "high", "task": "Telegram long-poll getUpdates + sendMessage. src/telegram.ts." },
-    { "id": "agent-1", "status": "todo", "value": "high", "task": "Agent loop (src/agent.ts): LLM adapter interface (LLMClient) + Gemini free-tier impl using generateContent function-calling. Tools: browse(url)->scrape text, reply(text). Bounded by RELAY_MAX_STEPS. Per-chat short memory (last N turns). Behind interface so Claude swaps in. Unit-test the tool-dispatch + step cap with a mock LLM (no network)." },
+    { "id": "agent-1", "status": "done", "value": "high", "task": "DONE: src/llm.ts (LLMClient interface + ToolSpec/ToolCall/LLMMessage; GeminiClient free-tier impl mapping to generateContent functionDeclarations, Claude-swappable) + src/agent.ts (runAgent tool loop: scrape+reply tools, SSRF guard on scrape targets, RELAY_MAX_STEPS bound, step-budget fallback, scrapeFn injectable for tests). 4 offline unit tests w/ mock LLM (scrape->reply, SSRF-block, direct-answer, no-infinite-loop). tsc + 8/8 vitest green. NOTE: per-chat memory param exists (history) but wire-1 owns populating it." },
     { "id": "wire-1", "status": "todo", "value": "high", "task": "Replace index.ts stub with the agent: inbound msg -> agent.run(chatId, text) -> tools drive anvil -> reply. First real errands: 'top HN story', 'weather in <city>'. e2e verify: text the bot, assert a coherent reply (needs all 3 keys)." },
     { "id": "safety-1", "status": "todo", "value": "medium", "task": "Safety: per-chat rate limit (RELAY_RATE_LIMIT_PER_MIN), step/time caps enforced, SSRF via isUrlSafe on every browse target, dangerous-action guard (mirror auto-scan DANGEROUS regex: delete/pay/logout/purchase/etc.) before any click/submit, redact secrets from anything echoed back or logged." },
     { "id": "agent-2", "status": "todo", "value": "medium", "task": "Richer tools: navigate+click+type via withBrowser (multi-step browsing, not just scrape), extract-structured (ask LLM to pull fields from page text). Keeps step cap + safety guard." },
@@ -26,6 +26,7 @@
     { "id": "polish-1", "status": "todo", "value": "low", "task": "UX: typing indicator (sendChatAction), /start + /help commands, friendly errors, truncation notices, basic usage log." }
   ],
   "history": [
-    { "item": "scaffold + anvil-1 + tg-1", "note": "Initial scaffold created by the build session (pre-loop). Channel->stub->anvil pipe runnable; agent loop is the next item." }
+    { "item": "scaffold + anvil-1 + tg-1", "note": "Initial scaffold created by the build session (pre-loop). Channel->stub->anvil pipe runnable; agent loop is the next item." },
+    { "item": "agent-1", "note": "Gemini agent loop + LLM adapter + 4 mock-LLM unit tests. Built offline (no keys/anvil needed). Next: wire-1 (replace index.ts stub with runAgent) — but wire-1's e2e needs TELEGRAM_BOT_TOKEN + GEMINI_API_KEY + anvil reachable (owner-blockers)." }
   ]
 }
