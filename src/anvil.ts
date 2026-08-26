@@ -12,6 +12,34 @@ function authHeaders(): Record<string, string> {
   return KEY ? { Authorization: `Bearer ${KEY}` } : {};
 }
 
+const RETRY_ATTEMPTS = Math.max(1, Number(process.env.ANVIL_RETRY_ATTEMPTS ?? 2)); // total tries
+const RETRY_BASE_MS = 400;
+
+/** True for transient anvil/network errors worth one more try — timeouts, connection
+ * resets, and 5xx. NOT for SSRF/4xx/"Blocked URL" (deterministic — retry won't help). */
+export function isTransientError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/Blocked URL|Blocked protocol|Blocked hostname|Blocked IP/i.test(msg)) return false;
+  if (/\b(4\d\d)\b/.test(msg) && !/\b(408|429)\b/.test(msg)) return false; // 4xx except 408/429
+  return /timeout|timed out|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up|network|fetch failed|\b5\d\d\b|\b408\b|\b429\b/i.test(msg);
+}
+
+/** Run an anvil op with a bounded retry on transient errors (exponential backoff).
+ * Deterministic failures (SSRF/4xx) throw immediately. */
+async function withRetry<T>(op: () => Promise<T>, label: string): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await op();
+    } catch (e) {
+      lastErr = e;
+      if (attempt >= RETRY_ATTEMPTS || !isTransientError(e)) throw e;
+      await new Promise((r) => setTimeout(r, RETRY_BASE_MS * attempt));
+    }
+  }
+  throw lastErr;
+}
+
 /** Liveness probe — used by the loop's STAGE INFRA to confirm anvil is reachable. */
 export async function anvilLive(timeoutMs = 4000): Promise<boolean> {
   try {
@@ -29,17 +57,20 @@ export interface AnvilSession {
 
 /** Create a browser session and return its id + the correctly-built CDP ws endpoint. */
 export async function createSession(opts: { headless?: boolean; stealth?: boolean } = {}): Promise<AnvilSession> {
-  const r = await fetch(`${BASE}/v1/sessions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ headless: opts.headless ?? true, stealth: opts.stealth ?? true }),
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!r.ok) {
-    throw new Error(`anvil create session failed: ${r.status} ${await r.text().catch(() => "")}`.slice(0, 300));
-  }
-  const s = (await r.json()) as { id: string };
-  if (!s.id) throw new Error("anvil create session: no id in response");
+  const s = await withRetry(async () => {
+    const r = await fetch(`${BASE}/v1/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ headless: opts.headless ?? true, stealth: opts.stealth ?? true }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) {
+      throw new Error(`anvil create session failed: ${r.status} ${await r.text().catch(() => "")}`.slice(0, 300));
+    }
+    const parsed = (await r.json()) as { id: string };
+    if (!parsed.id) throw new Error("anvil create session: no id in response");
+    return parsed;
+  }, "createSession");
 
   // Build the endpoint ourselves — the returned websocketUrl always says localhost
   // and omits the token. Derive scheme/host from BASE, append token if auth is on.
@@ -91,14 +122,16 @@ export async function withBrowser<T>(fn: (browser: import("puppeteer-core").Brow
 // then click/type, then read — across several tool calls on the same page.
 
 async function action(sessionId: string, path: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const r = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Session-Id": sessionId, ...authHeaders() },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(45000),
-  });
-  if (!r.ok) throw new Error(`anvil ${path} failed: ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`);
-  return (await r.json().catch(() => ({}))) as Record<string, unknown>;
+  return withRetry(async () => {
+    const r = await fetch(`${BASE}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Session-Id": sessionId, ...authHeaders() },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(45000),
+    });
+    if (!r.ok) throw new Error(`anvil ${path} failed: ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`);
+    return (await r.json().catch(() => ({}))) as Record<string, unknown>;
+  }, path);
 }
 
 /** Navigate the session's page to a URL. SSRF-guarded. Defaults to
