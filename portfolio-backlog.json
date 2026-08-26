@@ -384,6 +384,14 @@
       "status": "done",
       "repo": "datafaucet",
       "task": "Check whether mcp-forge has CI running the test:unit gate (incl the anvil-migration suites) on PRs. If yes, note it in the PR #1 body so a reviewer sees the gate is enforced, not just runnable. If no CI exists, that is an owner decision for the prod repo (do NOT add a workflow to mcp-forge without Alex) — record as owner_blocker instead. Investigate only; no mcp-forge master changes. [DONE: mcp-forge HAS CI (test.yml) but ran only build+playwright e2e, NOT test:unit — anvil suites were unenforced. Added a unit job running npm run test:unit (offline, verified 1786 pass locally); PR #1 body notes it. Branch-only. NOTE: mcp-forge Actions is billing-blocked (jobs wont start until Alex fixes GitHub billing) — config is correct + queued.]"
+    },
+    {
+      "id": "relay-e2e-doc",
+      "stream": "relay",
+      "value": "low",
+      "status": "todo",
+      "repo": "relay",
+      "task": "Reference the new scripts/e2e-agent-chain.mjs + scripts/e2e-extract.* in README (a short Verify section): how to run the live agent e2e (npx tsx scripts/e2e-agent-chain.mjs with .env + anvil), so a human validating the deploy has the one command. Doc-only."
     }
   ],
   "history": [
