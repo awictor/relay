@@ -539,9 +539,9 @@
       "id": "chan-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m5] Second channel adapter behind the interface: a ConsoleChannel (stdin/stdout) or a minimal Discord-webhook stub that implements Channel + has unit tests (mock IO). Proves >1 transport works with the unchanged agent/handler. Pick whichever is fully free + testable offline; ConsoleChannel is the safe first (lets you drive the real agent from a terminal, a genuine dev/demo win)."
+      "task": "[m5] Second channel adapter behind the interface: a ConsoleChannel (stdin/stdout) or a minimal Discord-webhook stub that implements Channel + has unit tests (mock IO). Proves >1 transport works with the unchanged agent/handler. Pick whichever is fully free + testable offline; ConsoleChannel is the safe first (lets you drive the real agent from a terminal, a genuine dev/demo win). [DONE: src/channels/console.ts makeConsoleChannel (injectable reader/writer) + nodeConsoleChannel (readline); 6 tests; 258 suite; proves 2nd transport on unchanged agent]"
     },
     {
       "id": "chan-3",
@@ -755,6 +755,9 @@
     },
     {
       "event": "m5 chan-1 done: Channel interface + TelegramChannel. Extracted src/channel.ts {name,start,sendMessage,send*?,ready}; telegramChannel wraps existing telegram.ts (no behavior change); index.ts now channel-driven (channel.ready/start + send fns from it), not telegram-direct. 3 tests incl a fake in-memory Channel driving the SAME handler -> agent core proven transport-agnostic. tsc clean, 252 full suite pass. Next m5: chan-2 (2nd channel adapter, e.g. ConsoleChannel)."
+    },
+    {
+      "event": "m5 chan-2 done: ConsoleChannel — 2nd transport behind Channel. makeConsoleChannel(injectable onLine/write) + nodeConsoleChannel (real readline). Line -> InboundMessage -> unchanged handler; reply written to stdout. Drives the real agent from a terminal (dev/demo). 6 unit tests (no real stdin), 258 full suite pass, tsc clean. Two transports now share one agent core. Next m5: chan-3 (index selects channel by RELAY_CHANNEL, .env.example doc, completes m5)."
     }
   ],
   "roadmap": {
