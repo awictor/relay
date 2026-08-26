@@ -45,4 +45,34 @@ describe("Metrics", () => {
     expect(s.avgSteps).toBe(0);
     expect(s.p50Ms).toBe(0);
   });
+
+  // HARDEN: the latency ring buffer (LATENCY_WINDOW=500) drops the oldest sample once full via a
+  // rotating index `li`. Nothing exercised the wraparound — a broken index could keep stale samples
+  // or double-count. Record 500 slow then 500 fast: the window must now hold ONLY the fast samples,
+  // so p50/p95 reflect the fast batch, not a blend with the evicted slow ones.
+  it("latency percentiles reflect only the last LATENCY_WINDOW (500) samples", () => {
+    const m = new Metrics();
+    for (let i = 0; i < 500; i++) m.record({ steps: 1, tools: [], elapsedMs: 1000, ok: true });
+    // Window is now full of 1000ms samples.
+    expect(m.summary().p50Ms).toBe(1000);
+    // Overwrite the entire window with 10ms samples.
+    for (let i = 0; i < 500; i++) m.record({ steps: 1, tools: [], elapsedMs: 10, ok: true });
+    const s = m.summary();
+    expect(s.p50Ms).toBe(10); // every slow sample evicted — no blend
+    expect(s.p95Ms).toBe(10);
+    // turns keeps counting past the window (it's the ring buffer that's bounded, not the totals).
+    expect(s.turns).toBe(1000);
+  });
+
+  // HARDEN: a partial overwrite must evict proportionally — record 500 slow, then 250 fast, so the
+  // window is half fast / half slow and p50 lands at the boundary (fast), p95 stays slow.
+  it("partial ring overwrite evicts the oldest half", () => {
+    const m = new Metrics();
+    for (let i = 0; i < 500; i++) m.record({ steps: 1, tools: [], elapsedMs: 1000, ok: true });
+    for (let i = 0; i < 250; i++) m.record({ steps: 1, tools: [], elapsedMs: 10, ok: true });
+    const s = m.summary();
+    // 250 fast (10ms) + 250 remaining slow (1000ms) in the 500-window: nearest-rank p50 = 10.
+    expect(s.p50Ms).toBe(10);
+    expect(s.p95Ms).toBe(1000);
+  });
 });
