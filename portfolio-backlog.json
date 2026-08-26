@@ -787,7 +787,7 @@
       "id": "e2e-live-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m15] Add a real fetch_json errand to e2e-live.mjs: agent hits a public JSON API (no key needed, e.g. a public time/weather endpoint) via the fetch_json tool through real anvil-adjacent path and asserts a parsed field appears in the reply. Assert tools used included fetch_json."
     },
@@ -1093,6 +1093,9 @@
     },
     {
       "event": "m15 e2e-live-1 DONE: scripts/e2e-live.mjs — the FIRST CI-safe live e2e (existing e2e-*.mjs exit 1 when anvil down; this SKIPs+exit0 when anvil down OR no GEMINI_API_KEY so it runs anywhere). Drives the REAL agent (Gemini+anvil) to scrape example.com (deterministic constant page) and asserts the reply contains Example Domain + a fetch tool was used. Wired npm run e2e:live (tsx). LIVE-VERIFIED: 1/1 pass, steps=2 tools=scrape, reply quoted Example Domain, exit 0; SKIP path verified exit 0 with anvil unreachable. tsc clean, 358 unit pass. call-tested: TRUE (real anvil 200, real Gemini call)."
+    },
+    {
+      "event": "m15 e2e-live-2 DONE: added a real fetch_json errand to e2e-live.mjs — agent hits open-meteo (public no-key JSON API) via the fetch_json tool and surfaces a live temperature number. Added requireTool support so this case PINS fetch_json specifically (not just any fetch). Live temp varies so assertion checks tool-use + a real number in the reply, not an exact value. LIVE-VERIFIED 2/2: scrape->Example Domain (chose extract this run, robust), fetch_json->24.1C, exit 0. tsc clean, 358 unit pass. call-tested TRUE."
     }
   ],
   "roadmap": {

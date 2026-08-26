@@ -36,6 +36,17 @@ const cases = [
     assert: (reply) => /example domain/i.test(reply),
     why: "reply mentions 'Example Domain' (example.com's constant H1)",
   },
+  {
+    name: "fetch_json (public no-key API)",
+    // open-meteo is a stable, free, no-key JSON API. The live temperature varies, so we DON'T
+    // assert an exact value — we assert the agent (a) used the fetch_json tool and (b) surfaced a
+    // real number from the JSON into its reply. Proves the direct-JSON path end to end.
+    task: "Use the JSON API at https://api.open-meteo.com/v1/forecast?latitude=51.5&longitude=-0.13&current=temperature_2m to tell me the current temperature in London. Report the number.",
+    fetchTools: ["fetch_json"],
+    requireTool: "fetch_json", // this case specifically proves the direct-JSON tool, not just any fetch
+    assert: (reply) => /-?\d+(\.\d+)?\s*(°|deg|c\b|celsius)/i.test(reply) || /\d/.test(reply),
+    why: "reply surfaces a real numeric temperature pulled from the JSON",
+  },
 ];
 
 let ok = 0;
@@ -43,12 +54,19 @@ for (const c of cases) {
   try {
     const res = await runAgent(c.task, { llm });
     const usedFetch = res.tools.some((t) => c.fetchTools.includes(t));
-    const passed = usedFetch && c.assert(res.reply);
+    // Some cases pin a SPECIFIC tool (e.g. fetch_json) to prove that exact path, not just any fetch.
+    const usedRequired = !c.requireTool || res.tools.includes(c.requireTool);
+    const passed = usedFetch && usedRequired && c.assert(res.reply);
     console.log(`\nCASE: ${c.name}`);
     console.log(`  steps=${res.steps} tools=${res.tools.join(",") || "(none)"}`);
     console.log(`  reply: ${res.reply.slice(0, 200).replace(/\n/g, " ")}`);
     if (passed) { ok++; console.log(`  PASS: ${c.why}`); }
-    else console.log(`  FAIL: expected ${c.why}${usedFetch ? "" : " (and a fetch tool was used)"}`);
+    else {
+      const miss = !usedFetch ? "no fetch tool used"
+        : !usedRequired ? `required tool '${c.requireTool}' not used`
+        : `assertion failed (${c.why})`;
+      console.log(`  FAIL: ${miss}`);
+    }
   } catch (e) {
     console.log(`\nCASE: ${c.name}\n  ERROR: ${e instanceof Error ? e.message : String(e)}`);
   }
