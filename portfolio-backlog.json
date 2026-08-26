@@ -1139,9 +1139,33 @@
       "id": "cookies-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m29] Wire + document: the agent uses seeded cookies automatically on navigate/scrape/browse for a matching host (no new user-facing tool needed if env-seeded); dangerous-action guard still blocks clicks. Add the cookie security model to SECURITY.md (host-scoped, redacted, read-oriented, user-authorized) + a .env.example RELAY_COOKIES note. Closes m29."
+    },
+    {
+      "id": "sites-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m30] cookie-jar: add jarHosts() -> distinct sorted host list from the jar (strip leading dot, dedupe). Handler: add a /sites command that replies with the configured hosts (names only) or a clear no-cookies-configured message. Wire in index.ts via a cookieHosts dep (like statusLine). Unit-test jarHosts + the handler /sites branch (empty + populated), asserting NO cookie value ever appears."
+    },
+    {
+      "id": "sites-2",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m30] Add /sites to the help/command list + commands.ts if it enumerates commands, and document it in README (the bot can be given cookies for sites you authorize; /sites shows which). Ensure /sites short-circuits before the agent like other slash commands + is counted by recordCommand."
+    },
+    {
+      "id": "sites-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m30] Consider the same cookie capability for DataFaucets anvil path (mcp-forge anvil-migration) — audit whether its browse/auto-scan routes could accept a host-scoped cookie seed for authorized capture, OR document why its out of scope (DataFaucet capture is for PUBLIC API discovery, auth-capture is a different feature). Decide + record. mcp-forge anvil-migration only if any code; NEVER master."
     }
   ],
   "history": [
@@ -1551,10 +1575,13 @@
     },
     {
       "event": "m29 cookies-2 DONE: env-seeded per-host cookie jar. src/lib/cookie-jar.ts — loadCookieJar/readJar (RELAY_COOKIES gitignored JSON {cookies:[]}, [] on absent/corrupt), cookiesForHost (host-scoped select via cookieMatchesHost), redactCookieValues (masks jar values >=4 chars -> [redacted-cookie]). navigate() now seeds matching-host cookies into the session BEFORE navigating (lazy import breaks anvil<->jar cycle; best-effort, cookie failure doesnt block nav) — so scrape/browse/discover/screenshot/pdf all inherit it via the navigate chokepoint. index.ts wraps redactText -> redactCookieValues(redactText(t)) so cookie values cant leak to logs/replies. Added RELAY_COOKIES to .env.example (env-parity gate caught it); data/ already gitignored. +8 jar tests. 489 pass, tsc clean. cookies-3 = doc the cookie security model in SECURITY.md, closes m29."
+    },
+    {
+      "event": "m29 cookies-3 DONE + m29-agent-cookies COMPLETE. cookies-3: SECURITY.md control #6 (cookie jar) — host-scoped (never cross-origin, suffix-collision rejected), redacted (values masked in logs/replies), read-oriented (dangerous-action guard still blocks acting), user-authorized+local (opt-in gitignored file, off by default). m29 done_when met: agent can read authorized logged-in pages via host-scoped seeded cookies, values redacted, guards intact, tested+documented. ROADMAP advanced -> AUTHORED m30-cookie-ux (/sites command listing which hosts the jar covers — names only — so the auth capability is auditable from chat; closes the UX loop). Seeded sites-1/2/3. 26th self-directed milestone. NOTE: substance genuinely thinning — m30 is a real transparency win on top of m29; after it, honestly reassess whether remaining non-gated work justifies continuing vs parking on the 3 owner-blockers."
     }
   ],
   "roadmap": {
-    "current": "m29-agent-cookies",
+    "current": "m30-cookie-ux",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1755,6 +1782,13 @@
         "id": "m29-agent-cookies",
         "goal": "Give the agent a real capability it lacks: acting on pages behind a cookie/session. Today Relay can only read PUBLIC pages — anvil sessions start fresh + logged-out, so a user cant say check my <account> because the agent has no way to carry an auth cookie. Add a SAFE, opt-in cookie-passing path: the user (or an env-provided cookie for a specific host) can seed cookies into an anvil session so the agent can read a page the user is entitled to, with the SSRF + dangerous-action guards still enforced and cookies redacted from logs. Real product depth — the #1 thing separating a demo from a useful assistant. anvil already exposes cookie set/get (see ANVIL-CONTRACT /v1/cookies).",
         "done_when": "the agent can be given cookies for a specific host (via a guarded tool or env-seeded per-host cookie jar) that anvil applies to the session before navigating, so it can read an authorized logged-in page; cookies are host-scoped (never sent cross-origin), redacted from all logs/replies, and the dangerous-action guard still blocks state changes; unit-tested offline (mock anvil cookie API); documented incl. the security model in SECURITY.md",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m30-cookie-ux",
+        "goal": "Close the cookie UX loop. m29 gave the agent host-scoped auth cookies, but a user has no way to know WHICH sites the bot can act on their behalf for — the capability is invisible + unauditable from the chat. Add a /sites (or extend /status) command that lists the hosts the cookie jar is configured for (host names ONLY, never values), so a user can confirm coverage + trust what the bot can reach. Small, real, transparency win that completes the auth feature. Handler-level, offline-testable.",
+        "done_when": "a /sites command (or a line in /status) lists the distinct hosts the cookie jar covers (names only, values NEVER shown), reads via cookie-jar (no keys needed), says none configured cleanly when the jar is empty/absent; handler-wired + unit-tested; documented",
         "status": "todo",
         "owner_gated": false
       }

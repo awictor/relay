@@ -40,6 +40,20 @@ The agent loop is bounded by `RELAY_MAX_STEPS` (default 8) and every anvil call 
 task can't loop or hang indefinitely. anvil itself enforces per-session page caps + a session
 timeout.
 
+### 6. Cookie jar (opt-in auth) — `src/lib/cookie-jar.ts` + `src/anvil.ts`
+So the agent can read a page the operator is entitled to (a logged-in dashboard), an **opt-in**
+gitignored cookie jar (`RELAY_COOKIES`, default off) can seed cookies into an anvil session. It is
+constrained on every axis:
+- **Host-scoped.** `navigate()` seeds only cookies whose `domain` matches the target host
+  (`cookiesForHost` → `cookieMatchesHost`); a cookie for one site is **never** injected on another
+  (the SSRF-equivalent for cookies — suffix collisions like `notexample.com` are rejected).
+- **Redacted.** Cookie values are masked (`redactCookieValues`, chained into the log/echo scrubber),
+  so a seeded session cookie can't leak into logs or a reply even if it lands in scraped text.
+- **Read-oriented.** Cookies let the agent *see* an authorized page; the dangerous-action guard (#2)
+  still blocks committing/destructive clicks, so a session can't be used to *act* autonomously.
+- **User-authorized + local.** The jar is a file the operator creates; `data/` is gitignored, so it
+  never enters the repo. Off by default — no jar means the agent stays logged-out on public pages.
+
 ## Reporting
 This is a personal/portfolio project; there is no formal disclosure process. The controls above are
 the security surface — see the linked tests for exactly what each is proven to catch.
