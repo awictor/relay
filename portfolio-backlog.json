@@ -233,9 +233,9 @@
       "id": "relay-tools-e2e-full",
       "stream": "relay",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "Single integration test that runs a scripted-LLM agent through search->compare->reply and asserts the FINAL formatReply output is readable lines (not JSON), proving the tools + formatter compose. Ties together relay-search-e2e intent with the new formatter. Offline (mock backend + scripted LLM)."
+      "task": "Single integration test that runs a scripted-LLM agent through search->compare->reply and asserts the FINAL formatReply output is readable lines (not JSON), proving the tools + formatter compose. Ties together relay-search-e2e intent with the new formatter. Offline (mock backend + scripted LLM). [DONE: test/agent-chain.test.ts — search->compare->reply composition + lazy-model JSON-reply rendered as lines; 2 tests; 66 suite pass]"
     },
     {
       "id": "syn-1j",
@@ -260,6 +260,14 @@
       "status": "todo",
       "repo": "datafaucet",
       "task": "Optional capture polish: the capture check-regex in verification over-flagged api.paritydeals.com (a real third-party deals API on reqres.in) as noise-ish. It was correctly KEPT by the actual filter (only a test-harness heuristic flagged it). No code bug — but consider whether cross-origin third-party APIs should be captured at all for an MCP built from ONE target site, or filtered to the target host + its api subdomain. Decide + document; low priority."
+    },
+    {
+      "id": "relay-http-tool",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "Add a direct http/JSON-API tool: many user asks (weather, prices, sports) are answered by a public JSON API faster than driving a browser. Add a fetch_json(url) tool (SSRF-guarded, size-capped, JSON-only content-type, no secrets forwarded) so the agent can hit an API directly and extract from the JSON, falling back to scrape/browse for HTML sites. Unit-test with a mock fetch; keep it behind the same safety guards."
     }
   ],
   "history": [
@@ -342,6 +350,9 @@
     },
     {
       "event": "syn-1j done: ANVIL_CRAWL_SETTLE_MS env makes the per-page crawl settle configurable (default 1200ms, prod byte-for-byte unchanged); anvil-crawl + anvil-capture tests set it to 0 -> combined ~14s down to ~1.25s. All synergy work now done or low-polish; remaining backlog is entirely [low] across relay e2e polish + anvil obs."
+    },
+    {
+      "event": "relay-tools-e2e-full done: search->compare->reply chain composition test (test/agent-chain.test.ts) — proves the tools + SMS formatter compose into a readable user answer, incl the lazy-model case (reply IS compare JSON -> formatter renders bullet lines). 2 tests, 66 full suite pass, tsc clean. All backlog was [low]; refilled relay-http-tool [medium] — a direct JSON-API tool so common asks (weather/prices) skip the browser, a real capability + speed win."
     }
   ]
 }
