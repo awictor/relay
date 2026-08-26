@@ -305,9 +305,17 @@
       "id": "relay-compare-fallback",
       "stream": "relay",
       "value": "low",
+      "status": "done",
+      "repo": "relay",
+      "task": "Wire the same JSON-LD/meta fallback into the compare tool (per-URL): compare currently calls extractFields (text only). Refactor its per-row extraction to reuse the extract handler path (text -> structured fallback) so multi-page compares also benefit on SPA/product pages. Keep parallel fetch + all-null-row-on-failure. Add a test. [DONE: shared extractOne() helper; extract+compare both text->JSON-LD/meta fallback; per-row, only when text all-null; 1 test; 89 suite pass]"
+    },
+    {
+      "id": "relay-anvil-retry",
+      "stream": "relay",
+      "value": "low",
       "status": "todo",
       "repo": "relay",
-      "task": "Wire the same JSON-LD/meta fallback into the compare tool (per-URL): compare currently calls extractFields (text only). Refactor its per-row extraction to reuse the extract handler path (text -> structured fallback) so multi-page compares also benefit on SPA/product pages. Keep parallel fetch + all-null-row-on-failure. Add a test."
+      "task": "Resilience: a single anvil hiccup (session create/navigate timeout) currently fails a scrape/extract outright. Add one bounded retry (backoff) around the anvil scrape/navigate in src/anvil.ts for transient errors (timeout, ECONNRESET, 5xx) — NOT for SSRF/4xx. Cap attempts, keep total time sane. Unit-test with a mock that fails once then succeeds."
     }
   ],
   "history": [
@@ -405,6 +413,9 @@
     },
     {
       "event": "relay-extract-tune done: JSON-LD/meta fallback for extract — when the text pass is all-null, retry over anvil.extractStructured (ld+json scripts + og/twitter/meta tags). extractFieldsResult exposes allNull; fallback only fires when text found nothing; extractStructured optional on BrowserBackend. extractFields back-compat kept. 5 tests + 88 full suite pass, tsc clean, live e2e green (GitHub 3022 / MDN 712 chars of meta captured). Refilled relay-compare-fallback (extend same fallback to the compare tool)."
+    },
+    {
+      "event": "relay-compare-fallback done: refactored the extract text->JSON-LD/meta fallback into a shared extractOne() helper; both extract and compare use it, so multi-page compares are SPA-robust (per-row fallback, only when the text pass was all-null). 1 new test + 89 full suite pass, tsc clean. Refilled relay-anvil-retry (bounded transient-error retry around anvil scrape/navigate)."
     }
   ]
 }
