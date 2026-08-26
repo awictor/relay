@@ -1115,9 +1115,33 @@
       "id": "parity-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m28] Mirror the parity test into mcp-forge (anvil-migration) so BOTH repos guard the pair (like anvil-client-parity is bidirectional), wire into test:unit, and update SHARED.md moving url-validator + redact-secrets from section 2 (manual) to section 1 (guarded). Closes m28. mcp-forge anvil-migration only, NEVER master."
+    },
+    {
+      "id": "cookies-1",
+      "stream": "anvil",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m29] Add cookie support to Relays anvil client (src/anvil.ts): setCookies(sessionId, cookies) + getCookies(sessionId) hitting anvils /v1/cookies (see ANVIL-CONTRACT.md for the exact shape). Host-scope each cookie (domain must match the target). Unit-test against a mock anvil (injectable fetch), assert the POST body shape + that a cross-origin cookie is rejected before send."
+    },
+    {
+      "id": "cookies-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m29] Env-seeded per-host cookie jar: RELAY_COOKIE_<HOST> (or a JSON RELAY_COOKIES file, gitignored) -> when the agent navigates to a matching host, seed those cookies into the session first. Host-match strict (exact host). Redact cookie VALUES from all logs (extend redactText/turn-log). Never send a hosts cookies to any other host. Unit-test the host-match + redaction offline."
+    },
+    {
+      "id": "cookies-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m29] Wire + document: the agent uses seeded cookies automatically on navigate/scrape/browse for a matching host (no new user-facing tool needed if env-seeded); dangerous-action guard still blocks clicks. Add the cookie security model to SECURITY.md (host-scoped, redacted, read-oriented, user-authorized) + a .env.example RELAY_COOKIES note. Closes m29."
     }
   ],
   "history": [
@@ -1518,10 +1542,13 @@
     },
     {
       "event": "m28 parity-1+2 DONE. parity-1 STRATEGY: comment-strip CODE compare (NOT byte-identical — each repos header legitimately differs: Relays says Copied-from-mcp-forge). parity-2: test/shared-lib-parity.test.ts — codeOnly() strips //+block comments+blank lines+collapses whitespace, then url-validator.ts + redact-secrets.ts CODE must match ../mcp-forge; skips if mcp-forge absent (self-contained CI) like anvil-client-parity. Found + fixed one last cosmetic drift: redact-secrets urlencoded key parse (const [key]=split vs const key=split[0]??\"\") — aligned mcp-forge to Relays safer form (committed anvil-migration). PROVED THE GUARD BITES: injected 1-char drift -> FAIL, restored -> pass. Relay 475 pass, mcp-forge 1843 pass, tsc clean. call-tested TRUE. parity-3 = mirror the guard into mcp-forge (bidirectional) + move url-validator/redact-secrets from SHARED.md section-2-manual to section-1-guarded."
+    },
+    {
+      "event": "m28 parity-3 DONE + m28-parity-guards COMPLETE. parity-3: mirrored the shared-lib parity guard into mcp-forge (tests/unit/shared-lib-parity.test.ts, same code-only compare, skips if relay absent), wired into test:unit (1847 pass). Guard now BIDIRECTIONAL like anvil-client-parity — url-validator + redact-secrets drift fails CI in whichever repo runs. SHARED.md updated: moved both files from section-2-manual to section-1-guarded, fixed rule-of-thumb. m28 done_when met: kept-identical contract now ENFORCED not manual, proven-to-bite. ROADMAP advanced -> AUTHORED m29-agent-cookies (real product depth: safe opt-in host-scoped cookie passing so the agent can read authorized logged-in pages — the #1 demo->useful gap; SSRF+dangerous-action guards stay, cookies redacted). Seeded cookies-1/2/3. 25th self-directed milestone. NOTE: verified relay CI (ci.yml) already runs typecheck+full suite+build+shutdown-e2e — no gap there; m29 is genuine capability, not busywork."
     }
   ],
   "roadmap": {
-    "current": "m28-parity-guards",
+    "current": "m29-agent-cookies",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1715,6 +1742,13 @@
         "id": "m28-parity-guards",
         "goal": "Make the kept-identical contract ENFORCED, not manual. m27 documented (SHARED.md) that url-validator.ts + redact-secrets.ts are copied-and-must-mirror between Relay and DataFaucet with NO automated guard — and the audit found they had actually drifted. anvil-client already has a byte-parity test in both repos; give these two the same treatment so a future edit that forgets to mirror fails CI instead of silently splitting the SSRF/redaction behavior across the two products. The change is test-only + additive (no runtime behavior change).",
         "done_when": "a parity test in Relay asserts url-validator.ts + redact-secrets.ts match the mcp-forge copies (skips gracefully if ../mcp-forge absent, like anvil-client-parity); if a byte-diff is too strict for the doc-comment differences, the guard normalizes comments OR the files are made truly byte-identical; tsc + suite green; SHARED.md updated to move these from manual to guarded",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m29-agent-cookies",
+        "goal": "Give the agent a real capability it lacks: acting on pages behind a cookie/session. Today Relay can only read PUBLIC pages — anvil sessions start fresh + logged-out, so a user cant say check my <account> because the agent has no way to carry an auth cookie. Add a SAFE, opt-in cookie-passing path: the user (or an env-provided cookie for a specific host) can seed cookies into an anvil session so the agent can read a page the user is entitled to, with the SSRF + dangerous-action guards still enforced and cookies redacted from logs. Real product depth — the #1 thing separating a demo from a useful assistant. anvil already exposes cookie set/get (see ANVIL-CONTRACT /v1/cookies).",
+        "done_when": "the agent can be given cookies for a specific host (via a guarded tool or env-seeded per-host cookie jar) that anvil applies to the session before navigating, so it can read an authorized logged-in page; cookies are host-scoped (never sent cross-origin), redacted from all logs/replies, and the dangerous-action guard still blocks state changes; unit-tested offline (mock anvil cookie API); documented incl. the security model in SECURITY.md",
         "status": "todo",
         "owner_gated": false
       }
