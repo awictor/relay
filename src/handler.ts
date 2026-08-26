@@ -8,6 +8,7 @@ import type { LLMMessage, LLMClient } from "./llm.js";
 import { runAgent, type AgentDeps } from "./agent.js";
 import { formatReply } from "./lib/format-reply.js";
 import { formatTurnLog } from "./lib/turn-log.js";
+import { friendlyError } from "./lib/failure.js";
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -268,11 +269,10 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       const elapsedMs = deps.now() - startedAt;
       log(formatTurnLog({ chatId: msg.chatId, steps: 0, tools: [], elapsedMs, replyChars: 0, ok: false, error: emsg }));
       deps.recordTurn({ steps: 0, tools: [], elapsedMs, ok: false });
-      if (/\b(503|429|UNAVAILABLE|high demand|overloaded|rate)/i.test(emsg)) {
-        await deps.sendMessage(msg.chatId, "My brain's overloaded right now (free-tier model is busy). Try again in a moment.");
-      } else {
-        await deps.sendMessage(msg.chatId, `Sorry — something went wrong: ${emsg}`);
-      }
+      // Never leak the raw error to the user (it can carry hostnames/status/stack text). The raw
+      // message is already logged above via formatTurnLog; the user gets a friendly, category-
+      // specific line (browser down / model busy / blocked link / generic). m14 degrade-1.
+      await deps.sendMessage(msg.chatId, friendlyError(emsg));
     }
   };
 }

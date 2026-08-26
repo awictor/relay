@@ -215,6 +215,27 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/overloaded/i);
   });
 
+  // m14 degrade-1: anvil-down surfaces as a connection-refused / "create session failed" error.
+  // The user must get a friendly browser-down line, NOT the raw ECONNREFUSED text.
+  it("an anvil/browser-down error -> friendly browser message, no raw error leaked", async () => {
+    const { handle, sent } = harness({
+      runAgentFn: async () => { throw new Error("anvil create session failed: connect ECONNREFUSED 127.0.0.1:3000"); },
+    });
+    await handle(msg("get the top HN story"));
+    expect(sent[0]!.text).toMatch(/browser/i);
+    expect(sent[0]!.text).not.toMatch(/ECONNREFUSED|127\.0\.0\.1|create session/);
+  });
+
+  // m14 degrade-1: a blocked/unsafe URL bubbling up gets a user-actionable line (not generic).
+  it("a blocked-URL error -> the unsafe-link message", async () => {
+    const { handle, sent } = harness({
+      runAgentFn: async () => { throw new Error("Blocked URL: private IP 10.0.0.5"); },
+    });
+    await handle(msg("open http://10.0.0.5"));
+    expect(sent[0]!.text).toMatch(/unsafe|can't open/i);
+    expect(sent[0]!.text).not.toMatch(/10\.0\.0\.5/);
+  });
+
   // DEV-0021: the memory-poison guard under a PRE-EXISTING conversation. The error branch is
   // reached AFTER memoryGet but BEFORE memorySet, so a failed turn must leave the prior history
   // exactly as it was — not cleared, not extended with a dangling user/assistant turn.

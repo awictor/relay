@@ -747,7 +747,7 @@
       "id": "degrade-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m14] Inbound degradation: when anvil is unreachable, a browsing task should reply with a clear \"my browser is down, try again shortly\" instead of a raw error or hang; when the LLM errors non-transiently, a clear apology. Audit handler/agent error paths; add handler tests driving runAgentFn that throws anvil-ish vs llm-ish errors -> assert the right friendly message + a failed turn recorded (not a throw)."
     },
@@ -766,6 +766,14 @@
       "status": "todo",
       "repo": "relay",
       "task": "[m14] Process-level safety: index.ts installs crash handlers (installCrashHandlers exists) — confirm an unhandledRejection/uncaughtException logs + does NOT take down the long-poll worker (or exits cleanly for the supervisor to restart). Add a unit test for the crash-handler wiring (mock process.on). Doc the failure-mode matrix (anvil down / LLM down / store unwritable -> behavior) in DEPLOY.md or a FAILURE-MODES note."
+    },
+    {
+      "id": "degrade-4",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m14] Apply the failure classifier to the PROACTIVE paths too: schedule-runner/alert-runner/digest-runner currently log a raw catch — route their user-facing failure text (the message a scheduled task sends on error, if any) through friendlyError so a browser-down scheduled run doesnt DM the user a raw ECONNREFUSED. Audit each runner catch; where it notifies the user on failure, friendly-ify; where it only logs+skips, leave raw in the log. Test."
     }
   ],
   "history": [
@@ -1046,6 +1054,9 @@
     },
     {
       "event": "m13-shared-client COMPLETE: shared-1 canonical anvil-client in Relay, shared-2 vendored into mcp-forge + parity guard, shared-3 Relay-side mirror guard + vendoring-contract doc. The one-shared-browser connect logic now has ONE source, byte-parity-guarded both ways. ROADMAP advanced -> AUTHORED m14-degradation (graceful degradation under partial failure across ALL Relay paths — anvil/LLM/store down -> fail soft + tested, no crash/hang). Seeded degrade-1/2/3. 10th self-directed milestone. m1-synergy still owner_blocked (billing/merge)."
+    },
+    {
+      "event": "m14 degrade-1 DONE: added src/lib/failure.ts (classifyFailure -> browser|llm|blocked|generic + friendlyError). Handler catch no longer leaks raw emsg to the user (was `Sorry — something went wrong: ${emsg}` w/ hostnames/status/stack); now sends a category-specific friendly line, raw still logged via turn-log. +9 tests (failure.test.ts + 2 handler cases: anvil-down->browser msg no ECONNREFUSED leak, blocked-URL->unsafe msg). 353 pass. anvil live(200); failure path call-tested via injected throwing runAgentFn (not live-crashed — killing anvil is disruptive). Refill: degrade-4 (route proactive-runner user-facing failures through friendlyError too)."
     }
   ],
   "roadmap": {
