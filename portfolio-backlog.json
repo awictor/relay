@@ -177,9 +177,25 @@
       "id": "relay-tools",
       "stream": "relay",
       "value": "medium",
+      "status": "done",
+      "repo": "relay",
+      "task": "Broaden Relay agent capability beyond browse/scrape: add a structured extract tool (given a URL + a natural-language field list, drive anvil to load the page then return JSON with those fields) so a user can text \"get me the price and title from <url>\" and get clean data, not prose. Reuse src/anvil.ts readCurrent/scrape; keep the LLM behind the adapter; bound steps; unit-test with a mock BrowserBackend. [DONE: extract tool in src/agent.ts + extractFields() LLM sub-call; ToolSpec extended for array params; 7 tests; 43 suite pass; live e2e anvil+Gemini green]"
+    },
+    {
+      "id": "relay-tools-2",
+      "stream": "relay",
+      "value": "medium",
       "status": "todo",
       "repo": "relay",
-      "task": "Broaden Relay agent capability beyond browse/scrape: add a structured extract tool (given a URL + a natural-language field list, drive anvil to load the page then return JSON with those fields) so a user can text \"get me the price and title from <url>\" and get clean data, not prose. Reuse src/anvil.ts readCurrent/scrape; keep the LLM behind the adapter; bound steps; unit-test with a mock BrowserBackend."
+      "task": "Add a multi-page extract: let extract accept an array of URLs (or a search-then-extract flow) and return a JSON array, so a user can text \"compare the price of X across these 3 links\". Reuse extractFields per page; cap page count; dedup; keep steps bounded. Unit-test with mock backend returning distinct pages."
+    },
+    {
+      "id": "relay-extract-tune",
+      "stream": "relay",
+      "value": "low",
+      "status": "todo",
+      "repo": "relay",
+      "task": "extractFields currently scrapes text only (document.body.innerText). For data-heavy SPAs the value may be in attributes/meta/JSON-LD. Add an option to also pass the page HTML (or <script type=application/ld+json>) into the extraction prompt when text extraction yields all-null. Guard prompt size."
     }
   ],
   "history": [
@@ -238,6 +254,9 @@
     },
     {
       "event": "relay-mem verified DONE (built prior loop as DEV-0001, backlog was stale): MemoryStore persists per-chat turns to data/relay-memory.json (gitignored), wired into index.ts, 6 dedicated tests + 29 relay tests green, tsc clean. Deduped the double relay-mem entry. Refilled relay-mem-e2e (cross-instance restart round-trip proof) + relay-tools (structured extract tool for the consumer product)."
+    },
+    {
+      "event": "relay-tools done: shipped structured extract tool (text a URL + fields -> clean JSON). extract agent tool + extractFields() focused LLM sub-call (tolerant JSON parse, all-null fallback, normalized to requested fields). ToolSpec extended for array params. 7 new tests + 43 full suite pass, tsc clean, live e2e green (real anvil scrape -> real Gemini extract -> shaped JSON). Broadens Relay beyond browse/scrape = real consumer-product growth vs Instinct. Refilled relay-tools-2 (multi-URL compare extract) + relay-extract-tune (HTML/JSON-LD fallback for SPAs)."
     }
   ]
 }
