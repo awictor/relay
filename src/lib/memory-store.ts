@@ -87,6 +87,14 @@ export class MemoryStore {
     this.persist();
   }
 
+  // Drop one chat's history (DEV-0023 /reset). Returns true if there was something to clear.
+  // Persists so the wipe survives a restart. No-op (false) for an unknown chat.
+  delete(chatId: ChatId): boolean {
+    const had = this.map.delete(chatId);
+    if (had) this.persist();
+    return had;
+  }
+
   size(): number {
     return this.map.size;
   }

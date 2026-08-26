@@ -10,7 +10,7 @@ Try:
 • "compare the price across these 3 links"
 • "find the newest HN posts about AI"
 
-Commands: /help  /start`;
+Commands: /help  /start  /reset (clear our chat)`;
 
 const HELP = `Relay — what I can do:
 • Read a page: send a link, or name a site + what you want. ("top HN story", "weather in Paris")
@@ -19,6 +19,8 @@ const HELP = `Relay — what I can do:
 • Find then fetch: "find newest listings for <thing>" → I open the search page, grab the results, and read them.
 
 Limits: I won't log in as you, pay, buy, or do anything destructive. If a task needs that, I'll say so.
+
+Start over anytime: /reset clears our conversation history.
 
 Just text me the task in plain English.`;
 

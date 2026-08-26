@@ -31,6 +31,7 @@ describe("handler smoke (real memory + metrics + commands)", () => {
       llm: {} as never,
       memoryGet: (id) => memory.get(id) as LLMMessage[],
       memorySet: (id, h) => memory.set(id, h),
+      memoryClear: (id) => memory.delete(id),
       sendMessage: async (_id, text) => { sent.push(text); },
       sendTyping: async () => {},
       handleCommand,                       // real
@@ -73,6 +74,7 @@ describe("handler smoke (real memory + metrics + commands)", () => {
       llm: {} as never,
       memoryGet: (id) => memory.get(id) as LLMMessage[],
       memorySet: (id, h) => memory.set(id, h),
+      memoryClear: (id) => memory.delete(id),
       sendMessage: async (_id, text) => { sent.push(text); },
       sendTyping: async () => {},
       handleCommand,

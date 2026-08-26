@@ -15,6 +15,7 @@ function harness(over: Partial<HandlerDeps> = {}) {
     sendMessage: async (chatId, text) => { sent.push({ chatId, text }); },
     sendTyping: async () => {},
     handleCommand: () => null,
+    memoryClear: (id) => mem.delete(id),
     checkRateLimit: () => ({ allowed: true }),
     redactText: (t) => t,
     hasModelKey: () => true,
@@ -41,6 +42,25 @@ describe("createHandler", () => {
     expect(agentCalled).toBe(false);
     expect(recorded).toHaveLength(0);
     expect(mem.size).toBe(0);
+  });
+
+  it("/reset clears the chat's memory, confirms, and does NOT run the agent (DEV-0023)", async () => {
+    let agentCalled = false;
+    const { handle, sent, mem } = harness({
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    mem.set(3, [{ role: "user", content: "old" }]);
+    await handle(msg("/reset", 3));
+    expect(agentCalled).toBe(false);
+    expect(mem.has(3)).toBe(false);
+    expect(sent[0]!.text).toMatch(/cleared/i);
+  });
+
+  it("/clear is an alias for /reset; with no history it says nothing to clear", async () => {
+    const { handle, sent, mem } = harness();
+    await handle(msg("/clear@relaybot", 9));
+    expect(mem.has(9)).toBe(false);
+    expect(sent[0]!.text).toMatch(/nothing to clear/i);
   });
 
   it("a rate-limited chat gets the limit message, no agent", async () => {

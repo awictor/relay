@@ -103,4 +103,23 @@ describe("MemoryStore persistence", () => {
     const s = new MemoryStore({ file }); // no throw
     expect(s.size()).toBe(0);
   });
+
+  it("delete(chatId) clears one chat, persists, and survives reload (DEV-0023 /reset)", () => {
+    const file = tmpFile();
+    const a = new MemoryStore({ file });
+    a.set(1, [{ content: "keep" }]);
+    a.set(2, [{ content: "drop" }]);
+    expect(a.delete(2)).toBe(true);   // had something
+    expect(a.get(2)).toEqual([]);
+    expect(a.get(1)).toEqual([{ content: "keep" }]); // other chat untouched
+    // persisted: a fresh store from the same file still has 1 and not 2
+    const b = new MemoryStore({ file });
+    expect(b.get(1)).toEqual([{ content: "keep" }]);
+    expect(b.get(2)).toEqual([]);
+  });
+
+  it("delete of an unknown chat returns false (no-op)", () => {
+    const s = new MemoryStore({ file: tmpFile() });
+    expect(s.delete(12345)).toBe(false);
+  });
 });

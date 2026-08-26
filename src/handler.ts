@@ -16,6 +16,8 @@ export interface HandlerDeps {
   sendMessage: (chatId: number, text: string) => Promise<unknown>;
   sendTyping: (chatId: number) => Promise<unknown>;
   handleCommand: (text: string) => string | null;
+  // Clear this chat's stored history (/reset). Returns true if there was anything to clear.
+  memoryClear: (chatId: number) => boolean;
   checkRateLimit: (chatId: number) => { allowed: boolean; retryAfterSec?: number };
   redactText: (text: string) => string;
   hasModelKey: () => boolean;
@@ -33,6 +35,15 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
 
   return async function handle(msg: InboundMessage): Promise<void> {
     log(`[in] ${msg.from}: ${deps.redactText(msg.text).slice(0, 120)}`);
+
+    // /reset (alias /clear): wipe THIS chat's memory. Needs chatId, so it's handled here rather
+    // than in the pure handleCommand. Short-circuits before rate-limit/agent, like other commands.
+    const first = msg.text.trim().toLowerCase().split(/\s+/)[0]?.split("@")[0];
+    if (first === "/reset" || first === "/clear") {
+      const had = deps.memoryClear(msg.chatId);
+      await deps.sendMessage(msg.chatId, had ? "Cleared our conversation — starting fresh." : "Nothing to clear — we've got no history yet.");
+      return;
+    }
 
     // Slash commands reply instantly — no rate-limit/agent.
     const cmd = deps.handleCommand(msg.text);

@@ -38,6 +38,7 @@ const handle = createHandler({
   llm,
   memoryGet: (id) => memory.get(id) as LLMMessage[],
   memorySet: (id, history) => memory.set(id, history),
+  memoryClear: (id) => memory.delete(id),
   sendMessage,
   sendTyping,
   handleCommand,
