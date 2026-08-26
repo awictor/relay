@@ -462,6 +462,14 @@
       "status": "done",
       "repo": "relay",
       "task": "Graceful shutdown: on SIGTERM/SIGINT (docker stop, pm2 restart) the long-poll worker should stop getUpdates, flush the in-flight memory.persist, and exit 0 — so a redeploy never drops a half-written memory file or an in-progress reply. Add a signal handler in index.ts; unit-test the shutdown fn (mock the poller + memory). Real 24/7 resilience, not cosmetic. [DONE: src/shutdown.ts createShutdown+installSignalHandlers wired in index.ts; idempotent, exits 0 even if stopPolling throws; memory already sync-durable; 3 tests; 134 suite pass]"
+    },
+    {
+      "id": "relay-shutdown-e2e",
+      "stream": "relay",
+      "value": "low",
+      "status": "todo",
+      "repo": "relay",
+      "task": "Prove graceful shutdown end-to-end: a script that spawns the built worker (dist/index.js) with a dummy TELEGRAM_BOT_TOKEN, sends SIGTERM, and asserts it logs [shutdown] + exits 0 within ~2s (not killed by timeout). Uses child_process; offline. Confirms the signal wiring works in the real process, not just the unit fn."
     }
   ],
   "history": [
