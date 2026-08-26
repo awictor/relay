@@ -50,6 +50,23 @@ HandlerDeps callback. Both short-circuit before rate-limit/agent. List new ones 
 batch. Concurrency is per-BATCH; cross-batch stays serial (the poll loop awaits the batch before the
 next getUpdates). Per-chat `checkRateLimit` guards abuse, not latency.
 
+## Process lifecycle & resilience (24/7 worker)
+
+Two distinct exit paths in `src/shutdown.ts`, wired in `index.ts`:
+- **Signal shutdown** — `createShutdown` + `installSignalHandlers` catch SIGTERM/SIGINT (docker stop,
+  pm2 restart, Ctrl-C): stop the poller + anvil pinger, flush the final metrics window (`onShutdown`,
+  DEV-0041), `exit(0)`. Idempotent (a 2nd signal mid-shutdown is ignored). Clean stop.
+- **Crash** — `installCrashHandlers` (DEV-0066) catches `uncaughtException` + `unhandledRejection`:
+  without it a stray throw/reject in a non-awaited path killed the worker with NO log (deploy goes
+  dark). Logs `[fatal] <kind>: <stack≤1000>`, best-effort `onFatal` flush, `exit(1)`. Re-entrancy
+  guarded (`dying` flag) so a rejection during the exception handler can't loop.
+- **Exit-code contract: 0 = intended stop, 1 = crash.** A supervisor uses this to decide restart —
+  don't exit(0) on an error path or the crash looks intentional and won't restart.
+- Both take an injectable `exit` (defaults `process.exit`) so tests drive them without killing the
+  runner. Memory needs no flush — MemoryStore is `writeFileSync` per turn (synchronously durable).
+- relay has NO HTTP server (Telegram long-poll), so there is no `/healthz` — liveness is the `/status`
+  text reply + the supervisor's own process check. Don't add an http health endpoint.
+
 ## Free-infra constraint
 
 Telegram long-poll, Gemini free tier, self-hosted anvil. No paid vendor. `.env` gitignored;
