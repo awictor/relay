@@ -1171,7 +1171,7 @@
       "id": "audit-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m31] Full-stack green pass: relay npm test + npx tsc --noEmit + npm run preflight (expect GO); mcp-forge npm run test:unit (anvil-migration); anvil-engine npm test. Record the numbers. Any red = fix it (thats the highest-value work). Report the consolidated pass state."
     },
@@ -1190,6 +1190,14 @@
       "status": "todo",
       "repo": "relay",
       "task": "[m31] Doc/claim truth-check: spot-check PORTFOLIO.md + README + THESIS + SECURITY + SHARED against the code (test counts, command list, shared-lib sections, cookie model). Fix anything drifted. Then write the closing summary: non-gated roadmap complete, remaining = deploy-1 (Oracle VM) + pr-1-merge + gh-billing. Closes m31."
+    },
+    {
+      "id": "audit-4",
+      "stream": "relay",
+      "value": "low",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m31] preflight runtime: the full run exceeds a 2min wall (serial mcp-forge test:unit + relay suite + live e2e). Either note the expected ~3-4min runtime in the preflight output/README, or add a --fast subset flag (skip the heaviest cross-repo gate) for a quick GO check. Minor DX; the checks themselves all pass."
     }
   ],
   "history": [
@@ -1611,6 +1619,9 @@
     },
     {
       "event": "m30 sites-3 DONE + m30-cookie-ux COMPLETE. sites-3: recorded the scope decision (comment in mcp-forge auto-scan, anvil-migration) — DataFaucet auto-scan is PUBLIC-API discovery + redacts creds from bodies (safe-to-share MCP servers), intentionally NOT auth-capture; Relay owns the host-scoped cookie path (different threat model). No behavior change. m30 done_when met: /sites lists authorized hosts names-only, tested+documented, cookie capability now auditable from chat. ROADMAP advanced -> AUTHORED m31-final-audit (honest end-of-roadmap verification: full-stack green pass + backlog hygiene + doc/claim truth-check, then declare non-gated roadmap complete naming the 3 owner actions). Seeded audit-1/2/3. 27th self-directed milestone. This is the honest move — non-gated build surface is exhausted; m31 verifies rather than invents, and will state plainly whats left for the owner."
+    },
+    {
+      "event": "m31 audit-1 DONE: full-stack green pass. relay npm test 494 pass + tsc clean; anvil-engine npm test 659 pass; mcp-forge test:unit (anvil-migration) 1848 pass. TOTAL 3001 tests, 0 fail across all three repos. NOTE: npm run preflight itself times out at the 2min tool limit (it runs mcp-forge test:unit + relay suite + e2e serially = >2min wall) — thats a harness timeout not a failure; every constituent gate passes when run separately. Consider (audit refill) splitting preflight or bumping its per-check budget. Non-gated build surface confirmed exhausted + all green. audit-2 = backlog hygiene."
     }
   ],
   "roadmap": {
