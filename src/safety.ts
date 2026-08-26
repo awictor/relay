@@ -32,8 +32,10 @@ export function checkRateLimit(chatId: number, now = Date.now()): { allowed: boo
 // State-changing / irreversible actions the agent must not perform autonomously
 // (mirrors mcp-forge auto-scan's DANGEROUS button filter). Used to gate any
 // click/type/submit on matching element text once agent-2 adds those tools.
+// m26 safety-audit-2: added committing synonyms the sweep caught missing — subscribe, bid, add to
+// cart, book(ing), donate — all start a payment/commitment the agent must not trigger autonomously.
 export const DANGEROUS_ACTION_RE =
-  /\b(delete|remove|cancel|logout|log out|sign out|unsubscribe|close account|deactivate|submit|confirm|pay|purchase|buy|checkout|order|send|transfer|withdraw|approve|authorize|destroy|reset|wipe|erase)\b/i;
+  /\b(delete|remove|cancel|logout|log out|sign out|subscribe|unsubscribe|close account|deactivate|submit|confirm|pay|purchase|buy|checkout|order|send|transfer|withdraw|approve|authorize|destroy|reset|wipe|erase|bid|add to cart|book|booking|donate|donation)\b/i;
 
 /** True if the given action/target text describes a destructive or committing action. */
 export function isDangerousAction(text: string): boolean {

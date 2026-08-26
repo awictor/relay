@@ -1051,7 +1051,7 @@
       "id": "safety-audit-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m26] Dangerous-action sweep: read src/safety.ts (isDangerousAction), try obfuscated destructive labels the agent might click — Pay/Buy/Delete/Submit/Transfer/Logout with spacing, casing, unicode lookalikes, synonyms (Purchase, Remove, Confirm order, Send money), and selector-only (no label) cases. Test each; tighten the regex/logic for real misses; document accepted limits (cant catch everything without semantics)."
     },
@@ -1452,6 +1452,9 @@
     },
     {
       "event": "m26 safety-audit-1 DONE: adversarial SSRF sweep (test/ssrf-adversarial.test.ts, 31 bypass shapes across loopback/private/numeric-encodings/IPv6-mapped-ULA-linklocal/embedded-creds/non-http-protocols/trailing-dot/internal-ports + a no-over-block sanity). FOUND A REAL BYPASS: http://localhost./ (trailing dot) resolved to localhost but slipped the exact-match blocklist -> FIXED by stripping a FQDN trailing dot from hostname before checks. All other 30 already blocked (numeric-encoding rule catches decimal/hex/octal; URL/protocol parse catches file/gopher/data/ftp; creds ignored by hostname check). 419 pass (+31), tsc clean. Refill safety-audit-4: mirror the fix to mcp-forge vendored copy (kept-identical contract). call-tested TRUE (real bypass proven+closed)."
+    },
+    {
+      "event": "m26 safety-audit-2 DONE: adversarial dangerous-action sweep (test/dangerous-action-adversarial.test.ts, 24 catch + 5 allow cases). FOUND 5 REAL GAPS in DANGEROUS_ACTION_RE — subscribe, bid, add to cart, book/booking, donate/donation — all committing/payment actions the agent could click autonomously; ADDED them. Casing/spacing variants already caught (i flag + \b). MUST_ALLOW (read more/next/search/view/show) still pass = no over-block. 448 pass (+29), tsc clean. call-tested TRUE (5 gaps proven open then closed). Note: unicode-homoglyph obfuscation is an accepted limit (regex cant catch semantic intent; the anvil-side + step caps + reply-only-on-reply are the backstop) — documented in safety-audit-3 SECURITY.md."
     }
   ],
   "roadmap": {
