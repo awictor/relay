@@ -7,12 +7,16 @@ function harness(chatId?: number) {
   let handler: ((line: string) => void) | null = null;
   let unsubbed = false;
   const written: string[] = [];
+  let thinking = 0;
+  let quit = 0;
   const ch = makeConsoleChannel({
     onLine: (h) => { handler = h; return () => { unsubbed = true; }; },
     write: (t) => written.push(t),
     chatId,
+    onThinking: () => { thinking++; },
+    onQuit: () => { quit++; },
   });
-  return { ch, feed: (line: string) => handler?.(line), written, wasUnsubbed: () => unsubbed };
+  return { ch, feed: (line: string) => handler?.(line), written, wasUnsubbed: () => unsubbed, thinking: () => thinking, quit: () => quit };
 }
 
 describe("ConsoleChannel — Channel contract", () => {
@@ -64,5 +68,44 @@ describe("ConsoleChannel — Channel contract", () => {
     const h = ch.start(async () => {});
     h.stop();
     expect(wasUnsubbed()).toBe(true);
+  });
+
+  // m25 demo-2: UX hooks.
+  it("fires onThinking when a real task is accepted (before the agent runs)", async () => {
+    const { ch, feed, thinking } = harness();
+    ch.start(async () => {});
+    feed("what's the weather?");
+    await Promise.resolve();
+    expect(thinking()).toBe(1);
+  });
+
+  it("/quit ends the session: onQuit fires, a bye is written, no agent run", async () => {
+    const { ch, feed, written, quit, thinking } = harness();
+    const got: InboundMessage[] = [];
+    ch.start(async (m) => { got.push(m); });
+    feed("/quit");
+    await Promise.resolve();
+    expect(quit()).toBe(1);
+    expect(written.some((w) => /bye/i.test(w))).toBe(true);
+    expect(got).toHaveLength(0);      // never handed to the agent
+    expect(thinking()).toBe(0);       // and no thinking indicator for a quit
+  });
+
+  it("/exit is an alias for /quit", async () => {
+    const { ch, feed, quit } = harness();
+    ch.start(async () => {});
+    feed("/exit");
+    await Promise.resolve();
+    expect(quit()).toBe(1);
+  });
+
+  it("input after /quit is ignored (session stopped)", async () => {
+    const { ch, feed } = harness();
+    const got: InboundMessage[] = [];
+    ch.start(async (m) => { got.push(m); });
+    feed("/quit");
+    feed("still here?");
+    await Promise.resolve();
+    expect(got).toHaveLength(0);
   });
 });

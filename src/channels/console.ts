@@ -11,6 +11,10 @@ export interface ConsoleChannelDeps {
   onLine: (handler: (line: string) => void) => () => void;
   write: (text: string) => void;
   chatId?: number; // console is single-user; a fixed id (default 1)
+  // Optional demo-UX hooks (m25 demo-2). onThinking fires when a task is accepted (before the agent
+  // runs) so the terminal shows progress; onQuit fires on /quit|/exit so the wiring can exit cleanly.
+  onThinking?: () => void;
+  onQuit?: () => void;
 }
 
 /** Build a ConsoleChannel. Prod wiring passes a readline-backed onLine + console.log. */
@@ -20,13 +24,21 @@ export function makeConsoleChannel(deps: ConsoleChannelDeps): Channel {
     name: "console",
     ready: () => true, // no credentials needed
     start(onMessage: (msg: InboundMessage) => Promise<void>) {
+      let stopped = false;
       const unsub = deps.onLine((line) => {
         const text = line.trim();
         if (!text) return;
+        // /quit or /exit ends the session cleanly (m25 demo-2) — a demo user needs an obvious out
+        // besides Ctrl-C. deps.onQuit lets the node wiring close readline + exit 0.
+        if (/^\/(quit|exit)$/i.test(text)) { deps.write("Bye."); stopped = true; deps.onQuit?.(); return; }
+        if (stopped) return;
+        // Thinking indicator (m25 demo-2): the agent+anvil round-trip is seconds long; without a
+        // marker the terminal looks hung. Optional so unit tests / older wiring are unaffected.
+        deps.onThinking?.();
         const msg: InboundMessage = { chatId, text, from: "console", messageId: Date.now() % 1_000_000 };
         void onMessage(msg).catch((e) => deps.write(`[error] ${e instanceof Error ? e.message : String(e)}`));
       });
-      return { stop: () => unsub() };
+      return { stop: () => { stopped = true; unsub(); } };
     },
     async sendMessage(_chatId: number, text: string) {
       deps.write(text);
@@ -55,5 +67,7 @@ export function nodeConsoleChannel(): Channel {
       return () => { closed = true; rl.off("line", fn); rl.close(); };
     },
     write: (text) => { process.stdout.write("\n" + text + "\n"); }, // always print, even a reply that lands after EOF
+    onThinking: () => { process.stdout.write("…working (driving the browser)\n"); },
+    onQuit: () => { closed = true; rl.close(); process.exit(0); },
   });
 }

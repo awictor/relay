@@ -35,7 +35,7 @@ console.log(`
 │ Brain: ${provider.padEnd(7)}   Browser: ${anvilBase.padEnd(28)}│
 │ Try:  what's the top story on Hacker News?                   │
 │       what's the current weather in London?                  │
-│ Ctrl-C to exit.                                              │
+│ /quit (or Ctrl-C) to exit.                                   │
 └──────────────────────────────────────────────────────────────┘`);
 
 await import("../src/index.ts");
