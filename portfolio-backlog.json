@@ -353,9 +353,17 @@
       "id": "relay-e2e-smoke",
       "stream": "relay",
       "value": "low",
+      "status": "done",
+      "repo": "relay",
+      "task": "Single offline smoke test that wires the REAL MemoryStore + real Metrics + real handleCommand/checkRateLimit through createHandler (only llm + telegram send faked), to catch cross-module wiring drift the unit tests miss (they fake memory). Assert a 2-message conversation: turn 1 persists, turn 2 sees history. Offline. [DONE: test/handler-smoke.test.ts — real MemoryStore+Metrics+handleCommand through createHandler, only llm+send faked; 2-msg conversation persist+history + /help short-circuit; 2 tests; 117 suite pass]"
+    },
+    {
+      "id": "relay-ci",
+      "stream": "quality",
+      "value": "low",
       "status": "todo",
       "repo": "relay",
-      "task": "Single offline smoke test that wires the REAL MemoryStore + real Metrics + real handleCommand/checkRateLimit through createHandler (only llm + telegram send faked), to catch cross-module wiring drift the unit tests miss (they fake memory). Assert a 2-message conversation: turn 1 persists, turn 2 sees history. Offline."
+      "task": "Add a GitHub Actions CI workflow (.github/workflows/ci.yml): on push/PR run npm ci + npm run typecheck + npm test (all offline, no keys needed). Locks the 117-test suite green on every push so the /relay-loop and any manual change cant regress silently. Node 22."
     }
   ],
   "history": [
@@ -474,6 +482,9 @@
     },
     {
       "event": "relay-index-test done: factored the untested index.ts message-handler seam into createHandler(deps) in src/handler.ts (injectable llm/memory/send/command/rate-limit/clock, matching the repo pattern); index.ts now just builds the real deps. 6 wiring tests (command short-circuit, rate-limit, missing-key, normal turn persist+record, agent-error friendly-msg + no memory write, transient hint). Behavior unchanged, full suite 115 pass. Relay now has NO untested integration seam. Backlog is entirely [low] cleanup + owner-gated (PR#1 merge, VM provision)."
+    },
+    {
+      "event": "relay-e2e-smoke done: handler smoke test wiring REAL MemoryStore + Metrics + handleCommand through createHandler (only llm+send faked) — proves turn 1 persists to the real store and turn 2 sees it, real metrics count both, real /help short-circuits. 2 tests, 117 full suite pass. Catches cross-module drift unit tests (which fake memory) miss. Relay test coverage now spans unit->wiring->cross-module smoke."
     }
   ]
 }
