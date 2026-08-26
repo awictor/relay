@@ -23,6 +23,18 @@ describe("classifyFailure", () => {
   it("llm wins over browser when a 503 is also a fetch failure (most-specific first)", () => {
     expect(classifyFailure("fetch failed: 503 overloaded")).toBe("llm");
   });
+
+  // HARDEN: precedence — a Blocked-URL error that ALSO mentions a transport word (timeout/fetch
+  // failed) must stay "blocked" (checked before browser), so an SSRF rejection never gets the
+  // "browser's having trouble, try again" advice that invites a retry against a blocked target.
+  it("blocked wins over browser when the message also has a transport word", () => {
+    expect(classifyFailure("Blocked URL: private IP (fetch failed after timeout)")).toBe("blocked");
+    expect(classifyFailure("Blocked protocol: only http/https allowed; connection refused")).toBe("blocked");
+  });
+  it("llm wins over blocked when both a rate-limit and a block phrase appear", () => {
+    // llm is checked first; a 429 with an incidental 'refused (' still reads as brain-busy.
+    expect(classifyFailure("429 rate limit — upstream refused (retry)")).toBe("llm");
+  });
 });
 
 describe("friendlyError", () => {
