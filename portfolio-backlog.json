@@ -1083,7 +1083,7 @@
       "id": "vendor-2",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m27] Audit whether url-validator.ts + redact-secrets.ts are ACTUALLY vendored-identical Relay<->mcp-forge (headers claim so). Diff each pair; if they drifted (redactText got AQ./sk-ant in Relay only — is that shared or Relay-local?), decide: add a parity test like anvil-client-parity, or document the intentional divergence in each files header. Report the true state."
     },
@@ -1485,6 +1485,9 @@
     },
     {
       "event": "m27 vendor-1 DONE (mcp-forge anvil-migration, NEVER master; supersedes safety-audit-4). Mirrored Relays trailing-dot SSRF fix into mcp-forge url-validator.ts (hostname.replace(/.$/) strip before blocklist/IP checks) — the vendored-identical copies were drifting after m26. Added adversarial SSRF cases (trailing-dot, decimal/hex IP, IPv6 loopback/mapped/ULA, creds, file/gopher, redis port) to the existing url-validator.test.ts. test:unit 1841 pass/0 fail (+18), tsc clean. Copies re-aligned. call-tested TRUE. vendor-2 = audit whether url-validator + redact-secrets are TRULY identical Relay<->mcp-forge (redactText AQ./sk-ant additions are Relay-side safety.ts, NOT the shared url-validator — likely Relay-local, confirm)."
+    },
+    {
+      "event": "m27 vendor-2 DONE: audited the vendored pairs. url-validator.ts Relay<->mcp-forge: CODE identical (trailing-dot fix now in both), only comment/docstring differences — OK. redact-secrets.ts: REAL DRIFT found — Relays SENSITIVE_KEY_RE caught authorization|^auth$|_auth$|bearer, mcp-forges did NOT (a captured Authorization/bearer body field would leak). FIXED mcp-forge (anvil-migration): aligned the regex to Relays superset; consequence: auth object now redacted wholesale (safer); updated nested test to non-auth key + added auth/bearer coverage. test:unit 1843 pass. NOTE: redactText AQ./sk-ant additions from m26 live in Relays safety.ts (Relay-LOCAL, not the shared redact-secrets lib) so no mirror needed there. call-tested TRUE. vendor-3 = document the shared-lib map (identical+guarded vs Relay-local)."
     }
   ],
   "roadmap": {
