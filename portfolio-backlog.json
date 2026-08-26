@@ -507,9 +507,9 @@
       "id": "sched-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m4] Scheduler runner behind an interface: a tick() that pulls due schedules from ScheduleStore, runs runAgent on the stored task, sends the reply to the chat unprompted, removes once-tasks / reschedules daily. Injectable (store+runAgent+send+now) so it is unit-tested with a mock clock+agent. Wire a setInterval in index.ts (env RELAY_SCHED_TICK_MS, default 30s), stop it in graceful shutdown."
+      "task": "[m4] Scheduler runner behind an interface: a tick() that pulls due schedules from ScheduleStore, runs runAgent on the stored task, sends the reply to the chat unprompted, removes once-tasks / reschedules daily. Injectable (store+runAgent+send+now) so it is unit-tested with a mock clock+agent. Wire a setInterval in index.ts (env RELAY_SCHED_TICK_MS, default 30s), stop it in graceful shutdown. [DONE: src/schedule-runner.ts makeScheduleRunner — dueNow poll -> runAgent -> unprompted text -> complete; re-entrancy guard; fail=complete-not-storm; wired index.ts (RELAY_SCHED_TICK_MS 30s) + shutdown-stop; 6 tests; env-parity fixed; 239 suite pass]"
     },
     {
       "id": "sched-3",
@@ -719,6 +719,9 @@
     },
     {
       "event": "m4 sched-1 done: schedule parse + persistent store (src/lib/schedule.ts). parseSchedule handles relative (in N min/hr/day), daily (every morning / every day at 8pm), and tomorrow-at-time; returns null for non-schedule or task-less input. ScheduleStore JSON-file persisted (gitignored), per-chat cap, dueNow(now), complete() drops once / reschedules daily. 12 unit tests, full suite 233 pass, tsc clean. Next m4: sched-2 (runner that fires due schedules through runAgent + texts unprompted)."
+    },
+    {
+      "event": "m4 sched-2 done: scheduled-task runner (src/schedule-runner.ts). Polls ScheduleStore.dueNow, runs the agent on each due task, texts the chat UNPROMPTED (Reminder/Daily), drops once/reschedules daily. Re-entrancy guard prevents double-fire on a slow agent; a failed run completes (no storm). Injectable -> 6 unit tests w/ mock clock+agent. Wired into index.ts (RELAY_SCHED_TICK_MS default 30s, 0 disables) + stopped in shutdown. Added the 2 env vars to .env.example (DEV-0055 parity gate caught it). 239 full suite pass. Relay is now PROACTIVE — reactive->autonomous jump done at the engine level. Next m4: sched-3 (handler/commands: route remind-me + /schedules + /cancel)."
     }
   ],
   "roadmap": {
