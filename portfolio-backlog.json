@@ -675,9 +675,9 @@
       "id": "cons-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m11] README refresh: update What-you-can-text-it + Commands + Status to the real surface (scrape/browse/extract/compare/search/fetch_json/screenshot/pdf tools; schedules/reminders; recipes; digests; alerts; channels telegram|console; observability; 334 tests). Fix any stale lines. Doc-only; keep it tight."
+      "task": "[m11] README refresh: update What-you-can-text-it + Commands + Status to the real surface (scrape/browse/extract/compare/search/fetch_json/screenshot/pdf tools; schedules/reminders; recipes; digests; alerts; channels telegram|console; observability; 334 tests). Fix any stale lines. Doc-only; keep it tight. [DONE: README What-you-can-text-it + Commands + Status refreshed to full surface (fetch+proactive, all commands, transport note, 330+ tests)]"
     },
     {
       "id": "cons-2",
@@ -950,6 +950,9 @@
     },
     {
       "event": "m11 cons-2 done: whole-product journey test. REAL Memory/Recipe/Digest/Alert stores wired through createHandler as index does (only llm/send faked); drives lookup->save recipes->define digest->/run briefing->watch alert->/run recipe->all lists reflect state + cross-instance persistence. Proves the 6 self-directed feature milestones COMPOSE. 336 full suite pass, tsc clean. Next m11: cons-1 (README refresh) then cons-3 (demo transcript) -> completes m11."
+    },
+    {
+      "event": "m11 cons-1 done: README refreshed to the real surface — fetch/read tools incl screenshot/pdf/fetch_json + the proactive half (reminders, recipes, digests, alerts), full Commands list, transport-agnostic note, updated Status (anti-spam, proactive-safety, per-store persistence, [proactive] obs, 330+ tests). Doc-only. Next m11: cons-3 (demo transcript) -> completes m11."
     }
   ],
   "roadmap": {
