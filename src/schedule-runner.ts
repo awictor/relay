@@ -105,6 +105,17 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     deps.recordTurn?.({ steps, tools, elapsedMs, ok: true });
   }
 
+  // m14 degrade-2: completing a schedule persists to disk; if that throws (unwritable store),
+  // it must NOT escape the per-schedule handling and abort the rest of the due batch. Swallow +
+  // log so one bad write can't lose every other due task this tick.
+  function safeComplete(s: Schedule): void {
+    try { deps.store.complete(s.id, deps.now()); }
+    catch (e) {
+      deps.onError?.(e);
+      log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, error: "complete_failed:" + (e instanceof Error ? e.message : String(e)).slice(0, 80) })}`);
+    }
+  }
+
   async function tick(): Promise<number> {
     if (running) return 0;
     running = true;
@@ -116,7 +127,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // (drop once / advance daily) so it doesn't storm — log the skip instead of firing.
         if (overCap(s.chatId, deps.now())) {
           log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, skipped: "rate_cap" })}`);
-          deps.store.complete(s.id, deps.now());
+          safeComplete(s);
           continue;
         }
         try { await fireOne(s); fired++; }
@@ -126,7 +137,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
           deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: 0, ok: false });
           // Don't leave a failed once-task to retry forever every tick — complete it so it
           // drops (daily still advances). A failed run is reported by the miss, not a storm.
-          deps.store.complete(s.id, deps.now());
+          safeComplete(s);
         }
       }
       if (fired) log(`[schedule] fired ${fired} due task(s)`);

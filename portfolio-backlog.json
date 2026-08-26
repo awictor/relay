@@ -755,7 +755,7 @@
       "id": "degrade-2",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m14] Proactive degradation: a scheduled/recipe/digest/alert run whose dependency is down must SKIP cleanly (already partly: runner catches + completes) but verify digest member failure, alert-check failure, and a store whose persist() throws all degrade without crashing the tick loop or losing other due items. Add runner tests: one member/alert throwing doesnt block the rest; a persist failure is swallowed. "
     },
@@ -1057,6 +1057,9 @@
     },
     {
       "event": "m14 degrade-1 DONE: added src/lib/failure.ts (classifyFailure -> browser|llm|blocked|generic + friendlyError). Handler catch no longer leaks raw emsg to the user (was `Sorry — something went wrong: ${emsg}` w/ hostnames/status/stack); now sends a category-specific friendly line, raw still logged via turn-log. +9 tests (failure.test.ts + 2 handler cases: anvil-down->browser msg no ECONNREFUSED leak, blocked-URL->unsafe msg). 353 pass. anvil live(200); failure path call-tested via injected throwing runAgentFn (not live-crashed — killing anvil is disruptive). Refill: degrade-4 (route proactive-runner user-facing failures through friendlyError too)."
+    },
+    {
+      "event": "m14 degrade-2 DONE: proactive-path resilience. Audit found schedule-runner already per-schedule try/catch (failed task completed not retried-forever), digest-runner already per-member (couldnt fetch), alert-runner already catch->notify:false, stores persist() already best-effort. REMAINING gap fixed: store.complete() in tick (inner catch + overCap branch) was UNGUARDED — an unwritable-store complete() would escape the loop and abort the rest of the due batch, losing other due tasks. Added safeComplete() wrapper (swallow+log+onError). Test: flaky store whose complete() throws mid-batch -> both due tasks still attempted, tick doesnt throw. 354 pass, tsc clean. call-tested via injected flaky store (offline)."
     }
   ],
   "roadmap": {

@@ -76,6 +76,44 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.list(1)).toHaveLength(0); // dropped, won't retry every tick
   });
 
+  // m14 degrade-2: completing a schedule persists to disk. If complete() throws (unwritable
+  // store), it must NOT abort the rest of the due batch — every other due task still fires.
+  it("a store.complete() failure is swallowed and doesn't block the rest of the due batch", async () => {
+    const clock = { t: NOW };
+    const store = new ScheduleStore({ file: tmpFile() });
+    const errs: unknown[] = [];
+    // Wrap the real store so complete() throws on the FIRST call only (simulate a transient
+    // write failure), then delegates normally.
+    let firstComplete = true;
+    const flaky = Object.assign(Object.create(Object.getPrototypeOf(store)), store, {
+      dueNow: (n: number) => store.dueNow(n),
+      complete: (id: string, n: number) => {
+        if (firstComplete) { firstComplete = false; throw new Error("EACCES: read-only file system"); }
+        return store.complete(id, n);
+      },
+    });
+    const ran: string[] = [];
+    const runner = makeScheduleRunner({
+      store: flaky,
+      llm: {} as never,
+      runAgent: async (task) => { ran.push(task); return { reply: `did:${task}` }; },
+      send: async () => {},
+      formatReply: (t) => t,
+      now: () => clock.t,
+      periodMs: 0,
+      onError: (e) => errs.push(e),
+    });
+    store.add(1, { kind: "once", task: "a", dueMs: NOW - 1 }, NOW);
+    store.add(1, { kind: "once", task: "b", dueMs: NOW - 1 }, NOW);
+    // tick must NOT throw even though the first task's complete() throws mid-batch.
+    const n = await runner.tick();
+    // BOTH tasks were attempted (agent ran for each) — the complete() failure on "a" didn't abort
+    // the loop before "b" got its turn. That's the resilience guarantee.
+    expect(ran).toEqual(["a", "b"]);
+    expect(n).toBeGreaterThanOrEqual(1); // "b" fully fired; "a" completed-failed (still attempted)
+    expect(errs).toHaveLength(1);        // the complete failure was reported, not swallowed silently
+  });
+
   it("only fires each due task once even if ticks overlap (re-entrancy guard)", async () => {
     const clock = { t: NOW };
     let agentCalls = 0;
