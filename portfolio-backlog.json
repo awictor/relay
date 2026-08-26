@@ -62,16 +62,23 @@
     {
       "id": "syn-1b",
       "repo": "anvil",
-      "status": "todo",
-      "value": "high",
-      "task": "FIX puppeteer.connect -> anvil /cdp: fails \"Protocol error (Target.getBrowserContexts): Target closed\". Relay only used anvil REST, never puppeteer.connect, so browser-level CDP relay is unproven. Diagnose: (a) puppeteer-core skew (mcp-forge 25.1.0 vs anvil deps 24.43.1) — try matching versions; (b) anvil src/cdp-proxy.ts relay of browser-level calls (Target.*) — does it forward/keep-alive correctly?; (c) test raw: connect puppeteer-core@24 to anvil /cdp from a scratch script. This gates the whole DataFaucet->anvil migration (auto-scan needs page.on(request) interception, which needs puppeteer.connect)."
+      "status": "partial",
+      "value": "low",
+      "task": "PARTIAL: fixed a real cdp-proxy bug (buffer client CDP msgs until Chrome ws opens, anvil 216d927) but puppeteer.connect still fails Target-closed — deeper browser-level relay issue. DOWNGRADED: HAR capture path (syn-1c) supersedes this for the DataFaucet migration, so puppeteer.connect is no longer on the critical path. Revisit only if a future need requires live CDP driving."
     },
     {
       "id": "syn-1c",
       "repo": "datafaucet",
       "status": "todo",
+      "value": "high",
+      "task": "ELEVATED to THE migration path (puppeteer.connect blocked). VERIFIED anvil HAR works via pure REST: create session -> POST /v1/har/start -> POST /v1/actions/navigate -> /v1/har/stop -> GET /v1/har returned 18 entries for jsonplaceholder, no puppeteer.connect. NEXT: on branch anvil-migration, add an anvil-HAR capture path to auto-scan that (1) navigates the crawl pages via /v1/actions/navigate, (2) collects requests from HAR, (3) maps HAR entries -> the scan output {method,url,headers,body} DataFaucet expects. First: confirm exact HAR entry shape (my probe hit e.request undefined — GET /v1/har and log one entry’s keys)."
+    },
+    {
+      "id": "syn-1d",
+      "repo": "datafaucet",
+      "status": "todo",
       "value": "medium",
-      "task": "Fallback if puppeteer.connect stays hard: DataFaucet auto-scan could use anvil REST /v1/har (start/stop) or intercept endpoints to capture network requests instead of puppeteer request events — anvil already records HAR. Evaluate whether HAR gives the same {method,url,headers,body} the scan needs; if so, an anvil-native capture path avoids puppeteer.connect entirely."
+      "task": "Prereq for syn-1c: dump one anvil HAR entry’s full shape (GET /v1/har after a navigate) and document the field path to method/url/headers/postData, so the HAR->scan mapping in syn-1c is exact. anvil HAR is standard HAR 1.2 (log.entries[].request.{method,url,headers[],postData.text}) — confirm against live output."
     }
   ],
   "history": [
@@ -82,6 +89,10 @@
     {
       "item": "syn-1",
       "note": "Wrote flag-gated anvil backend for auto-scan (branch anvil-migration, prod-safe, tsc+build green). Found real bug: puppeteer.connect to anvil /cdp -> Target closed. Refilled syn-1b (fix the connect / version skew) + syn-1c (HAR-based capture fallback)."
+    },
+    {
+      "item": "syn-1b + HAR discovery",
+      "note": "cdp-proxy buffer fix shipped (anvil 216d927) but puppeteer.connect still Target-closed. Pivoted strategy: VERIFIED anvil HAR capture works over pure REST (18 entries, no puppeteer.connect). Elevated syn-1c to the migration path, downgraded syn-1b, refilled syn-1d (nail HAR entry shape)."
     }
   ]
 }
