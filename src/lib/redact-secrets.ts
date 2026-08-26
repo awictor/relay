@@ -3,7 +3,7 @@
 // values are replaced anywhere in a nested object/array, matched by KEY NAME.
 
 export const SENSITIVE_KEY_RE =
-  /password|passwd|secret|token|api_key|apikey|access_token|refresh_token|private_key|client_secret|credential|credit_card|card_number|cvv|ssn|social_security|authorization|^auth$|_auth$|bearer/i;
+  /password|passwd|secret|token|api_key|apikey|access_token|refresh_token|private_key|client_secret|credential|credit_card|card_number|cvv|ssn|social_security|authorization|^auth$|_auth$|bearer|session_id|session_token/i;
 
 export function redactSecretsDeep(
   node: unknown,
