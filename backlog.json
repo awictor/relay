@@ -59,9 +59,9 @@
     },
     {
       "id": "deploy-1",
-      "status": "todo",
+      "status": "prepped",
       "value": "high",
-      "task": "OWNER-GATED infra: stand up 24/7 host. Recommend Oracle Cloud Always Free VM: docker run anvil-engine + pm2/systemd the Relay worker. Health checks. Document exact steps. Until then MVP runs on Alex's machine (anvil local, worker local). Confirm with Alex before relying on any host."
+      "task": "DEPLOY ARTIFACTS DONE (provisioning still owner-gated): Relay Dockerfile (tiny node:22-slim worker, no port/no Chrome — anvil owns Chrome), docker-compose.yml (anvil + relay one network, relay->http://anvil:3000, healthcheck-gated depends_on, restart unless-stopped, env from .env), DEPLOY.md (exact Oracle Cloud Always Free steps + on-machine fallback + honest compute-not-vendor note). env var names verified consistent across .env.example/compose/anvil. tsc+18 tests green. OWNER STILL NEEDS: create the Oracle VM + provide TELEGRAM_BOT_TOKEN + GEMINI_API_KEY in relay/.env, then docker compose up -d --build."
     },
     {
       "id": "polish-1",
@@ -90,6 +90,10 @@
     {
       "item": "agent-2",
       "note": "multi-step browse (navigate/click/type/read) + dangerous-action guard; fixed readCurrent (scrape-needs-url -> evaluate innerText); verified live nav+read+release."
+    },
+    {
+      "item": "deploy-1 (prep)",
+      "note": "Dockerfile + docker-compose + DEPLOY.md written and verified. Actual VM provisioning + tokens remain owner-gated."
     }
   ]
 }

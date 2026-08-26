@@ -1,0 +1,47 @@
+# Runs the whole Relay stack on one host (e.g. an Oracle Cloud Always Free VM):
+#   - anvil: self-hosted Chrome browser-as-a-service (built from ../anvil-engine)
+#   - relay: the Telegram agent worker, talking to anvil over the internal network
+#
+# Prereqs on the host:
+#   1. Both repos cloned side by side: ./anvil-engine and ./relay (this dir).
+#   2. `npm run build` run in BOTH (compose copies pre-built dist/).
+#   3. A .env file next to this compose with TELEGRAM_BOT_TOKEN, GEMINI_API_KEY,
+#      and optionally ANVIL_API_KEY (see DEPLOY.md).
+#
+# Start:  docker compose up -d --build
+# Logs:   docker compose logs -f relay
+# Stop:   docker compose down
+
+services:
+  anvil:
+    build: ../anvil-engine
+    restart: unless-stopped
+    environment:
+      ANVIL_HOST: 0.0.0.0
+      ANVIL_ENGINE_PORT: "3000"
+      ANVIL_API_KEY: ${ANVIL_API_KEY:-}
+      ANVIL_MAX_SESSIONS: "5"
+      ANVIL_SESSION_TIMEOUT_MS: "300000"
+    # No published port — only relay (same network) reaches it. Add "3000:3000"
+    # under ports: if you want to hit anvil from the host for debugging.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/v1/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  relay:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      anvil:
+        condition: service_healthy
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN in .env}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?set GEMINI_API_KEY in .env}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+      ANVIL_BASE_URL: http://anvil:3000
+      ANVIL_API_KEY: ${ANVIL_API_KEY:-}
+      RELAY_MAX_STEPS: ${RELAY_MAX_STEPS:-8}
+      RELAY_RATE_LIMIT_PER_MIN: ${RELAY_RATE_LIMIT_PER_MIN:-10}
