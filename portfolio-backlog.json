@@ -470,6 +470,14 @@
       "status": "done",
       "repo": "relay",
       "task": "Prove graceful shutdown end-to-end: a script that spawns the built worker (dist/index.js) with a dummy TELEGRAM_BOT_TOKEN, sends SIGTERM, and asserts it logs [shutdown] + exits 0 within ~2s (not killed by timeout). Uses child_process; offline. Confirms the signal wiring works in the real process, not just the unit fn. [DONE: scripts/e2e-shutdown.mjs spawns built worker, SIGTERMs, asserts [shutdown]+exit0 (SIGKILL backstop). win32-honest: skips (no catchable SIGTERM), asserts on Linux/CI. exit 0 here]"
+    },
+    {
+      "id": "relay-shutdown-ci",
+      "stream": "quality",
+      "value": "low",
+      "status": "todo",
+      "repo": "relay",
+      "task": "Wire scripts/e2e-shutdown.mjs into CI so the SIGTERM assertion actually runs on Linux (the workflow runner). Add a step to .github/workflows/ci.yml after npm test: npm run build && node scripts/e2e-shutdown.mjs. On ubuntu it exercises the real signal path (skips only on Windows). Small — locks graceful-shutdown against regression on the deploy platform."
     }
   ],
   "history": [
