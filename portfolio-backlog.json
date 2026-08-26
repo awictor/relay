@@ -1,0 +1,36 @@
+{
+  "_comment": "Portfolio backlog for /agent-loop. Spans THREE repos around one thesis: anvil-engine is the self-hosted agentic browser that BOTH products run on (no Browserbase/Browserless/Steel). Each iteration: STAGE 0 triage across all streams -> do the single highest-leverage item -> verify -> commit/push -> REFILL (append >=1 new next-step you discovered). STOP only if truly nothing + refill yielded nothing.",
+  "thesis": "anvil-engine (self-hosted CDP browser) is shared infra. Relay = consumer text-a-bot on anvil. DataFaucet = dev/MCP layer; its capture flow still pays Browserbase — moving it to anvil unifies the stack and removes the vendor. Synergy: one browser engine, two products, zero browser vendor.",
+  "repos": {
+    "relay": "C:/Users/acwic/relay (awictor/relay, branch main) — consumer Telegram agent. MVP DONE + live-verified.",
+    "datafaucet": "C:/Users/acwic/mcp-forge (awictor/mcp-forge, master) — DO NOT touch master. All work on branch anvil-migration behind a feature flag; prod stays on Browserbase until Alex merges.",
+    "anvil": "C:/Users/acwic/anvil-engine (awictor/anvil-engine, main) — the shared browser engine."
+  },
+  "invariants": [
+    "Free services only. Never commit secrets (.env gitignored; grep staged diff before push).",
+    "DataFaucet: NEVER commit to master. Use branch 'anvil-migration'; gate every behavior change behind an env flag (e.g. BROWSER_BACKEND=anvil|browserbase, default browserbase) so prod is unaffected until merge.",
+    "Verify before done: tsc + tests each repo; real e2e (anvil live at http://localhost:3000) when possible; report call-tested honestly.",
+    "$? after a pipe is the pipe's status. Context-mode hook blocks curl — use ctx_execute(fetch) for HTTP probes.",
+    "EVERY iteration must REFILL: append >=1 concrete next-step to items[] before finishing, so the loop never dead-ends."
+  ],
+  "streams": {
+    "synergy": "Wire DataFaucet capture-flow (auto-scan) to anvil as an alternative browser backend behind BROWSER_BACKEND flag. This is the flagship cross-product work — deep well: adapter, session mgmt, live-view, tests, parity with Browserbase.",
+    "relay": "Extend Relay: more channels (SMS/WhatsApp), richer tools, memory persistence, deploy hardening. Also: dogfood — could Relay consume a DataFaucet-hosted MCP?",
+    "anvil": "Harden the shared engine: whatever both consumers need (stability, stealth, session limits, observability). Fixes here benefit both products.",
+    "quality": "Tests/e2e/robustness across all three."
+  },
+  "owner_blockers": [
+    "deploy-1 (relay): Oracle Always Free VM for 24/7 (DEPLOY.md). Owner-gated.",
+    "DataFaucet prod merge: after anvil-migration branch is proven, Alex decides when to merge + flip the flag."
+  ],
+  "items": [
+    { "id": "syn-1", "repo": "datafaucet", "status": "todo", "value": "high", "task": "Create branch anvil-migration off master (never touch master). Add a BROWSER_BACKEND env flag (default 'browserbase'). In src/app/api/browser/auto-scan/route.ts add an anvil provider path: when BROWSER_BACKEND=anvil, create an anvil session (POST /v1/sessions) + build the CDP ws endpoint (ws(s)://host/cdp?session=<id>[&token]) + puppeteer.connect, mirroring the existing browserless/browserbase branch. Reuse Relay's verified connect pattern. tsc + build; do NOT change default behavior." },
+    { "id": "syn-2", "repo": "datafaucet", "status": "todo", "value": "high", "task": "On anvil-migration: point start/stop/debug browser routes' backend selection at the flag too (session create + teardown + live-view). anvil live-view is /v1/view (MJPEG) — map it where Browserbase debug URL was used. Keep browserbase default. Verify a real auto-scan via anvil locally (anvil on :3000) returns captured endpoints." },
+    { "id": "syn-3", "repo": "datafaucet", "status": "todo", "value": "medium", "task": "Add an e2e/unit test asserting the anvil backend path builds a valid CDP endpoint + captures endpoints, mirroring existing browser tests. Document BROWSER_BACKEND in .env.local.example. Prepare a PR description for the eventual master merge (do NOT merge)." },
+    { "id": "relay-mem", "repo": "relay", "status": "todo", "value": "medium", "task": "Persist per-chat memory across restarts (currently in-memory Map, lost on restart). Simple JSON file or sqlite; bounded. Unit-test load/save. Keeps the agent context after a redeploy." },
+    { "id": "anvil-obs", "repo": "anvil", "status": "todo", "value": "low", "task": "Confirm /v1/metrics exposes session counts + latency both products can monitor; add anything missing. Low priority until a real deploy exists." }
+  ],
+  "history": [
+    { "item": "portfolio-loop created", "note": "Pivoted from single-repo relay-loop (kept dead-ending) to a 3-repo portfolio loop around the anvil-as-shared-browser thesis. Flagship stream = wire DataFaucet capture to anvil (behind a flag, on a branch, prod untouched). Self-refilling." }
+  ]
+}
