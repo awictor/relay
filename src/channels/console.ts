@@ -42,13 +42,18 @@ export function makeConsoleChannel(deps: ConsoleChannelDeps): Channel {
  */
 export function nodeConsoleChannel(): Channel {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: "> " });
+  let closed = false;
+  // Re-prompt only while open. On EOF (piped input / Ctrl-D) readline fires "close"; prompting after
+  // that throws ERR_USE_AFTER_CLOSE, so guard it (this crashed `npm run demo` on piped stdin).
+  const reprompt = () => { if (closed) return; try { rl.prompt(); } catch { closed = true; } };
   return makeConsoleChannel({
     onLine: (handler) => {
-      const fn = (line: string) => { handler(line); rl.prompt(); };
+      const fn = (line: string) => { handler(line); reprompt(); };
       rl.on("line", fn);
-      rl.prompt();
-      return () => { rl.off("line", fn); rl.close(); };
+      rl.once("close", () => { closed = true; });
+      reprompt();
+      return () => { closed = true; rl.off("line", fn); rl.close(); };
     },
-    write: (text) => { process.stdout.write("\n" + text + "\n"); },
+    write: (text) => { process.stdout.write("\n" + text + "\n"); }, // always print, even a reply that lands after EOF
   });
 }

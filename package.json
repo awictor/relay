@@ -16,6 +16,7 @@
     "status": "tsx scripts/status.mjs",
     "preflight": "node scripts/preflight.mjs",
     "bench:latency": "tsx scripts/bench-latency.mjs",
+    "demo": "tsx scripts/demo.mjs",
     "clean": "rm -rf dist"
   },
   "dependencies": {

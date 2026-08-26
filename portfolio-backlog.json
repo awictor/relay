@@ -1019,7 +1019,7 @@
       "id": "demo-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m25] scripts/demo.mjs (npm run demo): build the real handler (createHandler with the actual llm + anvil-backed runAgent + console channel from src/channels/console.ts), read tasks from stdin (readline), feed each through the handler, print the reply. Reuse index.ts wiring — do NOT fork the agent. If GEMINI_API_KEY missing or anvil /v1/live down, print a clear one-line notice + exit 0 (no crash). Reference src/channels/console.ts + handler.ts for exact shapes."
     },
@@ -1408,6 +1408,9 @@
     },
     {
       "event": "m24 claude-3 DONE + m24-claude-adapter COMPLETE. claude-3: LLM_PROVIDER=gemini|claude selector in index.ts (default gemini, byte-unchanged), hasModelKey + boot warning now provider-aware (ANTHROPIC_API_KEY vs GEMINI_API_KEY), boot logs agent brain: <provider>. README diagram + PORTFOLIO Relay bullet updated to cite the two REAL adapters (GeminiClient default + ClaudeClient) swapped by one env var, live Claude = paid key. 381 pass, tsc clean. m24 done_when met: Claude-swappable is real code+tests+selector, not vapor; live call owner-gated. ROADMAP advanced -> AUTHORED m25-console-demo (npm run demo: zero-Telegram one-command drive of the real agent loop over the console channel — makes the product feelable in 30s). Seeded demo-1/2/3. 21st self-directed milestone."
+    },
+    {
+      "event": "m25 demo-1 DONE: scripts/demo.mjs (npm run demo) — zero-Telegram drive of the REAL agent over the console channel. Preflight: missing model key OR anvil down -> clear [demo] notice + exit 0 (verified both). Sets RELAY_CHANNEL=console then imports index.ts (reuses ALL wiring, agent NOT forked); banner shows brain+browser+example tasks. FOUND+FIXED a real bug in nodeConsoleChannel (src/channels/console.ts): rl.prompt() after readline close threw ERR_USE_AFTER_CLOSE + crashed the process on EOF/piped stdin — now guarded (closed flag + try/catch reprompt + once(close)). Verified: notice path exit 0, real boot reaches > prompt with anvil reachable:true + agent brain:gemini, no crash. HONEST: interactive reply works live; piped-single-line stdin is racy on Windows (readline+pipe timing) so not auto-asserted — its a human interactive tool. 382 pass, tsc clean."
     }
   ],
   "roadmap": {
