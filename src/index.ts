@@ -11,6 +11,7 @@ import { handleCommand } from "./commands.js";
 import { MemoryStore } from "./lib/memory-store.js";
 import { Metrics } from "./lib/metrics.js";
 import { createHandler } from "./handler.js";
+import { createShutdown, installSignalHandlers } from "./shutdown.js";
 
 const llm = new GeminiClient();
 
@@ -58,7 +59,14 @@ async function main() {
   if (!process.env.GEMINI_API_KEY) console.warn("WARNING: GEMINI_API_KEY not set — the agent can't run until it's provided.");
 
   console.log("Relay polling Telegram…");
-  startPolling(handle);
+  const poller = startPolling(handle);
+  // Clean stop on docker stop / pm2 restart / Ctrl-C: halt polling, exit 0. Memory is
+  // already durable (MemoryStore persists synchronously each turn).
+  installSignalHandlers(createShutdown({
+    stopPolling: () => poller.stop(),
+    log: (m) => console.log(m),
+    exit: (code) => process.exit(code),
+  }));
 }
 
 main();
