@@ -34,6 +34,15 @@ describe("formatStatus", () => {
     expect(s.startsWith("⚠")).toBe(true);
     expect(s.startsWith("✅")).toBe(false);
   });
+  // DEV-0109: surface the busiest command when present, omit the fragment when not.
+  it("renders a top-command fragment when topCommand is set", () => {
+    const s = formatStatus({ uptimeMs: 1000, turns: 2, anvilOk: true, topCommand: { name: "/status", count: 3 } });
+    expect(s).toMatch(/top cmd \/status x3/);
+  });
+  it("omits the top-command fragment when no command has been used", () => {
+    const s = formatStatus({ uptimeMs: 1000, turns: 2, anvilOk: true });
+    expect(s).not.toMatch(/top cmd/);
+  });
 });
 
 describe("makeAnvilPinger (DEV-0025 live reachability refresh)", () => {

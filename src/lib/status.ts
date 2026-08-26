@@ -5,6 +5,7 @@ export interface StatusInfo {
   uptimeMs: number;      // ms since process start
   turns: number;         // total turns handled (from Metrics)
   anvilOk: boolean;      // last-known anvil reachability
+  topCommand?: { name: string; count: number }; // DEV-0109: busiest slash command, omitted if none
 }
 
 // DEV-0025: /status reachability was boot-seeded only, so it went stale when the browser dropped
@@ -72,5 +73,7 @@ export function formatStatus(info: StatusInfo): string {
   const browser = info.anvilOk ? "browser connected" : "browser DOWN";
   const turns = info.turns === 1 ? "1 task" : `${info.turns} tasks`;
   const prefix = info.anvilOk ? "✅" : "⚠️";
-  return `${prefix} Relay up ${formatUptime(info.uptimeMs)} · ${turns} handled · ${browser}.`;
+  // DEV-0109: surface the busiest slash command when one has been used (omitted otherwise).
+  const topCmd = info.topCommand ? ` · top cmd ${info.topCommand.name} x${info.topCommand.count}` : "";
+  return `${prefix} Relay up ${formatUptime(info.uptimeMs)} · ${turns} handled · ${browser}${topCmd}.`;
 }

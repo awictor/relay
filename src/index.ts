@@ -112,7 +112,11 @@ const handle = createHandler({
   memoryGet: (id) => memory.get(id) as LLMMessage[],
   memorySet: (id, history) => memory.set(id, history),
   memoryClear: (id) => memory.delete(id),
-  statusLine: () => formatStatus({ uptimeMs: Date.now() - startMs, turns: metrics.summary().turns, anvilOk: anvilPinger.current() }),
+  statusLine: () => {
+    const cmds = Object.entries(metrics.summary().commands);
+    const topCommand = cmds.length ? { name: cmds[0]![0], count: cmds[0]![1] } : undefined;
+    return formatStatus({ uptimeMs: Date.now() - startMs, turns: metrics.summary().turns, anvilOk: anvilPinger.current(), topCommand });
+  },
   scheduleAdd: (chatId, text, now) => {
     const p = parseSchedule(text, now);
     if (!p) return { ok: false, reason: "unparsed" };
