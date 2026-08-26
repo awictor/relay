@@ -1,0 +1,31 @@
+{
+  "_comment": "Relay build backlog for /relay-loop. Each iteration: STAGE 0 triage -> pick highest-leverage todo -> build -> verify (tsc + vitest + real e2e when keys present) -> commit + push. STOP is valid. Free services only. Never touch mcp-forge. Secrets in .env only (gitignored).",
+  "product": "Relay — text a Telegram bot; an agent + self-hosted anvil-engine browser fetches/processes data from any app and replies. Instinct (instinct.co) competitor. Free-infra MVP.",
+  "invariants": [
+    "Free services only (Telegram long-poll, Gemini free tier, self-hosted anvil).",
+    "Do NOT modify C:/Users/acwic/mcp-forge. Merge improvements back via PRs later.",
+    "Secrets via .env (gitignored) — reuse redact-secrets; grep before every push.",
+    "anvil connect: POST /v1/sessions -> build ws(s)://host/cdp?session=<id>[&token=] yourself -> puppeteer.connect -> POST /v1/sessions/:id/release. Simple fetches: REST /v1/scrape.",
+    "LLM behind an adapter interface so Claude swaps in for Gemini in one line."
+  ],
+  "owner_blockers": [
+    "TELEGRAM_BOT_TOKEN in .env (from @BotFather) — needed for any live/e2e test.",
+    "GEMINI_API_KEY in .env (aistudio.google.com/apikey) — needed for the agent loop.",
+    "anvil-engine running + reachable at ANVIL_BASE_URL (local `docker run -p 3000:3000 anvil-engine`, or deployed) — needed for browser fetches.",
+    "Hosting decision for 24/7 (Oracle Always Free VM recommended) — item deploy-1."
+  ],
+  "items": [
+    { "id": "scaffold", "status": "done", "value": "high", "task": "TS project (package.json/tsconfig/gitignore/.env.example), copied libs (redact-secrets, url-validator), anvil client, telegram transport, stub index, unit test, backlog, README. Pushed to awictor/relay." },
+    { "id": "anvil-1", "status": "done", "value": "high", "task": "anvil client: createSession (builds CDP ws endpoint correctly), releaseSession, withBrowser (puppeteer connect+release), scrape (REST), anvilLive probe. src/anvil.ts." },
+    { "id": "tg-1", "status": "done", "value": "high", "task": "Telegram long-poll getUpdates + sendMessage. src/telegram.ts." },
+    { "id": "agent-1", "status": "todo", "value": "high", "task": "Agent loop (src/agent.ts): LLM adapter interface (LLMClient) + Gemini free-tier impl using generateContent function-calling. Tools: browse(url)->scrape text, reply(text). Bounded by RELAY_MAX_STEPS. Per-chat short memory (last N turns). Behind interface so Claude swaps in. Unit-test the tool-dispatch + step cap with a mock LLM (no network)." },
+    { "id": "wire-1", "status": "todo", "value": "high", "task": "Replace index.ts stub with the agent: inbound msg -> agent.run(chatId, text) -> tools drive anvil -> reply. First real errands: 'top HN story', 'weather in <city>'. e2e verify: text the bot, assert a coherent reply (needs all 3 keys)." },
+    { "id": "safety-1", "status": "todo", "value": "medium", "task": "Safety: per-chat rate limit (RELAY_RATE_LIMIT_PER_MIN), step/time caps enforced, SSRF via isUrlSafe on every browse target, dangerous-action guard (mirror auto-scan DANGEROUS regex: delete/pay/logout/purchase/etc.) before any click/submit, redact secrets from anything echoed back or logged." },
+    { "id": "agent-2", "status": "todo", "value": "medium", "task": "Richer tools: navigate+click+type via withBrowser (multi-step browsing, not just scrape), extract-structured (ask LLM to pull fields from page text). Keeps step cap + safety guard." },
+    { "id": "deploy-1", "status": "todo", "value": "high", "task": "OWNER-GATED infra: stand up 24/7 host. Recommend Oracle Cloud Always Free VM: docker run anvil-engine + pm2/systemd the Relay worker. Health checks. Document exact steps. Until then MVP runs on Alex's machine (anvil local, worker local). Confirm with Alex before relying on any host." },
+    { "id": "polish-1", "status": "todo", "value": "low", "task": "UX: typing indicator (sendChatAction), /start + /help commands, friendly errors, truncation notices, basic usage log." }
+  ],
+  "history": [
+    { "item": "scaffold + anvil-1 + tg-1", "note": "Initial scaffold created by the build session (pre-loop). Channel->stub->anvil pipe runnable; agent loop is the next item." }
+  ]
+}
