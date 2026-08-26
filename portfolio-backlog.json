@@ -731,9 +731,9 @@
       "id": "shared-2",
       "stream": "synergy",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "datafaucet",
-      "task": "[m13] Vendor the same anvil-client.ts into mcp-forge (anvil-migration branch) alongside the existing browser-backend.ts, and re-point anvilConnectUrls to use buildConnectUrls from it (behavior identical). Add tests/unit/anvil-client-parity.test.ts that reads BOTH files (relay + mcp-forge copies) and asserts they are byte-identical (the vendoring contract). Full test:unit green; browserbase path unchanged."
+      "task": "[m13] Vendor the same anvil-client.ts into mcp-forge (anvil-migration branch) alongside the existing browser-backend.ts, and re-point anvilConnectUrls to use buildConnectUrls from it (behavior identical). Add tests/unit/anvil-client-parity.test.ts that reads BOTH files (relay + mcp-forge copies) and asserts they are byte-identical (the vendoring contract). Full test:unit green; browserbase path unchanged. [DONE: vendored anvil-client.ts into mcp-forge byte-identical; anvilConnectUrls delegates to buildConnectUrls; tests/unit/anvil-client-parity.test.ts (skip-if-relay-absent) wired into test:unit; browserbase unchanged; 19 anvil/backend tests green]"
     },
     {
       "id": "shared-3",
@@ -1016,6 +1016,9 @@
     },
     {
       "event": "m13 shared-1 done: canonical shared anvil-client. src/lib/anvil-client.ts (pure, dependency-light): buildConnectUrls(base,id,key) -> {connectUrl cdp-ws, liveUrl /v1/view} + isTransientError, marked CANONICAL for vendoring. src/anvil.ts re-points (createSession uses it, isTransientError re-exported), no behavior change. 6 tests, 342 full suite pass, tsc clean. Next m13: shared-2 (vendor the file into mcp-forge anvil-migration + byte-parity test; re-point anvilConnectUrls)."
+    },
+    {
+      "event": "m13 shared-2 done: vendored the canonical anvil-client.ts into mcp-forge (anvil-migration, byte-identical); anvilConnectUrls now delegates to buildConnectUrls (behavior identical, browserbase untouched). tests/unit/anvil-client-parity.test.ts guards the vendoring contract (byte-identical vs the Relay copy; skips gracefully in CI where relay isnt checked out), wired into test:unit. 19 backend/anvil tests green. The connect logic now has ONE source across both repos, drift-guarded. Next m13: shared-3 (Relay-side mirror parity guard + doc the contract) -> completes m13."
     }
   ],
   "roadmap": {
