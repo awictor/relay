@@ -84,4 +84,27 @@ describe("runAgent loop control (DEV-0014)", () => {
     const { tools } = await runAgent("two tools then reply", { llm, backend: stubBackend() });
     expect(tools).toEqual(["scrape", "fetch_json"]);
   });
+
+  // HARDEN: the step-budget-exhausted path — the model tool-calls every step and never replies.
+  // The loop must exit and make ONE forced "reply now" call so the user still gets an answer, not
+  // a hang or a thrown error. RELAY_MAX_STEPS default is 8; script 8 scrapes + the forced reply.
+  it("exhausting the step budget makes a forced final reply (user still gets an answer)", async () => {
+    const script = Array.from({ length: 8 }, () => ({ toolCall: { name: "scrape", args: { url: "https://x.com/a" } } as ToolCall }));
+    script.push({ text: "best answer with what I have" }); // the forced final llm.complete
+    const llm = new ScriptLLM(script);
+    const { reply, steps } = await runAgent("never replies", { llm, backend: stubBackend() });
+    expect(reply).toBe("best answer with what I have");
+    expect(steps).toBe(8); // capped
+    // the forced call carries the "Step budget reached" nudge as the last user message
+    const forced = llm.calls[llm.calls.length - 1]!;
+    expect(forced.some((m) => m.role === "user" && /step budget reached/i.test(m.content))).toBe(true);
+  });
+
+  it("a blank forced final reply falls back to the ran-out-of-steps message", async () => {
+    const script = Array.from({ length: 8 }, () => ({ toolCall: { name: "scrape", args: { url: "https://x.com/a" } } as ToolCall }));
+    script.push({ text: "   " }); // forced reply is blank -> fallback
+    const llm = new ScriptLLM(script);
+    const { reply } = await runAgent("never replies, blank final", { llm, backend: stubBackend() });
+    expect(reply).toMatch(/ran out of steps/i);
+  });
 });
