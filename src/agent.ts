@@ -274,18 +274,8 @@ export async function runAgent(
         if (!safe.safe) { push("extract", `ERROR: refused (${safe.reason}).`); continue; }
         if (fields.length === 0) { push("extract", "ERROR: no fields given. Provide the field names to extract."); continue; }
         try {
-          const r = await backend.scrape(url);
-          let { json, allNull } = await extractFieldsResult(deps.llm, r.content.slice(0, 8000), fields);
-          // Fallback: if the visible text yielded nothing, many SPA/product pages carry
-          // the data in JSON-LD / meta tags a text scrape drops. Retry over those.
-          if (allNull && backend.extractStructured) {
-            const structured = await backend.extractStructured(url).catch(() => "");
-            if (structured.trim()) {
-              const retry = await extractFieldsResult(deps.llm, structured.slice(0, 8000), fields);
-              if (!retry.allNull) json = retry.json;
-            }
-          }
-          push("extract", `EXTRACTED from ${r.title || url}:\n${json}`);
+          const { json, title } = await extractOne(deps.llm, backend, url, fields);
+          push("extract", `EXTRACTED from ${title || url}:\n${json}`);
         } catch (e) {
           push("extract", `ERROR extracting from ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -312,8 +302,8 @@ export async function runAgent(
         // rather than failing the whole compare.
         const rows = await Promise.all(urls.map(async (u) => {
           try {
-            const r = await backend.scrape(u);
-            const json = await extractFields(deps.llm, r.content.slice(0, 8000), fields);
+            // Same text -> JSON-LD/meta fallback as the extract tool, per row.
+            const { json } = await extractOne(deps.llm, backend, u, fields);
             return { url: u, ...(JSON.parse(json) as Record<string, unknown>) };
           } catch {
             return { url: u, ...Object.fromEntries(fields.map((f) => [f, null])) };
@@ -388,6 +378,27 @@ export async function runAgent(
 // gets valid, shaped output rather than prose.
 export async function extractFields(llm: LLMClient, pageText: string, fields: string[]): Promise<string> {
   return (await extractFieldsResult(llm, pageText, fields)).json;
+}
+
+/** Extract fields from one URL: scrape text, and if that yields all-null, retry over
+ * the page's JSON-LD/meta (when the backend supports it). Shared by the extract and
+ * compare tools so both are SPA-robust. Returns the normalized JSON + the page title. */
+export async function extractOne(
+  llm: LLMClient,
+  backend: BrowserBackend,
+  url: string,
+  fields: string[]
+): Promise<{ json: string; title: string }> {
+  const r = await backend.scrape(url);
+  let { json, allNull } = await extractFieldsResult(llm, r.content.slice(0, 8000), fields);
+  if (allNull && backend.extractStructured) {
+    const structured = await backend.extractStructured(url).catch(() => "");
+    if (structured.trim()) {
+      const retry = await extractFieldsResult(llm, structured.slice(0, 8000), fields);
+      if (!retry.allNull) json = retry.json;
+    }
+  }
+  return { json, title: r.title };
 }
 
 /** Like extractFields but also reports whether every field came back null — lets the
