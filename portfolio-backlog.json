@@ -827,7 +827,7 @@
       "id": "anvil-ops-1",
       "stream": "anvil",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "anvil-engine",
       "task": "[m17] AUDIT anvil-engines current observability: read src (app.ts/actions.ts/pool.ts/config.ts), list what /v1/live + any /v1/metrics expose today, whether session-pool state (active/max/leaked) is visible, and whether uncaught errors log+exit for a supervisor (like Relay installCrashHandlers). Write the gap list into the backlog as the concrete anvil-ops-2 task. cd C:/Users/acwic/anvil-engine; do NOT touch mcp-forge."
     },
@@ -835,7 +835,7 @@
       "id": "anvil-ops-2",
       "stream": "anvil",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "anvil-engine",
       "task": "[m17] Close the biggest observability gap found in anvil-ops-1 — most likely a /v1/metrics (or extend /v1/live) that reports sessions active/max, pool size, uptime, total-served, so Relays `relay status` (and any operator) can see anvil health. Match anvils existing route/test patterns; vitest + tsc; default path unchanged."
     },
@@ -1156,6 +1156,9 @@
     },
     {
       "event": "m16 ops-3 DONE + m16-operability COMPLETE. ops-3: runtime persists a metrics snapshot ({v,at,summary}) via writeMetricsSnapshot on the N-turn tick + shutdown + fatal; `relay status` reads it (readMetricsSnapshot) and prints the last window + age; +4 tests (round-trip, missing, wrong-shape, mkdir-p/no-throw). README Verify documents npm run status. 368 pass. m16 done_when met: offline operability CLI reads durable stores + anvil probe + metrics, no keys, degrades cleanly, documented. ROADMAP advanced -> AUTHORED m17-anvil-ops (bring Relays operability/failure discipline to anvil-engine, the shared engine; audit then close biggest gap). Seeded anvil-ops-1/2/3 — FIRST anvil-stream milestone in a while. 13th self-directed milestone."
+    },
+    {
+      "event": "m17 anvil-ops-1+2 DONE (anvil-engine, master). AUDIT: anvil already strong — installProcessHandlers (SIGINT/TERM->exit0, uncaught/unhandledRejection->stop()+exit1 for supervisor, re-entrancy guarded), per-route histogram /v1/metrics (p50/p95/p99, errorsByEndpoint), session counters (created/released/peakConcurrent/requestsServed/errorsCount), /v1/health + /v1/live + /v1/ready. GAP: /v1/health + /v1/metrics reported activeSessions but NOT the ceiling (maxSessions/poolSize/poolAvailable) — operator cant see exhaustion headroom. FIX (anvil-ops-2, same iteration since gap bounded): both endpoints now return maxSessions+poolSize+poolAvailable (additive, default path identical). Live-verified fresh build on :3199 (MAX=7,POOL=2) -> health+metrics both show maxSessions=7,poolSize=2,poolAvailable=2. anvil tsc clean, 637 tests (+2). Note: running :3000 instance is the OLD build until owner restarts it — new fields live only after restart (owner action, non-blocking)."
     }
   ],
   "roadmap": {
