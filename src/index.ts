@@ -195,6 +195,7 @@ const handle = createHandler({
   redactText,
   hasModelKey: () => !!(LLM_PROVIDER === "claude" ? process.env.ANTHROPIC_API_KEY : process.env.GEMINI_API_KEY),
   recordTurn,
+  recordCommand: (name) => metrics.recordCommand(name),
   now: () => Date.now(),
 });
 
