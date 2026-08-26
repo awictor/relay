@@ -14,7 +14,9 @@ Try:
 
 Or schedule me: "remind me to stretch in 20 min", "every morning text me the weather".
 
-Commands: /help  /start  /reset (clear our chat)  /status (am I up?)  /schedules  /cancel`;
+Save a recipe: "save btc: check the price of bitcoin", then /run btc anytime.
+
+Commands: /help  /start  /reset  /status  /schedules  /cancel  /recipes  /run  /forget`;
 
 const HELP = `Relay — what I can do:
 • Read a page: send a link, or name a site + what you want. ("top HN story", "weather in Paris")
@@ -27,6 +29,8 @@ const HELP = `Relay — what I can do:
 Limits: I won't log in as you, pay, buy, or do anything destructive. If a task needs that, I'll say so.
 
 Schedule me: "remind me to X in 10 min" or "every morning tell me Y" — I'll text you when it's time. /schedules lists them, /cancel <id> (or /cancel all) removes them.
+
+Save recipes: "save <name>: <task>" stores a task you can re-run with /run <name>. /recipes lists them, /forget <name> removes one.
 
 Start over anytime: /reset clears our conversation history.
 

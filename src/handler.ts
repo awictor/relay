@@ -31,6 +31,13 @@ export interface HandlerDeps {
   scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number } | { ok: false; reason: "unparsed" | "capped" };
   scheduleList?: (chatId: number) => Array<{ id: string; kind: string; task: string; dueMs: number }>;
   scheduleCancel?: (chatId: number, which: string) => { removed: number };
+  // Saved recipes (m7 recipe-2). All optional so older wiring stays valid. recipeSave parses a
+  // "save <name>: <task>" message (null if it isn't one); recipeResolve returns a saved task by
+  // name (null if unknown); recipeList/recipeForget manage them.
+  recipeSave?: (chatId: number, text: string) => { ok: true; name: string } | { ok: false; reason: "unparsed" | "capped" };
+  recipeResolve?: (chatId: number, text: string) => { name: string; task: string } | null; // parses a run command + looks up
+  recipeList?: (chatId: number) => Array<{ name: string; task: string; schedule?: string }>;
+  recipeForget?: (chatId: number, name: string) => boolean;
   checkRateLimit: (chatId: number) => { allowed: boolean; retryAfterSec?: number };
   redactText: (text: string) => string;
   hasModelKey: () => boolean;
@@ -91,6 +98,40 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       }
       if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the limit of scheduled tasks — cancel one with /schedules first."); return; }
       // reason === "unparsed": fall through to the agent (it wasn't really a schedule request).
+    }
+
+    // /recipes: list saved recipes. No agent run.
+    if (first === "/recipes" && deps.recipeList) {
+      const list = deps.recipeList(msg.chatId);
+      if (!list.length) { await deps.sendMessage(msg.chatId, "No saved recipes. Save one: \"save btc: check the price of bitcoin\", then /run btc."); return; }
+      const lines = list.map((r) => `• ${r.name}${r.schedule ? ` (${r.schedule})` : ""} — ${r.task}`);
+      await deps.sendMessage(msg.chatId, `Your recipes:\n${lines.join("\n")}\n\nRun with /run <name>, remove with /forget <name>.`);
+      return;
+    }
+
+    // /forget <name>: remove a saved recipe. No agent run.
+    if (first === "/forget" && deps.recipeForget) {
+      const name = msg.text.trim().split(/\s+/).slice(1).join(" ").trim();
+      const removed = name ? deps.recipeForget(msg.chatId, name) : false;
+      await deps.sendMessage(msg.chatId, removed ? `Forgot "${name}".` : "No recipe by that name — see /recipes.");
+      return;
+    }
+
+    // "save <name>: <task>" -> store a recipe. No agent run.
+    if (deps.recipeSave && /^\s*save(\s+recipe)?\s+[^:]+:\s*\S/i.test(msg.text)) {
+      const r = deps.recipeSave(msg.chatId, msg.text);
+      if (r.ok) { await deps.sendMessage(msg.chatId, `Saved recipe "${r.name}". Run it anytime with /run ${r.name}.`); return; }
+      if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the recipe limit — /forget one first."); return; }
+      // unparsed: fall through
+    }
+
+    // "/run <name>" / "run <name>" -> resolve the recipe to its task, then run it through the
+    // normal agent path by rewriting the message text (falls through below).
+    if (deps.recipeResolve && /^(\/run\b|run\s+)/i.test(msg.text)) {
+      const hit = deps.recipeResolve(msg.chatId, msg.text);
+      if (hit) { msg = { ...msg, text: hit.task }; } // run the saved task via the agent path below
+      else if (/^\/run\b/i.test(msg.text)) { await deps.sendMessage(msg.chatId, "No recipe by that name — see /recipes."); return; }
+      // natural "run ..." with no match: fall through to the agent as a normal message.
     }
 
     // Slash commands reply instantly — no rate-limit/agent.

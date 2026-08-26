@@ -17,6 +17,7 @@ import { runAgent } from "./agent.js";
 import { formatReply } from "./lib/format-reply.js";
 import { ScheduleStore, parseSchedule } from "./lib/schedule.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
+import { RecipeStore, parseRecipeCommand, parseRunCommand } from "./lib/recipes.js";
 
 const llm = new GeminiClient();
 
@@ -55,6 +56,7 @@ const memory = new MemoryStore({
 // Proactive/scheduled tasks (m4): persisted schedules + a runner that fires them through
 // the agent and texts the result unprompted. Free-infra: a JSON file + an interval, no cron.
 const schedules = new ScheduleStore({ file: process.env.RELAY_SCHEDULE_FILE ?? "data/relay-schedules.json" });
+const recipes = new RecipeStore({ file: process.env.RELAY_RECIPE_FILE ?? "data/relay-recipes.json" });
 const SCHED_TICK_MS = Number(process.env.RELAY_SCHED_TICK_MS ?? 30_000); // 0 disables
 const scheduleRunner = makeScheduleRunner({
   store: schedules, llm, runAgent, send: sendMessage, formatReply,
@@ -84,6 +86,21 @@ const handle = createHandler({
     }
     return { removed: schedules.remove(which, chatId) ? 1 : 0 };
   },
+  recipeSave: (chatId, text) => {
+    const p = parseRecipeCommand(text);
+    if (!p) return { ok: false, reason: "unparsed" };
+    const rec = recipes.add(chatId, p, Date.now());
+    if (!rec) return { ok: false, reason: "capped" };
+    return { ok: true, name: rec.name };
+  },
+  recipeResolve: (chatId, text) => {
+    const name = parseRunCommand(text);
+    if (!name) return null;
+    const rec = recipes.get(chatId, name);
+    return rec ? { name: rec.name, task: rec.task } : null;
+  },
+  recipeList: (chatId) => recipes.list(chatId).map((r) => ({ name: r.name, task: r.task, schedule: r.schedule })),
+  recipeForget: (chatId, name) => recipes.remove(chatId, name),
   sendMessage,
   sendPhoto,
   sendDocument,
