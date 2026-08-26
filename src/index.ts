@@ -7,6 +7,7 @@ import { anvilLive } from "./anvil.js";
 import { runAgent } from "./agent.js";
 import { GeminiClient } from "./llm.js";
 import type { LLMMessage } from "./llm.js";
+import { checkRateLimit, redactText } from "./safety.js";
 
 const llm = new GeminiClient();
 
@@ -15,7 +16,13 @@ const MEMORY_TURNS = 6;
 const memory = new Map<number, LLMMessage[]>();
 
 async function handle(msg: InboundMessage): Promise<void> {
-  console.log(`[in] ${msg.from}: ${msg.text.slice(0, 120)}`);
+  console.log(`[in] ${msg.from}: ${redactText(msg.text).slice(0, 120)}`);
+
+  const rl = checkRateLimit(msg.chatId);
+  if (!rl.allowed) {
+    await sendMessage(msg.chatId, `You're sending a lot — give me ${rl.retryAfterSec}s to catch up.`);
+    return;
+  }
 
   if (!process.env.GEMINI_API_KEY) {
     await sendMessage(msg.chatId, "I'm not fully configured yet (missing model key). Try again soon.");

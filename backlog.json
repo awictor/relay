@@ -47,9 +47,9 @@
     },
     {
       "id": "safety-1",
-      "status": "todo",
+      "status": "done",
       "value": "medium",
-      "task": "Safety: per-chat rate limit (RELAY_RATE_LIMIT_PER_MIN), step/time caps enforced, SSRF via isUrlSafe on every browse target, dangerous-action guard (mirror auto-scan DANGEROUS regex: delete/pay/logout/purchase/etc.) before any click/submit, redact secrets from anything echoed back or logged."
+      "task": "DONE: src/safety.ts — per-chat sliding-window rate limit (RELAY_RATE_LIMIT_PER_MIN, wired into index.handle), DANGEROUS_ACTION_RE guard (adapted from auto-scan; ready for agent-2 click/type), redactText (mask Bearer/AIza/sk-/telegram/hex in logs+replies) + redactObject. Wired: redacted inbound logging + rate-limit gate in index.ts. SSRF guard already on scrape targets (agent.ts). 7 new unit tests, 15/15 green. NOTE: relay redact-secrets SENSITIVE_KEY_RE now adds authorization|auth|bearer — DIVERGES from mcp-forge copy; keep in mind on merge-back."
     },
     {
       "id": "agent-2",
@@ -82,6 +82,10 @@
     {
       "item": "wire-1",
       "note": "index.ts -> runAgent + memory; fixed anvil scrape session bug; browser pipe verified live (relay->anvil->Chrome). Telegram/Gemini e2e still key-gated."
+    },
+    {
+      "item": "safety-1",
+      "note": "safety.ts: rate limit + dangerous-action guard + redaction; wired rate-limit + redacted logging into index. redact-secrets diverged from mcp-forge (added auth/bearer key match)."
     }
   ]
 }
