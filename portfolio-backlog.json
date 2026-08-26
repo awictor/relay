@@ -411,9 +411,17 @@
       "id": "relay-dockerignore",
       "stream": "quality",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "Confirm relay Dockerfile build context excludes data/ (chat memory) + .env + node_modules + test/ via a .dockerignore, so the 24/7 image stays small and never bakes in local memory/secrets. Add .dockerignore if missing; verify against the Dockerfile COPY lines. Small hardening for the deploy image."
+      "task": "Confirm relay Dockerfile build context excludes data/ (chat memory) + .env + node_modules + test/ via a .dockerignore, so the 24/7 image stays small and never bakes in local memory/secrets. Add .dockerignore if missing; verify against the Dockerfile COPY lines. Small hardening for the deploy image. [DONE: .dockerignore excludes node_modules/data/.env/.git/src/test; keeps package*.json + dist (verified not ignored); trims build context + no state/secrets shipped]"
+    },
+    {
+      "id": "anvil-dockerignore",
+      "stream": "quality",
+      "value": "low",
+      "status": "todo",
+      "repo": "anvil",
+      "task": "Check anvil-engine has a .dockerignore (it ships via docker compose build in DEPLOY.md). If its Dockerfile does COPY . . or lacks .dockerignore, add one excluding node_modules/.git/test/dist-source-maps so the compose build is fast + clean. Verify build inputs kept."
     }
   ],
   "history": [
@@ -556,6 +564,9 @@
     },
     {
       "event": "relay-e2e-doc done: README gained a Verify section documenting the offline suite (npm test) + the live deploy smoke test (npx tsx scripts/e2e-agent-chain.mjs, needs .env + anvil). Doc-only. Remaining todos all [low] + owner-gated: syn-2c (interactive live-view), syn-1l (third-party API capture policy), df-owner-summary (post-CI, blocked on gh billing)."
+    },
+    {
+      "event": "relay-dockerignore done: added .dockerignore — Dockerfile COPY was already narrow (package*.json + dist only, no COPY . .), but the full build context (node_modules, data/ memory, .env, .git, src, test) still uploaded to the daemon. Now excluded; build inputs (package*.json, dist) verified kept. Deploy image build is smaller + never ships local state/secrets. Remaining todos: syn-2c + syn-1l (datafaucet design polish), df-owner-summary (blocked on gh-billing)."
     }
   ]
 }
