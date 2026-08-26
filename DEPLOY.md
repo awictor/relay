@@ -28,6 +28,14 @@ You need three secrets first (only you can create these — login walls):
    git clone https://github.com/awictor/anvil-engine.git
    git clone https://github.com/awictor/relay.git
    ```
+   For a **reproducible** deploy, check out the paired known-good tag in each (both are
+   tagged at the same green state — anvil 529 tests + relay 117 tests, CI green):
+   ```bash
+   git -C anvil-engine checkout deploy-v1
+   git -C relay        checkout deploy-v1
+   ```
+   `main`/`master` also work but track ongoing changes; pin to the tag if you want the
+   exact validated build. Bump the tag (both repos together) after verifying a new state.
 
 4. **Build both** (compose copies pre-built dist/):
    ```bash
