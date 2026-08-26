@@ -51,7 +51,10 @@ Command dispatch MAP (three sites — a grep for one misses the others):
    `/^(\/run\b|run\s+)/i`, digest-first (`isDigest`→`digestRun`) then recipe (`recipeResolve` rewrites
    msg.text to the saved task and FALLS THROUGH to the agent). So proving `/run` is handled needs an
    end-to-end `createHandler` drive with a `runAgentFn` spy, never a static "is it dispatched" grep.
-The `Commands:` line in HELP (commands.ts) is the advertised set; keep it == the union of sites 1-3.
+The `Commands:` line lives in START (commands.ts, returned by `/start`), NOT HELP (HELP is the
+capability-bullet block). It's the advertised set; keep it == the union of sites 1-3. DEV-0101
+(test/commands.test.ts) parses those tokens + drives createHandler with a runAgentFn spy to prove
+each is handled, never falls through to the agent.
 
 ## Concurrency
 
