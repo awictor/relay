@@ -79,6 +79,13 @@
       "status": "todo",
       "value": "medium",
       "task": "Prereq for syn-1c: dump one anvil HAR entry’s full shape (GET /v1/har after a navigate) and document the field path to method/url/headers/postData, so the HAR->scan mapping in syn-1c is exact. anvil HAR is standard HAR 1.2 (log.entries[].request.{method,url,headers[],postData.text}) — confirm against live output."
+    },
+    {
+      "id": "relay-quota",
+      "repo": "relay",
+      "status": "todo",
+      "value": "medium",
+      "task": "Gemini free-tier 429 quota hit under testing. Options: (a) surface a clearer wait-time to the user from the 429 retryDelay field; (b) add a tiny in-memory request throttle so bursts do not exhaust the daily cap; (c) document the free-tier limits in README. Retry+friendly-msg already exist; this is polish."
     }
   ],
   "history": [
@@ -93,6 +100,10 @@
     {
       "item": "syn-1b + HAR discovery",
       "note": "cdp-proxy buffer fix shipped (anvil 216d927) but puppeteer.connect still Target-closed. Pivoted strategy: VERIFIED anvil HAR capture works over pure REST (18 entries, no puppeteer.connect). Elevated syn-1c to the migration path, downgraded syn-1b, refilled syn-1d (nail HAR entry shape)."
+    },
+    {
+      "item": "fix scrape timeout",
+      "note": "User hit \"operation aborted due to timeout\". Root cause: anvil REST /v1/scrape + navigate hardcoded networkidle2 (60s cap) which hangs on polling sites like HN. Fixed relay scrape() to navigate(domcontentloaded)+readCurrent and defaulted navigate to domcontentloaded. HN scrape 15s->1.1s. Worker restarted with fix. (Separately, Gemini free tier 429 quota from heavy testing — retry/backoff already handles it.)"
     }
   ]
 }

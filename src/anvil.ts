@@ -101,8 +101,10 @@ async function action(sessionId: string, path: string, body: Record<string, unkn
   return (await r.json().catch(() => ({}))) as Record<string, unknown>;
 }
 
-/** Navigate the session's page to a URL. SSRF-guarded. */
-export async function navigate(sessionId: string, url: string, waitUntil = "networkidle2"): Promise<{ url: string; title: string }> {
+/** Navigate the session's page to a URL. SSRF-guarded. Defaults to
+ * domcontentloaded — networkidle2 hangs (up to anvil's 60s cap) on sites that
+ * keep polling (e.g. Hacker News), which caused user-facing timeouts. */
+export async function navigate(sessionId: string, url: string, waitUntil = "domcontentloaded"): Promise<{ url: string; title: string }> {
   const check = isUrlSafe(url);
   if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
   const r = await action(sessionId, "/v1/actions/navigate", { url, waitUntil });
@@ -135,29 +137,22 @@ export async function readCurrent(sessionId: string): Promise<{ content: string;
 }
 
 /**
- * Fetch a page's text (or html) via anvil's REST /v1/scrape.
- * anvil's /v1/scrape targets an existing session (no auto-create), so we create a
- * session, scrape with X-Session-Id, and always release. SSRF-guarded first.
- * Returns { content, title, url }.
+ * Fetch a page's text: create a session, navigate (domcontentloaded — fast, and
+ * avoids the networkidle2 hang that anvil's REST /v1/scrape forces with a 60s cap),
+ * read the rendered text, release. SSRF-guarded first. Returns { content, title, url }.
  */
 export async function scrape(
   url: string,
-  opts: { format?: "text" | "html"; waitForSelector?: string } = {}
+  _opts: { format?: "text" | "html"; waitForSelector?: string } = {}
 ): Promise<{ content: string; title: string; url: string }> {
   const check = isUrlSafe(url);
   if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
   const session = await createSession();
   try {
-    const r = await fetch(`${BASE}/v1/scrape`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Session-Id": session.id, ...authHeaders() },
-      body: JSON.stringify({ url, format: opts.format ?? "text", waitForSelector: opts.waitForSelector }),
-      signal: AbortSignal.timeout(45000),
-    });
-    if (!r.ok) {
-      throw new Error(`anvil scrape failed: ${r.status} ${await r.text().catch(() => "")}`.slice(0, 300));
-    }
-    return (await r.json()) as { content: string; title: string; url: string };
+    await navigate(session.id, url, "domcontentloaded");
+    // brief settle for client-rendered content, then read the DOM text
+    await new Promise((r) => setTimeout(r, 600));
+    return await readCurrent(session.id);
   } finally {
     await releaseSession(session.id);
   }
