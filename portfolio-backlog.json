@@ -595,9 +595,33 @@
       "id": "recipe-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m7] Scheduled recipes: if a recipe has a schedule, register it with ScheduleStore so the runner fires it (task = recipe task). \"every morning run <name>\" or save-with-schedule. Wire recipe->schedule at save time; a fired scheduled recipe texts the result unprompted. Unit-test the recipe->schedule bridge; live e2e (scripts/e2e-recipe.mjs): save a recipe w/ ~2s schedule -> runner fires it -> reply."
+    },
+    {
+      "id": "pobs-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m8] Scheduler runner observability: makeScheduleRunner takes optional log + recordTurn deps; on each fire emit a structured [proactive] line (id, kind, task-length, steps, elapsedMs, ok) and call recordTurn (same Metrics as inbound) so /status + [metrics] count proactive runs too. Runner already returns fired count; thread steps/ms out of runAgent. Unit-test the log+record on a fire (mock)."
+    },
+    {
+      "id": "pobs-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m8] Per-chat proactive-send rate cap: a misfiring daily (or many due at once) must not spam. Add a small token-bucket/counter (max proactive sends per chat per hour, env RELAY_PROACTIVE_MAX_PER_HOUR default ~10); when exceeded, skip+log rather than send, and complete the schedule so it doesnt storm. Injectable clock; unit-test the cap."
+    },
+    {
+      "id": "pobs-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m8] Bound + guard proactive agent runs same as inbound: the scheduled task goes through runAgent which already has RELAY_MAX_STEPS + dangerous-action guard, but confirm a scheduled task cant do something inbound would refuse; add a test that a dangerous scheduled task is handled safely (reply/refuse, no unsafe action). Doc the proactive-obs env vars in .env.example."
     }
   ],
   "history": [
@@ -821,10 +845,13 @@
     },
     {
       "event": "m7 recipe-2 done: recipe commands wired. save <name>: <task> stores; /recipes lists; /run <name> resolves saved task + runs it via the agent path (text rewrite); /forget removes. index.ts RecipeStore + parse fns; deps optional on HandlerDeps; HELP/START + RELAY_RECIPE_FILE documented. 9 handler tests, 283 full suite pass, tsc clean. Users can now teach-once/re-run. Next m7: recipe-3 (scheduled recipes: recipe w/ schedule -> ScheduleStore, runner fires it; live e2e)."
+    },
+    {
+      "event": "m7-recipes COMPLETE: recipe-1 store/parse, recipe-2 save/list/run/forget, recipe-3 scheduled recipes (schedule <name> <when> -> runner fires the recipe task; parseScheduleFor; live e2e verified). Users can teach-once + run by name or schedule. ROADMAP advanced -> AUTHORED m8-proactive-obs (observability + rate-cap + safety for the scheduler/recipe proactive paths, which today have no [out]/[metrics] and no anti-spam cap). Seeded pobs-1/2/3. 4th self-directed milestone jump. m1-synergy still owner_blocked."
     }
   ],
   "roadmap": {
-    "current": "m7-recipes",
+    "current": "m8-proactive-obs",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -871,6 +898,13 @@
         "id": "m7-recipes",
         "goal": "Relay saved recipes: a user teaches Relay a task once (\"track the price on <url>\" / \"summarize <site> daily\") and names it; Relay stores the recipe (task template + optional schedule) and can re-run it by name or on schedule. Compounding product value — turns one-off asks into reusable, personal automations. Builds on ScheduleStore + extract/compare. Free-infra: JSON file store like schedules.",
         "done_when": "recipe parse/store (name+task+optional schedule) + /recipes list + /run <name> + \"save this as <name>\" routing + a scheduled recipe fires via the runner; offline unit+wiring tests + a live e2e",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m8-proactive-obs",
+        "goal": "Observability + safety for the PROACTIVE paths (scheduler + recipes), which today run with none of the per-turn [out]/[metrics] the inbound handler has. A scheduled/recipe run should log a structured [proactive] line (which schedule/recipe, steps, ms, ok/err), feed the same Metrics, and respect the dangerous-action + step/time bounds. Also: a per-chat cap on proactive sends per hour so a misfiring daily cant spam a user. Makes the autonomous side of Relay debuggable + safe for a 24/7 deploy.",
+        "done_when": "scheduler runner emits a structured [proactive] log + records to Metrics per fire; a per-chat hourly proactive-send cap enforced; offline unit tests + the existing e2e still green",
         "status": "todo",
         "owner_gated": false
       }
