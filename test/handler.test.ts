@@ -63,6 +63,33 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/nothing to clear/i);
   });
 
+  it("/reset clears this chat's memory and confirms, no agent (had history)", async () => {
+    let agentCalled = false;
+    const { handle, sent, recorded, mem } = harness({
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    mem.set(1, [{ role: "user", content: "old" }]);
+    await handle(msg("/reset"));
+    expect(agentCalled).toBe(false);
+    expect(mem.has(1)).toBe(false);          // wiped
+    expect(sent[0]!.text).toMatch(/cleared/i);
+    expect(recorded).toHaveLength(0);        // not an agent turn
+  });
+
+  it("/reset on an empty chat says nothing-to-clear", async () => {
+    const { handle, sent } = harness();
+    await handle(msg("/reset", 2));
+    expect(sent[0]!.text).toMatch(/nothing to clear/i);
+  });
+
+  it("/clear is an alias for /reset", async () => {
+    const { handle, sent, mem } = harness();
+    mem.set(3, [{ role: "user", content: "x" }]);
+    await handle(msg("/clear", 3));
+    expect(mem.has(3)).toBe(false);
+    expect(sent[0]!.text).toMatch(/cleared/i);
+  });
+
   it("a rate-limited chat gets the limit message, no agent", async () => {
     let agentCalled = false;
     const { handle, sent, recorded } = harness({
