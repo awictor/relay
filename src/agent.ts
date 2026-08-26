@@ -53,11 +53,25 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "compare",
+    description: "Fetch SEVERAL pages and extract the same fields from each, returning a JSON array (one object per URL, plus its url). Use for 'compare X across these links' tasks. Capped at a few URLs.",
+    parameters: {
+      type: "object",
+      properties: {
+        urls: { type: "array", items: { type: "string" }, description: "Absolute http(s) URLs to compare (max 5)" },
+        fields: { type: "array", items: { type: "string" }, description: "Field names to extract from each, e.g. [\"price\",\"title\"]" },
+      },
+      required: ["urls", "fields"],
+    },
+  },
+  {
     name: "reply",
     description: "Send the final answer to the user and end the task. Call exactly once when done or when you must report you cannot complete it.",
     parameters: { type: "object", properties: { text: { type: "string", description: "Message to send the user" } }, required: ["text"] },
   },
 ];
+
+const MAX_COMPARE_URLS = 5;
 
 const SYSTEM_PROMPT = `You are Relay, an assistant reached over text message. A user texts a task; use tools to accomplish it, then call "reply" with a concise, friendly answer (they're on a phone — keep it short, no markdown tables).
 
@@ -65,6 +79,7 @@ Tools:
 - "scrape" (url): read a single page. Use for simple lookups. If the user names a site, infer the URL (Hacker News -> https://news.ycombinator.com).
 - "browse" (url) then "click"/"type"/"read": for tasks needing interaction (search a site, fill a form, page through results). "read" returns the current page after your actions.
 - "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
+- "compare" (urls, fields): fetch several pages and extract the same fields from each; returns a JSON array. Use when the user wants to compare data points across multiple links.
 - "reply" (text): finish.
 
 Rules:
@@ -200,6 +215,39 @@ export async function runAgent(
         } catch (e) {
           push("extract", `ERROR extracting from ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }
+        continue;
+      }
+
+      if (call.name === "compare") {
+        const rawUrls = Array.isArray(call.args.urls) ? call.args.urls.map(String).filter(Boolean) : [];
+        const fields = Array.isArray(call.args.fields) ? call.args.fields.map(String).filter(Boolean) : [];
+        if (rawUrls.length === 0) { push("compare", "ERROR: no urls given."); continue; }
+        if (fields.length === 0) { push("compare", "ERROR: no fields given."); continue; }
+        // Dedup, cap, and drop unsafe targets up front (report which were skipped).
+        const seenU = new Set<string>();
+        const urls: string[] = [];
+        const skipped: string[] = [];
+        for (const u of rawUrls) {
+          if (seenU.has(u)) continue;
+          seenU.add(u);
+          if (!isUrlSafe(u).safe) { skipped.push(u); continue; }
+          if (urls.length < MAX_COMPARE_URLS) urls.push(u);
+        }
+        if (urls.length === 0) { push("compare", `ERROR: no safe urls to compare (skipped ${skipped.length}).`); continue; }
+        // Fetch + extract each page in parallel; a per-URL failure becomes all-null for that row
+        // rather than failing the whole compare.
+        const rows = await Promise.all(urls.map(async (u) => {
+          try {
+            const r = await backend.scrape(u);
+            const json = await extractFields(deps.llm, r.content.slice(0, 8000), fields);
+            return { url: u, ...(JSON.parse(json) as Record<string, unknown>) };
+          } catch {
+            return { url: u, ...Object.fromEntries(fields.map((f) => [f, null])) };
+          }
+        }));
+        const note = skipped.length || rawUrls.length > MAX_COMPARE_URLS
+          ? ` (skipped ${skipped.length} unsafe; capped at ${MAX_COMPARE_URLS})` : "";
+        push("compare", `COMPARED ${rows.length} pages${note}:\n${JSON.stringify(rows, null, 2)}`);
         continue;
       }
 
