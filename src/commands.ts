@@ -2,19 +2,21 @@
 // Returns a reply string for a recognized command, or null to pass the message
 // through to the agent.
 
-const START = `👋 I'm Relay. Text me a task and I'll go do it in a real browser and text you back.
+const START = `👋 I'm Relay. Text me a task and I'll do it in a real browser and text you back.
 
 Try:
 • "top story on Hacker News"
-• "weather in Tokyo"
-• send me a link and I'll summarize it
+• "extract the price and title from <link>"
+• "compare the price across these 3 links"
+• "find the newest HN posts about AI"
 
 Commands: /help  /start`;
 
 const HELP = `Relay — what I can do:
-• Read a page: send a link, or name a site + what you want.
-• Look things up: "top HN story", "price of bitcoin", "weather in Paris".
-• Multi-step: I can open a site, search, and read results.
+• Read a page: send a link, or name a site + what you want. ("top HN story", "weather in Paris")
+• Pull out data: "extract the price and rating from <link>" → clean values, not a wall of text.
+• Compare across pages: "compare the price of X across these links" → a side-by-side.
+• Find then fetch: "find newest listings for <thing>" → I open the search page, grab the results, and read them.
 
 Limits: I won't log in as you, pay, buy, or do anything destructive. If a task needs that, I'll say so.
 

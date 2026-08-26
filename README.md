@@ -13,12 +13,22 @@ self-hosted anvil-engine (real Chrome).
 ```
 Telegram user ──text──> Telegram Bot API ──long-poll──> Relay worker (Node/TS)
                                                           ├─ agent loop (Gemini free tier; Claude-swappable)
-                                                          ├─ tools: browse/scrape via anvil, reply
+                                                          ├─ tools: scrape/browse/extract/compare/search via anvil, reply
                                                           └─ per-chat memory + safety caps
                                                                 │ puppeteer.connect / REST /v1/scrape
                                                                 ▼
                                                      anvil-engine (self-hosted Chrome)
 ```
+
+## What you can text it
+
+- **Read**: send a link, or name a site + what you want — "top HN story", "weather in Paris".
+- **Extract** structured data: "extract the price and title from `<link>`" → clean JSON values, not prose.
+- **Compare** across pages: "compare the price of X across these links" → one row per link.
+- **Search then fetch**: "find the newest listings for `<thing>`" → Relay opens the search page,
+  harvests the result links, and reads/extracts across them (no URL pasting needed).
+
+It won't log in as you, pay, buy, or take destructive actions — it says so instead.
 
 ## Setup
 
