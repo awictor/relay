@@ -41,6 +41,18 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: "object", properties: {}, required: [] },
   },
   {
+    name: "extract",
+    description: "Fetch a page and pull out specific structured fields as clean JSON. Use when the user wants particular data points (e.g. price, title, rating) rather than prose. Returns a JSON object keyed by the requested fields; a field not found is null.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Absolute http(s) URL to read" },
+        fields: { type: "array", items: { type: "string" }, description: "Field names to extract, e.g. [\"price\",\"title\"]" },
+      },
+      required: ["url", "fields"],
+    },
+  },
+  {
     name: "reply",
     description: "Send the final answer to the user and end the task. Call exactly once when done or when you must report you cannot complete it.",
     parameters: { type: "object", properties: { text: { type: "string", description: "Message to send the user" } }, required: ["text"] },
@@ -52,6 +64,7 @@ const SYSTEM_PROMPT = `You are Relay, an assistant reached over text message. A 
 Tools:
 - "scrape" (url): read a single page. Use for simple lookups. If the user names a site, infer the URL (Hacker News -> https://news.ycombinator.com).
 - "browse" (url) then "click"/"type"/"read": for tasks needing interaction (search a site, fill a form, page through results). "read" returns the current page after your actions.
+- "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
 - "reply" (text): finish.
 
 Rules:
@@ -174,6 +187,22 @@ export async function runAgent(
         continue;
       }
 
+      if (call.name === "extract") {
+        const url = String(call.args.url ?? "");
+        const fields = Array.isArray(call.args.fields) ? call.args.fields.map(String).filter(Boolean) : [];
+        const safe = isUrlSafe(url);
+        if (!safe.safe) { push("extract", `ERROR: refused (${safe.reason}).`); continue; }
+        if (fields.length === 0) { push("extract", "ERROR: no fields given. Provide the field names to extract."); continue; }
+        try {
+          const r = await backend.scrape(url);
+          const json = await extractFields(deps.llm, r.content.slice(0, 8000), fields);
+          push("extract", `EXTRACTED from ${r.title || url}:\n${json}`);
+        } catch (e) {
+          push("extract", `ERROR extracting from ${url}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
       if (call.name === "read") {
         if (!sessionId) { push("read", "ERROR: no page open. Call browse first."); continue; }
         try {
@@ -197,5 +226,38 @@ export async function runAgent(
     return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: MAX_STEPS };
   } finally {
     if (sessionId) await backend.releaseSession(sessionId).catch(() => {});
+  }
+}
+
+// Structured extraction: a focused LLM sub-call over page text that returns ONLY a
+// JSON object keyed by the requested fields (missing field -> null). Kept behind the
+// same LLMClient so Claude/Gemini swap is unaffected. Returns a pretty JSON string;
+// on any parse failure returns a JSON object with all fields null so the caller still
+// gets valid, shaped output rather than prose.
+export async function extractFields(llm: LLMClient, pageText: string, fields: string[]): Promise<string> {
+  const nullObj = () => JSON.stringify(Object.fromEntries(fields.map((f) => [f, null])), null, 2);
+  const prompt = `From the page content below, extract these fields: ${fields.join(", ")}.
+Respond with ONLY a JSON object whose keys are exactly those field names. If a field is not present, use null. No prose, no code fence.
+
+PAGE CONTENT:
+${pageText}`;
+  const res = await llm.complete(
+    [
+      { role: "system", content: "You extract structured data from web page text and output only JSON." },
+      { role: "user", content: prompt },
+    ],
+    []
+  );
+  const raw = (res.text ?? "").trim();
+  // Tolerate a stray code fence or leading prose: grab the first {...} block.
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) return nullObj();
+  try {
+    const parsed = JSON.parse(match[0]) as Record<string, unknown>;
+    // Normalize to exactly the requested fields (drop extras, fill missing with null).
+    const out = Object.fromEntries(fields.map((f) => [f, f in parsed ? parsed[f] : null]));
+    return JSON.stringify(out, null, 2);
+  } catch {
+    return nullObj();
   }
 }
