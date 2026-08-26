@@ -43,6 +43,16 @@ User COMMANDS (/reset, /status): pure-text ones live in `handleCommand(text)→s
 ones (need chatId) live in the handler's `first`-token branch BEFORE handleCommand, via an optional
 HandlerDeps callback. Both short-circuit before rate-limit/agent. List new ones in /help + /start.
 
+Command dispatch MAP (three sites — a grep for one misses the others):
+1. `handleCommand` (`src/commands.ts`) — pure canned text: `/start`, `/help` (+ bot-suffix/case strip).
+2. handler `first`-token `if (first === "/x" && deps.xCb)` (`src/handler.ts`): `/reset`(+`/clear`), `/status`,
+   `/schedules`, `/cancel`, `/recipes`, `/forget`, `/alerts`, `/forget-alert`, `/digests`, `/forget-digest`.
+3. `/run <name>` is NOT a `first===` branch — it's a dedicated block (~handler.ts:214) matching
+   `/^(\/run\b|run\s+)/i`, digest-first (`isDigest`→`digestRun`) then recipe (`recipeResolve` rewrites
+   msg.text to the saved task and FALLS THROUGH to the agent). So proving `/run` is handled needs an
+   end-to-end `createHandler` drive with a `runAgentFn` spy, never a static "is it dispatched" grep.
+The `Commands:` line in HELP (commands.ts) is the advertised set; keep it == the union of sites 1-3.
+
 ## Concurrency
 
 `startPolling` dispatches each getUpdates batch via `dispatchBatch` = `Promise.all` with per-handler
