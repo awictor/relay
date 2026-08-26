@@ -77,6 +77,7 @@ async function main() {
   // already durable (MemoryStore persists synchronously each turn).
   installSignalHandlers(createShutdown({
     stopPolling: () => { poller.stop(); anvilPinger.stop(); },
+    onShutdown: () => console.log(metrics.format()), // flush the final metrics window (DEV-0041)
     log: (m) => console.log(m),
     exit: (code) => process.exit(code),
   }));

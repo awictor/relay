@@ -9,6 +9,9 @@ export interface ShutdownDeps {
   stopPolling: () => void;
   log: (msg: string) => void;
   exit: (code: number) => void;
+  // Optional final flush (DEV-0041): e.g. emit the last metrics window before exit. Periodic-only
+  // logging otherwise loses the partial window on redeploy. Best-effort — a throw must not block exit.
+  onShutdown?: () => void;
 }
 
 /** Returns a handler that runs the shutdown sequence at most once. */
@@ -22,6 +25,13 @@ export function createShutdown(deps: ShutdownDeps): (signal: string) => void {
       deps.stopPolling();
     } catch (e) {
       deps.log(`[shutdown] stopPolling error (ignored): ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (deps.onShutdown) {
+      try {
+        deps.onShutdown();
+      } catch (e) {
+        deps.log(`[shutdown] onShutdown error (ignored): ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
     deps.exit(0);
   };

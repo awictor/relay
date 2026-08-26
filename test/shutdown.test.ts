@@ -39,4 +39,32 @@ describe("createShutdown", () => {
     expect(calls.exit).toEqual([0]);
     expect(calls.logs.some((l) => /stopPolling error/.test(l))).toBe(true);
   });
+
+  it("fires onShutdown once, before exit (final metrics flush — DEV-0041)", () => {
+    const order: string[] = [];
+    let shutdownCalls = 0;
+    const shutdown = createShutdown({
+      stopPolling: () => order.push("stop"),
+      onShutdown: () => { shutdownCalls++; order.push("flush"); },
+      log: () => {},
+      exit: () => order.push("exit"),
+    });
+    shutdown("SIGTERM");
+    shutdown("SIGINT"); // idempotent — must not flush twice
+    expect(shutdownCalls).toBe(1);
+    expect(order).toEqual(["stop", "flush", "exit"]); // flush after stop, before exit
+  });
+
+  it("an onShutdown throw is swallowed and exit still runs", () => {
+    const calls = { exit: [] as number[], logs: [] as string[] };
+    const shutdown = createShutdown({
+      stopPolling: () => {},
+      onShutdown: () => { throw new Error("flush boom"); },
+      log: (m) => calls.logs.push(m),
+      exit: (c) => calls.exit.push(c),
+    });
+    shutdown("SIGTERM");
+    expect(calls.exit).toEqual([0]);
+    expect(calls.logs.some((l) => /onShutdown error/.test(l))).toBe(true);
+  });
 });
