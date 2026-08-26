@@ -579,9 +579,9 @@
       "id": "recipe-1",
       "stream": "relay",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "[m7] src/lib/recipes.ts: RecipeStore (JSON file, gitignored, like ScheduleStore) — add(chatId,{name,task,schedule?})/get(chatId,name)/list(chatId)/remove(chatId,name); name unique per chat, cap per chat. Pure parse: parseRecipeCommand(text) recognizes \"save this as <name>\" / \"save <name>: <task>\" -> {name,task}. Unit-test store + parse offline."
+      "task": "[m7] src/lib/recipes.ts: RecipeStore (JSON file, gitignored, like ScheduleStore) — add(chatId,{name,task,schedule?})/get(chatId,name)/list(chatId)/remove(chatId,name); name unique per chat, cap per chat. Pure parse: parseRecipeCommand(text) recognizes \"save this as <name>\" / \"save <name>: <task>\" -> {name,task}. Unit-test store + parse offline. [DONE: src/lib/recipes.ts RecipeStore (add/get/list/remove, unique-per-chat, update-in-place, cap-exempt-on-update) + parseRecipeCommand + parseRunCommand; 9 tests; 274 suite]"
     },
     {
       "id": "recipe-2",
@@ -815,6 +815,9 @@
     },
     {
       "event": "m6-anvil-depth COMPLETE (pool verified + caps + bench: warm acquire ~198x faster than cold launch, proven live). ROADMAP EXHAUSTED (original m1-m6 all done/owner-blocked) -> AUTHORED m7-recipes: saved reusable task recipes (teach Relay once, re-run by name or schedule) — compounding product value on top of the scheduler+extract. Seeded recipe-1/2/3. This is STAGE GOAL step 3: loop invented its own next milestone with zero owner input. m1-synergy still owner_blocked (billing/merge)."
+    },
+    {
+      "event": "m7 recipe-1 done: recipe parse + store. RecipeStore (JSON file like ScheduleStore) add/get/list/remove, names unique per chat + case-insensitive, update-in-place (cap-exempt); parseRecipeCommand (save <name>: <task>) + parseRunCommand (/run|run <name>). 9 tests, 274 full suite pass, tsc clean. Next m7: recipe-2 (handler routing: save/list/run/forget)."
     }
   ],
   "roadmap": {
