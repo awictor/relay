@@ -63,6 +63,7 @@ const scheduleRunner = makeScheduleRunner({
   store: schedules, llm, runAgent, send: sendMessage, formatReply,
   now: () => Date.now(), periodMs: SCHED_TICK_MS,
   log: (m) => console.log(m),
+  recordTurn, // proactive fires count in the same Metrics as inbound turns (m8)
 });
 
 const handle = createHandler({

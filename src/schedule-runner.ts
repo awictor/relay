@@ -10,7 +10,7 @@ import type { Schedule, ScheduleStore } from "./lib/schedule.js";
 export interface ScheduleRunnerDeps {
   store: ScheduleStore;
   llm: LLMClient;
-  runAgent: (userText: string, deps: { llm: LLMClient }, history: LLMMessage[]) => Promise<{ reply: string }>;
+  runAgent: (userText: string, deps: { llm: LLMClient }, history: LLMMessage[]) => Promise<{ reply: string; steps?: number; tools?: string[] }>;
   send: (chatId: number, text: string) => Promise<unknown>;
   formatReply: (text: string) => string;
   now: () => number;
@@ -19,6 +19,9 @@ export interface ScheduleRunnerDeps {
   clearInterval?: (h: unknown) => void;
   log?: (msg: string) => void;
   onError?: (e: unknown) => void;
+  // Observability (m8): record each proactive fire into the same Metrics as inbound turns,
+  // so /status + [metrics] count them. Optional (older wiring stays valid).
+  recordTurn?: (t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean }) => void;
 }
 
 export interface ScheduleRunner {
@@ -37,11 +40,18 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   async function fireOne(s: Schedule): Promise<void> {
     // A scheduled task is a fresh, contextless agent run (no chat history) whose reply is
     // pushed to the user. Prefix so an unprompted message is understood as a reminder.
-    const { reply } = await deps.runAgent(s.task, { llm: deps.llm }, []);
-    const body = deps.formatReply(reply);
+    const startedAt = deps.now();
+    const res = await deps.runAgent(s.task, { llm: deps.llm }, []);
+    const body = deps.formatReply(res.reply);
     const label = s.kind === "daily" ? "⏰ Daily" : "⏰ Reminder";
     await deps.send(s.chatId, `${label}: ${s.task}\n\n${body}`);
     deps.store.complete(s.id, deps.now());
+    // Observability (m8): structured proactive-run line + Metrics record (same as inbound).
+    const elapsedMs = deps.now() - startedAt;
+    const steps = res.steps ?? 0;
+    const tools = res.tools ?? [];
+    log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, taskLen: s.task.length, steps, ms: Math.max(0, elapsedMs), ok: true })}`);
+    deps.recordTurn?.({ steps, tools, elapsedMs, ok: true });
   }
 
   async function tick(): Promise<number> {
@@ -54,7 +64,8 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         try { await fireOne(s); fired++; }
         catch (e) {
           deps.onError?.(e);
-          log(`[schedule] fire failed id=${s.id}: ${e instanceof Error ? e.message : String(e)}`);
+          log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, error: (e instanceof Error ? e.message : String(e)).slice(0, 120) })}`);
+          deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: 0, ok: false });
           // Don't leave a failed once-task to retry forever every tick — complete it so it
           // drops (daily still advances). A failed run is reported by the miss, not a storm.
           deps.store.complete(s.id, deps.now());

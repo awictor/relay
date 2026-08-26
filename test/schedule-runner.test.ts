@@ -106,3 +106,39 @@ describe("makeScheduleRunner start/stop", () => {
     expect(cleared).toBe(true);
   });
 });
+
+describe("makeScheduleRunner observability (m8 pobs-1)", () => {
+  it("logs a [proactive] line + records an ok turn on a successful fire", async () => {
+    const clock = { t: NOW };
+    const logs: string[] = [];
+    const recorded: Array<{ ok: boolean; steps: number; tools: string[] }> = [];
+    const { store, runner } = harness(clock, {
+      runAgent: async (task) => ({ reply: `did:${task}`, steps: 3, tools: ["scrape"] }),
+      log: (m) => logs.push(m),
+      recordTurn: (t) => recorded.push({ ok: t.ok, steps: t.steps, tools: t.tools }),
+    });
+    store.add(1, { kind: "once", task: "x", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    const line = logs.find((l) => l.startsWith("[proactive]"));
+    expect(line).toBeTruthy();
+    const obj = JSON.parse(line!.slice("[proactive] ".length));
+    expect(obj).toMatchObject({ kind: "once", steps: 3, ok: true });
+    expect(recorded).toEqual([{ ok: true, steps: 3, tools: ["scrape"] }]);
+  });
+
+  it("logs a [proactive] failure line + records a failed turn when the agent throws", async () => {
+    const clock = { t: NOW };
+    const logs: string[] = [];
+    const recorded: Array<{ ok: boolean }> = [];
+    const { store, runner } = harness(clock, {
+      runAgent: async () => { throw new Error("boom"); },
+      log: (m) => logs.push(m),
+      recordTurn: (t) => recorded.push({ ok: t.ok }),
+    });
+    store.add(1, { kind: "once", task: "x", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    const line = logs.find((l) => l.startsWith("[proactive]") && /"ok":false/.test(l));
+    expect(line).toBeTruthy();
+    expect(recorded).toEqual([{ ok: false }]);
+  });
+});
