@@ -121,9 +121,17 @@
       "id": "syn-1h",
       "stream": "synergy",
       "value": "medium",
+      "status": "done",
+      "repo": "datafaucet",
+      "task": "Add a CI/e2e guard for the anvil capture path so the draft PR can be verified without a live anvil by a reviewer: write tests/integration/anvil-capture.test.ts that stands up a tiny mock anvil (http server responding to /v1/sessions, /v1/har/start|stop, /v1/har, /v1/actions/navigate|evaluate, /v1/sessions/:id/release) and asserts auto-scan under BROWSER_BACKEND=anvil emits endpoints from a canned HAR + releases the session. Offline, deterministic. Wire into gate. [DONE: tests/integration/anvil-capture.test.ts, 2 tests pass, wired into test:unit gate]"
+    },
+    {
+      "id": "syn-1i",
+      "stream": "synergy",
+      "value": "medium",
       "status": "todo",
       "repo": "datafaucet",
-      "task": "Add a CI/e2e guard for the anvil capture path so the draft PR can be verified without a live anvil by a reviewer: write tests/integration/anvil-capture.test.ts that stands up a tiny mock anvil (http server responding to /v1/sessions, /v1/har/start|stop, /v1/har, /v1/actions/navigate|evaluate, /v1/sessions/:id/release) and asserts auto-scan under BROWSER_BACKEND=anvil emits endpoints from a canned HAR + releases the session. Offline, deterministic. Wire into gate."
+      "task": "Extend the mock-anvil test (syn-1h) to cover multi-page crawl + MAX_PAGES bound: have /v1/actions/evaluate return same-host links on the first visit so the crawl enqueues+visits a 2nd page, and assert the route stops at MAX_PAGES and dedups already-visited URLs. Also add a failure case: mock /v1/sessions 500 -> assert an error SSE event + no unreleased session leak."
     }
   ],
   "history": [
@@ -164,6 +172,9 @@
     },
     {
       "event": "syn-1g done: opened DRAFT PR #1 anvil-migration->master (body from docs/anvil-migration-PR.md). Deduped syn-2 (kept richest). Refilled syn-1h (offline mock-anvil integration test so reviewers verify the anvil path without live anvil)."
+    },
+    {
+      "event": "syn-1h done: offline mock-anvil integration test (tests/integration/anvil-capture.test.ts) — verifies BROWSER_BACKEND=anvil capture path (endpoint capture, noise filter, body redaction, full session lifecycle) with no live anvil; wired into test:unit. Draft PR #1 now CI-verifiable. Refilled syn-1i (multi-page crawl + failure-case coverage)."
     }
   ]
 }
