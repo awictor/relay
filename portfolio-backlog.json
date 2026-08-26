@@ -1163,9 +1163,33 @@
       "id": "sites-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m30] Consider the same cookie capability for DataFaucets anvil path (mcp-forge anvil-migration) — audit whether its browse/auto-scan routes could accept a host-scoped cookie seed for authorized capture, OR document why its out of scope (DataFaucet capture is for PUBLIC API discovery, auth-capture is a different feature). Decide + record. mcp-forge anvil-migration only if any code; NEVER master."
+    },
+    {
+      "id": "audit-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m31] Full-stack green pass: relay npm test + npx tsc --noEmit + npm run preflight (expect GO); mcp-forge npm run test:unit (anvil-migration); anvil-engine npm test. Record the numbers. Any red = fix it (thats the highest-value work). Report the consolidated pass state."
+    },
+    {
+      "id": "audit-2",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m31] Backlog hygiene: scan portfolio-backlog.json items[] for todos that are stale/superseded/duplicate/owner-gated-mislabeled; mark done/obsolete or convert to owner_blocker as appropriate. Confirm every roadmap milestone marked done actually meets its done_when (spot-check 3-4). Report discrepancies."
+    },
+    {
+      "id": "audit-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m31] Doc/claim truth-check: spot-check PORTFOLIO.md + README + THESIS + SECURITY + SHARED against the code (test counts, command list, shared-lib sections, cookie model). Fix anything drifted. Then write the closing summary: non-gated roadmap complete, remaining = deploy-1 (Oracle VM) + pr-1-merge + gh-billing. Closes m31."
     }
   ],
   "history": [
@@ -1584,10 +1608,13 @@
     },
     {
       "event": "m30 sites-2 DONE: README documents /sites + the cookie-auth model. Reworded the wont-log-in-as-you line to reflect reality (stays logged-out by default; opt-in host-scoped RELAY_COOKIES authorizes specific sites; /sites lists them names-only; dangerous-action guard still blocks committing clicks; link SECURITY.md). Added /sites to the Commands line. (Also committed separately: concurrent dev-loop handler improvement — bare /forget|/forget-alert|/forget-digest now reply a usage hint not a silent no-op.) /sites already short-circuits + is recordCommand-tallied (sites-1). 493 pass. sites-3 = DataFaucet cookie-capture decision (closes m30)."
+    },
+    {
+      "event": "m30 sites-3 DONE + m30-cookie-ux COMPLETE. sites-3: recorded the scope decision (comment in mcp-forge auto-scan, anvil-migration) — DataFaucet auto-scan is PUBLIC-API discovery + redacts creds from bodies (safe-to-share MCP servers), intentionally NOT auth-capture; Relay owns the host-scoped cookie path (different threat model). No behavior change. m30 done_when met: /sites lists authorized hosts names-only, tested+documented, cookie capability now auditable from chat. ROADMAP advanced -> AUTHORED m31-final-audit (honest end-of-roadmap verification: full-stack green pass + backlog hygiene + doc/claim truth-check, then declare non-gated roadmap complete naming the 3 owner actions). Seeded audit-1/2/3. 27th self-directed milestone. This is the honest move — non-gated build surface is exhausted; m31 verifies rather than invents, and will state plainly whats left for the owner."
     }
   ],
   "roadmap": {
-    "current": "m30-cookie-ux",
+    "current": "m31-final-audit",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1795,6 +1822,13 @@
         "id": "m30-cookie-ux",
         "goal": "Close the cookie UX loop. m29 gave the agent host-scoped auth cookies, but a user has no way to know WHICH sites the bot can act on their behalf for — the capability is invisible + unauditable from the chat. Add a /sites (or extend /status) command that lists the hosts the cookie jar is configured for (host names ONLY, never values), so a user can confirm coverage + trust what the bot can reach. Small, real, transparency win that completes the auth feature. Handler-level, offline-testable.",
         "done_when": "a /sites command (or a line in /status) lists the distinct hosts the cookie jar covers (names only, values NEVER shown), reads via cookie-jar (no keys needed), says none configured cleanly when the jar is empty/absent; handler-wired + unit-tested; documented",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m31-final-audit",
+        "goal": "Honest end-of-roadmap audit. After 30 milestones the non-gated build surface is essentially exhausted — both products live-proven on anvil, agent has auth+safety+degradation+ops, thesis quantified, docs complete, deploy fully de-risked. Before declaring the non-gated roadmap DONE, verify the portfolio has no unproven claim, stale/orphaned backlog item, or dead code: run every gate green, confirm each `done` milestones done_when actually holds, spot-check that docs match reality. Then state plainly what remains = ONLY the 3 owner actions. This is verification, not building — the right final move when honest work runs out.",
+        "done_when": "a full-stack verification pass is green (relay npm test + preflight, mcp-forge test:unit, anvil tests); the backlog is checked for stale/duplicate/orphaned todos (cleaned or noted); any doc/claim that no longer matches code is fixed; a closing summary states the non-gated roadmap is complete and names the exact remaining owner-gated work; if a real new direction surfaces during the audit, seed it instead of stopping",
         "status": "todo",
         "owner_gated": false
       }
