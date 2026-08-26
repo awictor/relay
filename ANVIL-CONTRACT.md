@@ -1,5 +1,7 @@
 # anvil-engine API contract (the verified reference)
 
+*Part of the [portfolio](PORTFOLIO.md) — anvil is the shared browser both products run on.*
+
 `src/anvil.ts` is the SOURCE OF TRUTH for talking to self-hosted anvil-engine. DataFaucet
 (mcp-forge, `anvil-migration`) and any other consumer reimplement these exact calls — keep them in
 sync with this file, and prefer copying the shapes here over rediscovering them.

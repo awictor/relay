@@ -987,9 +987,33 @@
       "id": "narrative-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m23] Cross-link the whole doc set into a coherent map (README -> PORTFOLIO.md -> THESIS.md/DEPLOY.md/ANVIL-CONTRACT.md; mcp-forge anvil-migration-PR.md Before-you-merge). Add a one-line pointer in each so no doc is an island. Closes m23."
+    },
+    {
+      "id": "claude-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m24] Implement ClaudeClient in src/llm.ts behind LLMClient: map LLMMessage[] -> Anthropic Messages API (system separate, roles, tool_use/tool_result blocks), map TOOLS -> Anthropic tools schema, parse the response into LLMResult{text,toolCall}. Mirror GeminiClients structure. Read GeminiClient + toGemini first to match the exact interface + tool shapes. No live call yet."
+    },
+    {
+      "id": "claude-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m24] Unit-test ClaudeClient fully offline with a mocked fetch (injectable transport): assert request body shape (system/messages/tools), a tool_use response parses to LLMResult.toolCall{name,args}, a text-only response parses to LLMResult.text, and an API error surfaces as a transient-classifiable message. No ANTHROPIC_API_KEY needed."
+    },
+    {
+      "id": "claude-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m24] Wire the selector: LLM_PROVIDER=gemini|claude in index.ts picks the client (default gemini so nothing changes), add ANTHROPIC_API_KEY to .env.example (env-parity gate), update README/PORTFOLIO Claude-swappable claim to point at the real adapter + note a live Claude call is owner-gated (paid key). Closes m24."
     }
   ],
   "history": [
@@ -1351,10 +1375,13 @@
     },
     {
       "event": "m23 narrative-2 DONE: PORTFOLIO.md Guided demo fleshed out — added a clean-checkout Setup block (clone both repos side-by-side, mcp-forge checkout anvil-migration, npm ci, .env, start anvil) + a What-working-looks-like block with expected output per command (preflight GO 7/7, bench p50s, e2e:faults N/N, status UP sessions X/Y, merge-readiness READY). Reviewer now knows the exact commands AND what green looks like. Reiterated CI-safe SKIP semantics."
+    },
+    {
+      "event": "m23 narrative-3 DONE + m23-portfolio-narrative COMPLETE. narrative-3: doc set is now a coherent cross-linked map — THESIS/DEPLOY/ANVIL-CONTRACT each got a top Part-of-portfolio pointer back to PORTFOLIO.md; PORTFOLIO links out to ANVIL-CONTRACT (+ already THESIS/DEPLOY); README->PORTFOLIO at top; mcp-forge anvil-migration-PR Before-you-merge. No doc is an island. m23 done_when met: single 2-min legible story + guided demo + linked. ROADMAP advanced -> AUTHORED m24-claude-adapter (make the Claude-swappable claim REAL — actual ClaudeClient behind LLMClient, offline-tested via mock fetch, LLM_PROVIDER selector; live call owner-gated on paid ANTHROPIC_API_KEY). Seeded claude-1/2/3. 20th self-directed milestone. This is real code+capability, not just docs — good sign the loop found fresh substance past the doc-saturation point."
     }
   ],
   "roadmap": {
-    "current": "m23-portfolio-narrative",
+    "current": "m24-claude-adapter",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1513,6 +1540,13 @@
         "id": "m23-portfolio-narrative",
         "goal": "Tie it together. 22 milestones built three linked repos + a proven thesis, but there is NO single artifact an outsider (or Alex, presenting) can read in 2 minutes to see the whole thing: the one-shared-browser thesis, the two products on it, the measured proof, and the one-command gates (preflight, merge-readiness, bench:latency, status). Write a top-level PORTFOLIO.md narrative + a guided demo path so the work is legible and credible without spelunking commits. Credibility/GTM artifact for an AE. Fully offline.",
         "done_when": "a PORTFOLIO.md (in relay, the hub repo) tells the whole story: thesis, the 3 repos + how they connect, the 2 products both live-proven on anvil, the measured latency + cost thesis, and the one-command proofs (preflight/merge-readiness/bench:latency/status) with what each demonstrates; plus a short guided demo sequence someone can run start-to-finish; linked from README; honest about whats deployed (nothing yet — owner-gated) vs proven",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m24-claude-adapter",
+        "goal": "Make the Claude-swappable claim REAL. README + PORTFOLIO say the agent brain is Gemini now, Claude-swappable in one line — but only GeminiClient implements LLMClient; a Claude adapter does not exist, so the claim is vapor. Implement a real ClaudeClient (Anthropic Messages API + tool-use) behind the SAME LLMClient interface, unit-tested offline (mock fetch), with a one-env-var selector (LLM_PROVIDER=gemini|claude) so the swap is literally one line/one var. Do NOT require an Anthropic key to build/test — the adapter is tested with a mocked transport; a live call is owner-gated (needs ANTHROPIC_API_KEY, a paid key, so it parks as an owner-blocker, never blocks the loop).",
+        "done_when": "src/llm.ts has a ClaudeClient implementing LLMClient (Messages API request shape + tool_use/tool_result mapping + the same LLMResult{text,toolCall}), selected via LLM_PROVIDER; unit tests cover request-shaping + tool-call parsing + text-only with a mocked fetch (no key, offline); README/PORTFOLIO claim updated to point at the real adapter; a live Claude call is noted as owner-gated (ANTHROPIC_API_KEY, paid)",
         "status": "todo",
         "owner_gated": false
       }

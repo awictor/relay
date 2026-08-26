@@ -29,7 +29,8 @@ yourself see [Guided demo](#guided-demo).
 
 - **anvil-engine** — the shared browser. Real Chrome, self-hosted; REST + a CDP websocket proxy +
   an MJPEG live view + an MCP surface. Pooling, per-session caps, crash-handlers (exit-for-supervisor),
-  and an operator-legible `/v1/health` + `/v1/metrics` (sessions active/max, pool, uptime).
+  and an operator-legible `/v1/health` + `/v1/metrics` (sessions active/max, pool, uptime). The exact
+  endpoints Relay verifies against are in [ANVIL-CONTRACT.md](ANVIL-CONTRACT.md).
 - **Relay** — a consumer text-a-bot: text it a task, an agent (Gemini, Claude-swappable) drives
   anvil and texts back. Scheduled tasks, recipes, digests, change-alerts, graceful degradation.
 - **DataFaucet** — the dev/MCP layer; its capture/browse flow can run on anvil behind

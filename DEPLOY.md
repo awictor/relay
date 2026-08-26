@@ -1,5 +1,7 @@
 # Deploying Relay 24/7 (free)
 
+*Part of the [portfolio](PORTFOLIO.md). This is the owner-gated deploy step; run `npm run preflight` first — GREEN means only the host + secrets below remain.*
+
 Goal: Relay + anvil running always-on so anyone can text the bot anytime — on
 **free** infra. Recommended host: **Oracle Cloud Always Free** (a genuinely
 always-on VM that fits Chrome; Render/Fly free tiers spin down or are too small).

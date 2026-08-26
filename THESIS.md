@@ -1,5 +1,7 @@
 # Why self-hosted anvil, not a browser vendor
 
+*Part of the [portfolio](PORTFOLIO.md) — the map of the thesis, repos, and proofs.*
+
 The whole stack (Relay + DataFaucet) runs its browsing on **anvil-engine**, self-hosted, instead
 of Browserbase / Browserless / Steel. This page states the case with **measured latency** and a
 **reproducible cost model** — not marketing numbers.
