@@ -619,9 +619,33 @@
       "id": "pobs-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m8] Bound + guard proactive agent runs same as inbound: the scheduled task goes through runAgent which already has RELAY_MAX_STEPS + dangerous-action guard, but confirm a scheduled task cant do something inbound would refuse; add a test that a dangerous scheduled task is handled safely (reply/refuse, no unsafe action). Doc the proactive-obs env vars in .env.example."
+    },
+    {
+      "id": "digest-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m9] Extend RecipeStore (or a DigestStore) to hold digests: {name, members:[recipeName], schedule?}. parseDigestCommand: \"define digest <name>: <recipe1>, <recipe2>, ...\". Store add/get/list/remove; validate member recipes exist at define time (warn on unknown). Unit-test parse + store offline."
+    },
+    {
+      "id": "digest-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m9] Digest runner: given a digest, run each member recipe task through the agent, compose ONE message (labeled sections per member), send once. Reuse the agent path; bound total members; a failed member becomes a \"(couldn t fetch)\" line, not a whole failure. Injectable; unit-test the compose with a mock agent."
+    },
+    {
+      "id": "digest-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m9] Handler + schedule integration: /digest lists; \"define digest ...\" stores; \"/run <digest>\" or \"schedule <digest> every morning\" runs/schedules it (dispatch a digest vs a recipe by name). HELP/START + .env doc. Live e2e (scripts/e2e-digest.mjs): 2 recipes -> a digest -> schedule ~2s -> one combined message fires."
     }
   ],
   "history": [
@@ -854,10 +878,13 @@
     },
     {
       "event": "m8 pobs-2 done: per-chat hourly proactive-send cap. Runner tracks sends/chat in a rolling hour; over RELAY_PROACTIVE_MAX_PER_HOUR (default 10, 0=unlimited) it skips the send + completes the schedule (drop once/advance daily) + logs skipped:rate_cap. Per-chat (one floods -> others unaffected). 3 tests, .env.example doc, 291 full suite pass. A misfiring daily can no longer spam a user. Next m8: pobs-3 (confirm proactive runs respect the dangerous-action + step bounds; doc env vars; completes m8)."
+    },
+    {
+      "event": "m8-proactive-obs COMPLETE: pobs-1 [proactive] log+Metrics, pobs-2 per-chat hourly send cap, pobs-3 proactive inherits dangerous-guard+step-bound (tested). The autonomous paths are now observable, rate-limited, and safe. ROADMAP advanced -> AUTHORED m9-digest (bundle recipes into one scheduled briefing — compounding on m4+m7). Seeded digest-1/2/3. 5th self-directed milestone. m1-synergy still owner_blocked."
     }
   ],
   "roadmap": {
-    "current": "m8-proactive-obs",
+    "current": "m9-digest",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -911,6 +938,13 @@
         "id": "m8-proactive-obs",
         "goal": "Observability + safety for the PROACTIVE paths (scheduler + recipes), which today run with none of the per-turn [out]/[metrics] the inbound handler has. A scheduled/recipe run should log a structured [proactive] line (which schedule/recipe, steps, ms, ok/err), feed the same Metrics, and respect the dangerous-action + step/time bounds. Also: a per-chat cap on proactive sends per hour so a misfiring daily cant spam a user. Makes the autonomous side of Relay debuggable + safe for a 24/7 deploy.",
         "done_when": "scheduler runner emits a structured [proactive] log + records to Metrics per fire; a per-chat hourly proactive-send cap enforced; offline unit tests + the existing e2e still green",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m9-digest",
+        "goal": "Digests: bundle several saved recipes into ONE named digest that runs them and sends a single combined message (\"morning briefing\" = weather + top HN + btc price, one text at 8am). Compounding on recipes+scheduler: instead of N separate proactive pings, the user gets one curated digest. Free-infra: a digest is a recipe-of-recipes in the same store.",
+        "done_when": "digest define (name + member recipe names) + store; a digest run executes each member recipe + composes one message; schedulable like a recipe; handler commands (/digest, define/run) + offline unit+wiring tests + a live e2e",
         "status": "todo",
         "owner_gated": false
       }
