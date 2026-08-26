@@ -18,6 +18,7 @@ import { formatReply } from "./lib/format-reply.js";
 import { ScheduleStore, parseSchedule } from "./lib/schedule.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunCommand } from "./lib/recipes.js";
+import { parseScheduleFor } from "./lib/schedule.js";
 
 const llm = new GeminiClient();
 
@@ -101,6 +102,15 @@ const handle = createHandler({
   },
   recipeList: (chatId) => recipes.list(chatId).map((r) => ({ name: r.name, task: r.task, schedule: r.schedule })),
   recipeForget: (chatId, name) => recipes.remove(chatId, name),
+  recipeSchedule: (chatId, name, whenClause, now) => {
+    const rec = recipes.get(chatId, name);
+    if (!rec) return { ok: false, reason: "unknown" };
+    const p = parseScheduleFor(whenClause, rec.task, now);
+    if (!p) return { ok: false, reason: "unparsed" };
+    const s = schedules.add(chatId, p, now);
+    if (!s) return { ok: false, reason: "capped" };
+    return { ok: true, kind: s.kind };
+  },
   sendMessage,
   sendPhoto,
   sendDocument,

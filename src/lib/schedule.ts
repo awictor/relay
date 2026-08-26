@@ -43,6 +43,17 @@ function stripReminderPrefix(s: string): string {
  *   - "every morning" (9am) / "every day at 8pm" / "daily at 07:00" -> daily
  * The task is whatever remains after removing the time clause + a reminder prefix.
  */
+/**
+ * Parse ONLY the timing from a clause and attach a caller-supplied task — for scheduling a
+ * saved recipe ("schedule btc every morning" -> timing from "every morning", task = the
+ * recipe's stored task). Reuses parseSchedule with a placeholder task, then swaps it in.
+ */
+export function parseScheduleFor(clause: string, task: string, now: number): ParsedSchedule | null {
+  const p = parseSchedule(`${clause} __recipe__`, now);
+  if (!p || !task.trim()) return null;
+  return { ...p, task: task.trim() };
+}
+
 export function parseSchedule(text: string, now: number): ParsedSchedule | null {
   const raw = text.trim();
   const lower = raw.toLowerCase();

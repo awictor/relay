@@ -38,6 +38,10 @@ export interface HandlerDeps {
   recipeResolve?: (chatId: number, text: string) => { name: string; task: string } | null; // parses a run command + looks up
   recipeList?: (chatId: number) => Array<{ name: string; task: string; schedule?: string }>;
   recipeForget?: (chatId: number, name: string) => boolean;
+  // Schedule a saved recipe to run on a cadence (m7 recipe-3): "schedule <name> every morning".
+  // Resolves the recipe's task + registers it with the scheduler. Optional.
+  recipeSchedule?: (chatId: number, name: string, whenClause: string, now: number) =>
+    { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" };
   checkRateLimit: (chatId: number) => { allowed: boolean; retryAfterSec?: number };
   redactText: (text: string) => string;
   hasModelKey: () => boolean;
@@ -115,6 +119,17 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       const removed = name ? deps.recipeForget(msg.chatId, name) : false;
       await deps.sendMessage(msg.chatId, removed ? `Forgot "${name}".` : "No recipe by that name — see /recipes.");
       return;
+    }
+
+    // "schedule <name> <when>" -> run a saved recipe on a cadence. No agent run.
+    if (deps.recipeSchedule && /^\s*schedule\s+\S+/i.test(msg.text)) {
+      const m = msg.text.trim().match(/^schedule\s+(.+?)\s+((?:every|daily|in|tomorrow|at)\b.*)$/i);
+      if (m) {
+        const r = deps.recipeSchedule(msg.chatId, m[1]!, m[2]!, deps.now());
+        if (r.ok) { await deps.sendMessage(msg.chatId, `Scheduled "${m[1]!.trim()}" to run ${r.kind === "daily" ? "daily" : "once"}. Manage with /schedules.`); return; }
+        const why = r.reason === "unknown" ? "No recipe by that name — see /recipes." : r.reason === "capped" ? "You've hit the scheduled-task limit — /cancel one first." : "I couldn't parse that time. Try \"schedule <name> every morning\".";
+        await deps.sendMessage(msg.chatId, why); return;
+      }
     }
 
     // "save <name>: <task>" -> store a recipe. No agent run.

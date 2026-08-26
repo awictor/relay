@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSchedule, ScheduleStore } from "../src/lib/schedule.js";
+import { parseSchedule, parseScheduleFor, ScheduleStore } from "../src/lib/schedule.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -31,6 +31,25 @@ describe("parseSchedule — relative", () => {
   it("returns null when there's a time but no task", () => {
     expect(parseSchedule("in 10 minutes", NOW)).toBeNull();
     expect(parseSchedule("remind me in 5 mins", NOW)).toBeNull();
+  });
+});
+
+describe("parseScheduleFor (m7 recipe-3: timing-only + supplied task)", () => {
+  it("attaches the recipe task to a daily clause", () => {
+    const s = parseScheduleFor("every morning", "check the price of bitcoin", NOW)!;
+    expect(s.kind).toBe("daily");
+    expect(s.hourMin).toBe("09:00");
+    expect(s.task).toBe("check the price of bitcoin");
+  });
+  it("attaches to a relative clause", () => {
+    const s = parseScheduleFor("in 5 min", "top HN", NOW)!;
+    expect(s.kind).toBe("once");
+    expect(s.dueMs - NOW).toBe(5 * MIN);
+    expect(s.task).toBe("top HN");
+  });
+  it("null on an unparseable clause or empty task", () => {
+    expect(parseScheduleFor("whenever", "x", NOW)).toBeNull();
+    expect(parseScheduleFor("every morning", "  ", NOW)).toBeNull();
   });
 });
 
