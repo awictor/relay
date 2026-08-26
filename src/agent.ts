@@ -65,6 +65,11 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "fetch_json",
+    description: "GET a JSON HTTP API directly (no browser) and return the JSON. Fastest for public data APIs — weather, prices, sports, etc. Use when you know a JSON endpoint; falls back to scrape/browse for HTML pages. Only http(s), JSON responses, size-capped.",
+    parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL of a JSON API endpoint" } }, required: ["url"] },
+  },
+  {
     name: "search",
     description: "Open a search or listing page and get back candidate result links (deduped, same-site preferred, capped). Use when the user names WHAT they want but not the exact URLs — then extract/compare across the returned links. Provide a search-results URL (build the site's query URL, e.g. https://news.ycombinator.com/newest or a site search).",
     parameters: {
@@ -91,6 +96,7 @@ const SYSTEM_PROMPT = `You are Relay, an assistant reached over text message. A 
 Tools:
 - "scrape" (url): read a single page. Use for simple lookups. If the user names a site, infer the URL (Hacker News -> https://news.ycombinator.com).
 - "browse" (url) then "click"/"type"/"read": for tasks needing interaction (search a site, fill a form, page through results). "read" returns the current page after your actions.
+- "fetch_json" (url): hit a JSON HTTP API directly, no browser — fastest for public data APIs (weather, prices, sports). Use when you know a JSON endpoint; use scrape/browse for HTML pages.
 - "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
 - "compare" (urls, fields): fetch several pages and extract the same fields from each; returns a JSON array. Use when the user wants to compare data points across multiple links.
 - "search" (url): open a search/listing page and get candidate result links back. Use when the user knows WHAT they want but not the exact URLs — build the site's search URL, call search, then extract/compare across the returned links.
@@ -113,6 +119,24 @@ export interface BrowserBackend {
   readCurrent(sessionId: string): Promise<{ title: string; content: string; url: string }>;
   releaseSession(sessionId: string): Promise<void>;
   discoverLinks(url: string, limit?: number): Promise<string[]>;
+  fetchJson(url: string): Promise<{ status: number; contentType: string; text: string }>;
+}
+
+const FETCH_JSON_MAX_BYTES = 200_000;
+
+// Default fetchJson: a plain guarded GET. SSRF is checked by the caller; here we cap
+// size, require a JSON content-type, and never forward credentials/cookies.
+async function defaultFetchJson(url: string): Promise<{ status: number; contentType: string; text: string }> {
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { accept: "application/json" },
+    redirect: "follow",
+    signal: AbortSignal.timeout(10000),
+  });
+  const contentType = res.headers.get("content-type") ?? "";
+  const buf = await res.arrayBuffer();
+  const text = new TextDecoder().decode(buf.slice(0, FETCH_JSON_MAX_BYTES));
+  return { status: res.status, contentType, text };
 }
 
 const defaultBackend: BrowserBackend = {
@@ -124,6 +148,7 @@ const defaultBackend: BrowserBackend = {
   readCurrent: (id) => anvil.readCurrent(id),
   releaseSession: (id) => anvil.releaseSession(id),
   discoverLinks: (url, limit) => anvil.discoverLinks(url, limit),
+  fetchJson: (url) => defaultFetchJson(url),
 };
 
 export interface AgentDeps {
@@ -215,6 +240,25 @@ export async function runAgent(
           push(call.name, `Done: ${call.name} ${selector}. Call read to see the updated page.`);
         } catch (e) {
           push(call.name, `ERROR: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "fetch_json") {
+        const url = String(call.args.url ?? "");
+        const safe = isUrlSafe(url);
+        if (!safe.safe) { push("fetch_json", `ERROR: refused (${safe.reason}).`); continue; }
+        try {
+          const r = await backend.fetchJson(url);
+          if (!/json/i.test(r.contentType)) {
+            push("fetch_json", `Not a JSON response (content-type: ${r.contentType || "unknown"}). Use scrape for HTML pages.`);
+            continue;
+          }
+          // Validate it parses, then hand back a trimmed body for the model to read.
+          try { JSON.parse(r.text); } catch { push("fetch_json", `Response was not valid JSON (status ${r.status}).`); continue; }
+          push("fetch_json", `JSON from ${url} (status ${r.status}):\n${r.text.slice(0, 6000)}`);
+        } catch (e) {
+          push("fetch_json", `ERROR fetching ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }
