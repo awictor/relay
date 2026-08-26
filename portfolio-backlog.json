@@ -265,9 +265,17 @@
       "id": "relay-http-tool",
       "stream": "relay",
       "value": "medium",
+      "status": "done",
+      "repo": "relay",
+      "task": "Add a direct http/JSON-API tool: many user asks (weather, prices, sports) are answered by a public JSON API faster than driving a browser. Add a fetch_json(url) tool (SSRF-guarded, size-capped, JSON-only content-type, no secrets forwarded) so the agent can hit an API directly and extract from the JSON, falling back to scrape/browse for HTML sites. Unit-test with a mock fetch; keep it behind the same safety guards. [DONE: fetch_json tool — SSRF-guarded, 200KB cap, JSON-content-type required, no creds forwarded, injectable; 4 tests; 70 suite pass; live e2e real GitHub API JSON 200]"
+    },
+    {
+      "id": "relay-tool-routing",
+      "stream": "relay",
+      "value": "medium",
       "status": "todo",
       "repo": "relay",
-      "task": "Add a direct http/JSON-API tool: many user asks (weather, prices, sports) are answered by a public JSON API faster than driving a browser. Add a fetch_json(url) tool (SSRF-guarded, size-capped, JSON-only content-type, no secrets forwarded) so the agent can hit an API directly and extract from the JSON, falling back to scrape/browse for HTML sites. Unit-test with a mock fetch; keep it behind the same safety guards."
+      "task": "Now that the agent has scrape/browse/extract/compare/search/fetch_json, add a couple of routing regression tests (scripted LLM) asserting the SYSTEM_PROMPT guidance leads to sensible tool choice on representative asks (weather -> fetch_json/scrape, price+title -> extract, multi-link -> compare). Not testing the model, testing that the tool set + descriptions are coherent + the loop dispatches each correctly. Guards against tool-wiring regressions as tools grow."
     }
   ],
   "history": [
@@ -353,6 +361,9 @@
     },
     {
       "event": "relay-tools-e2e-full done: search->compare->reply chain composition test (test/agent-chain.test.ts) — proves the tools + SMS formatter compose into a readable user answer, incl the lazy-model case (reply IS compare JSON -> formatter renders bullet lines). 2 tests, 66 full suite pass, tsc clean. All backlog was [low]; refilled relay-http-tool [medium] — a direct JSON-API tool so common asks (weather/prices) skip the browser, a real capability + speed win."
+    },
+    {
+      "event": "relay-http-tool done: fetch_json tool for direct JSON API access (no browser) — SSRF-guarded, 200KB cap, JSON content-type required (else routes user to scrape), body-parse validated, no creds forwarded; injectable via BrowserBackend.fetchJson. 4 unit tests + 70 full suite pass, tsc clean, live e2e green (real GitHub API -> JSON status 200, full_name matched). Relay tool set now scrape/browse/extract/compare/search/fetch_json. Refilled relay-tool-routing [medium] (dispatch regression tests as the tool set grows)."
     }
   ]
 }
