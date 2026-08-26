@@ -113,9 +113,9 @@
       "id": "syn-2",
       "stream": "synergy",
       "value": "high",
-      "status": "todo",
+      "status": "done",
       "repo": "datafaucet",
-      "task": "Route the manual-browse routes (start/stop/debug) through BROWSER_BACKEND on anvil-migration. start/route.ts hard-503s without Browserbase creds and only speaks Browserbase session+debug API. Add an anvil branch: create session, build /cdp ws endpoint, return liveUrl from anvil /v1/view (MJPEG) instead of debuggerFullscreenUrl. Client inline-browser.tsx iframe expects a URL — anvil live-view is MJPEG, so decide iframe-able wrapper vs snapshot polling. Keep browserbase default identical."
+      "task": "Route the manual-browse routes (start/stop/debug) through BROWSER_BACKEND on anvil-migration. start/route.ts hard-503s without Browserbase creds and only speaks Browserbase session+debug API. Add an anvil branch: create session, build /cdp ws endpoint, return liveUrl from anvil /v1/view (MJPEG) instead of debuggerFullscreenUrl. Client inline-browser.tsx iframe expects a URL — anvil live-view is MJPEG, so decide iframe-able wrapper vs snapshot polling. Keep browserbase default identical. [DONE: start(DEV-0002)+stop+debug flag-gated on anvil; liveUrl=/v1/view MJPEG; live e2e green (scripts/e2e-anvil-browse.mjs); PR #1 body updated]"
     },
     {
       "id": "syn-1h",
@@ -132,6 +132,22 @@
       "status": "todo",
       "repo": "datafaucet",
       "task": "Extend the mock-anvil test (syn-1h) to cover multi-page crawl + MAX_PAGES bound: have /v1/actions/evaluate return same-host links on the first visit so the crawl enqueues+visits a 2nd page, and assert the route stops at MAX_PAGES and dedups already-visited URLs. Also add a failure case: mock /v1/sessions 500 -> assert an error SSE event + no unreleased session leak."
+    },
+    {
+      "id": "syn-2b",
+      "stream": "synergy",
+      "value": "medium",
+      "status": "todo",
+      "repo": "datafaucet",
+      "task": "Add offline mock-anvil integration tests for the manual-browse routes (mirror syn-1h): tests/integration/anvil-browse.test.ts stands up a mock anvil and asserts start(BROWSER_BACKEND=anvil) returns {sessionId, liveUrl=/v1/view, connectUrl=ws.../cdp}, stop releases the session + returns {requests:[],count:0}, debug returns {count:0,available:false}. Confirm default browserbase 503 still fires when creds missing + flag unset. Wire into test:unit gate."
+    },
+    {
+      "id": "syn-2c",
+      "stream": "synergy",
+      "value": "low",
+      "status": "todo",
+      "repo": "datafaucet",
+      "task": "Live-view interactivity: anvil /v1/view is read-only MJPEG (no click injection like Browserbase debugger). Either (a) document the read-only limit in inline-browser.tsx UI when backend=anvil, or (b) add a lightweight click-forward: overlay captures coords -> POST anvil /v1/actions/click-at (needs a new anvil endpoint by pixel). Decide + spec."
     }
   ],
   "history": [
@@ -175,6 +191,9 @@
     },
     {
       "event": "syn-1h done: offline mock-anvil integration test (tests/integration/anvil-capture.test.ts) — verifies BROWSER_BACKEND=anvil capture path (endpoint capture, noise filter, body redaction, full session lifecycle) with no live anvil; wired into test:unit. Draft PR #1 now CI-verifiable. Refilled syn-1i (multi-page crawl + failure-case coverage)."
+    },
+    {
+      "event": "syn-2 done: manual-browse start/stop/debug all flag-gated onto anvil (start=DEV-0002 committed earlier; stop+debug committed this run). liveUrl now anvil /v1/view MJPEG (iframe renders as-is). Live e2e green: start->real jpeg frame->stop release, zero Browserbase. PR #1 body updated. Refilled syn-2b (offline mock tests for browse routes) + syn-2c (live-view interactivity decision)."
     }
   ]
 }
