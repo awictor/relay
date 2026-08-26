@@ -494,6 +494,38 @@
       "status": "done",
       "repo": "relay",
       "task": "Fix concurrent DEV-0024 /status bug: prefix was always ✅ even when browser DOWN (emoji contradicted body). Now ⚠️ when anvilOk false. [DONE: src/lib/status.ts prefix per-state; 2 tests assert it; 148 suite pass]"
+    },
+    {
+      "id": "sched-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m4] src/lib/schedule.ts: pure parse + store. parseSchedule(text)-> {kind:once|daily, whenMs|hourMin, task} or null (natural phrases: \"in 10 min\", \"tomorrow 9am\", \"every morning\"). ScheduleStore (JSON file, gitignored, like MemoryStore): add/list/remove/dueNow(nowMs). Unit-test parse + store + dueNow, offline, injectable clock."
+    },
+    {
+      "id": "sched-2",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m4] Scheduler runner behind an interface: a tick() that pulls due schedules from ScheduleStore, runs runAgent on the stored task, sends the reply to the chat unprompted, removes once-tasks / reschedules daily. Injectable (store+runAgent+send+now) so it is unit-tested with a mock clock+agent. Wire a setInterval in index.ts (env RELAY_SCHED_TICK_MS, default 30s), stop it in graceful shutdown."
+    },
+    {
+      "id": "sched-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m4] Handler + commands: a /remind or natural \"remind me to X in 10m\" routes to schedule.add + confirms; /schedules lists pending; /cancel <n> removes. Update HELP/START + README. Unit-test the handler branch (mock store)."
+    },
+    {
+      "id": "sched-4",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m4] Live e2e: scripts/e2e-schedule.mjs schedules a task ~5s out with real ScheduleStore + a stub send, asserts the runner fires it once + removes it. Offline (no Telegram). Proves the reactive->proactive loop end to end."
     }
   ],
   "history": [
@@ -681,6 +713,55 @@
     },
     {
       "event": "DEV-0025 committed (was left uncommitted by concurrent loop): anvil reachability pinger keeps /status fresh (interval re-probe, not boot-only seed); injectable + unit-tested; index.ts seeds via tick() + start()s it; shutdown stops it (anvilPinger.stop() wired). Caught a transient tsc error mid-write, re-verified clean after the concurrent write settled. 152 full suite pass. Relay grew /reset+/status+pinger this session via concurrent loops; I keep committing+verifying+bug-fixing their output (status ✅/⚠️ prefix fix last run). df-owner-summary STILL billing-blocked. Portfolio green: relay 152, anvil 547, migration tsc clean."
+    },
+    {
+      "event": "AUTONOMOUS GOAL-ADVANCEMENT built in: added roadmap{current,milestones} to backlog + STAGE GOAL to /agent-loop command. m1-synergy=owner_blocked (code done, needs billing+merge), m2-relay-agent + m3-relay-harden=done. Advanced current to m4-scheduled (proactive/scheduled tasks — reactive->autonomous, the real Instinct-parity gap, fully advanceable on free infra). Seeded sched-1..4. Roadmap continues m5-channels, m6-anvil-depth. Loop now advances its own goal when a milestone converges/owner-gates instead of idling; exhausted roadmap => author the next milestone."
     }
-  ]
+  ],
+  "roadmap": {
+    "current": "m4-scheduled",
+    "milestones": [
+      {
+        "id": "m1-synergy",
+        "goal": "Move DataFaucet capture+browse onto anvil behind BROWSER_BACKEND flag",
+        "done_when": "anvil-migration branch: capture+browse flag-gated, CI unit gate, live-verified, draft PR#1",
+        "status": "owner_blocked",
+        "owner_gated": true,
+        "note": "code complete; blocked on gh-billing + PR#1 merge (owner)"
+      },
+      {
+        "id": "m2-relay-agent",
+        "goal": "Relay: full tool-using agent (scrape/browse/extract/compare/search/fetch_json/screenshot/pdf) + SMS-format + memory",
+        "done_when": "all tools shipped+tested, live agent e2e green",
+        "status": "done"
+      },
+      {
+        "id": "m3-relay-harden",
+        "goal": "Relay production-hardening: transient retry, per-turn+aggregate observability, graceful shutdown, CI, deploy-v1 tag, /reset+/status",
+        "done_when": "CI green incl shutdown e2e, 150+ tests, deploy-v1 tagged both repos",
+        "status": "done"
+      },
+      {
+        "id": "m4-scheduled",
+        "goal": "Relay proactive/scheduled tasks: user texts \"remind me\" or \"check X every morning\" -> Relay stores the schedule + fires the agent later, texting the result unprompted. First move from reactive bot to autonomous assistant (the real Instinct parity gap). Free-infra: in-process scheduler + persisted schedule file, no external cron.",
+        "done_when": "schedule parse + persist + due-check + fire-agent wired behind an interface, offline unit+wiring tests, live e2e (schedule a near-future task -> it fires + replies)",
+        "status": "todo",
+        "owner_gated": false
+      },
+      {
+        "id": "m5-channels",
+        "goal": "Second channel behind a Channel interface (Discord or WhatsApp-web via anvil) so Relay is not Telegram-only — proves the agent core is transport-agnostic",
+        "done_when": "Channel interface extracted, Telegram refactored onto it, a 2nd channel adapter (even stub+tests) added, agent core unchanged",
+        "status": "todo",
+        "owner_gated": false
+      },
+      {
+        "id": "m6-anvil-depth",
+        "goal": "anvil depth both products need: session pooling/reuse, stealth hardening, per-session resource caps — measured against real sites",
+        "done_when": "pooling + caps shipped with tests + a bench script showing reuse latency win",
+        "status": "todo",
+        "owner_gated": false
+      }
+    ]
+  }
 }
