@@ -64,6 +64,7 @@ const scheduleRunner = makeScheduleRunner({
   now: () => Date.now(), periodMs: SCHED_TICK_MS,
   log: (m) => console.log(m),
   recordTurn, // proactive fires count in the same Metrics as inbound turns (m8)
+  maxPerChatPerHour: Number(process.env.RELAY_PROACTIVE_MAX_PER_HOUR ?? 10), // anti-spam (m8)
 });
 
 const handle = createHandler({

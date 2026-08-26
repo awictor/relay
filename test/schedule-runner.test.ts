@@ -107,6 +107,46 @@ describe("makeScheduleRunner start/stop", () => {
   });
 });
 
+describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
+  it("stops sending to a chat past the hourly cap; over-cap schedules are dropped, not fired", async () => {
+    const clock = { t: NOW };
+    const sent: Array<{ chatId: number }> = [];
+    let agentCalls = 0;
+    const { store, runner } = harness(clock, {
+      maxPerChatPerHour: 2,
+      runAgent: async (task) => { agentCalls++; return { reply: `did:${task}` }; },
+      send: async (chatId) => { sent.push({ chatId }); },
+    });
+    // 4 due once-tasks for the same chat; cap 2 -> only 2 fire, 2 dropped.
+    for (let i = 0; i < 4; i++) store.add(1, { kind: "once", task: `t${i}`, dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(sent).toHaveLength(2);
+    expect(agentCalls).toBe(2);
+    expect(store.list(1)).toHaveLength(0); // over-cap ones completed (dropped), not left to storm
+  });
+
+  it("the cap is per-chat (a 2nd chat is unaffected)", async () => {
+    const clock = { t: NOW };
+    const sent: Array<{ chatId: number }> = [];
+    const { store, runner } = harness(clock, { maxPerChatPerHour: 1, send: async (chatId) => { sent.push({ chatId }); } });
+    store.add(1, { kind: "once", task: "a", dueMs: NOW - 1 }, NOW);
+    store.add(1, { kind: "once", task: "b", dueMs: NOW - 1 }, NOW); // over cap for chat 1
+    store.add(2, { kind: "once", task: "c", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(sent.filter((s) => s.chatId === 1)).toHaveLength(1);
+    expect(sent.filter((s) => s.chatId === 2)).toHaveLength(1);
+  });
+
+  it("cap 0 = unlimited", async () => {
+    const clock = { t: NOW };
+    const sent: unknown[] = [];
+    const { store, runner } = harness(clock, { maxPerChatPerHour: 0, send: async () => { sent.push(1); } });
+    for (let i = 0; i < 5; i++) store.add(1, { kind: "once", task: `t${i}`, dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(sent).toHaveLength(5);
+  });
+});
+
 describe("makeScheduleRunner observability (m8 pobs-1)", () => {
   it("logs a [proactive] line + records an ok turn on a successful fire", async () => {
     const clock = { t: NOW };

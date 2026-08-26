@@ -22,6 +22,9 @@ export interface ScheduleRunnerDeps {
   // Observability (m8): record each proactive fire into the same Metrics as inbound turns,
   // so /status + [metrics] count them. Optional (older wiring stays valid).
   recordTurn?: (t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean }) => void;
+  // Anti-spam (m8 pobs-2): max proactive sends per chat per rolling hour. A misfiring daily
+  // (or many due at once) must not flood a user. 0/absent = unlimited. Default set by index.
+  maxPerChatPerHour?: number;
 }
 
 export interface ScheduleRunner {
@@ -36,6 +39,23 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   const setI = deps.setInterval ?? ((fn, ms) => setInterval(fn, ms));
   const clearI = deps.clearInterval ?? ((h) => clearInterval(h as ReturnType<typeof setInterval>));
   const log = deps.log ?? (() => {});
+  const HOUR = 3_600_000;
+  const cap = deps.maxPerChatPerHour ?? 0;
+  const sendTimes = new Map<number, number[]>(); // chatId -> recent send epochs (rolling hour)
+
+  // True if this chat is at/over the hourly proactive-send cap (prunes old timestamps).
+  function overCap(chatId: number, now: number): boolean {
+    if (cap <= 0) return false;
+    const times = (sendTimes.get(chatId) ?? []).filter((t) => now - t < HOUR);
+    sendTimes.set(chatId, times);
+    return times.length >= cap;
+  }
+  function noteSend(chatId: number, now: number): void {
+    if (cap <= 0) return;
+    const times = sendTimes.get(chatId) ?? [];
+    times.push(now);
+    sendTimes.set(chatId, times);
+  }
 
   async function fireOne(s: Schedule): Promise<void> {
     // A scheduled task is a fresh, contextless agent run (no chat history) whose reply is
@@ -45,6 +65,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     const body = deps.formatReply(res.reply);
     const label = s.kind === "daily" ? "⏰ Daily" : "⏰ Reminder";
     await deps.send(s.chatId, `${label}: ${s.task}\n\n${body}`);
+    noteSend(s.chatId, deps.now());
     deps.store.complete(s.id, deps.now());
     // Observability (m8): structured proactive-run line + Metrics record (same as inbound).
     const elapsedMs = deps.now() - startedAt;
@@ -61,6 +82,13 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     try {
       const due = deps.store.dueNow(deps.now());
       for (const s of due) {
+        // Anti-spam: if this chat is over its hourly cap, skip the send + complete the schedule
+        // (drop once / advance daily) so it doesn't storm — log the skip instead of firing.
+        if (overCap(s.chatId, deps.now())) {
+          log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, skipped: "rate_cap" })}`);
+          deps.store.complete(s.id, deps.now());
+          continue;
+        }
         try { await fireOne(s); fired++; }
         catch (e) {
           deps.onError?.(e);
