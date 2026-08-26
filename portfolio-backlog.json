@@ -443,9 +443,9 @@
       "id": "relay-tag-doc-status",
       "stream": "quality",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
-      "task": "Add the deploy-v1 tag reference to STATUS.md (Verify section) so the owner one-glance knows the exact reproducible-deploy point exists + how to use it (git checkout deploy-v1 in both repos). Doc-only, keeps STATUS.md the single source of truth."
+      "task": "Add the deploy-v1 tag reference to STATUS.md (Verify section) so the owner one-glance knows the exact reproducible-deploy point exists + how to use it (git checkout deploy-v1 in both repos). Doc-only, keeps STATUS.md the single source of truth. [DONE: STATUS.md Reproducible-deploy-point section referencing deploy-v1 tags]"
     }
   ],
   "history": [
@@ -600,6 +600,9 @@
     },
     {
       "event": "relay-anvil-version-note done: tagged BOTH anvil-engine (ca33d87) + relay (current) as deploy-v1 at the all-green state (anvil 529+build CI green incl dist fix; relay 117 CI green) and pushed the tags. DEPLOY.md now documents checking out the paired tag for a reproducible deploy + bumping both together after validating. Prevents a future anvil breaking change from silently affecting a redeploy. Remaining: syn-2c + syn-1l (datafaucet design), df-owner-summary (blocked on gh-billing)."
+    },
+    {
+      "event": "relay-tag-doc-status done: STATUS.md now references the deploy-v1 reproducible-deploy tags. NOTE: loop has CONVERGED — 46 items done, remaining 3 todos are datafaucet DESIGN decisions (syn-2c interactive live-view, syn-1l third-party API capture policy) best made by Alex, + df-owner-summary (blocked on gh-billing). Relay/anvil/migration all shipped, tested, CI-gated, tagged. Not refilling with cosmetic doc-about-doc; the productive autonomous surface is exhausted until an owner action (merge PR#1 / provision VM / fix billing) or a new goal opens work."
     }
   ]
 }
