@@ -259,9 +259,9 @@
       "id": "syn-1l",
       "stream": "synergy",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "datafaucet",
-      "task": "Optional capture polish: the capture check-regex in verification over-flagged api.paritydeals.com (a real third-party deals API on reqres.in) as noise-ish. It was correctly KEPT by the actual filter (only a test-harness heuristic flagged it). No code bug — but consider whether cross-origin third-party APIs should be captured at all for an MCP built from ONE target site, or filtered to the target host + its api subdomain. Decide + document; low priority."
+      "task": "Optional capture polish: the capture check-regex in verification over-flagged api.paritydeals.com (a real third-party deals API on reqres.in) as noise-ish. It was correctly KEPT by the actual filter (only a test-harness heuristic flagged it). No code bug — but consider whether cross-origin third-party APIs should be captured at all for an MCP built from ONE target site, or filtered to the target host + its api subdomain. Decide + document; low priority. [DONE (verification-only, no code): the third-party API (api.paritydeals.com) was correctly KEPT by the real filter — only a test-harness heuristic over-flagged it. Capturing cross-origin APIs a target page calls is CORRECT for MCP generation (they are part of what the site uses). No change; policy = keep them.]"
     },
     {
       "id": "relay-http-tool",
@@ -451,9 +451,9 @@
       "id": "df-pr-body-syn2c",
       "stream": "synergy",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "datafaucet",
-      "task": "Update docs/anvil-migration-PR.md known-limit section: the read-only live-view is now LABELED in the UI (interactive:false -> View-only note), not just a silent limit. Tighten the wording so a reviewer sees it is handled, not outstanding. Doc-only on the branch."
+      "task": "Update docs/anvil-migration-PR.md known-limit section: the read-only live-view is now LABELED in the UI (interactive:false -> View-only note), not just a silent limit. Tighten the wording so a reviewer sees it is handled, not outstanding. Doc-only on the branch. [DONE: PR #1 known-limit section reworded — live-view read-only is UI-handled (interactive:false + View-only note), pixel-click out of scope; draft PR body updated]"
     }
   ],
   "history": [
@@ -614,6 +614,9 @@
     },
     {
       "event": "syn-2c done (option a - document the limit): anvil start route returns interactive:false; inline-browser.tsx renders a View-only note above the MJPEG panel so users arent confused that clicks dont register (anvil live-view is read-only, no click-injection). Browserbase omits the flag -> stays interactive, UI unchanged. tsc clean, next build green (1727 pages), anvil-browse test asserts interactive:false. Chose (a) over (b) click-forward: read-only view is fine for the capture use-case + avoids a new anvil pixel-click endpoint. Remaining: syn-1l (no-op, verification-only design note), df-owner-summary (blocked on gh-billing)."
+    },
+    {
+      "event": "df-pr-body-syn2c done: PR #1 known-limit wording tightened — read-only live-view is UI-handled (interactive:false + View-only note), shown as resolved not outstanding; draft PR body updated on GitHub. Also closed syn-1l as verification-only (no code): capturing a targets cross-origin third-party APIs is correct for MCP generation; the earlier over-flag was a test-harness heuristic, the real filter kept it correctly. Only df-owner-summary remains (blocked on gh-billing)."
     }
   ]
 }
