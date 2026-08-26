@@ -31,8 +31,11 @@ yourself see [Guided demo](#guided-demo).
   an MJPEG live view + an MCP surface. Pooling, per-session caps, crash-handlers (exit-for-supervisor),
   and an operator-legible `/v1/health` + `/v1/metrics` (sessions active/max, pool, uptime). The exact
   endpoints Relay verifies against are in [ANVIL-CONTRACT.md](ANVIL-CONTRACT.md).
-- **Relay** — a consumer text-a-bot: text it a task, an agent (Gemini, Claude-swappable) drives
-  anvil and texts back. Scheduled tasks, recipes, digests, change-alerts, graceful degradation.
+- **Relay** — a consumer text-a-bot: text it a task, an agent drives anvil and texts back. Scheduled
+  tasks, recipes, digests, change-alerts, graceful degradation. The brain is behind one `LLMClient`
+  interface with two real adapters — `GeminiClient` (free tier, default) and `ClaudeClient`
+  (Anthropic Messages API) — swapped by `LLM_PROVIDER=gemini|claude` (a live Claude call needs a
+  paid `ANTHROPIC_API_KEY`).
 - **DataFaucet** — the dev/MCP layer; its capture/browse flow can run on anvil behind
   `BROWSER_BACKEND=anvil` (default stays Browserbase until the owner merges — prod is untouched).
 

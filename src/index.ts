@@ -4,8 +4,8 @@
 
 import { selectChannel, type Channel } from "./channel.js";
 import { anvilLive } from "./anvil.js";
-import { GeminiClient } from "./llm.js";
-import type { LLMMessage } from "./llm.js";
+import { GeminiClient, ClaudeClient } from "./llm.js";
+import type { LLMMessage, LLMClient } from "./llm.js";
 import { checkRateLimit, redactText } from "./safety.js";
 import { handleCommand } from "./commands.js";
 import { MemoryStore } from "./lib/memory-store.js";
@@ -26,7 +26,10 @@ import { AlertStore, parseAlertCommand } from "./lib/alerts.js";
 import { checkAlert } from "./alert-runner.js";
 import { parseScheduleFor } from "./lib/schedule.js";
 
-const llm = new GeminiClient();
+// Agent brain, chosen by LLM_PROVIDER (m24). Default gemini (free tier) — nothing changes unless
+// set. `claude` uses the Anthropic Messages API adapter (needs ANTHROPIC_API_KEY, a paid key).
+const LLM_PROVIDER = (process.env.LLM_PROVIDER ?? "gemini").toLowerCase();
+const llm: LLMClient = LLM_PROVIDER === "claude" ? new ClaudeClient() : new GeminiClient();
 
 // The transport Relay runs on (m5), chosen by RELAY_CHANNEL (telegram default | console).
 const channel: Channel = selectChannel(process.env.RELAY_CHANNEL);
@@ -190,7 +193,7 @@ const handle = createHandler({
   handleCommand,
   checkRateLimit,
   redactText,
-  hasModelKey: () => !!process.env.GEMINI_API_KEY,
+  hasModelKey: () => !!(LLM_PROVIDER === "claude" ? process.env.ANTHROPIC_API_KEY : process.env.GEMINI_API_KEY),
   recordTurn,
   now: () => Date.now(),
 });
@@ -205,7 +208,9 @@ async function main() {
   const live = anvilPinger.current();
   console.log(`anvil reachable: ${live} (ANVIL_BASE_URL=${process.env.ANVIL_BASE_URL ?? "http://localhost:3000"})`);
   if (!live) console.warn("WARNING: anvil-engine not reachable — browsing tools will fail until it's running.");
-  if (!process.env.GEMINI_API_KEY) console.warn("WARNING: GEMINI_API_KEY not set — the agent can't run until it's provided.");
+  const modelKeyVar = LLM_PROVIDER === "claude" ? "ANTHROPIC_API_KEY" : "GEMINI_API_KEY";
+  if (!process.env[modelKeyVar]) console.warn(`WARNING: ${modelKeyVar} not set — the agent (LLM_PROVIDER=${LLM_PROVIDER}) can't run until it's provided.`);
+  else console.log(`agent brain: ${LLM_PROVIDER}`);
 
   scheduleRunner.start();              // fire proactive/scheduled tasks (no-op if RELAY_SCHED_TICK_MS=0)
   if (SCHED_TICK_MS > 0) console.log(`schedule runner on (${schedules.size()} pending, tick ${SCHED_TICK_MS}ms)`);

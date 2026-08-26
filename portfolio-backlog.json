@@ -1011,9 +1011,33 @@
       "id": "claude-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m24] Wire the selector: LLM_PROVIDER=gemini|claude in index.ts picks the client (default gemini so nothing changes), add ANTHROPIC_API_KEY to .env.example (env-parity gate), update README/PORTFOLIO Claude-swappable claim to point at the real adapter + note a live Claude call is owner-gated (paid key). Closes m24."
+    },
+    {
+      "id": "demo-1",
+      "stream": "relay",
+      "value": "high",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m25] scripts/demo.mjs (npm run demo): build the real handler (createHandler with the actual llm + anvil-backed runAgent + console channel from src/channels/console.ts), read tasks from stdin (readline), feed each through the handler, print the reply. Reuse index.ts wiring — do NOT fork the agent. If GEMINI_API_KEY missing or anvil /v1/live down, print a clear one-line notice + exit 0 (no crash). Reference src/channels/console.ts + handler.ts for exact shapes."
+    },
+    {
+      "id": "demo-2",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m25] Polish the demo UX: a one-line banner (what it is, that it drives real anvil, /quit to exit), echo the task, show a thinking indicator, print the reply cleanly. Handle Ctrl-C/EOF gracefully (reuse shutdown patterns). Optional: seed 2-3 suggested example tasks the user can copy."
+    },
+    {
+      "id": "demo-3",
+      "stream": "relay",
+      "value": "medium",
+      "status": "todo",
+      "repo": "relay",
+      "task": "[m25] Document npm run demo in README (top, near the PORTFOLIO pointer — its the lowest-friction way to SEE the product) + add it to PORTFOLIO.md guided demo as step 0 (the human-facing one). Note it needs GEMINI_API_KEY + anvil, degrades with a notice otherwise. Closes m25."
     }
   ],
   "history": [
@@ -1381,10 +1405,13 @@
     },
     {
       "event": "m24 claude-1+2 DONE: ClaudeClient implements LLMClient (real Anthropic Messages API) — toClaude() maps neutral msgs -> {system top-level, messages[] with text/tool_use/tool_result blocks, synthetic tool_use_id tying tool turns}, TOOLS -> input_schema (ToolSpec.parameters is already JSON Schema, 1:1), response tool_use/text -> LLMResult. Injectable transport for offline testing. +7 tests (claude-client.test.ts: toClaude mapping incl tool_result<->tool_use id pairing + multi-system; request-shape body/headers, tool_use parse, text-only parse, API-error surfaces status for isTransientError, no-key throws) — ALL offline, no ANTHROPIC_API_KEY. Added ANTHROPIC_* + LLM_PROVIDER to .env.example (env-parity gate caught them). 379 pass, tsc clean. Claude-swappable claim is now REAL code. claude-3 = index selector + doc-claim update; live Claude call owner-gated (paid key)."
+    },
+    {
+      "event": "m24 claude-3 DONE + m24-claude-adapter COMPLETE. claude-3: LLM_PROVIDER=gemini|claude selector in index.ts (default gemini, byte-unchanged), hasModelKey + boot warning now provider-aware (ANTHROPIC_API_KEY vs GEMINI_API_KEY), boot logs agent brain: <provider>. README diagram + PORTFOLIO Relay bullet updated to cite the two REAL adapters (GeminiClient default + ClaudeClient) swapped by one env var, live Claude = paid key. 381 pass, tsc clean. m24 done_when met: Claude-swappable is real code+tests+selector, not vapor; live call owner-gated. ROADMAP advanced -> AUTHORED m25-console-demo (npm run demo: zero-Telegram one-command drive of the real agent loop over the console channel — makes the product feelable in 30s). Seeded demo-1/2/3. 21st self-directed milestone."
     }
   ],
   "roadmap": {
-    "current": "m24-claude-adapter",
+    "current": "m25-console-demo",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1550,6 +1577,13 @@
         "id": "m24-claude-adapter",
         "goal": "Make the Claude-swappable claim REAL. README + PORTFOLIO say the agent brain is Gemini now, Claude-swappable in one line — but only GeminiClient implements LLMClient; a Claude adapter does not exist, so the claim is vapor. Implement a real ClaudeClient (Anthropic Messages API + tool-use) behind the SAME LLMClient interface, unit-tested offline (mock fetch), with a one-env-var selector (LLM_PROVIDER=gemini|claude) so the swap is literally one line/one var. Do NOT require an Anthropic key to build/test — the adapter is tested with a mocked transport; a live call is owner-gated (needs ANTHROPIC_API_KEY, a paid key, so it parks as an owner-blocker, never blocks the loop).",
         "done_when": "src/llm.ts has a ClaudeClient implementing LLMClient (Messages API request shape + tool_use/tool_result mapping + the same LLMResult{text,toolCall}), selected via LLM_PROVIDER; unit tests cover request-shaping + tool-call parsing + text-only with a mocked fetch (no key, offline); README/PORTFOLIO claim updated to point at the real adapter; a live Claude call is noted as owner-gated (ANTHROPIC_API_KEY, paid)",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m25-console-demo",
+        "goal": "A zero-Telegram, one-command demo of the actual product. Relay has a console channel (RELAY_CHANNEL=console) but no frictionless way for someone to DRIVE the real agent loop from a terminal — you still need to wire index.ts + a bot token mentally. Ship npm run demo: type a task at a prompt, watch the REAL agent (default Gemini) drive anvil and answer, in the console channel — no Telegram bot, no public URL, just a key + anvil. Turns the whole product into a 30-second thing a reviewer can feel, not just read about. CI-safe: clear message if the key/anvil are absent.",
+        "done_when": "npm run demo starts an interactive console session that runs the real handler/agent loop over the console channel (type task -> real anvil-driven reply), no Telegram needed; exits cleanly; prints a helpful notice (not a crash) if GEMINI_API_KEY or anvil is absent; documented in README + PORTFOLIO guided demo",
         "status": "todo",
         "owner_gated": false
       }
