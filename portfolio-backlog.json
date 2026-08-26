@@ -329,9 +329,17 @@
       "id": "relay-metrics",
       "stream": "relay",
       "value": "low",
+      "status": "done",
+      "repo": "relay",
+      "task": "In-memory rolling counters from the per-turn data (total turns, ok/fail, avg steps, tool-use histogram, p50/p95 ms) exposed via a tiny /healthz-style log-on-signal or a periodic summary line every N turns, so operator sees aggregate health without parsing every [out] line. Pure counter module + unit test; wire a summary log every 50 turns in index.ts. [DONE: src/lib/metrics.ts Metrics (turns/ok/fail/avgSteps/tool-histogram/p50/p95 via 500-sample ring); index.ts records+[metrics] every RELAY_METRICS_EVERY(50); 5 tests; 101 suite pass]"
+    },
+    {
+      "id": "relay-readme-status",
+      "stream": "relay",
+      "value": "low",
       "status": "todo",
       "repo": "relay",
-      "task": "In-memory rolling counters from the per-turn data (total turns, ok/fail, avg steps, tool-use histogram, p50/p95 ms) exposed via a tiny /healthz-style log-on-signal or a periodic summary line every N turns, so operator sees aggregate health without parsing every [out] line. Pure counter module + unit test; wire a summary log every 50 turns in index.ts."
+      "task": "README currently says the full agent lands via the /relay-loop backlog — stale. Update the README status/architecture to reflect the shipped reality: 6 fetch tools (scrape/browse/extract/compare/search/fetch_json) + JSON-LD fallback, persistent memory, safety caps, SMS formatting, transient retry, per-turn [out] + [metrics] observability, 101 tests. Small doc-accuracy fix so the repo represents itself correctly to Alex/readers."
     }
   ],
   "history": [
@@ -438,6 +446,9 @@
     },
     {
       "event": "relay-obs done: per-turn [out] structured log — runAgent now returns the tool names used; index.ts logs one JSON line/turn (chat, steps, tools+counts, elapsed ms, reply length, ok, truncated error) with no message content or secrets. src/lib/turn-log.ts formatter. 4 tests + 96 full suite pass, tsc clean. 24/7 deploy is now debuggable from logs alone. Refilled relay-metrics (rolling aggregate health counters)."
+    },
+    {
+      "event": "relay-metrics done: rolling in-memory health metrics (src/lib/metrics.ts) — turns, ok/fail, avg steps, tool histogram, p50/p95 latency (bounded 500-sample ring, O(1) mem); index.ts records each turn + logs a [metrics] summary every RELAY_METRICS_EVERY (default 50). 5 tests + 101 full suite pass, tsc clean. Relay 24/7 deploy now has both per-turn + aggregate observability. Refilled relay-readme-status (README says the agent is unbuilt — stale; update to shipped reality)."
     }
   ]
 }
