@@ -62,8 +62,10 @@ interface GeminiContent {
   parts: GeminiPart[];
 }
 
-/** Map our neutral message list to Gemini's contents[] + systemInstruction. */
-function toGemini(messages: LLMMessage[]): { system?: string; contents: GeminiContent[] } {
+/** Map our neutral message list to Gemini's contents[] + systemInstruction. Exported for tests
+ * (DEV-0039): a wrong mapping — esp. the Gemini-2.5 thoughtSignature roundtrip — silently breaks
+ * every LLM call. */
+export function toGemini(messages: LLMMessage[]): { system?: string; contents: GeminiContent[] } {
   let system: string | undefined;
   const contents: GeminiContent[] = [];
   for (const m of messages) {
