@@ -321,9 +321,17 @@
       "id": "relay-obs",
       "stream": "relay",
       "value": "low",
+      "status": "done",
+      "repo": "relay",
+      "task": "Lightweight per-turn observability: index.ts already logs [in]. Add a one-line [out] log per turn with steps taken, tools used (names), elapsed ms, and reply length (redacted) so a 24/7 deploy is debuggable from logs alone. runAgent already returns steps; thread back the tool-name list. Keep it structured (JSON line) + secret-redacted. Unit-test the log formatting. [DONE: runAgent returns tools[]; index.ts logs [out] JSON per turn (steps/tools/ms/replyChars/ok/error, no content/secrets); src/lib/turn-log.ts; 4 tests; 96 suite pass]"
+    },
+    {
+      "id": "relay-metrics",
+      "stream": "relay",
+      "value": "low",
       "status": "todo",
       "repo": "relay",
-      "task": "Lightweight per-turn observability: index.ts already logs [in]. Add a one-line [out] log per turn with steps taken, tools used (names), elapsed ms, and reply length (redacted) so a 24/7 deploy is debuggable from logs alone. runAgent already returns steps; thread back the tool-name list. Keep it structured (JSON line) + secret-redacted. Unit-test the log formatting."
+      "task": "In-memory rolling counters from the per-turn data (total turns, ok/fail, avg steps, tool-use histogram, p50/p95 ms) exposed via a tiny /healthz-style log-on-signal or a periodic summary line every N turns, so operator sees aggregate health without parsing every [out] line. Pure counter module + unit test; wire a summary log every 50 turns in index.ts."
     }
   ],
   "history": [
@@ -427,6 +435,9 @@
     },
     {
       "event": "relay-anvil-retry done: bounded transient-error retry around anvil createSession + action (navigate/click/type/read/evaluate) — timeouts/ECONNRESET/5xx/408/429 retried with backoff, SSRF/4xx throw immediately; ANVIL_RETRY_ATTEMPTS env (default 2). isTransientError exported + unit-tested. 3 new tests + 92 full suite pass, tsc clean, live scrape verified through the wrapper. Relay is now resilient to a single anvil hiccup. Refilled relay-obs (per-turn [out] structured log for 24/7 debuggability)."
+    },
+    {
+      "event": "relay-obs done: per-turn [out] structured log — runAgent now returns the tool names used; index.ts logs one JSON line/turn (chat, steps, tools+counts, elapsed ms, reply length, ok, truncated error) with no message content or secrets. src/lib/turn-log.ts formatter. 4 tests + 96 full suite pass, tsc clean. 24/7 deploy is now debuggable from logs alone. Refilled relay-metrics (rolling aggregate health counters)."
     }
   ]
 }
