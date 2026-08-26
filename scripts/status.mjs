@@ -3,8 +3,8 @@
 // watched, and whether anvil is up. Reads only the DURABLE state files (the same paths the runtime
 // writes, {v:1, items:[...]}) so it needs NO GEMINI/TELEGRAM key — the counts are file-based. Only
 // the anvil probe touches the network. A missing/corrupt store reads as 0, never a crash.
-import { readFileSync, existsSync } from "fs";
-import { statePaths, readStoreItems } from "../src/lib/state-paths.ts";
+import { existsSync } from "fs";
+import { statePaths, readStoreItems, readMetricsSnapshot } from "../src/lib/state-paths.ts";
 
 process.loadEnvFile?.(".env"); // optional: picks up ANVIL_BASE_URL / RELAY_*_FILE overrides if present
 
@@ -43,11 +43,11 @@ for (const s of STORES) {
 console.log(`  ${"—".repeat(15)}`);
 console.log(`  ${"total".padEnd(10)} ${String(grand).padStart(4)} across ${chats.size} chat(s)`);
 
-// Optional metrics snapshot (ops-3 will have the runtime persist this; read it best-effort now).
-const metricsFile = paths.metrics;
-if (existsSync(metricsFile)) {
-  try { console.log(`\nLast metrics: ${readFileSync(metricsFile, "utf8").trim().slice(0, 300)}`); }
-  catch { /* ignore */ }
+// Metrics snapshot the runtime persists on the metrics tick + shutdown/fatal (ops-3).
+const snap = readMetricsSnapshot(paths.metrics);
+if (snap) {
+  const ageMin = Math.round((Date.now() - snap.at) / 60000);
+  console.log(`\nlast metrics (${ageMin}m ago): ${JSON.stringify(snap.summary)}`);
 }
 
 const anvil = await probeAnvil();

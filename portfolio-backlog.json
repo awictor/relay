@@ -819,9 +819,33 @@
       "id": "ops-3",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m16] status.mjs prints the last metrics window if the runtime persisted one (it currently only logs metrics; add a best-effort metrics snapshot file write on the metrics tick + shutdown, read it here). Document npm run status in README (what it shows, that it needs no keys). Closes m16."
+    },
+    {
+      "id": "anvil-ops-1",
+      "stream": "anvil",
+      "value": "high",
+      "status": "todo",
+      "repo": "anvil-engine",
+      "task": "[m17] AUDIT anvil-engines current observability: read src (app.ts/actions.ts/pool.ts/config.ts), list what /v1/live + any /v1/metrics expose today, whether session-pool state (active/max/leaked) is visible, and whether uncaught errors log+exit for a supervisor (like Relay installCrashHandlers). Write the gap list into the backlog as the concrete anvil-ops-2 task. cd C:/Users/acwic/anvil-engine; do NOT touch mcp-forge."
+    },
+    {
+      "id": "anvil-ops-2",
+      "stream": "anvil",
+      "value": "high",
+      "status": "todo",
+      "repo": "anvil-engine",
+      "task": "[m17] Close the biggest observability gap found in anvil-ops-1 — most likely a /v1/metrics (or extend /v1/live) that reports sessions active/max, pool size, uptime, total-served, so Relays `relay status` (and any operator) can see anvil health. Match anvils existing route/test patterns; vitest + tsc; default path unchanged."
+    },
+    {
+      "id": "anvil-ops-3",
+      "stream": "anvil",
+      "value": "medium",
+      "status": "todo",
+      "repo": "anvil-engine",
+      "task": "[m17] Wire Relays `relay status` to also probe anvils new health/metrics endpoint (not just /v1/live) and print sessions active/max + uptime, so one command shows the whole stacks health. Cross-repo read-only of anvils endpoint; Relay-side change only. Closes m17."
     }
   ],
   "history": [
@@ -1129,10 +1153,13 @@
     },
     {
       "event": "m16 ops-2 DONE: factored durable-state paths into src/lib/state-paths.ts — statePaths(env) (env-overridable, data/ defaults for memory/schedules/recipes/digests/alerts/metrics) + readStoreItems(file) (safe {v,items} read, [] on missing/corrupt/bad-shape, never throws). index.ts now resolves all store files through statePaths(); status.mjs imports both (switched npm run status to tsx for the .ts import) — CLI + runtime can no longer path-drift. +6 tests (state-paths.test.ts: defaults, env overrides, read of items/missing/corrupt/non-array). 364 pass, tsc clean. status verified via shared helper (anvil UP 200 25ms). call-tested TRUE."
+    },
+    {
+      "event": "m16 ops-3 DONE + m16-operability COMPLETE. ops-3: runtime persists a metrics snapshot ({v,at,summary}) via writeMetricsSnapshot on the N-turn tick + shutdown + fatal; `relay status` reads it (readMetricsSnapshot) and prints the last window + age; +4 tests (round-trip, missing, wrong-shape, mkdir-p/no-throw). README Verify documents npm run status. 368 pass. m16 done_when met: offline operability CLI reads durable stores + anvil probe + metrics, no keys, degrades cleanly, documented. ROADMAP advanced -> AUTHORED m17-anvil-ops (bring Relays operability/failure discipline to anvil-engine, the shared engine; audit then close biggest gap). Seeded anvil-ops-1/2/3 — FIRST anvil-stream milestone in a while. 13th self-directed milestone."
     }
   ],
   "roadmap": {
-    "current": "m16-operability",
+    "current": "m17-anvil-ops",
     "milestones": [
       {
         "id": "m1-synergy",
@@ -1242,6 +1269,13 @@
         "id": "m16-operability",
         "goal": "Make the 24/7 deploy OPERABLE from outside the process. Relay tracks metrics + /status internally (Telegram-only), but an operator running it on the VM has no way to SEE health without reading logs or texting the bot. Add an offline-inspectable operability surface: a `relay status` CLI (or npm script) that reads the DURABLE state files (schedules, recipes, digests, alerts, last metrics) + probes anvil, and prints a health summary + counts — no bot, no keys needed for the counts. So the operator can ssh in and run one command to see whats scheduled, whats watched, and whether anvil is up.",
         "done_when": "a `npm run status` (scripts/status.mjs) reads the durable stores + probes anvil and prints a health/counts summary (pending schedules, saved recipes/digests/alerts, anvil up/down, last metrics window if present); runs with NO keys (counts are file-based) and degrades cleanly when a store file is absent; documented in README",
+        "status": "done",
+        "owner_gated": false
+      },
+      {
+        "id": "m17-anvil-ops",
+        "goal": "Give anvil-engine the same operability + failure-mode discipline Relay now has. anvil is the SHARED browser both products depend on — if it is opaque, the whole stack is. Audit its health/observability surface (does /v1/live/metrics expose enough? are session leaks/pool exhaustion visible? does a crash log + exit for supervisor restart like Relay?), then close the biggest gap. Same bar as Relay m14/m16: fail soft, observable, tested. anvil-engine repo is local (C:/Users/acwic/anvil-engine, master) + already has a test suite.",
+        "done_when": "anvil exposes an operator-legible health/metrics surface (sessions active/max, pool state, uptime) beyond a bare /v1/live, OR a documented crash/degradation gap is closed; change is tested (its vitest) + tsc clean; no behavior regression on the default path",
         "status": "todo",
         "owner_gated": false
       }

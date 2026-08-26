@@ -6,7 +6,8 @@
 // Paths are env-overridable (a deploy can relocate the data dir) with the historical defaults under
 // data/. Resolved at call time so a test/CLI can set the env before reading.
 
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { dirname } from "path";
 
 export interface StatePaths {
   memory: string;
@@ -41,5 +42,31 @@ export function readStoreItems<T = unknown>(file: string): T[] {
     return Array.isArray(obj?.items) ? (obj.items as T[]) : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Persist a metrics snapshot so `relay status` can show the last known health window without the
+ * bot running (ops-3). Best-effort — a write failure is swallowed (metrics are observability, never
+ * worth crashing the worker). Shape: `{ v: 1, at: <epoch ms>, summary: {...} }`.
+ */
+export function writeMetricsSnapshot(file: string, summary: unknown, nowMs: number): void {
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify({ v: 1, at: nowMs, summary }), "utf8");
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Read the metrics snapshot ({v,at,summary}) written by writeMetricsSnapshot. null if absent/corrupt. */
+export function readMetricsSnapshot(file: string): { at: number; summary: unknown } | null {
+  try {
+    if (!existsSync(file)) return null;
+    const obj = JSON.parse(readFileSync(file, "utf8"));
+    if (obj && typeof obj.at === "number") return { at: obj.at, summary: obj.summary };
+    return null;
+  } catch {
+    return null;
   }
 }

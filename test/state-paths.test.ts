@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { statePaths, readStoreItems } from "../src/lib/state-paths.js";
+import { statePaths, readStoreItems, writeMetricsSnapshot, readMetricsSnapshot } from "../src/lib/state-paths.js";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -48,5 +48,33 @@ describe("readStoreItems", () => {
     const f = join(tmp(), "shape.json");
     writeFileSync(f, JSON.stringify({ v: 1, items: { nope: true } }));
     expect(readStoreItems(f)).toEqual([]);
+  });
+});
+
+describe("metrics snapshot (ops-3)", () => {
+  it("write then read round-trips the summary + timestamp", () => {
+    const f = join(tmp(), "m.json");
+    const summary = { turns: 12, ok: 11, fail: 1, tools: { scrape: 5 } };
+    writeMetricsSnapshot(f, summary, 1700000000000);
+    const got = readMetricsSnapshot(f);
+    expect(got).not.toBeNull();
+    expect(got!.at).toBe(1700000000000);
+    expect(got!.summary).toEqual(summary);
+  });
+
+  it("readMetricsSnapshot returns null for a missing file", () => {
+    expect(readMetricsSnapshot(join(tmp(), "none.json"))).toBeNull();
+  });
+
+  it("readMetricsSnapshot returns null for corrupt / wrong-shape JSON", () => {
+    const f = join(tmp(), "bad.json");
+    writeFileSync(f, JSON.stringify({ nope: true })); // no numeric `at`
+    expect(readMetricsSnapshot(f)).toBeNull();
+  });
+
+  it("writeMetricsSnapshot creates the parent dir and never throws on a bad path", () => {
+    const nested = join(tmp(), "deep", "dir", "m.json");
+    expect(() => writeMetricsSnapshot(nested, { turns: 1 }, 1)).not.toThrow();
+    expect(readMetricsSnapshot(nested)?.summary).toEqual({ turns: 1 });
   });
 });

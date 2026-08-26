@@ -16,7 +16,7 @@ import { formatStatus, makeAnvilPinger } from "./lib/status.js";
 import { runAgent } from "./agent.js";
 import { formatReply } from "./lib/format-reply.js";
 import { friendlyError } from "./lib/failure.js";
-import { statePaths } from "./lib/state-paths.js";
+import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
 import { ScheduleStore, parseSchedule } from "./lib/schedule.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunCommand } from "./lib/recipes.js";
@@ -41,6 +41,10 @@ const startMs = Date.now();
 const ANVIL_PING_MS = Number(process.env.RELAY_ANVIL_PING_MS ?? 60_000); // 0 disables the refresh
 const anvilPinger = makeAnvilPinger({ probe: anvilLive, periodMs: ANVIL_PING_MS });
 
+// Durable-state file paths resolved through the shared module (ops-2), so `relay status` reads the
+// exact same files the runtime writes.
+const paths = statePaths();
+
 // Rolling aggregate health; a summary line is emitted every N turns so the operator
 // sees ok/fail rate, avg steps, latency percentiles + tool mix without parsing [out].
 const metrics = new Metrics();
@@ -48,16 +52,17 @@ const METRICS_EVERY = Number(process.env.RELAY_METRICS_EVERY ?? 50);
 let turnCount = 0;
 function recordTurn(t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean }) {
   metrics.record(t);
-  if (++turnCount % METRICS_EVERY === 0) console.log(metrics.format());
+  if (++turnCount % METRICS_EVERY === 0) {
+    console.log(metrics.format());
+    // Persist a snapshot so `relay status` can show the last health window offline (ops-3).
+    writeMetricsSnapshot(paths.metrics, metrics.summary(), Date.now());
+  }
 }
 
 // Per-chat rolling memory (last few turns). Bounded to keep prompts small, and PERSISTED to a local
 // JSON file (DEV-0001) so a redeploy/restart no longer wipes every conversation. Path is env-tunable;
 // the file is gitignored. Free-infra: a plain file, no DB.
 const MEMORY_TURNS = 6;
-// Durable-state file paths resolved through the shared module (ops-2), so `relay status` reads the
-// exact same files the runtime writes.
-const paths = statePaths();
 const memory = new MemoryStore({
   file: paths.memory,
   maxTurns: MEMORY_TURNS * 2,
@@ -211,7 +216,7 @@ async function main() {
   // already durable (MemoryStore persists synchronously each turn).
   installSignalHandlers(createShutdown({
     stopPolling: () => { poller.stop(); anvilPinger.stop(); scheduleRunner.stop(); },
-    onShutdown: () => console.log(metrics.format()), // flush the final metrics window (DEV-0041)
+    onShutdown: () => { console.log(metrics.format()); writeMetricsSnapshot(paths.metrics, metrics.summary(), Date.now()); }, // flush + persist the final window (DEV-0041, ops-3)
     log: (m) => console.log(m),
     exit: (code) => process.exit(code),
   }));
@@ -221,7 +226,7 @@ async function main() {
   // supervisor restarts.
   installCrashHandlers({
     log: (m) => console.error(m),
-    onFatal: () => console.log(metrics.format()),
+    onFatal: () => { console.log(metrics.format()); writeMetricsSnapshot(paths.metrics, metrics.summary(), Date.now()); },
   });
 }
 

@@ -74,6 +74,7 @@ texts back a phone-friendly answer.
 ```bash
 npm test              # 350+ offline unit/wiring tests (no keys, no anvil)
 npm run e2e:live      # LIVE end-to-end: real Gemini + anvil across canonical errands
+npm run status        # offline health: what's scheduled/saved/watched + is anvil up
 ```
 
 `npm run e2e:live` (`scripts/e2e-live.mjs`) is the **CI-safe** live smoke test. It drives the
@@ -88,6 +89,12 @@ real agent (Gemini + anvil) through the canonical errands — a deterministic **
 
 The older `scripts/e2e-*.mjs` (agent-chain, schedule, recipe, digest, alert, shutdown) are
 feature-specific live/offline proofs; `e2e:live` is the consolidated deploy check.
+
+`npm run status` (`scripts/status.mjs`) is the offline **operability** view — ssh into the VM and
+run it to see, without reading logs or texting the bot: how many schedules/recipes/digests/alerts
+are stored (across how many chats), whether anvil is up (+ latency), which keys are set (names
+only), and the last persisted metrics window (ok/fail, latency percentiles, tool mix). It needs
+**no keys** — counts come from the durable state files the runtime writes — and always exits 0.
 
 ## Shared anvil client (vendoring contract)
 
