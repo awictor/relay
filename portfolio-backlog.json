@@ -241,9 +241,9 @@
       "id": "syn-1j",
       "stream": "synergy",
       "value": "low",
-      "status": "todo",
+      "status": "done",
       "repo": "datafaucet",
-      "task": "Speed up the anvil crawl test (syn-1i runs ~12s): the route sleeps 1200ms/page to let XHRs fire. Make that settle interval configurable via env (e.g. ANVIL_CRAWL_SETTLE_MS, default 1200) so the mock test can set it to ~0 and run in <1s. Keep prod default unchanged. Then the whole anvil suite is CI-fast."
+      "task": "Speed up the anvil crawl test (syn-1i runs ~12s): the route sleeps 1200ms/page to let XHRs fire. Make that settle interval configurable via env (e.g. ANVIL_CRAWL_SETTLE_MS, default 1200) so the mock test can set it to ~0 and run in <1s. Keep prod default unchanged. Then the whole anvil suite is CI-fast. [DONE: ANVIL_CRAWL_SETTLE_MS env (default 1200, prod unchanged); tests set 0 -> crawl+capture ~14s to ~1.25s]"
     },
     {
       "id": "syn-1k",
@@ -339,6 +339,9 @@
     },
     {
       "event": "syn-1f done: live-tested anvil capture vs a real XHR-firing site (reqres.in) — nav-only DOES surface XHRs, so click-through is NOT needed (decision made on evidence). Found+fixed a real leak: DEV-0008 responseContentType classification let analytics beacons (that answer JSON) through; added NOISE host/path patterns (google collect, segment/amplitude/mixpanel/clarity/heap/datadog, *.stripe.com, ahrefs, /track, /pixel). Shared filter so browserbase path benefits too. 8 filter tests + 10 anvil pass. syn-1k marked done (moot — DEV-0008 committed by its own loop). Refilled syn-1l (cross-origin third-party API capture policy, low)."
+    },
+    {
+      "event": "syn-1j done: ANVIL_CRAWL_SETTLE_MS env makes the per-page crawl settle configurable (default 1200ms, prod byte-for-byte unchanged); anvil-crawl + anvil-capture tests set it to 0 -> combined ~14s down to ~1.25s. All synergy work now done or low-polish; remaining backlog is entirely [low] across relay e2e polish + anvil obs."
     }
   ]
 }
