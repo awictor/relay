@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e:live": "tsx scripts/e2e-live.mjs",
-    "status": "node scripts/status.mjs",
+    "status": "tsx scripts/status.mjs",
     "clean": "rm -rf dist"
   },
   "dependencies": {

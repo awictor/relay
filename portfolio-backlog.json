@@ -811,7 +811,7 @@
       "id": "ops-2",
       "stream": "relay",
       "value": "medium",
-      "status": "todo",
+      "status": "done",
       "repo": "relay",
       "task": "[m16] Factor the store-file paths + a readStore(file) helper (safe JSON parse, [] on absent/corrupt) into a small src/lib/state-paths.ts reused by BOTH index.ts and status.mjs, so the CLI reads exactly what the runtime writes (no path drift). Unit-test the helper. "
     },
@@ -1126,6 +1126,9 @@
     },
     {
       "event": "m16 ops-1 DONE: scripts/status.mjs — offline operability CLI (npm run status). Reads the durable {v:1,items:[]} stores (schedule/recipe/digest/alert, same env-defaulted paths as index.ts), counts per-store + total + distinct chats, probes anvil /v1/live (up/down+latency), shows key presence (names only). NO GEMINI/TELEGRAM key needed for counts; missing/corrupt store -> 0 not a crash; always exit 0 (informational). VERIFIED: empty (all 0, no-file notes, anvil UP 200 28ms) + seeded (2 sched+1 recipe=3 across 2 chats, anvil-down path clean). tsc clean, 358 unit pass. call-tested TRUE."
+    },
+    {
+      "event": "m16 ops-2 DONE: factored durable-state paths into src/lib/state-paths.ts — statePaths(env) (env-overridable, data/ defaults for memory/schedules/recipes/digests/alerts/metrics) + readStoreItems(file) (safe {v,items} read, [] on missing/corrupt/bad-shape, never throws). index.ts now resolves all store files through statePaths(); status.mjs imports both (switched npm run status to tsx for the .ts import) — CLI + runtime can no longer path-drift. +6 tests (state-paths.test.ts: defaults, env overrides, read of items/missing/corrupt/non-array). 364 pass, tsc clean. status verified via shared helper (anvil UP 200 25ms). call-tested TRUE."
     }
   ],
   "roadmap": {

@@ -16,6 +16,7 @@ import { formatStatus, makeAnvilPinger } from "./lib/status.js";
 import { runAgent } from "./agent.js";
 import { formatReply } from "./lib/format-reply.js";
 import { friendlyError } from "./lib/failure.js";
+import { statePaths } from "./lib/state-paths.js";
 import { ScheduleStore, parseSchedule } from "./lib/schedule.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunCommand } from "./lib/recipes.js";
@@ -54,17 +55,20 @@ function recordTurn(t: { steps: number; tools: string[]; elapsedMs: number; ok: 
 // JSON file (DEV-0001) so a redeploy/restart no longer wipes every conversation. Path is env-tunable;
 // the file is gitignored. Free-infra: a plain file, no DB.
 const MEMORY_TURNS = 6;
+// Durable-state file paths resolved through the shared module (ops-2), so `relay status` reads the
+// exact same files the runtime writes.
+const paths = statePaths();
 const memory = new MemoryStore({
-  file: process.env.RELAY_MEMORY_FILE ?? "data/relay-memory.json",
+  file: paths.memory,
   maxTurns: MEMORY_TURNS * 2,
 });
 
 // Proactive/scheduled tasks (m4): persisted schedules + a runner that fires them through
 // the agent and texts the result unprompted. Free-infra: a JSON file + an interval, no cron.
-const schedules = new ScheduleStore({ file: process.env.RELAY_SCHEDULE_FILE ?? "data/relay-schedules.json" });
-const recipes = new RecipeStore({ file: process.env.RELAY_RECIPE_FILE ?? "data/relay-recipes.json" });
-const digests = new DigestStore({ file: process.env.RELAY_DIGEST_FILE ?? "data/relay-digests.json" });
-const alerts = new AlertStore({ file: process.env.RELAY_ALERT_FILE ?? "data/relay-alerts.json" });
+const schedules = new ScheduleStore({ file: paths.schedules });
+const recipes = new RecipeStore({ file: paths.recipes });
+const digests = new DigestStore({ file: paths.digests });
+const alerts = new AlertStore({ file: paths.alerts });
 // Run a digest -> composed briefing text (member recipes -> one message). Shared by /run + schedule.
 const digestRunText = (chatId: number, name: string): Promise<string | null> => {
   const d = digests.get(chatId, name);
