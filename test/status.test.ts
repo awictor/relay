@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatUptime, formatStatus } from "../src/lib/status.js";
+import { formatUptime, formatStatus, makeAnvilPinger } from "../src/lib/status.js";
 
 // DEV-0024: /status health line — pure formatters, no live bot.
 describe("formatUptime", () => {
@@ -33,5 +33,58 @@ describe("formatStatus", () => {
     expect(s).toMatch(/browser DOWN/);
     expect(s.startsWith("⚠")).toBe(true);
     expect(s.startsWith("✅")).toBe(false);
+  });
+});
+
+describe("makeAnvilPinger (DEV-0025 live reachability refresh)", () => {
+  it("tick() updates the cached flag from the probe", async () => {
+    let val = false;
+    const p = makeAnvilPinger({ probe: async () => val, periodMs: 0, initial: false });
+    expect(p.current()).toBe(false);
+    val = true;
+    await p.tick();
+    expect(p.current()).toBe(true);
+    val = false;
+    await p.tick();
+    expect(p.current()).toBe(false);
+  });
+
+  it("a probe rejection keeps the last-known value (never throws)", async () => {
+    const p = makeAnvilPinger({ probe: async () => { throw new Error("net"); }, periodMs: 0, initial: true, onError: () => {} });
+    await p.tick(); // must not throw
+    expect(p.current()).toBe(true); // unchanged
+  });
+
+  it("start() with periodMs<=0 registers no interval; start()/stop() are idempotent", () => {
+    let started = 0, cleared = 0;
+    const p = makeAnvilPinger({
+      probe: async () => true, periodMs: 0, initial: false,
+      setInterval: () => { started++; return 1; },
+      clearInterval: () => { cleared++; },
+    });
+    p.start(); p.start();
+    expect(started).toBe(0); // disabled
+    p.stop();                // safe even though never started
+    expect(cleared).toBe(0);
+  });
+
+  it("start() registers exactly one interval; stop() clears it; the interval body probes", async () => {
+    let started = 0, cleared = 0;
+    let fn: (() => void) | null = null;
+    let val = false;
+    const p = makeAnvilPinger({
+      probe: async () => val, periodMs: 1000, initial: false,
+      setInterval: (f) => { started++; fn = f as () => void; return 42; },
+      clearInterval: (h) => { cleared++; expect(h).toBe(42); },
+    });
+    p.start(); p.start();          // second is a no-op
+    expect(started).toBe(1);
+    // fire the interval body: it probes + updates the cache
+    val = true;
+    fn!();
+    await Promise.resolve(); await Promise.resolve();
+    expect(p.current()).toBe(true);
+    p.stop();
+    expect(cleared).toBe(1);
   });
 });

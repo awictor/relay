@@ -7,6 +7,50 @@ export interface StatusInfo {
   anvilOk: boolean;      // last-known anvil reachability
 }
 
+// DEV-0025: /status reachability was boot-seeded only, so it went stale when the browser dropped
+// after start. This keeps a cached flag fresh by re-probing on an interval. Pure/injectable: the
+// caller passes the probe (anvilLive) + a setInterval/clearInterval pair, so it's testable without
+// real timers or a live anvil. current() reads the cached flag; tick() runs one probe + updates it.
+export interface AnvilPinger {
+  current(): boolean;                 // cached last-known reachability
+  tick(): Promise<void>;              // one probe, updates the cache (used by tests + the interval)
+  start(): void;                      // begin the interval (no-op if periodMs <= 0)
+  stop(): void;                       // clear the interval (safe to call when not started)
+}
+
+export interface AnvilPingerDeps {
+  probe: () => Promise<boolean>;                              // e.g. anvilLive
+  periodMs: number;                                           // 0 (or <=0) disables the interval
+  initial?: boolean;                                          // seed value (default false)
+  setInterval?: (fn: () => void, ms: number) => unknown;      // injectable for tests
+  clearInterval?: (h: unknown) => void;
+  onError?: (e: unknown) => void;                             // a failed probe shouldn't throw
+}
+
+export function makeAnvilPinger(deps: AnvilPingerDeps): AnvilPinger {
+  let ok = deps.initial ?? false;
+  let handle: unknown = null;
+  const setI = deps.setInterval ?? ((fn, ms) => setInterval(fn, ms));
+  const clearI = deps.clearInterval ?? ((h) => clearInterval(h as ReturnType<typeof setInterval>));
+
+  async function tick(): Promise<void> {
+    try { ok = await deps.probe(); }
+    catch (e) { deps.onError?.(e); } // keep the last-known value on a probe failure
+  }
+
+  return {
+    current: () => ok,
+    tick,
+    start() {
+      if (deps.periodMs <= 0 || handle !== null) return;
+      handle = setI(() => { void tick(); }, deps.periodMs);
+    },
+    stop() {
+      if (handle !== null) { clearI(handle); handle = null; }
+    },
+  };
+}
+
 /** Human uptime: "3d 4h", "4h 12m", "12m", "45s". Always the two largest non-zero units. */
 export function formatUptime(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
