@@ -406,6 +406,14 @@
       "status": "todo",
       "repo": "datafaucet",
       "task": "Once gh billing is fixed + PR #1 CI runs, capture the actual CI result (build/unit/e2e pass) into the PR #1 body as the final merge-confidence line. Blocked on owner (gh-billing) — do only after Actions runs. Investigate/verify only; no mcp-forge master changes."
+    },
+    {
+      "id": "relay-dockerignore",
+      "stream": "quality",
+      "value": "low",
+      "status": "todo",
+      "repo": "relay",
+      "task": "Confirm relay Dockerfile build context excludes data/ (chat memory) + .env + node_modules + test/ via a .dockerignore, so the 24/7 image stays small and never bakes in local memory/secrets. Add .dockerignore if missing; verify against the Dockerfile COPY lines. Small hardening for the deploy image."
     }
   ],
   "history": [
