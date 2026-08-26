@@ -2,7 +2,7 @@
 // Per-chat short memory so follow-ups have context. Falls back to a clear message
 // if keys/anvil are missing so it never hangs silently.
 
-import { telegramChannel, type Channel } from "./channel.js";
+import { selectChannel, type Channel } from "./channel.js";
 import { anvilLive } from "./anvil.js";
 import { GeminiClient } from "./llm.js";
 import type { LLMMessage } from "./llm.js";
@@ -20,8 +20,8 @@ import { makeScheduleRunner } from "./schedule-runner.js";
 
 const llm = new GeminiClient();
 
-// The transport Relay runs on (m5). Telegram today; a Channel-selecting env comes in chan-3.
-const channel: Channel = telegramChannel;
+// The transport Relay runs on (m5), chosen by RELAY_CHANNEL (telegram default | console).
+const channel: Channel = selectChannel(process.env.RELAY_CHANNEL);
 const sendMessage = (chatId: number, text: string) => channel.sendMessage(chatId, text);
 const sendTyping = (chatId: number) => channel.sendTyping ? channel.sendTyping(chatId) : Promise.resolve();
 const sendPhoto = channel.sendPhoto ? channel.sendPhoto.bind(channel) : undefined;

@@ -33,3 +33,18 @@ export const telegramChannel: Channel = {
   sendDocument: (chatId, bytes, filename, caption) => sendDocument(chatId, bytes, filename, caption),
   ready: () => hasToken(),
 };
+
+import { nodeConsoleChannel } from "./channels/console.js";
+
+/**
+ * Pick the transport by name (RELAY_CHANNEL: telegram | console). nodeConsoleChannel
+ * only opens stdin when constructed, so building it here is fine. Unknown names fall
+ * back to telegram. Pure selection given an env value.
+ */
+export function selectChannel(name: string | undefined): Channel {
+  switch ((name ?? "telegram").toLowerCase()) {
+    case "console": return nodeConsoleChannel();
+    case "telegram":
+    default:        return telegramChannel;
+  }
+}

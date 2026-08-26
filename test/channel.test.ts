@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { telegramChannel, type Channel } from "../src/channel.js";
+import { telegramChannel, selectChannel, type Channel } from "../src/channel.js";
 import { createHandler } from "../src/handler.js";
 import type { InboundMessage } from "../src/telegram.js";
 import type { LLMMessage } from "../src/llm.js";
@@ -18,6 +18,16 @@ describe("telegramChannel — Channel contract", () => {
 
   it("ready() reflects token presence without throwing", () => {
     expect(typeof telegramChannel.ready()).toBe("boolean");
+  });
+});
+
+describe("selectChannel", () => {
+  it("defaults to telegram (undefined / unknown / explicit)", () => {
+    // Don't select "console" here — nodeConsoleChannel opens stdin on construct.
+    expect(selectChannel(undefined).name).toBe("telegram");
+    expect(selectChannel("telegram").name).toBe("telegram");
+    expect(selectChannel("TELEGRAM").name).toBe("telegram"); // case-insensitive
+    expect(selectChannel("nonsense").name).toBe("telegram"); // unknown -> fallback
   });
 });
 
