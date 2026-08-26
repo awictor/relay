@@ -266,3 +266,24 @@ export async function screenshot(url: string): Promise<Uint8Array> {
     await releaseSession(session.id);
   }
 }
+
+/** Render a URL to PDF: create a session, navigate, POST /v1/pdf, release. SSRF-guarded like
+ * scrape. Returns the raw PDF bytes (for Telegram sendDocument). */
+export async function pdf(url: string): Promise<Uint8Array> {
+  const check = isUrlSafe(url);
+  if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
+  const session = await createSession();
+  try {
+    await navigate(session.id, url, "domcontentloaded");
+    await new Promise((r) => setTimeout(r, 600)); // brief settle for client-rendered content
+    const r = await fetch(`${BASE}/v1/pdf?sessionId=${encodeURIComponent(session.id)}`, {
+      method: "POST",
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!r.ok) throw new Error(`anvil pdf failed: ${r.status}`);
+    return new Uint8Array(await r.arrayBuffer());
+  } finally {
+    await releaseSession(session.id);
+  }
+}

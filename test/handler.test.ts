@@ -7,6 +7,7 @@ import type { LLMMessage } from "../src/llm.js";
 function harness(over: Partial<HandlerDeps> = {}) {
   const sent: Array<{ chatId: number; text: string }> = [];
   const photos: Array<{ chatId: number; len: number; caption?: string }> = [];
+  const docs: Array<{ chatId: number; len: number; filename?: string; caption?: string }> = [];
   const recorded: Array<{ ok: boolean; steps: number; tools: string[] }> = [];
   const mem = new Map<number, LLMMessage[]>();
   const deps: HandlerDeps = {
@@ -15,6 +16,7 @@ function harness(over: Partial<HandlerDeps> = {}) {
     memorySet: (id, h) => { mem.set(id, h); },
     sendMessage: async (chatId, text) => { sent.push({ chatId, text }); },
     sendPhoto: async (chatId, bytes, caption) => { photos.push({ chatId, len: bytes.length, caption }); },
+    sendDocument: async (chatId, bytes, filename, caption) => { docs.push({ chatId, len: bytes.length, filename, caption }); },
     sendTyping: async () => {},
     handleCommand: () => null,
     memoryClear: (id) => mem.delete(id),
@@ -28,7 +30,7 @@ function harness(over: Partial<HandlerDeps> = {}) {
     log: () => {},
     ...over,
   };
-  return { handle: createHandler(deps), sent, photos, recorded, mem };
+  return { handle: createHandler(deps), sent, photos, docs, recorded, mem };
 }
 
 const msg = (text: string, chatId = 1): InboundMessage => ({ chatId, from: "u", text } as InboundMessage);
@@ -134,6 +136,15 @@ describe("createHandler", () => {
     await handle(msg("screenshot HN", 11));
     expect(photos).toEqual([{ chatId: 11, len: 4, caption: "top of HN" }]);
     expect(sent).toHaveLength(0); // short caption -> no separate text message
+  });
+
+  it("a pdf result is sent as a document with the reply as caption (DEV-0032)", async () => {
+    const { handle, sent, docs } = harness({
+      runAgentFn: async () => ({ reply: "your PDF", steps: 1, tools: ["pdf"], doc: new Uint8Array([1, 2, 3, 4, 5]) }),
+    });
+    await handle(msg("pdf of HN", 12));
+    expect(docs).toEqual([{ chatId: 12, len: 5, filename: "page.pdf", caption: "your PDF" }]);
+    expect(sent).toHaveLength(0);
   });
 
   it("a normal message runs the agent, replies, persists memory, records an ok turn", async () => {

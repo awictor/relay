@@ -30,6 +30,7 @@ function recordingBackend() {
     discoverLinks: async (url) => { hits.push(`discoverLinks:${url}`); return ["https://x.com/a"]; },
     fetchJson: async (url) => { hits.push(`fetchJson:${url}`); return { status: 200, contentType: "application/json", text: "{}" }; },
     screenshot: async (url) => { hits.push(`screenshot:${url}`); return new Uint8Array([1, 2, 3]); },
+    pdf: async (url) => { hits.push(`pdf:${url}`); return new Uint8Array([4, 5, 6, 7]); },
   };
   return { b, hits };
 }
@@ -38,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "click", "compare", "extract", "fetch_json", "read", "reply", "scrape", "screenshot", "search", "type"].sort()
+      ["browse", "click", "compare", "extract", "fetch_json", "pdf", "read", "reply", "scrape", "screenshot", "search", "type"].sort()
     );
   });
 
@@ -119,6 +120,29 @@ describe("runAgent dispatch", () => {
     expect(r.photo).toBeInstanceOf(Uint8Array);
     expect(r.photo!.length).toBe(3);
     expect(r.reply).toBe("here it is");
+  });
+
+  it("pdf -> backend.pdf, returns doc bytes (DEV-0032)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "pdf", args: { url: "https://x.com/p" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "saved" } } as ToolCall },
+    ]);
+    const r = await runAgent("save x as pdf", { llm, backend: b });
+    expect(hits).toContain("pdf:https://x.com/p");
+    expect(r.doc).toBeInstanceOf(Uint8Array);
+    expect(r.doc!.length).toBe(4);
+  });
+
+  it("pdf with no backend.pdf reports unavailable, no doc", async () => {
+    const { b } = recordingBackend();
+    delete (b as { pdf?: unknown }).pdf;
+    const llm = new ScriptLLM([
+      { toolCall: { name: "pdf", args: { url: "https://x.com/p" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "cant" } } as ToolCall },
+    ]);
+    const r = await runAgent("save x", { llm, backend: b });
+    expect(r.doc).toBeUndefined();
   });
 
   it("screenshot with no backend.screenshot reports unavailable, no photo", async () => {

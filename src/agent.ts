@@ -87,6 +87,11 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to capture" } }, required: ["url"] },
   },
   {
+    name: "pdf",
+    description: "Render a web page to a PDF and send it to the user as a document. Use when the user wants to SAVE or KEEP a page (\"save as PDF\", \"send me a PDF of X\"). After calling this, still call reply with a short caption.",
+    parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to render" } }, required: ["url"] },
+  },
+  {
     name: "reply",
     description: "Send the final answer to the user and end the task. Call exactly once when done or when you must report you cannot complete it.",
     parameters: { type: "object", properties: { text: { type: "string", description: "Message to send the user" } }, required: ["text"] },
@@ -131,6 +136,8 @@ export interface BrowserBackend {
   // Optional: capture a URL as image bytes (DEV-0027). When absent, the screenshot tool
   // reports it can't take pictures rather than failing hard.
   screenshot?(url: string): Promise<Uint8Array>;
+  // Optional: render a URL to PDF bytes (DEV-0032). Absent -> pdf tool reports unavailable.
+  pdf?(url: string): Promise<Uint8Array>;
 }
 
 const FETCH_JSON_MAX_BYTES = 200_000;
@@ -162,6 +169,7 @@ const defaultBackend: BrowserBackend = {
   fetchJson: (url) => defaultFetchJson(url),
   extractStructured: (url) => anvil.extractStructured(url),
   screenshot: (url) => anvil.screenshot(url),
+  pdf: (url) => anvil.pdf(url),
 };
 
 export interface AgentDeps {
@@ -175,13 +183,14 @@ export async function runAgent(
   userText: string,
   deps: AgentDeps,
   history: LLMMessage[] = []
-): Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array }> {
+): Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array }> {
   const backend: BrowserBackend = deps.backend ?? {
     ...defaultBackend,
     ...(deps.scrapeFn ? { scrape: deps.scrapeFn } : {}),
   };
   const toolsUsed: string[] = []; // tool names invoked this turn (for observability)
   let photo: Uint8Array | undefined; // last screenshot captured this turn, sent by the handler
+  let doc: Uint8Array | undefined; // last PDF rendered this turn, sent by the handler
 
   const messages: LLMMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -238,6 +247,20 @@ export async function runAgent(
           push("screenshot", `Captured a screenshot of ${url} (${photo.length} bytes). It will be sent to the user; now call reply with a short caption.`);
         } catch (e) {
           push("screenshot", `ERROR capturing ${url}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "pdf") {
+        const url = String(call.args.url ?? "");
+        const safe = isUrlSafe(url);
+        if (!safe.safe) { push("pdf", `ERROR: refused (${safe.reason}).`); continue; }
+        if (!backend.pdf) { push("pdf", "ERROR: PDF rendering isn't available."); continue; }
+        try {
+          doc = await backend.pdf(url);
+          push("pdf", `Rendered ${url} to a PDF (${doc.length} bytes). It will be sent to the user; now call reply with a short caption.`);
+        } catch (e) {
+          push("pdf", `ERROR rendering ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }
@@ -385,13 +408,13 @@ export async function runAgent(
       push(call.name, `ERROR: unknown tool "${call.name}".`);
     }
 
-    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed, photo };
+    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed, photo, doc };
 
     const finalRes = await deps.llm.complete(
       [...messages, { role: "user", content: "Step budget reached. Reply now with your best answer using what you have." }],
       []
     );
-    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: MAX_STEPS, tools: toolsUsed, photo };
+    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: MAX_STEPS, tools: toolsUsed, photo, doc };
   } finally {
     if (sessionId) await backend.releaseSession(sessionId).catch(() => {});
   }

@@ -10,6 +10,7 @@ Try:
 • "compare the price across these 3 links"
 • "find the newest HN posts about AI"
 • "screenshot the top of Hacker News"
+• "save this page as a PDF: <link>"
 
 Commands: /help  /start  /reset (clear our chat)  /status (am I up?)`;
 
