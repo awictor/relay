@@ -1,0 +1,47 @@
+// Alert runner (m10 alert-2): run a watched task, compare the result to the stored
+// lastValue, and NOTIFY only when it changed (watch-and-notify). First run (no lastValue)
+// notifies + seeds. Always updates lastValue. Reused by /run <alert> + the scheduler (a
+// scheduled alert fires this). Injectable (runAgent/store fns) for offline unit tests.
+
+import type { LLMClient, LLMMessage } from "./llm.js";
+import type { Alert } from "./lib/alerts.js";
+import { changed } from "./lib/alerts.js";
+
+export interface AlertRunResult {
+  notify: boolean;   // did the value change (or first run)?
+  message: string | null; // the text to send when notify (null when unchanged)
+  value: string;     // the new observed value (always recorded)
+}
+
+export interface AlertRunnerDeps {
+  llm: LLMClient;
+  runAgent: (userText: string, deps: { llm: LLMClient }, history: LLMMessage[]) => Promise<{ reply: string }>;
+  formatReply: (text: string) => string;
+  setLast: (chatId: number, name: string, value: string) => void;
+}
+
+/**
+ * Check an alert once. Runs its task, compares to alert.lastValue via changed(threshold):
+ *   - first run (no lastValue): notify (baseline), seed lastValue.
+ *   - changed: notify with a "🔔 <name> changed" message.
+ *   - unchanged: no notify (silent) — but lastValue is still refreshed.
+ * Always calls setLast. Never throws — an agent failure returns notify:false so a flaky
+ * check doesn't spam; the value is left as-is.
+ */
+export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<AlertRunResult> {
+  let value: string;
+  try {
+    const res = await deps.runAgent(alert.task, { llm: deps.llm }, []);
+    value = deps.formatReply(res.reply).trim();
+  } catch {
+    return { notify: false, message: null, value: alert.lastValue ?? "" };
+  }
+
+  const firstRun = alert.lastValue === undefined;
+  const didChange = firstRun ? true : changed(alert.lastValue!, value, alert.threshold);
+  deps.setLast(alert.chatId, alert.name, value);
+
+  if (!didChange) return { notify: false, message: null, value };
+  const header = firstRun ? `🔔 ${alert.name} (watching)` : `🔔 ${alert.name} changed`;
+  return { notify: true, message: `${header}:\n${value}`, value };
+}
