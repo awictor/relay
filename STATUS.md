@@ -49,3 +49,10 @@ Browserbase/Browserless/Steel vendor. Built autonomously via `/agent-loop`. Free
 - Relay offline suite: `cd relay && npm test` (117, no keys).
 - Relay live agent: `npx tsx scripts/e2e-agent-chain.mjs` (needs `.env` + anvil on :3000).
 - Migration gate: `cd mcp-forge && git checkout anvil-migration && npm run test:unit` (1786).
+
+## Reproducible deploy point
+
+Both repos are tagged **`deploy-v1`** at this all-green state (anvil 529 tests + build CI
+green; relay 117 tests CI green). For an exact validated deploy: `git checkout deploy-v1`
+in each before `docker compose up` (see `DEPLOY.md`). Bump both tags together after
+validating a newer state.
