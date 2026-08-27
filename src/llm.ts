@@ -242,16 +242,27 @@ export class ClaudeClient implements LLMClient {
       // ToolSpec.parameters is already a JSON Schema object → Anthropic's input_schema 1:1.
       body.tools = tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }));
     }
-    const r = await this.transport("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": this.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30000),
-    }).catch((e) => new Response(JSON.stringify({ error: { message: String(e) } }), { status: 503 }));
+    // Bounded same-endpoint retry on transient statuses (DEV-0150). A single attempt made a transient
+    // 500/502/503/504/429/408 a hard user-facing failure; Gemini already retries, so Claude should too.
+    // 4xx (except 408/429) is deterministic — throw immediately, no retry.
+    const TRANSIENT = new Set([408, 429, 500, 502, 503, 504]);
+    const MAX_ATTEMPTS = 3;
+    let r!: Response;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      r = await this.transport("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": this.apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30000),
+      }).catch((e) => new Response(JSON.stringify({ error: { message: String(e) } }), { status: 503 }));
+      if (r.ok || !TRANSIENT.has(r.status) || attempt === MAX_ATTEMPTS) break;
+      r.body?.cancel?.();
+      await new Promise((res) => setTimeout(res, 800 * 2 ** (attempt - 1)));
+    }
 
     if (!r.ok) {
       // Surface status in the message so isTransientError can classify (5xx/429 transient).

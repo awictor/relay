@@ -92,4 +92,34 @@ describe("ClaudeClient.complete (offline via injected transport)", () => {
     const c = new ClaudeClient("");
     await expect(c.complete([{ role: "user", content: "q" }], [])).rejects.toThrow(/ANTHROPIC_API_KEY/);
   });
+
+  // DEV-0150: a transient status is retried same-endpoint (was a single-attempt hard fail).
+  it("retries a transient 503 then succeeds", async () => {
+    let calls = 0;
+    const fn = async () => {
+      calls++;
+      if (calls === 1) return new Response(JSON.stringify({ error: { message: "unavailable" } }), { status: 503 });
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "recovered" }] }), { status: 200 });
+    };
+    const c = new ClaudeClient("k", { fetch: fn });
+    const res = await c.complete([{ role: "user", content: "q" }], []);
+    expect(res.text).toBe("recovered");
+    expect(calls).toBe(2); // retried once, then ok
+  });
+
+  it("does NOT retry a deterministic 400 (throws on first attempt)", async () => {
+    let calls = 0;
+    const fn = async () => { calls++; return new Response(JSON.stringify({ error: { message: "bad request" } }), { status: 400 }); };
+    const c = new ClaudeClient("k", { fetch: fn });
+    await expect(c.complete([{ role: "user", content: "q" }], [])).rejects.toThrow(/400/);
+    expect(calls).toBe(1); // no retry on a client fault
+  });
+
+  it("gives up after MAX_ATTEMPTS of a persistent 503", async () => {
+    let calls = 0;
+    const fn = async () => { calls++; return new Response(JSON.stringify({ error: { message: "down" } }), { status: 503 }); };
+    const c = new ClaudeClient("k", { fetch: fn });
+    await expect(c.complete([{ role: "user", content: "q" }], [])).rejects.toThrow(/503/);
+    expect(calls).toBe(3); // MAX_ATTEMPTS
+  });
 });
