@@ -28,6 +28,16 @@ describe("checkAlert", () => {
     expect(lastSet).toEqual([{ name: "btc", value: "$65,000" }]);
   });
 
+  it("DEV-0176: a degraded reply does NOT notify + does NOT overwrite lastValue (no spam)", async () => {
+    const { d, lastSet } = deps("I ran out of steps before finishing. Try narrowing the request.", {
+      runAgent: async () => ({ reply: "I ran out of steps before finishing.", degraded: true }),
+    });
+    const r = await checkAlert(alert({ lastValue: "$65,000" }), d);
+    expect(r.notify).toBe(false);            // the failure text is NOT reported as a change
+    expect(r.value).toBe("$65,000");         // lastValue preserved
+    expect(lastSet).toEqual([]);             // setLast NOT called with the degraded value
+  });
+
   it("unchanged value -> silent (no notify), still refreshes lastValue", async () => {
     const { d, lastSet } = deps("sunny");
     const r = await checkAlert(alert({ lastValue: "sunny" }), d);

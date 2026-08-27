@@ -15,7 +15,7 @@ export interface AlertRunResult {
 
 export interface AlertRunnerDeps {
   llm: LLMClient;
-  runAgent: (userText: string, deps: { llm: LLMClient }, history: LLMMessage[]) => Promise<{ reply: string }>;
+  runAgent: (userText: string, deps: { llm: LLMClient }, history: LLMMessage[]) => Promise<{ reply: string; degraded?: boolean }>;
   formatReply: (text: string) => string;
   setLast: (chatId: number, name: string, value: string) => void;
 }
@@ -32,6 +32,9 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   let value: string;
   try {
     const res = await deps.runAgent(alert.task, { llm: deps.llm }, []);
+    // A degraded (soft-failure) reply is NOT a real value — comparing it to lastValue would read as a
+    // change and spam the user with the failure text. Skip notify, keep lastValue (DEV-0176).
+    if (res.degraded) return { notify: false, message: null, value: alert.lastValue ?? "" };
     value = deps.formatReply(res.reply).trim();
   } catch {
     return { notify: false, message: null, value: alert.lastValue ?? "" };

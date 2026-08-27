@@ -193,7 +193,7 @@ export async function runAgent(
   userText: string,
   deps: AgentDeps,
   history: LLMMessage[] = []
-): Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array }> {
+): Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; degraded?: boolean }> {
   const backend: BrowserBackend = deps.backend ?? {
     ...defaultBackend,
     ...(deps.scrapeFn ? { scrape: deps.scrapeFn } : {}),
@@ -214,12 +214,15 @@ export async function runAgent(
   try {
     let finalReply: string | null = null;
     let usedSteps = MAX_STEPS;
+    let degraded = false; // true when the reply is a soft-failure fallback, not a real answer (DEV-0176)
 
     for (let step = 1; step <= MAX_STEPS; step++) {
       const res = await deps.llm.complete(messages, TOOLS);
 
       if (!res.toolCall) {
-        finalReply = res.text?.trim() || "Sorry, I couldn't come up with an answer.";
+        const answered = res.text?.trim();
+        finalReply = answered || "Sorry, I couldn't come up with an answer.";
+        degraded = !answered; // empty model reply → soft failure, not a real answer
         usedSteps = step;
         break;
       }
@@ -418,13 +421,15 @@ export async function runAgent(
       push(call.name, `ERROR: unknown tool "${call.name}".`);
     }
 
-    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed, photo, doc };
+    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed, photo, doc, degraded };
 
+    // Ran out of the step budget without a final answer — a soft failure. Ask for a best-effort reply;
+    // whether or not the model produces text, this path is degraded (never a clean value for an alert).
     const finalRes = await deps.llm.complete(
       [...messages, { role: "user", content: "Step budget reached. Reply now with your best answer using what you have." }],
       []
     );
-    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: MAX_STEPS, tools: toolsUsed, photo, doc };
+    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: MAX_STEPS, tools: toolsUsed, photo, doc, degraded: true };
   } finally {
     if (sessionId) await backend.releaseSession(sessionId).catch(() => {});
   }
