@@ -9,6 +9,7 @@ import { runAgent, type AgentDeps } from "./agent.js";
 import { formatReply } from "./lib/format-reply.js";
 import { formatTurnLog } from "./lib/turn-log.js";
 import { friendlyError } from "./lib/failure.js";
+import { splitScheduleCommand } from "./lib/schedule.js";
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -215,12 +216,15 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
 
     // "schedule <name> <when>" -> run a saved digest OR recipe on a cadence (digest first). No agent run.
     if ((deps.recipeSchedule || deps.digestSchedule) && /^\s*schedule\s+\S+/i.test(msg.text)) {
-      const m = msg.text.trim().match(/^schedule\s+(.+?)\s+((?:every|daily|in|tomorrow|at)\b.*)$/i);
-      if (m) {
-        const name = m[1]!.trim();
+      // Split name<->time via the pure helper: it keeps the LONGEST name that still leaves a
+      // clean time clause, so a name whose interior has a time word ("check in") isn't truncated
+      // (DEV-0129). Falls back to null when no split yields a parseable clause.
+      const split = splitScheduleCommand(msg.text, deps.now());
+      if (split) {
+        const name = split.name;
         const isDig = deps.isDigest?.(msg.chatId, name) && deps.digestSchedule;
-        const r = isDig ? deps.digestSchedule!(msg.chatId, name, m[2]!, deps.now())
-                        : deps.recipeSchedule?.(msg.chatId, name, m[2]!, deps.now());
+        const r = isDig ? deps.digestSchedule!(msg.chatId, name, split.clause, deps.now())
+                        : deps.recipeSchedule?.(msg.chatId, name, split.clause, deps.now());
         if (r?.ok) { await deps.sendMessage(msg.chatId, `Scheduled "${name}" to run ${r.kind === "daily" ? "daily" : "once"}. Manage with /schedules.`); return; }
         const why = r?.reason === "unknown" ? "No recipe or digest by that name." : r?.reason === "capped" ? "You've hit the scheduled-task limit — /cancel one first." : "I couldn't parse that time. Try \"schedule <name> every morning\".";
         await deps.sendMessage(msg.chatId, why); return;

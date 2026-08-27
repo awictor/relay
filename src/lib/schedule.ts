@@ -54,6 +54,29 @@ export function parseScheduleFor(clause: string, task: string, now: number): Par
   return { ...p, task: task.trim() };
 }
 
+/**
+ * Split a "schedule <name> <when>" command into the saved-item name and the trailing time
+ * clause. The name may itself contain time-ish words ("check in", "log in", "my daily
+ * report") — so a naive "split at the first every|in|at" truncates it (DEV-0129: `schedule
+ * check in every morning` wrongly yielded name="check"). This scans split points left→right
+ * and returns the FIRST where the trailing clause parses as a PURE time clause (nothing but
+ * the cadence phrase remains, checked via a placeholder task), giving the longest name that
+ * still leaves a clean clause. `text` is the full command including the leading "schedule".
+ * Returns null if no split yields a parseable clause.
+ */
+export function splitScheduleCommand(text: string, now: number): { name: string; clause: string } | null {
+  const m = text.trim().match(/^schedule\s+(.+)$/i);
+  if (!m) return null;
+  const tokens = m[1]!.trim().split(/\s+/);
+  for (let k = 1; k < tokens.length; k++) {
+    const name = tokens.slice(0, k).join(" ");
+    const clause = tokens.slice(k).join(" ");
+    const p = parseSchedule(`${clause} __recipe__`, now);
+    if (p && p.task === "__recipe__") return { name, clause };
+  }
+  return null;
+}
+
 export function parseSchedule(text: string, now: number): ParsedSchedule | null {
   const raw = text.trim();
   const lower = raw.toLowerCase();

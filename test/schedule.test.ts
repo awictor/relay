@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSchedule, parseScheduleFor, ScheduleStore } from "../src/lib/schedule.js";
+import { parseSchedule, parseScheduleFor, splitScheduleCommand, ScheduleStore } from "../src/lib/schedule.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -50,6 +50,27 @@ describe("parseScheduleFor (m7 recipe-3: timing-only + supplied task)", () => {
   it("null on an unparseable clause or empty task", () => {
     expect(parseScheduleFor("whenever", "x", NOW)).toBeNull();
     expect(parseScheduleFor("every morning", "  ", NOW)).toBeNull();
+  });
+});
+
+describe("splitScheduleCommand (DEV-0129: name<->clause split keeps interior time words)", () => {
+  it("single-word name", () => {
+    expect(splitScheduleCommand("schedule digest daily", NOW)).toEqual({ name: "digest", clause: "daily" });
+  });
+  it("name whose 2nd token is a time keyword is NOT truncated (the bug)", () => {
+    // old lazy regex gave name="check", clause="in every morning"; now the longest clean split wins.
+    expect(splitScheduleCommand("schedule check in every morning", NOW)).toEqual({ name: "check in", clause: "every morning" });
+    expect(splitScheduleCommand("schedule log in at 5pm", NOW)).toEqual({ name: "log in", clause: "at 5pm" });
+  });
+  it("multi-word name + relative clause", () => {
+    expect(splitScheduleCommand("schedule my news brief in 2 hours", NOW)).toEqual({ name: "my news brief", clause: "in 2 hours" });
+  });
+  it("null when nothing after the name parses as a time clause", () => {
+    expect(splitScheduleCommand("schedule check in whenever", NOW)).toBeNull();
+    expect(splitScheduleCommand("schedule report", NOW)).toBeNull();
+  });
+  it("not a schedule command -> null", () => {
+    expect(splitScheduleCommand("run digest", NOW)).toBeNull();
   });
 });
 
