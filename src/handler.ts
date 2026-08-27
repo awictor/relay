@@ -71,7 +71,7 @@ export interface HandlerDeps {
   recordCommand?: (name: string) => void;
   now: () => number;
   // Optional override so tests don't hit the real agent loop.
-  runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array }>;
+  runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; degraded?: boolean }>;
   log?: (line: string) => void;
 }
 
@@ -283,8 +283,13 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     const startedAt = deps.now();
     try {
       await deps.sendTyping(msg.chatId);
-      const { reply, steps, tools, photo, doc } = await runIt(msg.text, { llm: deps.llm }, history);
-      const out = formatReply(reply);
+      const { reply, steps, tools, photo, doc, degraded } = await runIt(msg.text, { llm: deps.llm }, history);
+      // A degraded reply is a soft-failure fallback (agent ran out of steps / produced no answer,
+      // DEV-0176), not a real answer. Prepend a one-line hint so a live-bot user knows the result is
+      // partial, and count the turn as NOT-ok so the success metric isn't inflated by soft failures
+      // (DEV-0178 — handler is the 3rd consumer of the degraded flag, after alert-runner + digest-runner).
+      const body = formatReply(reply);
+      const out = degraded ? `⚠️ Partial answer — I ran low on steps. Try narrowing the request.\n\n${body}` : body;
       // If the agent produced a binary (screenshot image or PDF), send it first with the reply as
       // caption, then the text if the caption overflowed. Falls back to text-only when nothing was
       // produced or the sender isn't wired.
@@ -301,8 +306,8 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       const next: LLMMessage[] = [...history, { role: "user", content: msg.text }, { role: "assistant", content: out }];
       deps.memorySet(msg.chatId, next);
       const elapsedMs = deps.now() - startedAt;
-      log(formatTurnLog({ chatId: msg.chatId, steps, tools, elapsedMs, replyChars: out.length, ok: true }));
-      deps.recordTurn({ steps, tools, elapsedMs, ok: true });
+      log(formatTurnLog({ chatId: msg.chatId, steps, tools, elapsedMs, replyChars: out.length, ok: !degraded }));
+      deps.recordTurn({ steps, tools, elapsedMs, ok: !degraded });
     } catch (e) {
       const emsg = e instanceof Error ? e.message : String(e);
       console.error("agent error:", emsg);

@@ -208,6 +208,19 @@ describe("createHandler", () => {
     expect(recorded).toEqual([{ ok: true, steps: 2, tools: ["scrape"] }]);
   });
 
+  it("DEV-0178: a degraded reply records ok:false + prepends a partial-answer hint (not counted as success)", async () => {
+    const { handle, sent, recorded } = harness({
+      runAgentFn: async () => ({ reply: "I ran out of steps before finishing.", steps: 8, tools: ["scrape"], degraded: true }),
+    });
+    await handle(msg("scrape a huge site", 9));
+    // degraded turn is NOT a success — the ok/success metric must not be inflated by soft failures
+    expect(recorded).toEqual([{ ok: false, steps: 8, tools: ["scrape"] }]);
+    // the user sees a partial-answer hint prepended to the fallback text
+    expect(sent[0]!.chatId).toBe(9);
+    expect(sent[0]!.text).toMatch(/partial answer/i);
+    expect(sent[0]!.text).toContain("I ran out of steps before finishing.");
+  });
+
   it("an agent error -> friendly reply + a failed turn recorded (no memory write)", async () => {
     const { handle, sent, recorded, mem } = harness({
       runAgentFn: async () => { throw new Error("boom"); },
