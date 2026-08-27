@@ -55,15 +55,15 @@ describe("parseScheduleFor (m7 recipe-3: timing-only + supplied task)", () => {
 
 describe("splitScheduleCommand (DEV-0129: name<->clause split keeps interior time words)", () => {
   it("single-word name", () => {
-    expect(splitScheduleCommand("schedule digest daily", NOW)).toEqual({ name: "digest", clause: "daily" });
+    expect(splitScheduleCommand("schedule digest daily", NOW)).toEqual({ name: "digest", clause: "daily", explicitRecipe: false });
   });
   it("name whose 2nd token is a time keyword is NOT truncated (the bug)", () => {
     // old lazy regex gave name="check", clause="in every morning"; now the longest clean split wins.
-    expect(splitScheduleCommand("schedule check in every morning", NOW)).toEqual({ name: "check in", clause: "every morning" });
-    expect(splitScheduleCommand("schedule log in at 5pm", NOW)).toEqual({ name: "log in", clause: "at 5pm" });
+    expect(splitScheduleCommand("schedule check in every morning", NOW)).toEqual({ name: "check in", clause: "every morning", explicitRecipe: false });
+    expect(splitScheduleCommand("schedule log in at 5pm", NOW)).toEqual({ name: "log in", clause: "at 5pm", explicitRecipe: false });
   });
   it("multi-word name + relative clause", () => {
-    expect(splitScheduleCommand("schedule my news brief in 2 hours", NOW)).toEqual({ name: "my news brief", clause: "in 2 hours" });
+    expect(splitScheduleCommand("schedule my news brief in 2 hours", NOW)).toEqual({ name: "my news brief", clause: "in 2 hours", explicitRecipe: false });
   });
   it("null when nothing after the name parses as a time clause", () => {
     expect(splitScheduleCommand("schedule check in whenever", NOW)).toBeNull();
@@ -71,6 +71,11 @@ describe("splitScheduleCommand (DEV-0129: name<->clause split keeps interior tim
   });
   it("not a schedule command -> null", () => {
     expect(splitScheduleCommand("run digest", NOW)).toBeNull();
+  });
+  it("DEV-0131: strips the explicit 'recipe' keyword and flags it, keeping name+clause intact", () => {
+    expect(splitScheduleCommand("schedule recipe brief every morning", NOW)).toEqual({ name: "brief", clause: "every morning", explicitRecipe: true });
+    // a recipe named with an interior time word still works under the keyword form.
+    expect(splitScheduleCommand("schedule recipe check in at 5pm", NOW)).toEqual({ name: "check in", clause: "at 5pm", explicitRecipe: true });
   });
 });
 

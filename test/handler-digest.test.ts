@@ -88,6 +88,29 @@ describe("handler — digest routing", () => {
     expect(sent[0]).toMatch(/Scheduled "morning" to run daily/);
   });
 
+  it("DEV-0131: 'schedule recipe <name>' dispatches to recipeSchedule even when a same-named digest exists", async () => {
+    // "morning" is a digest (isDigest). Bare schedule hits digestSchedule; the explicit
+    // "recipe" keyword must route to recipeSchedule instead.
+    const calls: string[] = [];
+    const { handle, sent } = harness({
+      digestSchedule: (_c, n) => { calls.push(`digest:${n}`); return { ok: true, kind: "daily" }; },
+      recipeSchedule: (_c, n) => { calls.push(`recipe:${n}`); return { ok: true, kind: "daily" }; },
+    });
+    await handle(msg("schedule recipe morning every morning"));
+    expect(calls).toEqual(["recipe:morning"]); // recipe scheduled, digest NOT touched
+    expect(sent[0]).toMatch(/Scheduled "morning" to run daily/);
+  });
+
+  it("DEV-0131: bare 'schedule <name>' still dispatches to digestSchedule (digest-first preserved)", async () => {
+    const calls: string[] = [];
+    const { handle } = harness({
+      digestSchedule: (_c, n) => { calls.push(`digest:${n}`); return { ok: true, kind: "daily" }; },
+      recipeSchedule: (_c, n) => { calls.push(`recipe:${n}`); return { ok: true, kind: "daily" }; },
+    });
+    await handle(msg("schedule morning every morning"));
+    expect(calls).toEqual(["digest:morning"]);
+  });
+
   it("/forget-digest removes", async () => {
     const { handle, sent } = harness();
     await handle(msg("/forget-digest morning"));

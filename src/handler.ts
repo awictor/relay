@@ -222,7 +222,9 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       const split = splitScheduleCommand(msg.text, deps.now());
       if (split) {
         const name = split.name;
-        const isDig = deps.isDigest?.(msg.chatId, name) && deps.digestSchedule;
+        // "schedule recipe <name> ..." forces the recipe over a same-named digest (DEV-0131,
+        // twin of DEV-0130's /run keyword); bare "schedule <name> ..." stays digest-first.
+        const isDig = !split.explicitRecipe && deps.isDigest?.(msg.chatId, name) && deps.digestSchedule;
         const r = isDig ? deps.digestSchedule!(msg.chatId, name, split.clause, deps.now())
                         : deps.recipeSchedule?.(msg.chatId, name, split.clause, deps.now());
         if (r?.ok) { await deps.sendMessage(msg.chatId, `Scheduled "${name}" to run ${r.kind === "daily" ? "daily" : "once"}. Manage with /schedules.`); return; }

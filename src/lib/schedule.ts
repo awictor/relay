@@ -62,17 +62,20 @@ export function parseScheduleFor(clause: string, task: string, now: number): Par
  * and returns the FIRST where the trailing clause parses as a PURE time clause (nothing but
  * the cadence phrase remains, checked via a placeholder task), giving the longest name that
  * still leaves a clean clause. `text` is the full command including the leading "schedule".
+ * An optional "recipe" keyword ("schedule recipe <name> <when>", DEV-0131) is stripped and
+ * surfaced as `explicitRecipe` so the caller can force the recipe over a same-named digest.
  * Returns null if no split yields a parseable clause.
  */
-export function splitScheduleCommand(text: string, now: number): { name: string; clause: string } | null {
-  const m = text.trim().match(/^schedule\s+(.+)$/i);
+export function splitScheduleCommand(text: string, now: number): { name: string; clause: string; explicitRecipe: boolean } | null {
+  const m = text.trim().match(/^schedule\s+(?:(recipe)\s+)?(.+)$/i);
   if (!m) return null;
-  const tokens = m[1]!.trim().split(/\s+/);
+  const explicitRecipe = !!m[1];
+  const tokens = m[2]!.trim().split(/\s+/);
   for (let k = 1; k < tokens.length; k++) {
     const name = tokens.slice(0, k).join(" ");
     const clause = tokens.slice(k).join(" ");
     const p = parseSchedule(`${clause} __recipe__`, now);
-    if (p && p.task === "__recipe__") return { name, clause };
+    if (p && p.task === "__recipe__") return { name, clause, explicitRecipe };
   }
   return null;
 }
