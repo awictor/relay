@@ -265,6 +265,24 @@ describe("makeScheduleRunner observability (m8 pobs-1)", () => {
     expect(recorded).toEqual([{ ok: true, steps: 3, tools: ["scrape"] }]);
   });
 
+  it("DEV-0187: a degraded scheduled fire records ok:false + marks the message partial (not a clean success)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    const recorded: Array<{ ok: boolean }> = [];
+    const { store, runner } = harness(clock, {
+      runAgent: async () => ({ reply: "I ran out of steps before finishing.", steps: 8, tools: ["scrape"], degraded: true }),
+      send: async (_c, text) => { sent.push(text); },
+      recordTurn: (t) => recorded.push({ ok: t.ok }),
+    });
+    store.add(1, { kind: "daily", task: "morning report", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    // degraded proactive fire is NOT counted as a success
+    expect(recorded).toEqual([{ ok: false }]);
+    // it's still delivered (a daily shouldn't silently vanish) but clearly marked partial
+    expect(sent[0]).toMatch(/Partial/i);
+    expect(sent[0]).toContain("⏰ Daily: morning report");
+  });
+
   it("logs a [proactive] failure line + records a failed turn when the agent throws", async () => {
     const clock = { t: NOW };
     const logs: string[] = [];

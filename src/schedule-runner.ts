@@ -10,7 +10,7 @@ import type { Schedule, ScheduleStore } from "./lib/schedule.js";
 export interface ScheduleRunnerDeps {
   store: ScheduleStore;
   llm: LLMClient;
-  runAgent: (userText: string, deps: { llm: LLMClient }, history: LLMMessage[]) => Promise<{ reply: string; steps?: number; tools?: string[] }>;
+  runAgent: (userText: string, deps: { llm: LLMClient }, history: LLMMessage[]) => Promise<{ reply: string; steps?: number; tools?: string[]; degraded?: boolean }>;
   send: (chatId: number, text: string) => Promise<unknown>;
   formatReply: (text: string) => string;
   now: () => number;
@@ -21,7 +21,7 @@ export interface ScheduleRunnerDeps {
   onError?: (e: unknown) => void;
   // Observability (m8): record each proactive fire into the same Metrics as inbound turns,
   // so /status + [metrics] count them. Optional (older wiring stays valid).
-  recordTurn?: (t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean }) => void;
+  recordTurn?: (t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean; degraded?: boolean }) => void;
   // Anti-spam (m8 pobs-2): max proactive sends per chat per rolling hour. A misfiring daily
   // (or many due at once) must not flood a user. 0/absent = unlimited. Default set by index.
   maxPerChatPerHour?: number;
@@ -77,7 +77,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     // instead of the agent. Otherwise a normal scheduled/recipe agent run.
     const digestMatch = s.task.match(/^digest:(.+)$/);
     const alertMatch = s.task.match(/^alert:(.+)$/);
-    let res: { reply: string; steps?: number; tools?: string[] };
+    let res: { reply: string; steps?: number; tools?: string[]; degraded?: boolean };
     let sendText: string | null;
     if (alertMatch && deps.alertCheck) {
       // Alert: only sends when the watched value changed (null = silent). Always completes
@@ -98,7 +98,12 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       res = await deps.runAgent(s.task, { llm: deps.llm }, []);
       const body = deps.formatReply(res.reply);
       const label = s.kind === "daily" ? "⏰ Daily" : "⏰ Reminder";
-      sendText = `${label}: ${s.task}\n\n${body}`;
+      // A degraded reply (agent ran out of steps / no answer, DEV-0176) is a soft failure, not a real
+      // proactive result. Marking the unprompted message as partial keeps a flaky daily from pushing a
+      // failure string as if it were the briefing, and the ok:!degraded below keeps it out of the
+      // success metric (DEV-0187 — schedule-runner is the 4th runAgent consumer of the degraded flag).
+      const prefix = res.degraded ? "⚠️ Partial — I ran low on steps.\n\n" : "";
+      sendText = `${label}: ${s.task}\n\n${prefix}${body}`;
     }
     await deps.send(s.chatId, sendText!); // non-null here (alert-silent path returned early)
     noteSend(s.chatId, deps.now());
@@ -107,8 +112,11 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     const elapsedMs = deps.now() - startedAt;
     const steps = res.steps ?? 0;
     const tools = res.tools ?? [];
-    log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, taskLen: s.task.length, steps, ms: Math.max(0, elapsedMs), ok: true })}`);
-    deps.recordTurn?.({ steps, tools, elapsedMs, ok: true });
+    // A degraded agent reply is not a success (DEV-0187). alert/digest paths leave res.degraded
+    // undefined → ok:true, unchanged; only the plain agent branch can set it.
+    const ok = !res.degraded;
+    log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, taskLen: s.task.length, steps, ms: Math.max(0, elapsedMs), ok })}`);
+    deps.recordTurn?.({ steps, tools, elapsedMs, ok, ...(res.degraded ? { degraded: true } : {}) });
   }
 
   // m14 degrade-2: completing a schedule persists to disk; if that throws (unwritable store),
