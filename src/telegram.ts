@@ -1,8 +1,16 @@
 // Telegram transport — long-polling getUpdates (no public URL / webhook needed,
 // so zero inbound infra). sendMessage for replies. One process, one bot.
 
+import { mapPool } from "./lib/pool.js";
+
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const API = `https://api.telegram.org/bot${TOKEN}`;
+
+// Cap on how many inbound-message handlers run at once (DEV-0141). Each handler may open an anvil
+// browser session; the self-hosted anvil has a bounded Chrome pool, so an unbounded fan-out (the old
+// Promise.all) could open one session PER concurrent chat in a burst and 429/exhaust it. Default 4,
+// env-tunable. Mirrors DEV-0140's digest bound; reuses the same mapPool primitive.
+const DISPATCH_CONCURRENCY = Math.max(1, Number(process.env.RELAY_DISPATCH_CONCURRENCY) || 4);
 
 export interface InboundMessage {
   chatId: number;
@@ -131,14 +139,17 @@ export function parseUpdates(updates: TgUpdate[], offset: number): { messages: I
  * reply. Firing them together isolates latency per chat; per-chat rate-limit still guards abuse.
  * Each handler's error is caught individually (one throw never sinks the batch). Returns a promise
  * that settles when ALL handlers finish — the caller awaits it before the next getUpdates so a
- * genuinely stuck handler can't let the loop lap itself.
+ * genuinely stuck handler can't let the loop lap itself. BOUNDED (DEV-0141): at most
+ * DISPATCH_CONCURRENCY handlers run at once, so a burst of chats each starting an anvil browse can't
+ * open one session per chat simultaneously and exhaust the self-hosted Chrome pool. mapPool preserves
+ * the settle-all contract (it awaits every worker before resolving).
  */
 export async function dispatchBatch(
   messages: InboundMessage[],
   onMessage: (msg: InboundMessage) => Promise<void>,
   onError: (e: unknown) => void = (e) => console.error("onMessage handler error:", e instanceof Error ? e.message : String(e)),
 ): Promise<void> {
-  await Promise.all(messages.map((msg) => onMessage(msg).catch(onError)));
+  await mapPool(messages, DISPATCH_CONCURRENCY, (msg) => onMessage(msg).catch(onError));
 }
 
 export function startPolling(onMessage: (msg: InboundMessage) => Promise<void>): { stop: () => void } {

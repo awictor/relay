@@ -95,4 +95,34 @@ describe("dispatchBatch (DEV-0037 concurrent, no head-of-line block)", () => {
     await dispatchBatch([im(1, "a"), im(2, "b")], onMessage);
     expect(finished).toBe(2);
   });
+
+  it("DEV-0141: bounds in-flight handlers at DISPATCH_CONCURRENCY (default 4) while still running all", async () => {
+    // 9 chats, default cap 4: an active-counter proves no more than 4 handlers run at once (protects
+    // the bounded anvil session pool), yet every handler still runs and the promise settles after all.
+    let active = 0, maxActive = 0, done = 0;
+    const onMessage = async () => {
+      active++; maxActive = Math.max(maxActive, active);
+      await new Promise((r) => setTimeout(r, 10));
+      active--; done++;
+    };
+    const batch = Array.from({ length: 9 }, (_, i) => im(i + 1, "x"));
+    await dispatchBatch(batch, onMessage);
+    expect(maxActive).toBeLessThanOrEqual(4); // never more than the cap concurrently
+    expect(maxActive).toBeGreaterThan(1); // but genuinely concurrent, not sequential
+    expect(done).toBe(9); // all handlers ran
+  });
+
+  it("DEV-0141: bound still isolates a throwing handler (onError per message, batch survives)", async () => {
+    const done: number[] = [];
+    const errors: unknown[] = [];
+    const onMessage = async (m: InboundMessage) => {
+      await new Promise((r) => setTimeout(r, 5));
+      if (m.chatId % 3 === 0) throw new Error("boom");
+      done.push(m.chatId);
+    };
+    const batch = Array.from({ length: 9 }, (_, i) => im(i + 1, "x"));
+    await dispatchBatch(batch, onMessage, (e) => errors.push(e));
+    expect(done.sort((a, b) => a - b)).toEqual([1, 2, 4, 5, 7, 8]); // non-multiples of 3
+    expect(errors).toHaveLength(3); // 3, 6, 9 threw, each caught individually
+  });
 });
