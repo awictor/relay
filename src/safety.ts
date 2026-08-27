@@ -7,7 +7,16 @@ import { redactSecretsDeep, SENSITIVE_KEY_RE } from "./lib/redact-secrets.js";
 
 // ---- per-chat rate limit ---------------------------------------------------
 
-const RATE_LIMIT_PER_MIN = Number(process.env.RELAY_RATE_LIMIT_PER_MIN ?? 10);
+/** Resolve RELAY_RATE_LIMIT_PER_MIN to a safe value: a finite integer >= 0 (0 = explicit disable),
+ * else FAIL SAFE to the default. An unvalidated Number(env) yielded NaN on a typo, and since both
+ * checks in checkRateLimit compare against it (`NaN<=0` false, `len>=NaN` false) the limiter then
+ * ALWAYS allowed — anti-abuse silently OFF, a fail-OPEN. Garbage/negative must keep the limiter ON. */
+export function resolveRateLimit(raw: string | undefined, fallback = 10): number {
+  if (raw === undefined || raw.trim() === "") return fallback; // unset / blank → default (Number("") is 0, not disable)
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+}
+const RATE_LIMIT_PER_MIN = resolveRateLimit(process.env.RELAY_RATE_LIMIT_PER_MIN);
 const WINDOW_MS = 60_000;
 const hits = new Map<number, number[]>();
 

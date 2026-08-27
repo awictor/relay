@@ -1,5 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { checkRateLimit, isDangerousAction, redactText, redactObject } from "../src/safety.js";
+import { checkRateLimit, isDangerousAction, redactText, redactObject, resolveRateLimit } from "../src/safety.js";
+
+describe("resolveRateLimit (DEV-0162 — fail safe, never NaN)", () => {
+  it("garbage / undefined / negative FAIL SAFE to the default (limiter stays ON)", () => {
+    for (const bad of ["abc", "1O", undefined, "-5", "NaN", ""]) {
+      expect(resolveRateLimit(bad), String(bad)).toBe(10);
+    }
+  });
+  it("0 is an explicit disable; a valid positive integer is honored", () => {
+    expect(resolveRateLimit("0")).toBe(0);
+    expect(resolveRateLimit("25")).toBe(25);
+    expect(resolveRateLimit("12.9")).toBe(12); // floored
+  });
+});
 
 describe("checkRateLimit", () => {
   it("allows up to the limit then blocks within the window", () => {
