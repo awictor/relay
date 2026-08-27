@@ -101,6 +101,20 @@ describe("runDigest", () => {
     ]);
   });
 
+  it("DEV-0177: a degraded member reply becomes (couldn't fetch), not the failure text as content", async () => {
+    // A soft-failure reply (agent ran out of steps / no answer, DEV-0176) RESOLVES with degraded:true
+    // instead of throwing. It must be labeled like a fetch failure, never shown as this member's data.
+    const out = await runDigest(digest(["weather", "hn"]), deps({
+      runAgent: async (task: string) =>
+        task === "get the weather"
+          ? { reply: "I ran out of steps before finishing. Try narrowing the request.", degraded: true }
+          : { reply: `RESULT[${task}]` },
+    }));
+    expect(out).toContain("• weather: (couldn't fetch)");   // degraded → fallback line
+    expect(out).not.toContain("ran out of steps");           // failure text NOT leaked as briefing content
+    expect(out).toContain("• hn: RESULT[top HN story]");     // healthy member unaffected
+  });
+
   it("caps the number of members run", async () => {
     let calls = 0;
     const out = await runDigest(digest(["a", "b", "c", "d"]), deps({

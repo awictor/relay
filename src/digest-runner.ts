@@ -17,7 +17,7 @@ export interface DigestRunnerDeps {
   llm: LLMClient;
   // Resolve a member recipe name -> its task (null if the recipe was deleted since define).
   resolveRecipe: (chatId: number, name: string) => { task: string } | null;
-  runAgent: (userText: string, deps: { llm: LLMClient }, history: LLMMessage[]) => Promise<{ reply: string }>;
+  runAgent: (userText: string, deps: { llm: LLMClient }, history: LLMMessage[]) => Promise<{ reply: string; degraded?: boolean }>;
   formatReply: (text: string) => string;
   maxMembers?: number; // safety bound on how many recipes one digest runs (default 10)
 }
@@ -40,6 +40,10 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
     if (!rec) return `• ${name}: (no such recipe anymore)`;
     try {
       const res = await deps.runAgent(rec.task, { llm: deps.llm }, []);
+      // A degraded reply (agent ran out of steps / produced no answer, DEV-0176) is NOT briefing
+      // content — showing its failure text as this member's section would read as real data. Treat
+      // it exactly like a thrown error: the "(couldn't fetch)" fallback line (DEV-0177).
+      if (res.degraded) return `• ${name}: (couldn't fetch)`;
       const body = deps.formatReply(res.reply).trim();
       return `• ${name}: ${body}`;
     } catch {
