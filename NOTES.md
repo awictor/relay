@@ -56,6 +56,27 @@ capability-bullet block). It's the advertised set; keep it == the union of sites
 (test/commands.test.ts) parses those tokens + drives createHandler with a runAgentFn spy to prove
 each is handled, never falls through to the agent.
 
+## Recipe / digest / schedule parsing (two parsers, don't merge them)
+
+Naming a saved thing and scheduling it are parsed in TWO places with different jobs:
+- **Timing** — `src/lib/schedule.ts` owns cadence. `parseSchedule(text, now)` and the recipe-facing
+  `parseScheduleFor(clause, task, now)` recognize the cadence HEADS: relative `in N min/hour/day`,
+  `tomorrow at 9am`/`at 5pm` (→ `once`), and `every day|daily|every morning|every evening|every night`
+  (→ `daily`, morning=9/evening=18/night=21). This is the ONLY place that knows what a valid time
+  clause looks like.
+- **name↔clause split** — `src/handler.ts:~217` `schedule <name> <when>` does its OWN split with a
+  regex before handing the clause to schedule.ts: `/^schedule\s+(.+?)\s+((?:every|daily|in|tomorrow|at)\b.*)$/i`.
+  The name capture is **lazy** and the when-clause starts at the FIRST `every|daily|in|tomorrow|at`
+  token. **BUG (DEV-0129):** a saved name whose 2nd word is one of those keywords ("check in",
+  "log in", "sign in", "stand up at ...") truncates — `schedule check in every morning` →
+  name="check", when="in every morning", so the "check in" recipe/digest never resolves. Correct fix
+  keeps the split in the pure parse: prefer the LONGEST trailing clause that schedule.ts actually
+  accepts (try successive split points right-to-left, or feed candidate clauses to `parseScheduleFor`
+  and take the first that parses), so an interior time word in a name survives. Do NOT regress the
+  common single-word-name case (`schedule digest daily` must stay name="digest").
+- **/run name resolution** (`handler.ts:~241`) is digest-first: a digest and recipe with the SAME name
+  → the digest always wins silently (no way to target the recipe). Known gap (candidate C-AW).
+
 ## Concurrency
 
 `startPolling` dispatches each getUpdates batch via `dispatchBatch` = `Promise.all` with per-handler
