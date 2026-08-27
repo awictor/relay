@@ -134,7 +134,12 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
 
     // Natural scheduling: "remind me to X in 10m", "every morning tell me Y". Detected before
     // the agent so a schedule request is stored, not executed now. Falls through if unparsed.
-    if (deps.scheduleAdd && /\b(remind me|every day|every morning|every evening|every night|daily)\b|\bin \d+\s*(min|hour|day)/i.test(msg.text)) {
+    // GUARD (DEV-0175): do NOT let this NL matcher intercept an EXPLICIT command that owns a later
+    // branch — a slash-command, or a `run`/`schedule` verb — whose recipe/digest NAME merely contains
+    // a schedule word (e.g. `/run daily-report`, `run morning-brief`). Those must reach their own
+    // dispatch; only genuine free-text like "remind me ... every day" should schedule here.
+    const isExplicitCommand = first?.startsWith("/") || /^(?:run|schedule)\b/i.test(msg.text.trim());
+    if (!isExplicitCommand && deps.scheduleAdd && /\b(remind me|every day|every morning|every evening|every night|daily)\b|\bin \d+\s*(min|hour|day)/i.test(msg.text)) {
       const r = deps.scheduleAdd(msg.chatId, msg.text, deps.now());
       if (r.ok) {
         await deps.sendMessage(msg.chatId, `Got it — I'll ${r.kind === "daily" ? "do this daily" : "remind you"}: "${r.task}". Manage with /schedules.`);
