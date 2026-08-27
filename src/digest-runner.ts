@@ -24,18 +24,22 @@ export interface DigestRunnerDeps {
 export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise<string> {
   const cap = deps.maxMembers ?? 10;
   const members = digest.members.slice(0, cap);
-  const sections: string[] = [];
-  for (const name of members) {
+  // Run members CONCURRENTLY (DEV-0139): each member is a seconds-long agent (LLM+browser) call,
+  // so a sequential for..await made a 5-member digest take ~5x one member. Promise.all fans them
+  // out; each member's own try/catch keeps one failure from sinking the others (same isolation as
+  // the sequential version + dispatchBatch, DEV-0037). Order is preserved by mapping members ->
+  // indexed section strings, NOT by push-in-completion-order.
+  const sections = await Promise.all(members.map(async (name) => {
     const rec = deps.resolveRecipe(digest.chatId, name);
-    if (!rec) { sections.push(`• ${name}: (no such recipe anymore)`); continue; }
+    if (!rec) return `• ${name}: (no such recipe anymore)`;
     try {
       const res = await deps.runAgent(rec.task, { llm: deps.llm }, []);
       const body = deps.formatReply(res.reply).trim();
-      sections.push(`• ${name}: ${body}`);
+      return `• ${name}: ${body}`;
     } catch {
-      sections.push(`• ${name}: (couldn't fetch)`);
+      return `• ${name}: (couldn't fetch)`;
     }
-  }
+  }));
   const title = `📋 ${digest.name}`;
   return `${title}\n${sections.join("\n")}`;
 }
