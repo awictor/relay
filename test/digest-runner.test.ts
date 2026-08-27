@@ -72,6 +72,35 @@ describe("runDigest", () => {
     expect(maxActive).toBeGreaterThan(1); // more than one member in flight at once
   });
 
+  it("DEV-0140: caps in-flight members at DIGEST_CONCURRENCY (default 3) while preserving order + fallbacks", async () => {
+    // 6 members, default cap 3: an active-counter proves no more than 3 agents run at once (protects the
+    // bounded anvil session pool), yet output stays in member order and unknown/failure fallbacks survive.
+    let active = 0, maxActive = 0;
+    const members = ["m0", "m1", "gone", "m3", "boom", "m5"];
+    const dg: Digest = { chatId: 1, name: "big", members, schedule: undefined, created: NOW };
+    const out = await runDigest(dg, deps({
+      resolveRecipe: (_c, name) => (name === "gone" ? null : { task: name }),
+      runAgent: async (task: string) => {
+        active++; maxActive = Math.max(maxActive, active);
+        await new Promise((r) => setTimeout(r, 10));
+        active--;
+        if (task === "boom") throw new Error("boom");
+        return { reply: `R[${task}]` };
+      },
+    }));
+    expect(maxActive).toBeLessThanOrEqual(3); // never more than the cap in flight
+    expect(maxActive).toBeGreaterThan(1); // but genuinely concurrent, not sequential
+    const lines = out.split("\n").filter((l) => l.startsWith("•"));
+    expect(lines).toEqual([
+      "• m0: R[m0]",
+      "• m1: R[m1]",
+      "• gone: (no such recipe anymore)",
+      "• m3: R[m3]",
+      "• boom: (couldn't fetch)",
+      "• m5: R[m5]",
+    ]);
+  });
+
   it("caps the number of members run", async () => {
     let calls = 0;
     const out = await runDigest(digest(["a", "b", "c", "d"]), deps({

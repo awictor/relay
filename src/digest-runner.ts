@@ -6,6 +6,12 @@
 
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Digest } from "./lib/digests.js";
+import { mapPool } from "./lib/pool.js";
+
+// Cap on how many member agents run at once (DEV-0140). Each member opens an anvil browser session;
+// the self-hosted anvil has a bounded Chrome pool, so an unbounded fan-out (DEV-0139's Promise.all)
+// could open one session PER member simultaneously and 429/exhaust it. Default 3, env-tunable.
+const DIGEST_CONCURRENCY = Math.max(1, Number(process.env.RELAY_DIGEST_CONCURRENCY) || 3);
 
 export interface DigestRunnerDeps {
   llm: LLMClient;
@@ -24,12 +30,12 @@ export interface DigestRunnerDeps {
 export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise<string> {
   const cap = deps.maxMembers ?? 10;
   const members = digest.members.slice(0, cap);
-  // Run members CONCURRENTLY (DEV-0139): each member is a seconds-long agent (LLM+browser) call,
-  // so a sequential for..await made a 5-member digest take ~5x one member. Promise.all fans them
-  // out; each member's own try/catch keeps one failure from sinking the others (same isolation as
-  // the sequential version + dispatchBatch, DEV-0037). Order is preserved by mapping members ->
-  // indexed section strings, NOT by push-in-completion-order.
-  const sections = await Promise.all(members.map(async (name) => {
+  // Run members CONCURRENTLY (DEV-0139) but BOUNDED (DEV-0140): each member is a seconds-long agent
+  // (LLM+browser) call, so a sequential for..await made a 5-member digest take ~5x one member. A
+  // plain Promise.all fixed that but could open one anvil session PER member at once and exhaust the
+  // self-hosted Chrome pool; mapPool caps in-flight at DIGEST_CONCURRENCY. Each member's own
+  // try/catch keeps one failure from sinking the others; mapPool preserves member order.
+  const sections = await mapPool(members, DIGEST_CONCURRENCY, async (name) => {
     const rec = deps.resolveRecipe(digest.chatId, name);
     if (!rec) return `• ${name}: (no such recipe anymore)`;
     try {
@@ -39,7 +45,7 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
     } catch {
       return `• ${name}: (couldn't fetch)`;
     }
-  }));
+  });
   const title = `📋 ${digest.name}`;
   return `${title}\n${sections.join("\n")}`;
 }
