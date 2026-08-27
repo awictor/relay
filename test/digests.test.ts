@@ -33,6 +33,15 @@ describe("DigestStore", () => {
     expect(s.get(1, "morning")).toBeUndefined();
   });
 
+  it("DEV-0194: dedups repeated members (order-preserving), cap applies after dedup", () => {
+    const s = new DigestStore({ file: tmpFile(), maxMembers: 10 });
+    const rec = s.add(1, { name: "m", members: ["hn", "hn", "btc", "hn"] }, NOW)!;
+    expect(rec.members).toEqual(["hn", "btc"]); // dup 'hn' collapsed to first, order kept
+    // cap applies to the DEDUPED list: 3 distinct capped to 2, not 4-raw capped to 2
+    const s2 = new DigestStore({ file: tmpFile(), maxMembers: 2 });
+    expect(s2.add(1, { name: "m", members: ["a", "a", "b", "c"] }, NOW)!.members).toEqual(["a", "b"]);
+  });
+
   it("update-in-place by name (no dupe), cap-exempt", () => {
     const s = new DigestStore({ file: tmpFile(), maxPerChat: 1 });
     s.add(1, { name: "m", members: ["a"] }, NOW);

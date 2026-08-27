@@ -78,7 +78,14 @@ export class DigestStore {
    * (an update to an existing name is cap-exempt). */
   add(chatId: number, d: ParsedDigest & { schedule?: string }, now: number): Digest | null {
     const name = normalizeName(d.name);
-    const members = d.members.map(normalizeName).filter(Boolean).slice(0, this.maxMembers);
+    // Dedup members (order-preserving) BEFORE the cap (DEV-0194): a repeated recipe ("hn, hn, btc")
+    // would otherwise run the same recipe twice, duplicate its briefing section, and burn a second
+    // bounded anvil session per dup. A Set keyed on the normalized name collapses repeats to the first.
+    const seen = new Set<string>();
+    const members = d.members
+      .map(normalizeName)
+      .filter((m) => m && !seen.has(m) && (seen.add(m), true))
+      .slice(0, this.maxMembers);
     if (members.length === 0) return null;
     const existing = this.items.find((x) => x.chatId === chatId && x.name === name);
     if (!existing && this.items.filter((x) => x.chatId === chatId).length >= this.maxPerChat) return null;
