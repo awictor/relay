@@ -123,3 +123,19 @@ Secrets are kept out of logs/replies by TWO functions in `src/safety.ts`, matchi
   or args. So there is nothing in the `[out]` line to redact; DEV-0052's original "turn-log redaction"
   premise was wrong. The redaction that matters is on the `[in]` line (redactText) + tool-arg logging
   (redactObject), not turn-log.
+
+## Numeric env parsing — use intEnv (`src/lib/env.ts`)
+
+- **Never `Number(process.env.X ?? default)` raw.** A typo yields NaN and downstream comparisons
+  silently BREAK the feature: a NaN step budget dead-locks the agent (loop `step<=NaN` never runs), a
+  NaN rate limit fails OPEN (checkRateLimit always allows), a NaN timer period stops scheduled
+  reminders/digests firing. This class bit DEV-0161/0162/0163.
+- `intEnv(raw, {fallback, min=0, max?, allowZeroDisable?})` → a finite floored clamped integer or the
+  fallback, NEVER NaN. Blank/unset → fallback (Number("") is 0, which would misread as a real 0). A
+  literal 0 is honored ONLY with `allowZeroDisable` (means "disable"); else 0/below-min → fallback so a
+  bad value can't silently turn a feature off. Pinned by `test/env.test.ts`.
+- Consumers: index.ts timer/limit envs (SCHED_TICK/ANVIL_PING/METRICS_*/PROACTIVE_MAX). agent.ts
+  resolveMaxSteps + safety.ts resolveRateLimit are named wrappers (their own tests) — DEV-0166 folds
+  them onto intEnv. DIGEST/DISPATCH concurrency + ANVIL_RETRY use `Math.max(1, Number(env)||default)`
+  (also NaN-safe via `||`). GOTCHA: env-example-parity.test greps source for `process.env.NAME` — don't
+  write a literal `process.env.<name>` in a doc comment (it registers a phantom var, DEV-0163).
