@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { readJar, cookiesForHost, redactCookieValues, jarHosts } from "../src/lib/cookie-jar.js";
+import { readJar, cookiesForHost, redactCookieValues, jarHosts, loadCookieJar, _resetCookieJarCache } from "../src/lib/cookie-jar.js";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -9,7 +9,46 @@ function tmpJar(content: string) {
   const d = mkdtempSync(join(tmpdir(), "relay-cj-")); dirs.push(d);
   const f = join(d, "cookies.json"); writeFileSync(f, content); return f;
 }
-afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
+afterEach(() => { _resetCookieJarCache(); for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
+
+describe("loadCookieJar cache contract (DEV-0195)", () => {
+  it("loads the jar from the given file", () => {
+    const f = tmpJar(JSON.stringify({ cookies: [{ name: "sid", value: "abc123", domain: "example.com" }] }));
+    const jar = loadCookieJar(f);
+    expect(jar).toHaveLength(1);
+    expect(jar[0]!.name).toBe("sid");
+  });
+
+  it("a second call is CACHED — a rewrite of the file is NOT seen until reset (first-load-sticky)", () => {
+    const f = tmpJar(JSON.stringify({ cookies: [{ name: "one", value: "v1", domain: "a.com" }] }));
+    expect(loadCookieJar(f)).toHaveLength(1);
+    // rewrite the file with a different jar; the cached load must still win
+    writeFileSync(f, JSON.stringify({ cookies: [{ name: "two", value: "v2", domain: "b.com" }, { name: "three", value: "v3", domain: "c.com" }] }));
+    const again = loadCookieJar(f);
+    expect(again).toHaveLength(1);            // still the FIRST load
+    expect(again[0]!.name).toBe("one");
+  });
+
+  it("_resetCookieJarCache forces a fresh load reflecting the new file", () => {
+    const f = tmpJar(JSON.stringify({ cookies: [{ name: "one", value: "v1", domain: "a.com" }] }));
+    loadCookieJar(f);
+    writeFileSync(f, JSON.stringify({ cookies: [{ name: "two", value: "v2", domain: "b.com" }, { name: "three", value: "v3", domain: "c.com" }] }));
+    _resetCookieJarCache();
+    const fresh = loadCookieJar(f);
+    expect(fresh).toHaveLength(2);            // re-read after reset
+    expect(fresh.map((c) => c.name).sort()).toEqual(["three", "two"]);
+  });
+
+  it("a missing/corrupt file yields [] and caches [] (never throws)", () => {
+    const missing = join(tmpdir(), "relay-cj-does-not-exist", "nope.json");
+    expect(loadCookieJar(missing)).toEqual([]);
+    // still [] on a second call (cached), and reset lets a real file load next
+    expect(loadCookieJar(missing)).toEqual([]);
+    _resetCookieJarCache();
+    const f = tmpJar(JSON.stringify({ cookies: [{ name: "sid", value: "abc", domain: "x.com" }] }));
+    expect(loadCookieJar(f)).toHaveLength(1);
+  });
+});
 
 describe("readJar", () => {
   it("reads valid {cookies:[]} with the required fields", () => {
