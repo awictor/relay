@@ -105,8 +105,10 @@ export class GeminiClient implements LLMClient {
     if (tools.length) {
       body.tools = [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })) }];
     }
-    // Transient (retry same model w/ backoff) vs quota (fail over to next model now).
-    const TRANSIENT = new Set([500, 503, 504]);
+    // Transient (retry same model w/ backoff) vs quota (fail over to next model now). 502 Bad Gateway
+    // + 408 Request Timeout are transient upstream blips too (DEV-0149) — worth a same-model retry
+    // before failover, consistent with 500/503/504 and anvil's own 502 handling.
+    const TRANSIENT = new Set([500, 502, 503, 504, 408]);
     const MAX_ATTEMPTS = 3;
     let r!: Response;
     let lastErr = "";

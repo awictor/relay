@@ -35,6 +35,22 @@ describe("GeminiClient model failover", () => {
     await expect(c.complete([{ role: "user", content: "hi" }], [])).rejects.toThrow(/all models failed/i);
   });
 
+  it("DEV-0149: a 502 retries the SAME model (not immediate failover)", async () => {
+    const modelsHit: string[] = [];
+    vi.stubGlobal("fetch", stubFetch((url) => {
+      const model = url.match(/models\/([^:]+):/)?.[1] ?? "?";
+      modelsHit.push(model);
+      // First attempt on the primary model 502s; the retry (same model) succeeds.
+      if (modelsHit.length === 1) return { status: 502, body: { error: { message: "bad gateway" } } };
+      return { status: 200, body: { candidates: [{ content: { parts: [{ text: "recovered" }] } }] } };
+    }));
+    const c = new GeminiClient("test-key");
+    const res = await c.complete([{ role: "user", content: "hi" }], []);
+    expect(res.text).toBe("recovered");
+    expect(modelsHit.length).toBe(2);
+    expect(modelsHit[0]).toBe(modelsHit[1]); // SAME model retried, not failed over
+  });
+
   it("does not fail over on a clean 200 (uses primary)", async () => {
     let calls = 0;
     vi.stubGlobal("fetch", stubFetch(() => { calls++; return { status: 200, body: { candidates: [{ content: { parts: [{ text: "ok" }] } }] } }; }));
