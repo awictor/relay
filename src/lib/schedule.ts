@@ -110,6 +110,21 @@ export function parseSchedule(text: string, now: number): ParsedSchedule | null 
     return { kind: "daily", task, dueMs: nextDailyMs(now, hh, mm), hourMin };
   }
 
+  // --- 24-hour clock: "at 14:30", "tomorrow at 09:00" (DEV-0189) ---
+  // The am/pm branch below can't match a 24h time, but a COLON form "HH:MM" is unambiguous (it can't
+  // be a stray bare integer), so accept it here. Hour 0-23, minute 00-59; requires the colon + 2-digit
+  // minute so a lone "at 5" (no colon, no am/pm) still doesn't match.
+  const at24 = lower.match(/\b(tomorrow\s+)?(?:at\s+)?([01]?[0-9]|2[0-3]):([0-5][0-9])\b(?!\s*(?:am|pm))/);
+  if (at24) {
+    const hh = parseInt(at24[2]!, 10);
+    const mm = parseInt(at24[3]!, 10);
+    let due = nextDailyMs(now, hh, mm);
+    if (at24[1] && due - now < DAY) due += DAY; // "tomorrow" forces the next day if the time is still today
+    const task = cleanTask(raw, at24[0]!);
+    if (!task) return null;
+    return { kind: "once", task, dueMs: due };
+  }
+
   // --- absolute-ish: "tomorrow at 9am", "tomorrow 9:30", "at 5pm" (today or next day) ---
   const at = lower.match(/\b(tomorrow\s+)?(?:at\s+)?([0-9]{1,2})(?::([0-9]{2}))?\s*(am|pm)\b/);
   if (at && (at[1] || at[4])) { // require "tomorrow" or an am/pm to avoid matching stray numbers

@@ -34,6 +34,34 @@ describe("parseSchedule — relative", () => {
   });
 });
 
+describe("parseSchedule — 24-hour clock (DEV-0189)", () => {
+  it("'at HH:MM' 24h time parses to a once-task (the am/pm branch couldn't)", () => {
+    const a = parseSchedule("remind me to call the vet at 14:30", NOW)!;
+    expect(a).not.toBeNull();
+    expect(a.kind).toBe("once");
+    expect(a.task).toBe("call the vet");
+    // due is the next 14:30 local at/after NOW
+    const d = new Date(a.dueMs);
+    expect(d.getHours()).toBe(14);
+    expect(d.getMinutes()).toBe(30);
+  });
+  it("'tomorrow at 09:00' forces the next day", () => {
+    const s = parseSchedule("tomorrow at 09:00 send the report", NOW)!;
+    expect(s.kind).toBe("once");
+    expect(s.task).toBe("send the report");
+    expect(new Date(s.dueMs).getHours()).toBe(9);
+  });
+  it("a bare 'at 5' (no colon, no am/pm) still does NOT match (no stray-integer schedule)", () => {
+    expect(parseSchedule("look at 5 tabs", NOW)).toBeNull();
+  });
+  it("am/pm times still route through the existing branch (no regression)", () => {
+    const s = parseSchedule("remind me at 2:30pm to stretch", NOW)!;
+    expect(s.kind).toBe("once");
+    expect(new Date(s.dueMs).getHours()).toBe(14);
+    expect(new Date(s.dueMs).getMinutes()).toBe(30);
+  });
+});
+
 describe("parseScheduleFor (m7 recipe-3: timing-only + supplied task)", () => {
   it("attaches the recipe task to a daily clause", () => {
     const s = parseScheduleFor("every morning", "check the price of bitcoin", NOW)!;
