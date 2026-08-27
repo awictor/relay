@@ -43,6 +43,17 @@ export function buildConnectUrls(baseUrl: string, sessionId: string, apiKey?: st
 export function isTransientError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   if (/Blocked URL|Blocked protocol|Blocked hostname|Blocked IP/i.test(msg)) return false;
-  if (/\b(4\d\d)\b/.test(msg) && !/\b(408|429)\b/.test(msg)) return false; // 4xx except 408/429
-  return /timeout|timed out|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up|network|fetch failed|\b5\d\d\b|\b408\b|\b429\b/i.test(msg);
+  // Classify on the HTTP STATUS only, never on digits inside the response body. Throwers format
+  // "<label> failed: <status> <body>", so a loose whole-string /\b4\d\d\b/ scan (DEV-0148 bug)
+  // misread a 5xx whose body text carried a 4xx-shaped number (e.g. a 503 body "expected 400 fields")
+  // as non-transient and skipped a valid retry. Prefer an explicit status=<code> token; else take the
+  // FIRST 3-digit code (the status precedes the body). 4xx except 408/429 => deterministic, no retry.
+  const tokened = msg.match(/status=(\d{3})/);
+  const codeStr = tokened ? tokened[1] : msg.match(/\b([1-5]\d{2})\b/)?.[1];
+  if (codeStr) {
+    const code = Number(codeStr);
+    if (code >= 400 && code < 500) return code === 408 || code === 429; // client fault: retry only 408/429
+    if (code >= 500) return true; // server fault: worth a retry
+  }
+  return /timeout|timed out|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up|network|fetch failed/i.test(msg);
 }

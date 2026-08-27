@@ -29,4 +29,15 @@ describe("isTransientError (shared taxonomy)", () => {
   it("deterministic: SSRF + 4xx (except 408/429)", () => {
     for (const m of ["Blocked URL: private IP", "anvil failed: 400", "404 Not Found"]) expect(isTransientError(new Error(m)), m).toBe(false);
   });
+  it("DEV-0148: classifies on the status, not a 4xx-shaped number in the body", () => {
+    // a real 5xx whose response body text carries a 4xx-shaped number must stay TRANSIENT (the bug
+    // was the whole-string /\b4\d\d\b/ scan matching the body and forcing non-transient).
+    expect(isTransientError(new Error(`anvil /v1/actions/eval failed: 503 {"error":"expected 400 fields"}`))).toBe(true);
+    expect(isTransientError(new Error(`anvil failed: 500 got 404 from upstream target`))).toBe(true);
+    // explicit status= token wins over any digits in the body
+    expect(isTransientError(new Error(`status=502 body mentions 400 and 404`))).toBe(true);
+    expect(isTransientError(new Error(`status=400 body mentions 500`))).toBe(false);
+    // a genuine 4xx with a trailing body is still deterministic (first code is the status)
+    expect(isTransientError(new Error(`anvil failed: 404 not found, retry-after 500ms`))).toBe(false);
+  });
 });

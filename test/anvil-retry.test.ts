@@ -33,9 +33,7 @@ describe("isTransientError", () => {
   });
 
   // DEV-0034 (HARDEN): branches the original suite missed — DNS EAI_AGAIN, the generic
-  // "network" keyword, and the classify PRECEDENCE (a Blocked/4xx check runs before the
-  // transient check, so a message carrying BOTH a 4xx and a 5xx is treated as the 4xx = not
-  // retryable; documents that ordering so it isn't "fixed" into a retry loop by accident).
+  // "network" keyword. (The old whole-string 4xx-precedence case was corrected by DEV-0148 below.)
   it("treats DNS EAI_AGAIN and a generic 'network error' as transient", () => {
     expect(isTransientError(new Error("getaddrinfo EAI_AGAIN anvil.host"))).toBe(true);
     expect(isTransientError(new Error("network error"))).toBe(true);
@@ -45,11 +43,15 @@ describe("isTransientError", () => {
     expect(isTransientError(new Error("Blocked URL: private IP (would be 500)"))).toBe(false);
   });
 
-  it("PRECEDENCE: a 4xx present alongside a 5xx classifies as the 4xx (not retryable)", () => {
-    // the 4xx-except-408/429 guard runs before the 5xx transient check
-    expect(isTransientError(new Error("anvil failed: 500 upstream, original 404"))).toBe(false);
-    // but a pure 5xx is still transient
+  it("DEV-0148: classifies on the FIRST status code (the status), not a body digit", () => {
+    // Throwers format "<label> failed: <status> <body>", so the FIRST 3-digit code is the real
+    // status. A 5xx whose body text carries a 4xx-shaped number is still transient (this REPLACES
+    // the DEV-0034 buggy precedence that let a body 4xx force non-transient on a real 5xx).
+    expect(isTransientError(new Error("anvil failed: 500 upstream, original 404"))).toBe(true);
+    // a pure 5xx is still transient
     expect(isTransientError(new Error("anvil failed: 502 Bad Gateway"))).toBe(true);
+    // a genuine 4xx with a trailing body digit stays deterministic (first code is the status)
+    expect(isTransientError(new Error("anvil failed: 404 not found, retry-after 500ms"))).toBe(false);
   });
 
   it("408/429 stay retryable even though they are 4xx", () => {
