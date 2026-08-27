@@ -127,9 +127,10 @@ const handle = createHandler({
   memorySet: (id, history) => memory.set(id, history),
   memoryClear: (id) => memory.delete(id),
   statusLine: () => {
-    const cmds = Object.entries(metrics.summary().commands);
+    const sum = metrics.summary();
+    const cmds = Object.entries(sum.commands);
     const topCommand = cmds.length ? { name: cmds[0]![0], count: cmds[0]![1] } : undefined;
-    return formatStatus({ uptimeMs: Date.now() - startMs, turns: metrics.summary().turns, anvilOk: anvilPinger.current(), topCommand });
+    return formatStatus({ uptimeMs: Date.now() - startMs, turns: sum.turns, anvilOk: anvilPinger.current(), topCommand, fail: sum.fail, degraded: sum.degraded });
   },
   // /sites (m30): hosts the cookie jar authorizes the agent for — names only, never values.
   sitesLine: () => {

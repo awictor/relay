@@ -6,6 +6,8 @@ export interface StatusInfo {
   turns: number;         // total turns handled (from Metrics)
   anvilOk: boolean;      // last-known anvil reachability
   topCommand?: { name: string; count: number }; // DEV-0109: busiest slash command, omitted if none
+  fail?: number;         // DEV-0180: hard-failure turns (agent threw), omitted/0 → no clause
+  degraded?: number;     // DEV-0180: degraded turns (partial answers), omitted/0 → no clause
 }
 
 // DEV-0025: /status reachability was boot-seeded only, so it went stale when the browser dropped
@@ -75,5 +77,12 @@ export function formatStatus(info: StatusInfo): string {
   const prefix = info.anvilOk ? "✅" : "⚠️";
   // DEV-0109: surface the busiest slash command when one has been used (omitted otherwise).
   const topCmd = info.topCommand ? ` · top cmd ${info.topCommand.name} x${info.topCommand.count}` : "";
-  return `${prefix} Relay up ${formatUptime(info.uptimeMs)} · ${turns} handled · ${browser}${topCmd}.`;
+  // DEV-0180: surface the health breakdown (hard failures + partial/degraded answers) ONLY when
+  // there's something to report, so a healthy bot's line stays clean. fail and degraded are distinct
+  // classes (DEV-0179) — a crash vs an answered-but-partial turn — so name them separately.
+  const parts: string[] = [];
+  if (info.fail && info.fail > 0) parts.push(`${info.fail} failed`);
+  if (info.degraded && info.degraded > 0) parts.push(`${info.degraded} partial`);
+  const health = parts.length ? ` · ${parts.join(", ")}` : "";
+  return `${prefix} Relay up ${formatUptime(info.uptimeMs)} · ${turns} handled${health} · ${browser}${topCmd}.`;
 }

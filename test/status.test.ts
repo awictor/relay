@@ -43,6 +43,21 @@ describe("formatStatus", () => {
     const s = formatStatus({ uptimeMs: 1000, turns: 2, anvilOk: true });
     expect(s).not.toMatch(/top cmd/);
   });
+  // DEV-0180: surface the health breakdown (hard fails + partial/degraded) only when non-zero.
+  it("appends a health clause naming failed + partial counts when either is > 0", () => {
+    const s = formatStatus({ uptimeMs: 1000, turns: 10, anvilOk: true, fail: 2, degraded: 3 });
+    expect(s).toMatch(/2 failed/);
+    expect(s).toMatch(/3 partial/);
+  });
+  it("names only the non-zero class (partial-only, no failures)", () => {
+    const s = formatStatus({ uptimeMs: 1000, turns: 10, anvilOk: true, fail: 0, degraded: 1 });
+    expect(s).toMatch(/1 partial/);
+    expect(s).not.toMatch(/failed/);
+  });
+  it("omits the health clause entirely on a healthy bot (fail=0, degraded=0 or absent)", () => {
+    expect(formatStatus({ uptimeMs: 1000, turns: 10, anvilOk: true, fail: 0, degraded: 0 })).not.toMatch(/failed|partial/);
+    expect(formatStatus({ uptimeMs: 1000, turns: 10, anvilOk: true })).not.toMatch(/failed|partial/);
+  });
 });
 
 describe("makeAnvilPinger (DEV-0025 live reachability refresh)", () => {
