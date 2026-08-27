@@ -4,6 +4,7 @@
 // anything logged or echoed back to a user.
 
 import { redactSecretsDeep, SENSITIVE_KEY_RE } from "./lib/redact-secrets.js";
+import { intEnv } from "./lib/env.js";
 
 // ---- per-chat rate limit ---------------------------------------------------
 
@@ -12,9 +13,9 @@ import { redactSecretsDeep, SENSITIVE_KEY_RE } from "./lib/redact-secrets.js";
  * checks in checkRateLimit compare against it (`NaN<=0` false, `len>=NaN` false) the limiter then
  * ALWAYS allowed — anti-abuse silently OFF, a fail-OPEN. Garbage/negative must keep the limiter ON. */
 export function resolveRateLimit(raw: string | undefined, fallback = 10): number {
-  if (raw === undefined || raw.trim() === "") return fallback; // unset / blank → default (Number("") is 0, not disable)
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+  // Thin wrapper over the shared intEnv (DEV-0166). allowZeroDisable: a literal 0 is the documented
+  // "disable"; blank/garbage/negative FAIL SAFE to the default so a typo can't turn the limiter off.
+  return intEnv(raw, { fallback, min: 0, allowZeroDisable: true });
 }
 const RATE_LIMIT_PER_MIN = resolveRateLimit(process.env.RELAY_RATE_LIMIT_PER_MIN);
 const WINDOW_MS = 60_000;

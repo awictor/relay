@@ -9,15 +9,16 @@
 
 import * as anvil from "./anvil.js";
 import { isUrlSafe } from "./lib/url-validator.js";
+import { intEnv } from "./lib/env.js";
 import { isDangerousAction } from "./safety.js";
 import type { LLMClient, LLMMessage, ToolSpec, ToolCall } from "./llm.js";
 
 /** Resolve RELAY_MAX_STEPS to a valid positive integer, else the default 8. An unclamped
  * Number(env) let a typo ("abc"→NaN), 0, or a negative silently make the step loop never run —
- * the agent would do ZERO steps and reply "ran out of steps" on every message = a dead bot (DEV-0161). */
+ * the agent would do ZERO steps and reply "ran out of steps" on every message = a dead bot (DEV-0161).
+ * Thin wrapper over the shared intEnv primitive (DEV-0166). */
 export function resolveMaxSteps(raw: string | undefined, fallback = 8): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : fallback;
+  return intEnv(raw, { fallback, min: 1 });
 }
 const MAX_STEPS = resolveMaxSteps(process.env.RELAY_MAX_STEPS);
 
