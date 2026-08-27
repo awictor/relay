@@ -8,6 +8,7 @@ import { GeminiClient, ClaudeClient, resolveProvider } from "./llm.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
 import { checkRateLimit, redactText } from "./safety.js";
 import { redactCookieValues, jarHosts } from "./lib/cookie-jar.js";
+import { intEnv } from "./lib/env.js";
 import { handleCommand } from "./commands.js";
 import { MemoryStore } from "./lib/memory-store.js";
 import { Metrics } from "./lib/metrics.js";
@@ -44,7 +45,7 @@ const sendDocument = channel.sendDocument ? channel.sendDocument.bind(channel) :
 // Process start, for /status uptime (DEV-0024). Anvil reachability is kept fresh by a periodic
 // pinger (DEV-0025) instead of a boot-only seed, so /status doesn't go stale when the browser drops.
 const startMs = Date.now();
-const ANVIL_PING_MS = Number(process.env.RELAY_ANVIL_PING_MS ?? 60_000); // 0 disables the refresh
+const ANVIL_PING_MS = intEnv(process.env.RELAY_ANVIL_PING_MS, { fallback: 60_000, allowZeroDisable: true }); // 0 disables the refresh
 const anvilPinger = makeAnvilPinger({ probe: anvilLive, periodMs: ANVIL_PING_MS });
 
 // Durable-state file paths resolved through the shared module (ops-2), so `relay status` reads the
@@ -54,7 +55,7 @@ const paths = statePaths();
 // Rolling aggregate health; a summary line is emitted every N turns so the operator
 // sees ok/fail rate, avg steps, latency percentiles + tool mix without parsing [out].
 const metrics = new Metrics();
-const METRICS_EVERY = Number(process.env.RELAY_METRICS_EVERY ?? 50);
+const METRICS_EVERY = intEnv(process.env.RELAY_METRICS_EVERY, { fallback: 50, min: 1 });
 let turnCount = 0;
 function recordTurn(t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean }) {
   metrics.record(t);
@@ -67,7 +68,7 @@ function recordTurn(t: { steps: number; tools: string[]; elapsedMs: number; ok: 
 
 // DEV-0111: wall-clock heartbeat so a command-only / idle period still logs + snapshots metrics
 // (the turn-count flush above never fires with zero agent turns). Disabled if RELAY_METRICS_HEARTBEAT_MS<=0.
-const METRICS_HEARTBEAT_MS = Number(process.env.RELAY_METRICS_HEARTBEAT_MS ?? 300000); // 5 min default
+const METRICS_HEARTBEAT_MS = intEnv(process.env.RELAY_METRICS_HEARTBEAT_MS, { fallback: 300000, allowZeroDisable: true }); // 5 min default; 0 disables
 const metricsHeartbeat = makeMetricsHeartbeat({
   emit: () => console.log(metrics.format()),
   snapshot: () => writeMetricsSnapshot(paths.metrics, metrics.summary(), Date.now()),
@@ -104,13 +105,13 @@ const alertCheck = async (chatId: number, name: string): Promise<string | null> 
   return r.notify ? r.message : null;
 };
 const ALERT_CADENCE = process.env.RELAY_ALERT_CADENCE ?? "every day at 09:00"; // default alert check cadence
-const SCHED_TICK_MS = Number(process.env.RELAY_SCHED_TICK_MS ?? 30_000); // 0 disables
+const SCHED_TICK_MS = intEnv(process.env.RELAY_SCHED_TICK_MS, { fallback: 30_000, allowZeroDisable: true }); // 0 disables
 const scheduleRunner = makeScheduleRunner({
   store: schedules, llm, runAgent, send: sendMessage, formatReply,
   now: () => Date.now(), periodMs: SCHED_TICK_MS,
   log: (m) => console.log(m),
   recordTurn, // proactive fires count in the same Metrics as inbound turns (m8)
-  maxPerChatPerHour: Number(process.env.RELAY_PROACTIVE_MAX_PER_HOUR ?? 10), // anti-spam (m8)
+  maxPerChatPerHour: intEnv(process.env.RELAY_PROACTIVE_MAX_PER_HOUR, { fallback: 10, allowZeroDisable: true }), // anti-spam (m8); 0 = unlimited
   digestRun: (chatId, name) => digestRunText(chatId, name), // scheduled digests (m9)
   alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
   // m14 degrade-4: a failed ONE-SHOT reminder shouldn't vanish silently — tell the user, once,
