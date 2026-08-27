@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runAgent, extractFieldsResult } from "../src/agent.js";
+import { runAgent, extractFieldsResult, extractOne } from "../src/agent.js";
 import type { LLMClient, LLMMessage, LLMResult, ToolSpec, ToolCall } from "../src/llm.js";
 import type { BrowserBackend } from "../src/agent.js";
 
@@ -87,5 +87,44 @@ describe("runAgent — extract JSON-LD/meta fallback", () => {
     expect(b.structuredCalls).toBe(1);
     const toolMsg = llm.calls[llm.calls.length - 1]!.find((m) => m.role === "tool" && m.name === "extract");
     expect(toolMsg?.content).toMatch(/"price": null/);
+  });
+});
+
+// DEV-0197: extractOne directly — return contract + the extractStructured-absent guard branch that
+// the runAgent-level tests above don't isolate (agent.ts:458 `allNull && backend.extractStructured`).
+describe("extractOne (orchestrator)", () => {
+  it("text pass succeeds → returns the json + the scrape title, no structured call", async () => {
+    const llm = new ExtractLLM([]);
+    const b = backend({ text: "PRICE=$7", structured: "PRICE=$999" });
+    const r = await extractOne(llm, b, "https://x.com/i", ["price"]);
+    expect(JSON.parse(r.json)).toEqual({ price: "$7" });
+    expect(r.title).toBe("t");
+    expect(b.structuredCalls).toBe(0);
+  });
+
+  it("text all-null + structured has it → retry result used", async () => {
+    const llm = new ExtractLLM([]);
+    const b = backend({ text: "spinner", structured: "PRICE=$42" });
+    const r = await extractOne(llm, b, "https://x.com/i", ["price"]);
+    expect(JSON.parse(r.json)).toEqual({ price: "$42" });
+    expect(b.structuredCalls).toBe(1);
+  });
+
+  it("text all-null + backend WITHOUT extractStructured → stays all-null, never throws (the && guard)", async () => {
+    const llm = new ExtractLLM([]);
+    const b = backend({ text: "spinner" });
+    // remove the optional capability entirely to exercise the `&& backend.extractStructured` guard
+    delete (b as { extractStructured?: unknown }).extractStructured;
+    const r = await extractOne(llm, b, "https://x.com/i", ["price"]);
+    expect(JSON.parse(r.json)).toEqual({ price: null });
+    expect(r.title).toBe("t");
+  });
+
+  it("text all-null + extractStructured throws → falls back to the all-null json (caught)", async () => {
+    const llm = new ExtractLLM([]);
+    const b = backend({ text: "spinner" });
+    (b as { extractStructured: () => Promise<string> }).extractStructured = async () => { throw new Error("boom"); };
+    const r = await extractOne(llm, b, "https://x.com/i", ["price"]);
+    expect(JSON.parse(r.json)).toEqual({ price: null }); // .catch(()=>"") -> empty -> keeps all-null
   });
 });
