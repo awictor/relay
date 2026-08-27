@@ -15,6 +15,22 @@ describe("Metrics", () => {
     expect(s.tools).toEqual({ scrape: 2, extract: 1 });
   });
 
+  // DEV-0179: a not-ok turn splits into two classes — a DEGRADED turn (answered but partial) and a
+  // HARD failure (threw). They must be counted in SEPARATE buckets so an operator can tell "partial
+  // answers" from "crashes", and turns must equal ok + fail + degraded.
+  it("counts degraded turns separately from hard failures", () => {
+    const m = new Metrics();
+    m.record({ steps: 3, tools: ["scrape"], elapsedMs: 100, ok: true });                    // ok
+    m.record({ steps: 8, tools: ["scrape"], elapsedMs: 200, ok: false, degraded: true });   // soft (partial)
+    m.record({ steps: 0, tools: [], elapsedMs: 50, ok: false });                             // hard (threw)
+    const s = m.summary();
+    expect(s.turns).toBe(3);
+    expect(s.ok).toBe(1);
+    expect(s.degraded).toBe(1);          // the degraded turn lands here, NOT in fail
+    expect(s.fail).toBe(1);              // only the thrown turn
+    expect(s.ok + s.fail + s.degraded).toBe(s.turns);
+  });
+
   it("computes latency percentiles (nearest-rank)", () => {
     const m = new Metrics();
     for (const ms of [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]) m.record({ steps: 1, tools: [], elapsedMs: ms, ok: true });
@@ -25,7 +41,7 @@ describe("Metrics", () => {
 
   it("is empty-safe", () => {
     const s = new Metrics().summary();
-    expect(s).toMatchObject({ turns: 0, ok: 0, fail: 0, avgSteps: 0, p50Ms: 0, p95Ms: 0, tools: {} });
+    expect(s).toMatchObject({ turns: 0, ok: 0, fail: 0, degraded: 0, avgSteps: 0, p50Ms: 0, p95Ms: 0, tools: {} });
   });
 
   it("format() emits a [metrics] JSON line", () => {

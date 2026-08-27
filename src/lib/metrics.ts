@@ -8,7 +8,8 @@ const LATENCY_WINDOW = 500; // samples kept for percentiles
 export interface MetricsSummary {
   turns: number;
   ok: number;
-  fail: number;
+  fail: number;      // HARD failures only — a turn that threw (agent crashed / errored)
+  degraded: number;  // soft failures — agent answered but ran low on steps / gave no answer (DEV-0179)
   avgSteps: number;
   p50Ms: number;
   p95Ms: number;
@@ -19,7 +20,8 @@ export interface MetricsSummary {
 export class Metrics {
   private turns = 0;
   private okCount = 0;
-  private failCount = 0;
+  private failCount = 0;      // hard failures (a thrown/errored turn)
+  private degradedCount = 0;  // soft failures (degraded reply — answered but partial)
   private stepSum = 0;
   private latencies: number[] = []; // ring buffer of recent elapsedMs
   private li = 0;
@@ -36,10 +38,17 @@ export class Metrics {
     this.commands.set(name, (this.commands.get(name) ?? 0) + 1);
   }
 
-  /** Record one completed turn. */
-  record(turn: { steps: number; tools: string[]; elapsedMs: number; ok: boolean }): void {
+  /**
+   * Record one completed turn. A not-ok turn splits into two classes (DEV-0179): a DEGRADED turn
+   * (degraded:true — the agent answered but ran low on steps / gave no answer) increments degraded
+   * only, and a HARD failure (ok:false with no degraded — the turn threw) increments fail only. This
+   * lets an operator tell "producing partial answers" from "crashing"; turns == ok + fail + degraded.
+   */
+  record(turn: { steps: number; tools: string[]; elapsedMs: number; ok: boolean; degraded?: boolean }): void {
     this.turns++;
-    if (turn.ok) this.okCount++; else this.failCount++;
+    if (turn.ok) this.okCount++;
+    else if (turn.degraded) this.degradedCount++;
+    else this.failCount++;
     this.stepSum += Math.max(0, turn.steps);
     const ms = Math.max(0, turn.elapsedMs);
     if (this.latencies.length < LATENCY_WINDOW) this.latencies.push(ms);
@@ -60,6 +69,7 @@ export class Metrics {
       turns: this.turns,
       ok: this.okCount,
       fail: this.failCount,
+      degraded: this.degradedCount,
       avgSteps: this.turns ? Math.round((this.stepSum / this.turns) * 10) / 10 : 0,
       p50Ms: this.percentile(50),
       p95Ms: this.percentile(95),

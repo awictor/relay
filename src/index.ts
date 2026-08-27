@@ -57,7 +57,7 @@ const paths = statePaths();
 const metrics = new Metrics();
 const METRICS_EVERY = intEnv(process.env.RELAY_METRICS_EVERY, { fallback: 50, min: 1 });
 let turnCount = 0;
-function recordTurn(t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean }) {
+function recordTurn(t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean; degraded?: boolean }) {
   metrics.record(t);
   if (++turnCount % METRICS_EVERY === 0) {
     console.log(metrics.format());

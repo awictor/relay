@@ -65,7 +65,7 @@ export interface HandlerDeps {
   checkRateLimit: (chatId: number) => { allowed: boolean; retryAfterSec?: number };
   redactText: (text: string) => string;
   hasModelKey: () => boolean;
-  recordTurn: (t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean }) => void;
+  recordTurn: (t: { steps: number; tools: string[]; elapsedMs: number; ok: boolean; degraded?: boolean }) => void;
   // Count a slash-command invocation (DEV-0108). Optional so existing callers/tests need not pass it;
   // commands still short-circuit before the agent — this only tallies which are used.
   recordCommand?: (name: string) => void;
@@ -307,7 +307,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       deps.memorySet(msg.chatId, next);
       const elapsedMs = deps.now() - startedAt;
       log(formatTurnLog({ chatId: msg.chatId, steps, tools, elapsedMs, replyChars: out.length, ok: !degraded }));
-      deps.recordTurn({ steps, tools, elapsedMs, ok: !degraded });
+      deps.recordTurn({ steps, tools, elapsedMs, ok: !degraded, degraded });
     } catch (e) {
       const emsg = e instanceof Error ? e.message : String(e);
       console.error("agent error:", emsg);
