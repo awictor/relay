@@ -37,12 +37,14 @@ export function parseRecipeCommand(text: string): ParsedRecipe | null {
   return null;
 }
 
-/** Recognize a run command: "/run <name>" or "run recipe <name>". Returns the name or null. */
+/** Recognize a run command: "/run [recipe] <name>" or "run [recipe] <name>". The optional
+ * "recipe" keyword (DEV-0130: explicit recipe intent so a same-named digest can't shadow it) is
+ * stripped from BOTH the slash and natural forms. Returns the name or null. */
 export function parseRunCommand(text: string): string | null {
   const t = text.trim();
-  const slash = t.match(/^\/run\s+(.+)$/i);
+  const slash = t.match(/^\/run\s+(?:recipe\s+)?(.+)$/i);
   if (slash) return normalizeName(slash[1]!);
-  const nat = t.match(/^run(?:\s+recipe)?\s+(.+)$/i);
+  const nat = t.match(/^run\s+(?:recipe\s+)?(.+)$/i);
   if (nat) return normalizeName(nat[1]!);
   return null;
 }

@@ -240,10 +240,13 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     }
 
     // "/run <name>" / "run <name>" -> DIGEST (compose+send now) or RECIPE (rewrite to its task,
-    // fall through to the agent). Digest checked first so a digest name wins.
+    // fall through to the agent). Digest checked first so a bare name resolves a digest — UNLESS the
+    // user typed the explicit "recipe" keyword ("/run recipe <name>" / "run recipe <name>"), which
+    // signals recipe intent and must NOT be shadowed by a same-named digest (DEV-0130).
     if ((deps.recipeResolve || deps.digestRun) && /^(\/run\b|run\s+)/i.test(msg.text)) {
-      const nameOnly = msg.text.trim().replace(/^\/run\b\s*/i, "").replace(/^run\s+(recipe\s+)?/i, "").trim();
-      if (nameOnly && deps.isDigest?.(msg.chatId, nameOnly) && deps.digestRun) {
+      const explicitRecipe = /^(?:\/run|run)\s+recipe\s+\S/i.test(msg.text.trim());
+      const nameOnly = msg.text.trim().replace(/^\/run\b\s*/i, "").replace(/^run\s+/i, "").replace(/^recipe\s+/i, "").trim();
+      if (!explicitRecipe && nameOnly && deps.isDigest?.(msg.chatId, nameOnly) && deps.digestRun) {
         const composed = await deps.digestRun(msg.chatId, nameOnly);
         await deps.sendMessage(msg.chatId, composed ?? "That digest is empty or gone — see /digests.");
         return;

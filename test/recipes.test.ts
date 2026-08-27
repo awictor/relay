@@ -29,6 +29,12 @@ describe("parseRunCommand", () => {
     expect(parseRunCommand("run recipe Morning News")).toBe("morning news");
     expect(parseRunCommand("run btc")).toBe("btc");
   });
+  it("DEV-0130: strips the explicit 'recipe' keyword in BOTH slash and natural forms", () => {
+    expect(parseRunCommand("/run recipe btc")).toBe("btc"); // was "recipe btc" before the fix
+    expect(parseRunCommand("/run recipe Morning News")).toBe("morning news");
+    expect(parseRunCommand("run recipe btc")).toBe("btc");
+    // a recipe literally named "recipe X" is not addressable via the keyword form — acceptable edge.
+  });
   it("returns null for non-run text", () => {
     expect(parseRunCommand("running late")).toBeNull(); // "run" needs a space after it
     expect(parseRunCommand("what is /run")).toBeNull();

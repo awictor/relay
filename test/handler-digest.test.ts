@@ -62,6 +62,26 @@ describe("handler — digest routing", () => {
     expect(agentTexts).toEqual(["btc price"]);
   });
 
+  it("DEV-0130: explicit 'run recipe <name>' runs the recipe even when a same-named digest exists", async () => {
+    // "morning" is BOTH a digest (isDigest) and a recipe here. Bare /run runs the digest;
+    // the explicit "recipe" keyword must bypass the digest-first branch to the recipe.
+    const recipeResolve = (_c: number, text: string) =>
+      /morning/.test(text) ? { name: "morning", task: "morning recipe task" } : null;
+    const { handle, sent, agentTexts } = harness({ recipeResolve });
+    await handle(msg("/run recipe morning"));
+    expect(agentTexts).toEqual(["morning recipe task"]); // ran the recipe, not the digest
+    expect(sent.some((s) => /📋 morning/.test(s))).toBe(false); // digest NOT composed
+  });
+
+  it("DEV-0130: bare '/run <name>' still runs the same-named digest (digest-first preserved)", async () => {
+    const recipeResolve = (_c: number, text: string) =>
+      /morning/.test(text) ? { name: "morning", task: "morning recipe task" } : null;
+    const { handle, sent, agentTexts } = harness({ recipeResolve });
+    await handle(msg("/run morning"));
+    expect(sent[0]).toMatch(/📋 morning/); // digest wins on a bare name
+    expect(agentTexts).toHaveLength(0);
+  });
+
   it("schedule <digest> dispatches to digestSchedule", async () => {
     const { handle, sent } = harness();
     await handle(msg("schedule morning every morning"));
