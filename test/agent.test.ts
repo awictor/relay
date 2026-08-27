@@ -1,6 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { runAgent } from "../src/agent.js";
+import { runAgent, resolveMaxSteps } from "../src/agent.js";
 import type { LLMClient, LLMMessage, LLMResult, ToolSpec } from "../src/llm.js";
+
+describe("resolveMaxSteps (DEV-0161)", () => {
+  it("a valid positive integer string is used", () => {
+    expect(resolveMaxSteps("5")).toBe(5);
+    expect(resolveMaxSteps("12.9")).toBe(12); // floored
+  });
+  it("garbage / 0 / negative / undefined fall back to the default (never 0 = dead bot)", () => {
+    for (const bad of ["abc", "0", "-3", "", undefined, "NaN"]) {
+      expect(resolveMaxSteps(bad), String(bad)).toBe(8);
+    }
+    expect(resolveMaxSteps("abc", 4)).toBe(4); // custom fallback honored
+  });
+});
 
 // Scripted mock LLM: returns a queued result per call, records what it saw.
 class MockLLM implements LLMClient {
