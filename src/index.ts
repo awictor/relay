@@ -4,7 +4,7 @@
 
 import { selectChannel, type Channel } from "./channel.js";
 import { anvilLive } from "./anvil.js";
-import { GeminiClient, ClaudeClient } from "./llm.js";
+import { GeminiClient, ClaudeClient, resolveProvider } from "./llm.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
 import { checkRateLimit, redactText } from "./safety.js";
 import { redactCookieValues, jarHosts } from "./lib/cookie-jar.js";
@@ -30,7 +30,8 @@ import { parseScheduleFor } from "./lib/schedule.js";
 
 // Agent brain, chosen by LLM_PROVIDER (m24). Default gemini (free tier) — nothing changes unless
 // set. `claude` uses the Anthropic Messages API adapter (needs ANTHROPIC_API_KEY, a paid key).
-const LLM_PROVIDER = (process.env.LLM_PROVIDER ?? "gemini").toLowerCase();
+const { provider: LLM_PROVIDER, warning: LLM_PROVIDER_WARNING } = resolveProvider(process.env.LLM_PROVIDER);
+if (LLM_PROVIDER_WARNING) console.warn(`WARNING: ${LLM_PROVIDER_WARNING}`);
 const llm: LLMClient = LLM_PROVIDER === "claude" ? new ClaudeClient() : new GeminiClient();
 
 // The transport Relay runs on (m5), chosen by RELAY_CHANNEL (telegram default | console).

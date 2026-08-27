@@ -2,6 +2,21 @@
 // GeminiClient (free tier) today; a ClaudeClient is a drop-in later. Function-calling
 // is normalized to a single optional toolCall per turn.
 
+export type LLMProvider = "gemini" | "claude";
+
+/**
+ * Resolve the LLM_PROVIDER env value to a known provider. Only "gemini"/"claude" are valid
+ * (case/space-insensitive); anything else defaults to gemini AND returns a warning naming the bad
+ * value, so a typo like "claud"/"gpt" doesn't silently run Gemini while the startup log claims
+ * otherwise (DEV-0155). An empty/unset value is the intended default — no warning.
+ */
+export function resolveProvider(raw: string | undefined): { provider: LLMProvider; warning?: string } {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (v === "" || v === "gemini") return { provider: "gemini" };
+  if (v === "claude") return { provider: "claude" };
+  return { provider: "gemini", warning: `Unknown LLM_PROVIDER="${raw}" — falling back to gemini. Valid: gemini | claude.` };
+}
+
 export interface ToolSpec {
   name: string;
   description: string;
