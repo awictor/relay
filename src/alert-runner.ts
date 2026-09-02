@@ -49,6 +49,11 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // it stays below. On first run we seed silently unless it's already true.
   if (alert.condition) {
     const nowHolds = conditionHolds(alert.condition, value);
+    // Indeterminate reply ("price unavailable right now" — real, not degraded, but no comparable
+    // value): DON'T store it as lastValue. Storing it made the next real check see prevHolds=null
+    // and re-fire the edge ("🔔 below 50k") even though the value never left the below state. Keep
+    // the last GOOD value as the baseline and stay silent this tick (mirrors the degraded guard).
+    if (nowHolds === null) return { notify: false, message: null, value: alert.lastValue ?? value };
     const prevHolds = firstRun || alert.lastValue === undefined ? null : conditionHolds(alert.condition, alert.lastValue);
     deps.setLast(alert.chatId, alert.name, value);
     if (nowHolds === true && prevHolds !== true) {

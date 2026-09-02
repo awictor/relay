@@ -203,7 +203,7 @@
       "title": "Don't re-fire a predicate alert after a transient numberless check",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A real-but-numberless reply ('price unavailable') isn't degraded, so it's stored as lastValue; next check prevHolds=null and the edge test re-fires 'below 50k' though it never left the below state -> spurious double-ping trains users to ignore alerts (audit 5 B#5).",
       "how": "In checkAlert's predicate path, if the new value has no comparable value (conditionHolds indeterminate / extractValue null for below-above), skip setLast + skip notify (like the degraded guard) so the last GOOD value stays the baseline."
     },
@@ -265,6 +265,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 23: built predicate-refire-guard (audit 5 B#5, high/S, real bug). A real-but-numberless reply ('price temporarily unavailable') isn't degraded, so it was stored as lastValue; the next successful check then saw prevHolds=null and the edge test re-fired 'below 50k' though the value never left the below state -> spurious double-ping trains users to ignore the alert. checkAlert's predicate path now returns early when conditionHolds(new)===null: no setLast, no notify, last GOOD value kept as baseline (mirrors the degraded guard). +1 test (numberless keeps baseline + no re-fire on the next real check). 661 pass, tsc clean. call-tested false (pure runner logic, unit-tested). Remaining: conversational-edit-automations -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 22: built greeting-onboarding (audit 5 A#1, high/S). Onboarding fired only on the literal /start command a new user doesn't know; 'hi'/'hey'/'what can you do?' got run as a browser task = wasted first message. handleCommand now returns the /start intro for a WHOLE-message bare greeting (GREETING_RE, incl 'hello there'/'get started') or capability question (CAPABILITY_RE, 'what can you do'), guarded to <=6 words + anchored so a real task ('say hi to Sam on the forum', 'what can you tell me about X', 'how do I reset my router', 'hi, book me a table...') still falls through to the agent. No handler change needed — handleCommand already short-circuits before the agent. +2 tests (greets bare greeting/capability; does NOT hijack lookalike tasks). 660 pass, tsc clean. call-tested false (pure string match, unit-tested). Remaining: predicate-refire-guard, conversational-edit-automations."

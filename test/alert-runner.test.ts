@@ -103,6 +103,19 @@ describe("checkAlert", () => {
       const r = await checkAlert(alert({ lastValue: "Sold out", condition: cond }), deps("In stock — add to cart").d);
       expect(r.notify).toBe(true);
     });
+    it("a numberless (indeterminate) reply keeps the baseline + doesn't re-fire (predicate-refire-guard)", async () => {
+      // Already below (lastValue $48,000). A transient "price unavailable" is real but has no number,
+      // so conditionHolds is null. It must NOT be stored (else next check prevHolds=null re-fires) and
+      // must stay silent this tick.
+      const { d, lastSet } = deps("Price temporarily unavailable");
+      const r = await checkAlert(alert({ lastValue: "$48,000", condition: below }), d);
+      expect(r.notify).toBe(false);
+      expect(lastSet).toEqual([]);        // baseline NOT overwritten with the numberless value
+      expect(r.value).toBe("$48,000");    // last GOOD value preserved
+      // next real check, still below -> stays silent (no spurious re-cross)
+      const again = await checkAlert(alert({ lastValue: "$48,000", condition: below }), deps("$47,500").d);
+      expect(again.notify).toBe(false);
+    });
   });
 
   it("an agent failure -> no notify, no spam, value left as-is", async () => {
