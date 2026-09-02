@@ -248,7 +248,7 @@
       "title": "Ask one clarifying question before an ambiguous first errand",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A vague opener ('find me a good laptop', 'cheap flights to Lisbon') runs immediately against guessed sites/params, spending the highest-leverage first message on a guess the user didn't ask for (audit 6 A#3).",
       "how": "Detect a genuinely underspecified task (missing dates/budget/target) and ask ONE targeted question before running; keep it rare so it doesn't nag on clear tasks. Likely a light heuristic + a system-prompt nudge."
     }
@@ -301,6 +301,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 28: built clarify-once-ambiguous (audit 6 A#3, medium/S). A vague opener ('find me a good laptop', 'cheap flights to Lisbon') ran immediately against guessed sites/params, spending the highest-leverage first message on a guess. Added a SYSTEM_PROMPT rule: for a genuinely underspecified task where a real answer needs details the user didn't give, reply with ONE short question naming the 1-2 things needed and stop; ask at most once, only when no sensible default exists (clear tasks + defaults like 'weather'->location just run). +1 prompt-guard test (underspecified + one-question phrasing present, so a future edit can't silently drop it). 677 pass, tsc clean. LIVE-VERIFIED (anvil up, keys present): 'find me a good laptop' -> 1 step, 0 tools, reply 'What's your budget and what will you be using it for...?'; 'top story on hacker news' -> 2 steps, scrape, real answer (no over-ask). call-tested TRUE. Backlog DRY -> audit refills next iteration."
     },
     {
       "event": "PRODUCT-LOOP iter 27: built nonnumeric-alert-drift (audit 6 B#2, high/M, real bug). changed() fell back to raw trimmed-text inequality when neither side is numeric, so a 'watch top HN story' alert pinged 'changed' nearly every check because the agent's wording drifts run-to-run even when the answer is identical -> spam, user tunes it out. New normalizeForCompare() lowercases, strips volatile lead-ins/timestamps ('as of 3pm', 'right now', 'currently', 'today', 'it's', 'HH:MM am'), drops punctuation/emoji, collapses whitespace; changed() compares the normalized content for the non-numeric path. So pure phrasing drift is silent, a real content change ('Apple buys OpenAI' -> 'Google buys Anthropic', 'in stock' -> 'sold out') still fires. Numeric path unchanged. +4 tests (drift-silent, real-change-fires, normalizeForCompare equal/distinct). 676 pass, tsc clean. call-tested false (pure compare logic, unit-tested). Remaining: clarify-once-ambiguous -> then backlog dry -> audit refills."

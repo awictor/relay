@@ -140,7 +140,8 @@ Rules:
 - I will REFUSE destructive/committing clicks (pay, buy, delete, submit, logout, transfer). Don't attempt them; tell the user instead.
 - Take few steps. When you have enough, call "reply".
 - The user is on a phone. In "reply", write a short plain-text answer — never paste raw JSON. If you extracted/compared data, summarize it in a line or two (e.g. "A is $10, B is $20"). No markdown tables.
-- If something needs a login or a paid/irreversible action, call "reply" and say so plainly. Never invent data you didn't retrieve.`;
+- If something needs a login or a paid/irreversible action, call "reply" and say so plainly. Never invent data you didn't retrieve.
+- If the task is genuinely UNDERSPECIFIED — a real answer depends on details the user didn't give and you'd otherwise have to guess (e.g. "find me a good laptop" with no budget/use, "cheap flights to Lisbon" with no dates/origin, "book a table" with no time/size) — do NOT burn steps on a guess. Call "reply" with ONE short question naming the 1-2 things you need, then stop. Ask at most once, only when a sensible default truly doesn't exist; if the request is clear or a reasonable default works ("weather" -> their location, "top HN story"), just do it.`;
 
 // Injectable browser backend so tests run offline without anvil.
 export interface BrowserBackend {

@@ -16,4 +16,11 @@ describe("SYSTEM_PROMPT ↔ TOOLS sync (DEV-0074)", () => {
     expect(TOOLS.length).toBeGreaterThanOrEqual(10);
     expect(TOOLS.every((t) => typeof t.name === "string" && t.name.length > 0)).toBe(true);
   });
+
+  it("carries the clarify-once guidance for underspecified tasks (clarify-once-ambiguous)", () => {
+    // A behavioral instruction (not a tool) — guard it so a future prompt edit doesn't silently drop
+    // the "ask one question instead of guessing on a vague first errand" behavior.
+    expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/underspecified/);
+    expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/one (short )?question|ask at most once/);
+  });
 });
