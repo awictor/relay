@@ -167,6 +167,17 @@ export interface BrowserBackend {
 
 const FETCH_JSON_MAX_BYTES = 200_000;
 
+/** Cap text handed to the model, but APPEND A VISIBLE MARKER when we cut — otherwise the agent
+ * summarizes the top slice and states it as the whole truth, so a price/score/answer further down is
+ * silently missed. The marker tells the model the data is partial so it can hedge, or re-fetch a
+ * narrower target, instead of confidently answering from a fragment. Exported for tests. */
+export function truncateForModel(text: string, max = 6000): string {
+  const s = String(text ?? "");
+  if (s.length <= max) return s;
+  const dropped = s.length - max;
+  return `${s.slice(0, max)}\n\n[…truncated ${dropped} more characters — this is only the first ${max}. If the answer isn't above, say the page was long and you saw only the top, or fetch a more specific URL/section.]`;
+}
+
 // Default fetchJson: a plain guarded GET. SSRF is checked by the caller; here we cap
 // size, require a JSON content-type, and never forward credentials/cookies.
 async function defaultFetchJson(url: string): Promise<{ status: number; contentType: string; text: string }> {
@@ -259,7 +270,7 @@ export async function runAgent(
         if (!safe.safe) { push("scrape", `ERROR: refused (${safe.reason}).`); continue; }
         try {
           const r = await backend.scrape(url);
-          push("scrape", `TITLE: ${r.title || r.url}\n\n${r.content.slice(0, 6000)}`);
+          push("scrape", `TITLE: ${r.title || r.url}\n\n${truncateForModel(r.content)}`);
         } catch (e) {
           push("scrape", `ERROR fetching ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -354,7 +365,7 @@ export async function runAgent(
           }
           // Validate it parses, then hand back a trimmed body for the model to read.
           try { JSON.parse(r.text); } catch { push("fetch_json", `Response was not valid JSON (status ${r.status}).`); continue; }
-          push("fetch_json", `JSON from ${url} (status ${r.status}):\n${r.text.slice(0, 6000)}`);
+          push("fetch_json", `JSON from ${url} (status ${r.status}):\n${truncateForModel(r.text)}`);
         } catch (e) {
           push("fetch_json", `ERROR fetching ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -443,7 +454,7 @@ export async function runAgent(
         if (!sessionId) { push("read", "ERROR: no page open. Call browse first."); continue; }
         try {
           const r = await backend.readCurrent(sessionId);
-          push("read", `TITLE: ${r.title || r.url}\n\n${r.content.slice(0, 6000)}`);
+          push("read", `TITLE: ${r.title || r.url}\n\n${truncateForModel(r.content)}`);
         } catch (e) {
           push("read", `ERROR: ${e instanceof Error ? e.message : String(e)}`);
         }

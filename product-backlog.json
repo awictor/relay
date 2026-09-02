@@ -44,6 +44,51 @@
       "status": "done",
       "why": "nextDailyMs uses server-local setHours; on a UTC VM every-morning-9am fires at 9am UTC = middle of night.",
       "how": "Capture a per-chat TZ/offset and compute next-daily in it; default RELAY_TZ."
+    },
+    {
+      "id": "truncation-marker",
+      "title": "Mark truncated tool output",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "scrape/read/fetch_json silently sliced to 6000 chars; agent answered confidently from the top + missed data below.",
+      "how": "truncateForModel() appends a visible [truncated N more...] marker so the model hedges/re-fetches."
+    },
+    {
+      "id": "user-profile-location",
+      "title": "Per-user profile: home location + units",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "'near me' + bare 'weather' run location-less searches -> generic/wrong results; README even advertises 'best sushi near me'. Unanimous A+C.",
+      "how": "Small per-chat JSON profile store (location, units, tz); a /setlocation or set-my-location flow; agent gets it as context. Ties into the tz work already done."
+    },
+    {
+      "id": "parameterized-recipes",
+      "title": "Parameterized recipes with slots",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Recipes store a fixed task string; a user must re-teach per item. Slots turn one taught recipe into a reusable tool.",
+      "how": "Parse {slot} in recipe task; /run <name> <value> substitutes. recipes.ts parser change + handler run-path."
+    },
+    {
+      "id": "absolute-threshold-alerts",
+      "title": "Absolute-threshold + back-in-stock alerts",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Alerts only do 'changed by N'; users think in 'below 50k' / 'back in stock'. Extends the most retention-driving feature.",
+      "how": "Parse a comparison operator (below/above/back in stock) in the watch command; alert-runner evaluates the predicate vs extractValue/text."
+    },
+    {
+      "id": "inbound-photo-vision",
+      "title": "Accept inbound photos (vision)",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "Image-only messages get rejected ('send a task in words'); texting a photo (menu/receipt/product) is a natural first move + the biggest input gap vs Instinct. A+C.",
+      "how": "Download Telegram photo file_id, pass bytes to Gemini (already multimodal) as an image part; handler accepts media messages. Free (Gemini free tier is multimodal)."
     }
   ],
   "history": [
@@ -61,11 +106,17 @@
     },
     {
       "event": "PRODUCT-LOOP iter 5: built tz-daily-schedules (audit B). nextDailyMs was server-local setHours -> on a UTC VM 'every morning 9am' fired at 9am UTC (middle of night). Rewrote it to compute purely from UTC + a tz offset (tzOffsetMin from RELAY_TZ_OFFSET_MIN, minutes east of UTC, default 0=UTC, back-compat); exported nextDailyMs+tzOffsetMin. Updated 3 schedule tests to assert host-independently (getUTCHours) + added a tz-offset test (UTC/US-Eastern/CET wall-clock + tomorrow-rollover). Added RELAY_TZ_OFFSET_MIN to .env.example. 594 pass, tsc clean. call-tested false (pure time math, unit-tested). Backlog now DRY -> running 3-agent audit to refill (same iteration)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 6: backlog was dry -> ran 3-agent audit (2nd audit). Built truncation-marker (audit B#1, high/S): truncateForModel() appends a visible marker when scrape/read/fetch_json output is cut past 6000 chars, so the agent stops answering confidently from a fragment. +5 tests; bumped agent-result-cap HEADER_MARGIN 200->400 for the marker. 599 pass, tsc clean. call-tested false (pure, unit-tested). Seeded 4 from the audit: user-profile-location(S), parameterized-recipes(S), absolute-threshold-alerts(S), inbound-photo-vision(M)."
     }
   ],
   "audits": [
     {
       "note": "Bootstrap audit (3 lenses). A/new-user: web_search (TOP, unanimous), progress-ping, default-location/tz, read-only-expectation, clarifying-Q. B/reliability: alert-value-compare, atomic-store-writes, once-reminder-retry, tz-daily, truncation-hedge. C/power: web_search, voice-notes, multimodal-photo/pdf, confirmed-action-flow, parameterized-recipes. Seeded top 5."
+    },
+    {
+      "note": "Audit 2 (post-4-features). A/new-user: user-location (unanimous), photo-input, surface-ask-anything-in-help, clarifying-Q, tz(done). B/reliability: truncation-marker(built), over-cap-once-reminder-dropped, extractValue-picks-volume-not-price, fetch_json-200KB-cuts-valid-JSON, misparsed-reminder-runs-now. C/power: photo-vision, voice-notes, parameterized-recipes, absolute-threshold-alerts, user-profile. Seeded: user-profile-location, parameterized-recipes, absolute-threshold-alerts, inbound-photo-vision (truncation-marker built)."
     }
   ]
 }

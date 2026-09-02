@@ -31,9 +31,11 @@ function stubBackend(): BrowserBackend {
 }
 
 // The content slice cap. The tool message also carries a "TITLE: ...\n\n" prefix (or a
-// "JSON from <url> ...:\n" prefix), so allow a small header margin above the 6000 body cap.
+// "JSON from <url> ...:\n" prefix) AND, when the body is cut, a ~190-char truncation marker
+// (truncateForModel, product-loop) telling the model it saw only the first 6000 chars — so allow a
+// header margin that covers both. The point of the cap is still that the BODY is bounded near 6000.
 const BODY_CAP = 6000;
-const HEADER_MARGIN = 200;
+const HEADER_MARGIN = 400;
 
 function toolContentAfter(llm: ScriptLLM, name: string): string {
   // the tool result is pushed as a {role:"tool", name} message; it's visible on the NEXT llm call
