@@ -539,6 +539,33 @@
       "status": "done",
       "why": "The automation loop (query -> saved -> scheduled/watched) is the retention engine, but auto-suggest-save only nudges on a REPEAT + only offers a recipe (on-demand), never a recurring schedule/alert — a first satisfied answer teaches the user nothing about proactive value (audit 14 A#4 + C#1).",
       "how": "On a first clean text reply per chat, append one line: 'Tip: I can text this to you every morning or watch it for changes — just say \"every morning <this>\" or \"watch ...\".' Gate to fire once per chat (a flag in memory/profile). Keep it terse."
+    },
+    {
+      "id": "alert-redefine-dup-schedule",
+      "title": "Re-defining an alert stacks duplicate cadence schedules",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "alerts.add UPDATES in place on a repeat name but alertDefine always schedules.add'd another 'alert:<name>' marker, so re-stating a watch ('watch btc: ...' then '... in USD') silently accumulated 2/3/N background checks — /alerts shows one alert but /schedules fills w/ dups + each tick runs redundant anvil sessions (can exhaust the cap + pool) (audit 15 B#1).",
+      "how": "removeByTask(chatId, 'alert:<name>') before the schedules.add so the cadence is idempotent per alert name."
+    },
+    {
+      "id": "recipe-schedule-stable-marker",
+      "title": "Scheduled recipes use a stable recipe:<name> marker (not the raw task)",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "Scheduled recipes store the recipe's TASK STRING as the schedule marker, unlike digest:/alert:. If the recipe's task is later edited (re-save), the schedule keeps the OLD task (runs stale) + recipeForget's removeByTask(new task) matches nothing -> orphaned zombie schedule the user can't stop (audit 15 B#2).",
+      "how": "Schedule recipes under 'recipe:<name>' + resolve the task at fire time (mirror digest:/alert:); runner looks up the recipe by name on fire. recipeForget removeByTask('recipe:<name>'). Migrate/accept old rows."
+    },
+    {
+      "id": "recipe-auto-recall",
+      "title": "Route a natural message to a matching saved recipe",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "Saved recipes are write-only: /run needs the EXACT name a phone user never remembers, so the save flywheel dies at reuse. auto-suggest-save matches inbound vs history to CREATE; nothing matches inbound vs the recipe STORE to REUSE (audit 15 C#1).",
+      "how": "Reuse the task-suggest tokenizer/overlap against recipes[].task; on a high-overlap inbound (not already a command), offer 'Run your saved \"<name>\"? (yes)' or run it. Conservative threshold so it doesn't hijack."
     }
   ],
   "history": [
@@ -589,6 +616,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 60: backlog dry after iter 59 -> ran 15th audit (3 lenses), seeded 3, built alert-redefine-dup-schedule (audit 15 B#1, high/S, real bug). alerts.add UPDATES in place on a repeat name, but alertDefine always schedules.add'd another 'alert:<name>' cadence marker, so re-stating a watch ('watch btc: price' then 'watch btc: price in USD') silently stacked 2/3/N background checks — /alerts showed ONE alert but /schedules filled with dups + every tick ran redundant anvil sessions (can exhaust the per-chat cap + Chrome pool). Fix: removeByTask(chatId,'alert:<name>') before the schedules.add so the cadence is idempotent per name. 755 pass, tsc clean. LIVE-VERIFIED vs real AlertStore+ScheduleStore: 3 re-defines of 'watch btc' -> exactly 1 alert:btc schedule (was 3). call-tested TRUE. Seeded also: recipe-schedule-stable-marker(M bug), recipe-auto-recall(S)."
     },
     {
       "event": "PRODUCT-LOOP iter 59: built post-answer-recurring-offer (audit 14 A#4/C#1, medium/S). The automation loop (query -> saved -> scheduled/watched) is the retention engine, but auto-suggest-save only nudges on a REPEAT + only offers a recipe; a first satisfied answer taught the user nothing about proactive value. On a chat's FIRST clean text reply (empty prior history) with no repeat-nudge, the handler appends ONE '💡 Tip: I can keep this coming — say \"every morning <task>\" for a daily text, or \"watch ...\" to be pinged on changes.' Gated per-chat via an in-memory tippedChats set (fires once; at worst re-tips after restart) + never stacks with the save-nudge. +1 test (tip on first answer, absent on the second). 755 pass, tsc clean. call-tested false (handler wiring, unit-tested). Backlog DRY -> ran 15th audit (same iteration)."
@@ -729,6 +759,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 15 (post-59-features). A/new-user: persist-bare-city-reply-after-location-ask, operate-on-pasted-text (no URL), absolute-date/next-weekday/monthly-yearly reminders, quiet-hours. B/reliability: alert-redefine-stacks-dup-schedules (built), recipe-schedule-marker-orphan-on-edit (raw task not stable marker), extractValue-non-currency, DST-drift. C/power: recipe-auto-recall (match inbound vs recipe store to REUSE — save flywheel's missing half), cookie-session-expiry-nudge, unified /mine inventory, fuzzy /run, cross-session repeat detection. Built alert-redefine-dup-schedule (S bug, live-verified); seeded recipe-schedule-stable-marker(M bug), recipe-auto-recall(S). Deferred: extractValue-non-currency(M), DST(L), quiet-hours(M), pasted-text(S), absolute-date-reminders(M), + power bets."
     },
     {
       "note": "Audit 14 (post-56-features). A/new-user: answer-from-search-snippets (skip the always-scrape), acknowledge social filler (thanks/ok), world-clock time-in-city, first-success 'you can save/schedule this' tip. B/reliability: save-that-as-daily-hijacked-by-scheduler (FRESH iter-52 bug, built), extractValue-non-currency, orphaned-schedule-after-forget-digest, DST-drift, meta-matcher-false-fires-on-'are you free' (FRESH iter-56 bug, built). C/power: post-answer make-it-recurring offer (S, top), 'watch/alert/schedule that' by reference, multi-slot recipe args (applySlots collapses all slots — latent bug), per-item snooze/pause. Built both fresh regressions this run; seeded orphaned-schedule-on-forget(M bug), post-answer-recurring-offer(S). Deferred: extractValue-non-currency(M), DST(M), multi-slot-args(S), watch-that-by-reference(S), snooze(S)."

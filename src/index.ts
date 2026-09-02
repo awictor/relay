@@ -289,7 +289,11 @@ const handle = createHandler({
     if (!p) return { ok: false, reason: "unparsed" };
     const rec = alerts.add(chatId, p, now);
     if (!rec) return { ok: false, reason: "capped" };
-    // Auto-schedule the check (marker "alert:<name>"); the runner runs checkAlert on fire.
+    // Auto-schedule the check (marker "alert:<name>"). alerts.add UPDATES in place when the name
+    // already exists, so re-stating a watch ("watch btc: ..." then "watch btc: ... in USD") must NOT
+    // stack a 2nd/3rd cadence row — each would run a redundant anvil check forever + fill /schedules.
+    // Clear any existing marker first so the schedule is idempotent per alert name (audit 15 B#1).
+    schedules.removeByTask(chatId, `alert:${rec.name}`);
     const sp = parseScheduleFor(ALERT_CADENCE, `alert:${rec.name}`, now, profiles.offsetMin(chatId));
     if (sp) schedules.add(chatId, sp, now);
     return { ok: true, name: rec.name };
