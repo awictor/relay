@@ -251,6 +251,42 @@
       "status": "done",
       "why": "A vague opener ('find me a good laptop', 'cheap flights to Lisbon') runs immediately against guessed sites/params, spending the highest-leverage first message on a guess the user didn't ask for (audit 6 A#3).",
       "how": "Detect a genuinely underspecified task (missing dates/budget/target) and ask ONE targeted question before running; keep it rare so it doesn't nag on clear tasks. Likely a light heuristic + a system-prompt nudge."
+    },
+    {
+      "id": "dangerous-guard-typed-text",
+      "title": "Dangerous-action guard shouldn't match the TYPED text",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "agent.ts builds the guard label as label+selector+TYPED-text, so typing a query with a trigger word ('search Goodreads for this book', 'cancel culture', 'order status') is REFUSED as a committing action -> a whole class of normal browsing silently dead-ends with a scary refusal. Flagged 3 audits running (7 B#1, 6, 5).",
+      "how": "Guard the click TARGET only (label + selector) — typing into a field isn't the committing act, the click/submit is. Drop call.args.text from the isDangerousAction() label in the type/click branch. Keep refusing a click whose label/selector says pay/submit/delete."
+    },
+    {
+      "id": "once-reminder-cap-drop",
+      "title": "Don't silently delete a once-reminder that hits the hourly cap",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "schedule-runner over-cap path safeComplete()s a due 'once' reminder with no send + no failureNotice, so 'remind me to take my meds at 3pm' during a busy hour is deleted forever with only a log line — the highest-trust promise, a black hole (audit 7 B#2, 6 B).",
+      "how": "In the runner tick, when a DUE once-reminder is over the proactive cap, DON'T complete it — defer (leave dueMs or bump slightly) so it fires next tick, or send it anyway (a one-shot the user explicitly set isn't spam). Dailies keep the cap. Add a test for defer-not-drop."
+    },
+    {
+      "id": "telegram-command-menu",
+      "title": "Register the Telegram slash-command menu (setMyCommands)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "No setMyCommands call exists, so Telegram's native '/' autocomplete is empty; the 12 commands are a bare wall of names in /start with no descriptions -> a new user can't discover or correctly type /run, /alerts, /setlocation in the first 10 min (audit 7 A#4).",
+      "how": "On startup call the Bot API setMyCommands with each command + a one-line description (reuse the Commands: list). One HTTP call in telegram.ts, invoked from index main(). Keep it best-effort (log on failure)."
+    },
+    {
+      "id": "instant-calc-convert",
+      "title": "Answer calc/convert/known-fact instantly, no browser round-trip",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "'20% tip on $47', '100 USD in EUR', 'oz in a cup', 'capital of France' trigger a slow web_search/scrape (or risk the 'never invent data' refusal), adding 10-30s to the exact throwaway questions people first test the bot with (audit 7 A#5).",
+      "how": "Let the agent answer directly (reply without a tool) for arithmetic/unit-conversion/common-knowledge that needs no live data; a SYSTEM_PROMPT carve-out to the 'never invent data' rule for deterministic math/facts. Keep web_search for anything time-sensitive or uncertain."
     }
   ],
   "history": [
@@ -303,6 +339,9 @@
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
     },
     {
+      "event": "PRODUCT-LOOP iter 29: backlog dry after iter 28 -> ran 7th audit (3 lenses), seeded 4, built dangerous-guard-typed-text (audit 7 B#1, high/S, chronic bug flagged 3 audits running). The click/type guard built its label as label+selector+TYPED-text, so typing a query containing a trigger word ('search Goodreads for this book', 'cancel culture', 'order status') was REFUSED as a committing action -> a whole class of normal browsing silently dead-ended with a scary refusal. Now the guard checks the click TARGET only (label + selector); typing into a field isn't the committing act (the submit/click is), and a committing verb in the label/selector ('#checkout-submit', 'Confirm purchase') still gets caught. +2 tests (typed trigger-word runs not refused; selector-named commit still refused). isDangerousAction() + the adversarial suite unchanged. 679 pass, tsc clean. call-tested false (guard logic, unit-tested via MockLLM). Seeded also: once-reminder-cap-drop(M), telegram-command-menu(S), instant-calc-convert(S)."
+    },
+    {
       "event": "PRODUCT-LOOP iter 28: built clarify-once-ambiguous (audit 6 A#3, medium/S). A vague opener ('find me a good laptop', 'cheap flights to Lisbon') ran immediately against guessed sites/params, spending the highest-leverage first message on a guess. Added a SYSTEM_PROMPT rule: for a genuinely underspecified task where a real answer needs details the user didn't give, reply with ONE short question naming the 1-2 things needed and stop; ask at most once, only when no sensible default exists (clear tasks + defaults like 'weather'->location just run). +1 prompt-guard test (underspecified + one-question phrasing present, so a future edit can't silently drop it). 677 pass, tsc clean. LIVE-VERIFIED (anvil up, keys present): 'find me a good laptop' -> 1 step, 0 tools, reply 'What's your budget and what will you be using it for...?'; 'top story on hacker news' -> 2 steps, scrape, real answer (no over-ask). call-tested TRUE. Backlog DRY -> audit refills next iteration."
     },
     {
@@ -348,6 +387,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 7 (post-28-features). A/new-user: NL-alerts ('tell me when X' != watch<name>: syntax), first-run location/tz capture prompt, summarize-beyond-6000-chars (chunked read), setMyCommands menu, instant calc/convert/fact. B/reliability: dangerous-guard-matches-TYPED-text (search 'this book' refused — 3rd audit flagging it), once-reminder-dropped-at-hourly-cap, memory-clobber-concurrent-same-chat, extractValue-wrong-for-non-currency(temp/AQI), DST-drift(L). C/power: forward-to-act ingestion, deep-research multi-source cited, conversational follow-up on proactive pings, voice-note replies(TTS), quiet-hours/DND batched. Seeded top 4 by impact/effort: dangerous-guard-typed-text(S bug, chronic), once-reminder-cap-drop(M bug), telegram-command-menu(S), instant-calc-convert(S). Deferred: memory-clobber(M, needs per-chat lock), extractValue-non-currency(M), DST(L), summarize-chunking(M), NL-alerts(M), + all C power bets."
     },
     {
       "note": "Audit 6 (post-24-features). A/new-user: local/maps errands (README promises 'sushi near me' but no places tool), video/podcast transcript summarize (scrape gets JS shell), clarify-once-before-ambiguous, fetch-and-forward an existing file (pdf tool re-renders viewer), cross-turn browse session continuity. B/reliability: extractValue-wrong-number-for-non-currency(temp/AQI), non-numeric-alert-drift-false-fires(prose !==), digest-runs-unfilled-slot(no hasSlots guard), telegram-4096-silent-truncate, DST-drift-on-fixed-offset. C/power: 2FA/OTP/CAPTCHA relay, outbound voice calls(Instinct parity, L), personal autofill vault, push-to-calendar/sheets, persistent tracked datasets w/ trends. Seeded top 4 by impact/effort: digest-slot-guard(S bug), telegram-long-message-split(S bug), nonnumeric-alert-drift(M), clarify-once-ambiguous(S). Deferred: maps/video tools(M), 2FA-relay + autofill-vault + push-to-tools(M/L power bets), DST (fixed-offset acceptable near-term), extractValue-non-currency (overlaps nonnumeric-drift)."

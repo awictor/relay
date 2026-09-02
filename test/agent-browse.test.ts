@@ -55,6 +55,33 @@ describe("runAgent multi-step browse", () => {
     expect(afterClick.some((m) => m.role === "tool" && /REFUSED/.test(m.content))).toBe(true);
   });
 
+  it("does NOT refuse typing a query that merely contains a trigger word (dangerous-guard-typed-text)", async () => {
+    // "book"/"order"/"cancel" in the TYPED text is a search term, not a committing action — the guard
+    // must look at the click target, not the payload, so a normal search actually runs.
+    const llm = new MockLLM([
+      { toolCall: { name: "browse", args: { url: "https://www.goodreads.com" } } },
+      { toolCall: { name: "type", args: { selector: "#search", text: "the best book on gardening" } } },
+      { toolCall: { name: "read", args: {} } },
+      { toolCall: { name: "reply", args: { text: "here are the results" } } },
+    ]);
+    const { backend, log } = mockBackend();
+    const { reply } = await runAgent("search goodreads for the best book on gardening", { llm, backend });
+    expect(reply).toBe("here are the results");
+    expect(log).toContain("type:#search=the best book on gardening"); // typed, not refused
+    expect(llm.calls.flat().some((m) => m.role === "tool" && /REFUSED/.test(m.content))).toBe(false);
+  });
+
+  it("still refuses a click whose SELECTOR names a committing action even with benign label", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "browse", args: { url: "https://shop.example.com" } } },
+      { toolCall: { name: "click", args: { selector: "#checkout-submit", label: "next" } } },
+      { toolCall: { name: "reply", args: { text: "won't do that" } } },
+    ]);
+    const { backend, log } = mockBackend();
+    await runAgent("proceed", { llm, backend });
+    expect(log).not.toContain("click:#checkout-submit"); // selector 'submit'/'checkout' still caught
+  });
+
   it("click/type before browse errors (no session)", async () => {
     const llm = new MockLLM([
       { toolCall: { name: "click", args: { selector: "#x" } } },

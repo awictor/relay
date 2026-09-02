@@ -329,9 +329,13 @@ export async function runAgent(
       if (call.name === "click" || call.name === "type") {
         if (!sessionId) { push(call.name, "ERROR: no page open. Call browse first."); continue; }
         const selector = String(call.args.selector ?? "");
-        const label = String(call.args.label ?? "") + " " + selector + " " + String(call.args.text ?? "");
-        if (isDangerousAction(label)) {
-          push(call.name, `REFUSED: that looks like a destructive/committing action ("${label.trim()}"). I won't do that autonomously — tell the user.`);
+        // Guard the click TARGET (label + selector) only — NOT the typed text. Typing into a field
+        // isn't the committing act (the submit/click is), and matching the payload made benign tasks
+        // false-refuse: "search Goodreads for this book", a "cancel culture" query, "order status".
+        // The committing verb still gets caught on the click/submit whose label or selector says so.
+        const target = String(call.args.label ?? "") + " " + selector;
+        if (isDangerousAction(target)) {
+          push(call.name, `REFUSED: that looks like a destructive/committing action ("${target.trim()}"). I won't do that autonomously — tell the user.`);
           continue;
         }
         try {
