@@ -721,6 +721,15 @@
       "how": "If the last outbound was a proactive send + the inbound isn't a command/more/link/known-shape, prepend the cached ping text as agent context (a system line) so the follow-up resolves against it. Reuse the shared lastResultStore."
     },
     {
+      "id": "watch-schedule-that-followups",
+      "title": "Fix 3 watch/schedule-that bugs (do-that hijack, name collision, no-tz warn)",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "iter-74 watch/schedule-that had 3 fresh bugs (audit 20): B#1 'do/send that every morning' hijacked by the NL scheduler (isExplicitCommand omitted do/send) -> schedules literal 'do that' daily; B#2 name derived from first-2-words collided ('what's the...' -> 'whats-the') silently overwriting a prior alert by name; B#5 schedule-that by-ref dropped the no-tz UTC warning the primary path shows.",
+      "how": "isByRefShape (parseWatchThat||parseScheduleThat) added to isExplicitCommand; watch name drops stopwords (what's/the/price/of...) to salient tokens ('bitcoin'); schedule-that confirm appends the noTz tzWarn. +2 tests (do-that schedules prior task; watch-that salient name)."
+    },
+    {
       "id": "quiet-hours",
       "title": "Quiet-hours / DND window for proactive sends",
       "impact": "medium",
@@ -728,6 +737,42 @@
       "status": "done",
       "why": "An ill-timed 3am ping is a top churn driver for a proactive bot; there's an hourly cap but no time-of-day window, so a mis-timed schedule or alert can wake the user (audit 19 C#3).",
       "how": "A per-chat quiet window (default ~10pm-7am local via profile tz, override via a /quiet cmd); the runner defers a proactive send that lands in the window to the window's end. Profile already stores the tz offset."
+    },
+    {
+      "id": "inject-current-datetime",
+      "title": "Give the agent the current date/time + user tz",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "SYSTEM_PROMPT + context never tell the model what day/time it is, so 'news today', 'open right now', 'days until X', 'latest'/'this week' reason from the training-cutoff date -> confidently stale/vague answers on the exact time-sensitive asks it's told to use tools for (audit 20 A#1, top impact/effort).",
+      "how": "Build a system line 'Right now it is <ISO datetime in the chat's tz>; the user's timezone is UTC<offset>.' from Date.now()+profile offset; inject alongside the profile context in runAgent. (Date.now allowed in prod code; tests inject a now.)"
+    },
+    {
+      "id": "empty-read-escalation",
+      "title": "Detect a near-empty scrape/read and tell the agent it failed",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Only extract has an all-null fallback; scrape/readCurrent/browse have NO empty-content check, so a login wall / JS-only shell / blocked page returns ~0 chars + the agent answers from nothing (hallucinated / weak) with no signal the fetch failed (audit 20 A#4).",
+      "how": "In the scrape/read tool results, if the returned text is <~200 non-ws chars, return a marker ('[page came back nearly empty — it may need a login, be JS-only, or have blocked me; try a screenshot / a different source]') so the model retries or says so honestly instead of inventing."
+    },
+    {
+      "id": "cookie-consent-dismiss",
+      "title": "Auto-dismiss cookie/consent overlays before reading",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "scrape/read grab innerText ~600ms after load; on most news/EU pages the only thing there is the consent modal, so 'summarize this article <link>' summarizes the cookie banner (audit 20 A#2). No overlay handling exists in anvil.ts.",
+      "how": "Before reading, best-effort click common consent selectors (Accept/Agree/OK buttons, #onetrust-accept..., [aria-label*=accept]) or evaluate-remove fixed full-screen overlays; then read. Bounded + swallow errors. anvil.ts scrape/readCurrent."
+    },
+    {
+      "id": "failed-watch-receipts",
+      "title": "Tell the user when a watch keeps failing (don't go silently dead)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "A recurring alert/digest that errors N times in a row (login expired, markup changed, 429) just advances with a log line; the user assumes 'no news = nothing changed' while the watch is actually dead — the #1 invisible retention killer (audit 20 C#1).",
+      "how": "Count consecutive failures per schedule (extend the attempts field / a failStreak); after N (e.g. 3) send ONE throttled receipt ('your <name> watch has failed 3 checks — the site may have changed or a login expired') then reset the counter. Message-only, safe."
     }
   ],
   "history": [
@@ -778,6 +823,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 77: backlog dry after iter 76 -> ran 20th audit (3 lenses), which caught THREE fresh bugs in my iter-74 watch/schedule-that code; built all three (grouped as watch-schedule-that-followups, high/S). B#1: 'do/send that every morning' was hijacked by the NL scheduler because isExplicitCommand omitted the do/send by-ref verbs -> scheduled literal 'do that' daily; added isByRefShape (parseWatchThat||parseScheduleThat) to the guard. B#2: watch/schedule name derived from the first 2 words collided ('what's the price of bitcoin' -> 'whats-the', silently overwriting a prior alert by name in AlertStore); now drops stopwords to salient tokens ('bitcoin'). B#5: schedule-that by-ref dropped the no-tz UTC warning the primary path shows; now appends it. +2 tests (do-that schedules the prior task; watch-that salient name). 800 pass, tsc clean. call-tested false. LESSON (5th): a new by-ref verb set must go in BOTH its branch AND the isExplicitCommand gate. Seeded: inject-current-datetime(S), empty-read-escalation(S), cookie-consent-dismiss(M), failed-watch-receipts(S)."
     },
     {
       "event": "PRODUCT-LOOP iter 76: built quiet-hours (audit 19 C#3, medium/S). A mis-timed schedule/alert could ping at 3am (hourly cap but no time-of-day window) — a top churn driver for a proactive bot. New quietUntilMs(now, startH, endH, offsetMin) (in the user's tz, wraps midnight) + ScheduleStore.deferTo(id, whenMs) (forward-only). schedule-runner: a due send whose chat is inside its quiet window bumps that schedule's dueMs to the window's end (no send this tick) via quietUntil + deferTo deps. index wires them from RELAY_QUIET_START/END (default start===end = disabled) + the chat's profile tz; .env.example documents it. +3 tests (quietUntilMs inside/outside/disabled; store.deferTo forward-only; runner defers-in-window no-send). 798 pass, tsc clean. call-tested false (pure time math + runner wiring, unit-tested). Backlog DRY -> ran 20th audit (same iteration)."
@@ -969,6 +1017,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 20 (post-76-features). A/new-user (capability): inject-current-datetime (agent has no 'now' -> stale 'today'/'latest' answers, top S), auto-dismiss-cookie-consent (reads the banner not the article), scroll-to-load lazy pages, empty-read-escalation (scrape/read have no empty check -> hallucination). B/reliability: do/send-that-hijacked-by-scheduler (FRESH iter-74, built), watch-that-name-collision-overwrite (FRESH, built), extractValue-non-currency, DST, schedule-that-omits-no-tz-warn (FRESH, built). C/power: failed-watch-receipts (S, invisible-churn killer), auto-proof-screenshot-on-alerts (S), per-item snooze, cookie-session-expiry-nudge. Built the 3 fresh watch/schedule-that bugs; seeded inject-current-datetime(S), empty-read-escalation(S), cookie-consent-dismiss(M), failed-watch-receipts(S). Deferred: extractValue-non-currency(M), DST(L), scroll-to-load(M), snooze/screenshot/session-nudge(S each). LESSON (5th matcher-over-catch): a new by-reference verb set must be added to BOTH its own branch AND the isExplicitCommand guard that gates the earlier NL scheduler."
     },
     {
       "note": "Audit 19 (post-72-features). A/new-user (errand capability, not more canned matchers): multi-row list extraction (extract_list — extract/compare are scalar/per-URL), new-listing/feed watch (watch-a-search, set-diff), CSV export of extract/compare rows, reliable compute/aggregate over fetched values. B/reliability: isAlertEditShape-overbroad ('set...over the keys' reminder excluded from scheduler, silent loss — built), SITE_RE-'read'-shadows-real-read (FRESH iter-72, built), extractValue-non-currency, DANGEROUS_ACTION-over-refuses-UI-labels, DST. C/power: watch/schedule-that-by-reference (S, top retention lever), conversational-follow-up-on-pings (S, ping cached), quiet-hours (S), per-item snooze, failed-watch receipts. Built both bugs; seeded watch-schedule-that-by-ref(S), proactive-followup-context(S), quiet-hours(S). Deferred power capability: extract_list(M), watch-a-search(M), csv-export(S), compute-over-fetched(S), extractValue-non-currency(M), DST(L), dangerous-verb-context(M)."

@@ -352,7 +352,11 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // word ("save that as daily") which the NL matcher would otherwise turn into a junk daily schedule
     // running the literal "save that as" every morning + never create the recipe (audit-found).
     const isSaveThatShape = parseSaveThatAs(t0) !== null;
-    const isExplicitCommand = first?.startsWith("/") || /^(?:run|schedule)\b/i.test(t0) || isDefineShape || isAlertEditShape || isSaveThatShape;
+    // Also exclude the by-reference forms ("watch/schedule/do/send that ...") — their branch runs
+    // LATER, and "do/send that every morning" contains a cadence word the NL scheduler would grab,
+    // scheduling the literal "do that" every day (audit 20 B#1).
+    const isByRefShape = parseWatchThat(t0) !== null || parseScheduleThat(t0) !== null;
+    const isExplicitCommand = first?.startsWith("/") || /^(?:run|schedule)\b/i.test(t0) || isDefineShape || isAlertEditShape || isSaveThatShape || isByRefShape;
     // Cue set MUST cover every shape parseSchedule accepts, or a valid schedule never reaches it and
     // silently runs once. Includes weekly/interval (every <weekday>, every N min/hours, weekday/weekend)
     // added with recurring-schedules — omitting them made that whole feature unreachable from chat.
@@ -546,8 +550,12 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         if (!prior) { await deps.sendMessage(msg.chatId, `Nothing recent to ${watchThat ? "watch" : "schedule"} — run a task first, then say "${watchThat ? "watch that" : "schedule that every morning"}".`); return; }
         const task = (prior.content as string).trim();
         if (watchThat && deps.alertDefine) {
-          // Derive a short name from the task; build the standard "watch <name>: <task> <clause>".
-          const name = task.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\s+/).filter(Boolean).slice(0, 2).join("-") || "watch";
+          // Derive a short name from the SALIENT task words (drop filler like what's/the/price/of) so
+          // "what's the price of bitcoin" -> "bitcoin", not "whats-the" (which collided across tasks +
+          // silently overwrote a prior alert by name — audit 20 B#2). Fall back to "watch" if empty.
+          const STOP = new Set(["whats", "what", "the", "a", "an", "of", "is", "to", "in", "on", "me", "my", "price", "cost", "check", "how", "much", "get", "for", "s", "it", "that", "this"]);
+          const salient = task.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\s+/).filter((w) => w && !STOP.has(w));
+          const name = (salient.length ? salient : task.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\s+/).filter(Boolean)).slice(0, 2).join("-") || "watch";
           const r = deps.alertDefine(msg.chatId, `watch ${name}: ${task}${watchThat.clause ? " " + watchThat.clause : ""}`, deps.now());
           if (r.ok) {
             await deps.sendMessage(msg.chatId, `Watching "${r.name}" — I'll message you when it changes. See /alerts.`);
@@ -559,7 +567,13 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         }
         if (scheduleThat && deps.scheduleAdd) {
           const r = deps.scheduleAdd(msg.chatId, `${task} ${scheduleThat.clause}`, deps.now());
-          if (r.ok) { const when = r.whenText ? ` Next: ${r.whenText}.` : ""; await deps.sendMessage(msg.chatId, `Got it — I'll do that on that schedule: "${r.task}".${when} Manage with /schedules.`); return; }
+          if (r.ok) {
+            const when = r.whenText ? ` Next: ${r.whenText}.` : "";
+            // Same no-timezone warning the primary schedule path shows, so a by-ref schedule with no tz
+            // doesn't silently fire at UTC (audit 20 B#5).
+            const tzWarn = r.noTz ? ` ⚠️ No timezone set, so this is UTC — set yours with "/setlocation <city> UTC-5".` : "";
+            await deps.sendMessage(msg.chatId, `Got it — I'll do that on that schedule: "${r.task}".${when}${tzWarn} Manage with /schedules.`); return;
+          }
           await deps.sendMessage(msg.chatId, r.reason === "capped" ? "You've hit the schedule limit — /cancel one first." : "I couldn't read that timing — try \"schedule that every morning\" or \"...at 9am\".");
           return;
         }

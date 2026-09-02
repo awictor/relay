@@ -490,6 +490,31 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/Watching/);
   });
 
+  it("'do that every morning' schedules the last task (not the literal 'do that') (audit 20 B#1)", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    mem.set(6, [{ role: "user", content: "top HN story" }, { role: "assistant", content: "Story X" }]);
+    const added: string[] = [];
+    const { handle } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      scheduleAdd: (_c, text) => { added.push(text); return { ok: true, kind: "daily", task: "top HN story", whenMs: 0 }; },
+    });
+    await handle(msg("do that every morning", 6));
+    expect(added[0]).toBe("top HN story every morning"); // the prior task, not "do that"
+  });
+
+  it("'watch that' names the alert after salient words, not stopwords (audit 20 B#2)", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    mem.set(6, [{ role: "user", content: "what's the price of bitcoin" }, { role: "assistant", content: "$65k" }]);
+    const defined: string[] = [];
+    const { handle } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      alertDefine: (_c, text) => { defined.push(text); return { ok: true, name: "bitcoin" }; },
+      alertRunNow: async () => ({ message: null, commit: () => {} }),
+    });
+    await handle(msg("watch that below 50000", 6));
+    expect(defined[0]).toMatch(/^watch bitcoin:/); // salient token, not "whats-the"
+  });
+
   it("'schedule that every morning' schedules the last task", async () => {
     const mem = new Map<number, LLMMessage[]>();
     mem.set(6, [{ role: "user", content: "top HN story" }, { role: "assistant", content: "Story X" }]);
