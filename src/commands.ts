@@ -52,7 +52,22 @@ Just text me the task in plain English.`;
 const GREETING_RE = /^(?:hi|hey|hello|yo|hiya|heya|sup|howdy|gm|good morning|good evening|start|get started|help me)(?:\s+(?:there|relay|bot))?[!.?]*$/i;
 const CAPABILITY_RE = /^(?:what|who|how)\s+(?:can|do|are|is)\s+(?:you|u|this|relay)(?:\s+(?:can\s+)?do)?[\s\w]*\??$/i;
 
-/** Returns a canned reply for /start, /help, or a bare greeting/capability question; else null. */
+// Honest answer to a "meta / trust" question — a new user's other common opener ("is this free?",
+// "do you save my messages?", "are you a bot?"). These used to fall through to a browser turn (slow,
+// or an invented answer). One fixed, truthful reply builds the trust that gates a first real errand.
+const META = `A few honest answers:
+• Yes, I'm free to use.
+• I'm an AI bot, not a person — I drive a real web browser to do tasks and text you back.
+• I keep only a short rolling memory of our recent chat (so follow-ups make sense) on the server running me — nothing is shared or sold.
+• I'm not logged into any of your accounts unless you set that up yourself, and I won't pay, buy, or do anything irreversible on my own.
+
+Text me a task to try it — or /help for what I can do.`;
+// Whole-message trust/meta questions only (short + anchored) so "is this article free to read" (a
+// real errand) still reaches the agent.
+const META_RE = /^(?:(?:are|r)\s+(?:you|u)\s+(?:a\s+)?(?:real|human|person|bot|ai|robot)|is\s+this\s+(?:free|safe|a\s+(?:bot|scam|person))|(?:is\s+it|are\s+you)\s+free|do\s+(?:you|u)\s+(?:save|store|keep|sell|share|record)\s+(?:my\s+)?(?:messages?|data|chats?|info)|who\s+(?:made|built|created|owns)\s+(?:you|this)|are\s+(?:you|u)\s+safe|is\s+my\s+data\s+safe)[\s\w']*\??$/i;
+
+/** Returns a canned reply for /start, /help, a bare greeting/capability question, or a meta/trust
+ * question; else null. */
 export function handleCommand(text: string): string | null {
   const t = text.trim().toLowerCase();
   // Telegram commands can carry a bot suffix, e.g. /help@relaybot
@@ -62,5 +77,7 @@ export function handleCommand(text: string): string | null {
   // Greet a new user who opened with "hi" / "what can you do?" instead of the /start they don't know.
   // Keep it short (<= 6 words) so a longer sentence that merely starts with "how do you" is a real task.
   if (t.split(/\s+/).length <= 6 && (GREETING_RE.test(t) || CAPABILITY_RE.test(t))) return START;
+  // Meta/trust question -> honest fixed reply (bounded length so a real errand isn't swallowed).
+  if (t.split(/\s+/).length <= 8 && META_RE.test(t)) return META;
   return null;
 }

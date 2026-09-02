@@ -38,6 +38,18 @@ describe("handleCommand", () => {
     expect(handleCommand("how do I reset my router")).toBeNull();
   });
 
+  it("answers meta/trust questions with the honest fixed reply (meta-trust-canned-answers)", () => {
+    expect(handleCommand("is this free?")).toMatch(/free to use/i);
+    expect(handleCommand("are you a bot")).toMatch(/AI bot/i);
+    expect(handleCommand("do you save my messages?")).toMatch(/rolling memory/i);
+    expect(handleCommand("who made you")).toMatch(/free to use/i);
+    expect(handleCommand("is my data safe")).toMatch(/shared or sold/i);
+  });
+  it("does NOT hijack a real errand that looks meta-ish", () => {
+    expect(handleCommand("is this article free to read: example.com/x")).toBeNull(); // real errand + long
+    expect(handleCommand("do you save documents to a folder on that site")).toBeNull();
+  });
+
   // DEV-0043/0044: /help must advertise EVERY user-facing capability, or a shipped tool is hidden
   // from users (screenshot/pdf were missing). Guard sync: a new tool without a HELP line fails here.
   it("/help mentions every user-facing capability keyword", () => {
