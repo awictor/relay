@@ -3,12 +3,12 @@ import { createHandler, type HandlerDeps } from "../src/handler.js";
 import type { InboundMessage } from "../src/telegram.js";
 import type { LLMMessage } from "../src/llm.js";
 
-// DEV-0174: the schedule keyword-regex (handler.ts:137: remind me|every day|every morning|...|in N
-// min) is evaluated BEFORE the alert/digest/save branches, and only falls through when scheduleAdd
-// returns reason:"unparsed". A message that is really an alert/digest/save but contains a schedule
-// word ("alert me on btc: every day") depends entirely on scheduleAdd rejecting it — if scheduleAdd
-// wrongly claimed ok, the intended command would be silently shadowed. Pin the fall-through: with
-// scheduleAdd -> unparsed, such a message reaches the CORRECT downstream handler.
+// DEV-0174 + audit-9 B#1: the schedule keyword-regex (remind me|every day|every morning|...|in N
+// min) runs BEFORE the alert/digest/save branches. Originally it matched-then-relied on scheduleAdd
+// returning "unparsed" to fall through — but scheduleAdd could wrongly claim a define-shaped message
+// ("watch daily: btc") and silently shadow the intended command. The matcher now SKIPS command
+// shapes (define "<verb> <name>: <task>" + alert-edit "<verb> ... <below|by|...>") outright, so such
+// a message reaches its CORRECT downstream branch and never touches scheduleAdd.
 
 function harness(over: Partial<HandlerDeps> = {}) {
   const sent: string[] = [];
@@ -46,8 +46,10 @@ describe("handler command precedence (DEV-0174)", () => {
   it("'alert me on btc: every day' → alertDefine (schedule word doesn't shadow it)", async () => {
     const { handle, calls } = harness();
     await handle(msg("alert me on btc: every day"));
-    expect(calls.schedule).toBe(1);   // schedule regex matched + tried first
-    expect(calls.alert).toBe(1);      // ...then fell through to the real handler
+    // The NL scheduler now SKIPS a define-shaped message entirely (isDefineShape guard), instead of
+    // matching-then-relying-on-scheduleAdd-to-reject — so it never even tries. It reaches alertDefine.
+    expect(calls.schedule).toBe(0);
+    expect(calls.alert).toBe(1);
     expect(calls.agent).toBe(0);
   });
 

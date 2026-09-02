@@ -67,6 +67,30 @@ describe("handler — schedule routing", () => {
     expect(calls()).toBe(0);
   });
 
+  it("a 'watch <name>: <task>' with a cadence word is NOT hijacked by the scheduler (product-loop)", async () => {
+    // "watch daily: btc price" contains "daily" — the NL scheduler must NOT intercept it; it has to
+    // reach the alertDefine branch. scheduleAdd must not be called; the agent path (which the alert
+    // define lives on in this harness) handles it. Here we assert scheduleAdd was NOT invoked.
+    const added: Array<{ text: string }> = [];
+    const { handle } = harness({ scheduleAdd: (_c, text) => { added.push({ text }); return { ok: true, kind: "daily", task: "x", whenMs: 0 }; } });
+    await handle(msg("watch daily: btc price when it changes by 1000"));
+    expect(added).toHaveLength(0); // scheduler did not swallow the watch command
+  });
+
+  it("a 'save <name>: <task>' with 'every morning' in it is NOT hijacked by the scheduler", async () => {
+    const added: Array<{ text: string }> = [];
+    const { handle } = harness({ scheduleAdd: (_c, text) => { added.push({ text }); return { ok: true, kind: "daily", task: "x", whenMs: 0 }; } });
+    await handle(msg("save morning-brief: every morning summary of the news"));
+    expect(added).toHaveLength(0);
+  });
+
+  it("a plain reminder that merely starts with 'set' still schedules (guard not too broad)", async () => {
+    const added: Array<{ text: string }> = [];
+    const { handle } = harness({ scheduleAdd: (_c, text) => { added.push({ text }); return { ok: true, kind: "once", task: "call mom", whenMs: 0 }; } });
+    await handle(msg("set a reminder to call mom in 10 min"));
+    expect(added).toHaveLength(1); // NOT excluded — it's a real schedule, not an alert-edit shape
+  });
+
   it("scheduling a slotted recipe is refused with a clear reason, no agent (product-loop)", async () => {
     const { handle, sent, calls } = harness({
       recipeSchedule: () => ({ ok: false, reason: "needsarg" }),

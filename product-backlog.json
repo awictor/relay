@@ -323,6 +323,42 @@
       "status": "done",
       "why": "After /setlocation a user can't see or correct what was stored; a typo'd 'UTC-5' or wrong city is invisible + silently wrong on every weather/near-me/daily reminder (audit 8 A#2).",
       "how": "Add a /profile (or 'what's my location') read that echoes stored location/units/tz, and a clear/forget path. Handler branch + ProfileStore already has get; add a clear."
+    },
+    {
+      "id": "schedule-matcher-hijack",
+      "title": "NL scheduler hijacks watch/save/digest commands containing a cadence word",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "The schedule keyword-regex ran before the alert/save/digest define branches, guarded only against slash + run/schedule verbs; 'watch daily: btc' / 'save morning-brief: ...' contains a cadence word so it got turned into a reminder + the alert/recipe/digest was never created (audit 9 B#1).",
+      "how": "Extend the guard to skip messages matching a define shape ('<watch|alert me|save|[define] digest> <name>: <task>') or an alert-edit shape ('<change|set|make> ... <below|above|in stock|by>'); match the SHAPE not just the verb so 'set a reminder every day' still schedules."
+    },
+    {
+      "id": "once-reminder-transient-retry",
+      "title": "Re-queue a once-reminder that fails at fire time, not delete it",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "schedule-runner's fireOne catch always safeComplete()s a 'once' on ANY throw, so 'remind me to take my meds at 3pm' vanishes on a momentary anvil/LLM hiccup at 3pm — only the rate-cap path defers (audit 9 B#2, also 8 B).",
+      "how": "On a fireOne failure for a 'once', don't complete — defer for a bounded number of retries (e.g. keep it due, track an attempt count, drop after N so a permanently-broken task doesn't loop forever). Daily still advances. Send the failure notice only after the retries exhaust."
+    },
+    {
+      "id": "recurring-schedules",
+      "title": "Weekly / weekday / interval reminders",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "schedule.ts parses only once + daily; 'every Monday', 'weekdays at 8', 'every 2 hours' silently fall through to a one-off agent run that does nothing — a core recurring-reminder shape fails on first try (audit 9 A#2).",
+      "how": "Extend parseSchedule + Schedule kind to support day-of-week ('every monday'), weekday/weekend, and sub-daily intervals ('every N hours'); complete() advances to the next matching occurrence. New ScheduleKind values + nextOccurrence logic + tests."
+    },
+    {
+      "id": "auto-suggest-save",
+      "title": "Offer to save a repeated ask as a recipe/alert",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "Recipes/alerts exist but users must know the 'save X:' syntax; most never do, so the retention flywheel never starts. Detecting a repeated ask + proposing the save+schedule converts casual use into the sticky proactive loop (audit 9 C#1).",
+      "how": "On an inbound task that closely matches a recent one (per-chat memory), append a one-line 'want me to save this as a recipe / check it every morning?' nudge to the reply. Light similarity check; no new infra (reuse memory-store + recipes)."
     }
   ],
   "history": [
@@ -373,6 +409,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 37: backlog dry after iter 36 -> ran 9th audit (3 lenses), seeded 4, built schedule-matcher-hijack (audit 9 B#1, high/S, real bug). The NL schedule keyword-regex ran BEFORE the alert/save/digest define branches, guarded only against slash + run/schedule verbs; a define/edit whose name or task contained a cadence word ('watch daily: btc', 'save morning-brief: ...', 'change btc to below 5 every check') got turned into a reminder + the alert/recipe/digest was NEVER created. Guard now also skips define SHAPES ('<watch|alert me|save|[define] digest> <name>: <task>') + alert-edit shapes ('<change|set|make> ... <below|above|in stock|by>'); matched by shape not verb so 'set a reminder every day' still schedules. Updated the DEV-0174 precedence test (schedule now skipped, not tried-then-rejected) + 3 new handler-schedule tests (watch/save not hijacked, plain 'set' reminder still schedules). 698 pass, tsc clean. call-tested false (routing logic, unit-tested). Seeded also: once-reminder-transient-retry(M), recurring-schedules(M), auto-suggest-save(S)."
     },
     {
       "event": "PRODUCT-LOOP iter 36: built profile-view-reset (audit 8 A#2, medium/S). After /setlocation a user couldn't see or correct what was stored, so a typo'd 'UTC-5' or wrong city was invisible + silently wrong on every weather/near-me/daily reminder. Added ProfileStore.clear(); handler /profile branch echoes the stored location/units/tz (capitalized contextLine) with a hint, '/profile clear' forgets it, empty -> how-to-set hint. index wires profileView + profileClear; commands.ts Commands line + HELP + BOT_COMMANDS menu gain /profile; discoverability harness stubbed. +4 tests (store.clear had/persisted, handler show/empty/clear). 695 pass, tsc clean. call-tested false (handler+store wiring, unit-tested). Backlog DRY -> ran 9th audit (same iteration)."
@@ -444,6 +483,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 9 (post-36-features). A/new-user: text-native tasks (translate/summarize-pasted/rewrite) whitelist+advertise, weekly/weekday/interval reminders, read-doc-at-URL, reframe onboarding examples for mainstream. B/reliability: NL-scheduler-hijacks-define-commands-with-cadence-word (high/S, built), once-reminder-dropped-on-transient-FIRE-failure (only rate-cap defers), memory-clobber-concurrent, extractValue-wrong-non-currency(temp/AQI), DST-drift. C/power: auto-suggest-save-repeated-ask, watch-a-search (new results in a list), reply-to-ping follow-up, shareable/importable recipes. Seeded top 4: schedule-matcher-hijack(S bug, built), once-reminder-transient-retry(M), recurring-schedules(M), auto-suggest-save(S). Deferred: memory-clobber(M), extractValue-non-currency(M), DST(L), + power bets."
     },
     {
       "note": "Audit 8 (post-32-features). A/new-user: compound multi-errand messages, /profile view+reset, freeform personal-facts memory, cancel in-flight task, advertise photo/voice/PDF in onboarding. B/reliability: greedy 'I'm in X' location-setter hijacks reminders+corrupts profile (high/S, top), threshold-alert-numberless-fires+poisons-baseline (predicate guarded, threshold path not), memory-clobber-concurrent, alert-edit-into-already-true-stays-silent, once-reminder-dropped-on-transient-fire-failure. C/power: auto-learned long-term memory vault, cookie session-expiry re-auth nudge, batched recipe fan-out over a list, CSV/xlsx export attachment, language-aware read/translate. Seeded top 4: greedy-location-setter(S bug), threshold-alert-numberless-guard(S bug), alert-edit-check-now(S), profile-view-reset(S). Deferred: memory-clobber(M lock), once-reminder-transient-fail-retry(M), + power bets (auto-memory, batched fan-out, csv-export, translate)."

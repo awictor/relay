@@ -257,7 +257,18 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // branch — a slash-command, or a `run`/`schedule` verb — whose recipe/digest NAME merely contains
     // a schedule word (e.g. `/run daily-report`, `run morning-brief`). Those must reach their own
     // dispatch; only genuine free-text like "remind me ... every day" should schedule here.
-    const isExplicitCommand = first?.startsWith("/") || /^(?:run|schedule)\b/i.test(msg.text.trim());
+    // Also exclude the DEFINE/EDIT verbs whose own branches run LATER (watch/alert/save/define
+    // digest/change...): "watch daily: btc" or "save every-morning: X" contains a cadence word, so
+    // this NL matcher would hijack it and the alert/recipe/digest would never be created (DEV: an
+    // audit found this deterministic break). Those command-shaped messages must reach their branch.
+    // Match the actual command SHAPES the later branches own — a define ("watch/alert me/save/
+    // [define] digest <name>: <task>", note the colon) or an alert edit ("change/set/make <name>
+    // <below|above|in stock|by ...>"). Matching the shape (not just the leading verb) means a plain
+    // reminder like "set a reminder every day" is NOT excluded, but "watch daily: btc" is.
+    const t0 = msg.text.trim();
+    const isDefineShape = /^\s*(?:watch|alert(?:\s+me)?|save(?:\s+recipe)?|(?:define\s+)?digest)\s+[^:]+:\s*\S/i.test(t0);
+    const isAlertEditShape = /^\s*(?:change|update|edit|set|make)\s+.+\s(?:below|under|above|over|hits?|reaches?|in\s+stock|by)\b/i.test(t0);
+    const isExplicitCommand = first?.startsWith("/") || /^(?:run|schedule)\b/i.test(t0) || isDefineShape || isAlertEditShape;
     if (!isExplicitCommand && deps.scheduleAdd && /\b(remind me|every day|every morning|every evening|every night|daily)\b|\bin \d+\s*(min|hour|day)/i.test(msg.text)) {
       const r = deps.scheduleAdd(msg.chatId, msg.text, deps.now());
       if (r.ok) {
