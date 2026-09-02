@@ -50,6 +50,31 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.list(42)).toHaveLength(0); // once -> gone
   });
 
+  it("a 'recipe:<name>' schedule resolves the recipe's CURRENT task at fire time (recipe-schedule-stable-marker)", async () => {
+    const clock = { t: NOW };
+    const tasks: Record<string, string> = { btc: "check bitcoin price" };
+    const { store, runner, sent, ran } = harness(clock, {
+      recipeResolveTask: (_c, name) => tasks[name] ?? null,
+    });
+    store.add(1, { kind: "once", task: "recipe:btc", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(ran).toEqual(["check bitcoin price"]); // ran the resolved task, not the marker
+    expect(sent[0]!.text).toMatch(/check bitcoin price/); // header shows the human task, not "recipe:btc"
+    expect(sent[0]!.text).not.toMatch(/recipe:btc/);
+  });
+
+  it("a scheduled recipe deleted after scheduling stops firing (no send), completes", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent, ran } = harness(clock, {
+      recipeResolveTask: () => null, // recipe gone
+    });
+    store.add(1, { kind: "once", task: "recipe:gone", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(ran).toEqual([]);          // never ran the agent
+    expect(sent).toHaveLength(0);     // nothing sent
+    expect(store.list(1)).toHaveLength(0); // once dropped
+  });
+
   it("a daily task fires then reschedules forward (stays in the store)", async () => {
     const clock = { t: NOW };
     const { store, runner, sent } = harness(clock);

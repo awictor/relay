@@ -554,7 +554,7 @@
       "title": "Scheduled recipes use a stable recipe:<name> marker (not the raw task)",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Scheduled recipes store the recipe's TASK STRING as the schedule marker, unlike digest:/alert:. If the recipe's task is later edited (re-save), the schedule keeps the OLD task (runs stale) + recipeForget's removeByTask(new task) matches nothing -> orphaned zombie schedule the user can't stop (audit 15 B#2).",
       "how": "Schedule recipes under 'recipe:<name>' + resolve the task at fire time (mirror digest:/alert:); runner looks up the recipe by name on fire. recipeForget removeByTask('recipe:<name>'). Migrate/accept old rows."
     },
@@ -616,6 +616,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 61: built recipe-schedule-stable-marker (audit 15 B#2, medium/M, real bug). Scheduled recipes stored the recipe's raw TASK STRING as the schedule marker (unlike digest:/alert:), so editing the recipe after scheduling left the schedule running the STALE task + recipeForget's removeByTask(new task) matched nothing -> orphaned zombie schedule the user couldn't stop. Now recipeSchedule stores a stable 'recipe:<name>' marker; the runner resolves the recipe's CURRENT task by name at fire time via a new recipeResolveTask dep (deleted recipe -> stop firing, no send; header shows the human task not the marker); recipeForget removeByTask('recipe:<name>'). +2 runner tests (resolves current task + hides marker; deleted recipe stops). 757 pass, tsc clean. LIVE-VERIFIED vs real Recipe+ScheduleStore: marker 'recipe:btc' stable; edit recipe -> fire resolves new task; forget -> schedule cleared. call-tested TRUE. Remaining: recipe-auto-recall -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 60: backlog dry after iter 59 -> ran 15th audit (3 lenses), seeded 3, built alert-redefine-dup-schedule (audit 15 B#1, high/S, real bug). alerts.add UPDATES in place on a repeat name, but alertDefine always schedules.add'd another 'alert:<name>' cadence marker, so re-stating a watch ('watch btc: price' then 'watch btc: price in USD') silently stacked 2/3/N background checks — /alerts showed ONE alert but /schedules filled with dups + every tick ran redundant anvil sessions (can exhaust the per-chat cap + Chrome pool). Fix: removeByTask(chatId,'alert:<name>') before the schedules.add so the cadence is idempotent per name. 755 pass, tsc clean. LIVE-VERIFIED vs real AlertStore+ScheduleStore: 3 re-defines of 'watch btc' -> exactly 1 alert:btc schedule (was 3). call-tested TRUE. Seeded also: recipe-schedule-stable-marker(M bug), recipe-auto-recall(S)."

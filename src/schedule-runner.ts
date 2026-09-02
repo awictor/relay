@@ -35,6 +35,10 @@ export interface ScheduleRunnerDeps {
   // the notify message ONLY if it changed (null = silent) + a commit() to advance the baseline, which
   // MUST be called only AFTER a successful send so a failed send re-fires next check. Optional.
   alertCheck?: (chatId: number, name: string) => Promise<{ message: string | null; commit: () => void }>;
+  // Recipes: a scheduled recipe stores "recipe:<name>"; on fire, resolve the recipe's CURRENT task by
+  // name (null if it was deleted) and run it as the agent task — so editing the recipe changes what
+  // fires + forgetting it stops it (a stable marker, unlike storing the raw task). Optional.
+  recipeResolveTask?: (chatId: number, name: string) => string | null;
   // m14 degrade-4: what to tell the user when a scheduled fire FAILS. Default (absent) is silent
   // (the historical contract — a failed run is a logged miss, not a message, so a misfiring daily
   // can't storm). When provided, the runner sends its return value on failure; return null to stay
@@ -84,6 +88,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     // instead of the agent. Otherwise a normal scheduled/recipe agent run.
     const digestMatch = s.task.match(/^digest:(.+)$/);
     const alertMatch = s.task.match(/^alert:(.+)$/);
+    const recipeMatch = s.task.match(/^recipe:(.+)$/);
     let res: { reply: string; steps?: number; tools?: string[]; degraded?: boolean };
     let sendText: string | null;
     // For an alert: advance the baseline ONLY after the send below succeeds (a failed send would
@@ -108,15 +113,33 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       res = { reply: composed ?? "(digest is empty or was removed)" };
       sendText = deps.formatReply(res.reply); // digest text already labeled; no reminder prefix
     } else {
-      res = await deps.runAgent(s.task, { llm: deps.llm, context: deps.contextFor?.(s.chatId) || undefined }, []);
+      // A scheduled recipe carries "recipe:<name>" — resolve its CURRENT task by name at fire time
+      // (so editing the recipe changes what fires, and a deleted recipe stops firing). A plain task
+      // (legacy schedules / reminders) runs as-is.
+      let taskToRun = s.task;
+      let label = s.kind === "once" ? "⏰ Reminder" : "⏰ Recurring";
+      if (recipeMatch && deps.recipeResolveTask) {
+        const resolved = deps.recipeResolveTask(s.chatId, recipeMatch[1]!.trim());
+        if (resolved === null) {
+          // Recipe was deleted after scheduling — stop firing (drop once / advance daily), no send.
+          deps.store.complete(s.id, deps.now());
+          log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, recipe: recipeMatch[1], ok: true, sent: false, gone: true })}`);
+          deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
+          return;
+        }
+        taskToRun = resolved;
+        label = `${label} (${recipeMatch[1]!.trim()})`;
+      }
+      res = await deps.runAgent(taskToRun, { llm: deps.llm, context: deps.contextFor?.(s.chatId) || undefined }, []);
       const body = deps.formatReply(res.reply);
-      const label = s.kind === "once" ? "⏰ Reminder" : "⏰ Recurring";
       // A degraded reply (agent ran out of steps / no answer, DEV-0176) is a soft failure, not a real
       // proactive result. Marking the unprompted message as partial keeps a flaky daily from pushing a
       // failure string as if it were the briefing, and the ok:!degraded below keeps it out of the
       // success metric (DEV-0187 — schedule-runner is the 4th runAgent consumer of the degraded flag).
       const prefix = res.degraded ? "⚠️ Partial — I ran low on steps.\n\n" : "";
-      sendText = `${label}: ${s.task}\n\n${prefix}${body}`;
+      // Show the human task, not the "recipe:<name>" marker, in the reminder header.
+      const shown = recipeMatch ? taskToRun : s.task;
+      sendText = `${label}: ${shown}\n\n${prefix}${body}`;
     }
     await deps.send(s.chatId, sendText!); // non-null here (alert-silent path returned early)
     alertCommit?.(); // send succeeded -> NOW advance the alert baseline (a throw above skips this)

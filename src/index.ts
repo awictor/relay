@@ -120,6 +120,7 @@ const scheduleRunner = makeScheduleRunner({
   maxPerChatPerHour: intEnv(process.env.RELAY_PROACTIVE_MAX_PER_HOUR, { fallback: 10, allowZeroDisable: true }), // anti-spam (m8); 0 = unlimited
   digestRun: (chatId, name) => digestRunText(chatId, name), // scheduled digests (m9)
   alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
+  recipeResolveTask: (chatId, name) => { const r = recipes.get(chatId, name); return r ? r.task : null; }, // scheduled recipes: resolve current task at fire time
   // m14 degrade-4: a failed ONE-SHOT reminder shouldn't vanish silently — tell the user, once,
   // with a friendly (non-leaking) line. A "daily" stays silent (it retries tomorrow; a misfiring
   // daily must not storm the chat with failure pings).
@@ -236,11 +237,12 @@ const handle = createHandler({
   },
   recipeList: (chatId) => recipes.list(chatId).map((r) => ({ name: r.name, task: r.task, schedule: r.schedule })),
   recipeForget: (chatId, name) => {
-    // Cancel any schedule running this recipe's task too (a scheduled recipe stores the task string),
-    // else the runner keeps firing it after the recipe is gone (orphaned-schedule-on-forget).
+    // Cancel the scheduled "recipe:<name>" marker too, else the runner keeps firing after the recipe
+    // is gone (orphaned-schedule-on-forget). A stable marker (not the raw task) means this matches
+    // even if the recipe's task was edited after it was scheduled.
     const rec = recipes.get(chatId, name);
     const removed = recipes.remove(chatId, name);
-    if (removed && rec) schedules.removeByTask(chatId, rec.task);
+    if (removed && rec) schedules.removeByTask(chatId, `recipe:${rec.name}`);
     return removed;
   },
   recipeSchedule: (chatId, name, whenClause, now) => {
@@ -249,7 +251,9 @@ const handle = createHandler({
     // A slotted recipe has no per-fire value on a schedule, so it would emit the literal "{slot}"
     // and return nonsense every day (product-loop) — refuse with a clear reason.
     if (hasSlots(rec.task)) return { ok: false, reason: "needsarg" };
-    const p = parseScheduleFor(whenClause, rec.task, now, profiles.offsetMin(chatId));
+    // Schedule a STABLE "recipe:<name>" marker (like digest:/alert:); the runner resolves the recipe's
+    // CURRENT task at fire time, so editing the recipe changes what fires + forgetting it stops it.
+    const p = parseScheduleFor(whenClause, `recipe:${rec.name}`, now, profiles.offsetMin(chatId));
     if (!p) return { ok: false, reason: "unparsed" };
     const s = schedules.add(chatId, p, now);
     if (!s) return { ok: false, reason: "capped" };
