@@ -50,6 +50,17 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.list(42)).toHaveLength(0); // once -> gone
   });
 
+  it("a reminderOnly schedule echoes the note and does NOT run the agent (reminder-only-no-agent)", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent, ran } = harness(clock);
+    store.add(7, { kind: "once", task: "take my meds", dueMs: NOW - 1, reminderOnly: true }, NOW);
+    const n = await runner.tick();
+    expect(n).toBe(1);
+    expect(ran).toEqual([]);                       // agent never invoked — no confused browse/refusal
+    expect(sent[0]!.text).toBe("⏰ Reminder: take my meds");
+    expect(store.list(7)).toHaveLength(0);         // once -> gone
+  });
+
   it("a 'recipe:<name>' schedule resolves the recipe's CURRENT task at fire time (recipe-schedule-stable-marker)", async () => {
     const clock = { t: NOW };
     const tasks: Record<string, string> = { btc: "check bitcoin price" };

@@ -806,7 +806,7 @@
       "title": "pure personal reminders run the browser agent instead of echoing",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "\"remind me to take my meds at 8pm\" fires \"Reminder: take my meds\" then a confused 20-40s agent browse/refusal appended.",
       "how": "Detect a non-informational to-do at schedule time (imperative personal task, no fetch verb) and mark reminderOnly; fireOne echoes the stored text instead of calling runAgent."
     },
@@ -1086,6 +1086,10 @@
     {
       "id": "extractvalue-magnitude-suffix",
       "note": "extractValue now scales k/M/bn/thousand/million/billion/trillion magnitude suffixes on both currency-tagged and untagged numbers (bare m/t excluded untagged to avoid \"3m ago\"). A \"below 50000\" price watch no longer false-fires reading \"$60k\" as 60. 812 tests green."
+    },
+    {
+      "id": "reminder-only-no-agent",
+      "note": "Pure personal to-dos (\"remind me to take my meds\") now echo the stored note at fire time instead of running a 20-40s browser-agent errand that appended a confused browse/refusal. isReminderOnly = reminder-prefix present AND no info-fetch cue; \"remind me to check the weather\" still runs the agent. reminderOnly flag threads ParsedSchedule->Schedule->fireOne. Recipes never set it. 814 tests green."
     }
   ],
   "audits": [

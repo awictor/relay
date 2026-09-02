@@ -21,6 +21,7 @@ export interface Schedule {
   weekdays?: number[]; // for weekly: days-of-week to fire on (0=Sun..6=Sat), in the user's zone
   intervalMs?: number; // for interval: gap between fires
   attempts?: number;   // failed fire attempts (once-reminder transient-retry); dropped after a cap
+  reminderOnly?: boolean; // a pure personal to-do ("take meds"): echo the note at fire time, don't run the agent
   created: number;
 }
 
@@ -32,6 +33,7 @@ export interface ParsedSchedule {
   offsetMin?: number;  // tz offset used to compute dueMs, carried so reschedule stays in the user's zone
   weekdays?: number[];
   intervalMs?: number;
+  reminderOnly?: boolean; // pure personal to-do: echo at fire time, don't run the agent
 }
 
 const MINUTE = 60_000;
@@ -39,8 +41,21 @@ const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
 // Strip a leading "remind me to"/"remind me"/"reminder:" so the stored task reads naturally.
+const REMINDER_PREFIX_RE = /^\s*(please\s+)?(remind me to|remind me|reminder:?|remember to)\s+/i;
 function stripReminderPrefix(s: string): string {
-  return s.replace(/^\s*(please\s+)?(remind me to|remind me|reminder:?|remember to)\s+/i, "").trim();
+  return s.replace(REMINDER_PREFIX_RE, "").trim();
+}
+
+// Info-fetch cues: if a reminder's task contains one, the user wants the AGENT to look something up at
+// fire time ("remind me to check the weather at 8"), so it's NOT reminder-only. Absent = a pure personal
+// to-do ("take my meds", "call mom") that should just echo the note back, not run a 30s browser errand.
+const FETCH_CUE_RE = /\b(check|what'?s?|whats|how'?s?|when|where|who|why|price|cost|weather|forecast|temp|temperature|news|headline|headlines|latest|top|score|scores|status|standings|stock|stocks|rate|rates|look\s?up|search|find|fetch|get\s+me|tell\s+me|show\s+me|summar\w+|update\s+me|any\s+new)\b/i;
+
+// A reminder is "reminder-only" (echo the stored text, don't run the agent) when it CAME from a reminder
+// phrase AND its task has no info-fetch cue. Keeps "remind me to check BTC" on the agent path while
+// "remind me to take my meds" just re-sends the note — no confused browse/refusal appended.
+function isReminderOnly(raw: string, task: string): boolean {
+  return REMINDER_PREFIX_RE.test(raw.trim()) && !FETCH_CUE_RE.test(task);
 }
 
 /**
@@ -100,7 +115,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     const ms = /^h/.test(unit) ? n * HOUR : /^d/.test(unit) ? n * DAY : n * MINUTE;
     const task = cleanTask(raw, rel[0]!);
     if (!task) return null;
-    return { kind: "once", task, dueMs: now + ms };
+    return { kind: "once", task, dueMs: now + ms, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
   }
 
   // --- interval: "every 2 hours", "every 30 min", "every 90 minutes" (sub-daily recurring) ---
@@ -112,7 +127,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     if (n >= 1 && ms >= MINUTE) {
       const task = cleanTask(raw, interval[0]!);
       if (!task) return null;
-      return { kind: "interval", task, dueMs: now + ms, intervalMs: ms };
+      return { kind: "interval", task, dueMs: now + ms, intervalMs: ms, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
     }
   }
 
@@ -139,7 +154,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
       const hourMin = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
       const task = cleanTask(raw, weeklyClause[0]!);
       if (!task) return null;
-      return { kind: "weekly", task, dueMs: nextWeeklyMs(now, hh, mm, weekdays, offsetMin), hourMin, offsetMin, weekdays };
+      return { kind: "weekly", task, dueMs: nextWeeklyMs(now, hh, mm, weekdays, offsetMin), hourMin, offsetMin, weekdays, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
     }
   }
 
@@ -155,7 +170,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     const hourMin = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
     const task = cleanTask(raw, daily[0]!);
     if (!task) return null;
-    return { kind: "daily", task, dueMs: nextDailyMs(now, hh, mm, offsetMin), hourMin, offsetMin };
+    return { kind: "daily", task, dueMs: nextDailyMs(now, hh, mm, offsetMin), hourMin, offsetMin, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
   }
 
   // --- 24-hour clock: "at 14:30", "tomorrow at 09:00" (DEV-0189) ---
@@ -172,7 +187,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     const due = at24[1] ? dayAtMs(now, hh, mm, 1, offsetMin) : nextDailyMs(now, hh, mm, offsetMin);
     const task = cleanTask(raw, at24[0]!);
     if (!task) return null;
-    return { kind: "once", task, dueMs: due };
+    return { kind: "once", task, dueMs: due, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
   }
 
   // --- absolute-ish: "tomorrow at 9am", "tomorrow 9:30", "at 5pm" (today or next day) ---
@@ -184,7 +199,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     const due = at[1] ? dayAtMs(now, hh, mm, 1, offsetMin) : nextDailyMs(now, hh, mm, offsetMin);
     const task = cleanTask(raw, at[0]!);
     if (!task) return null;
-    return { kind: "once", task, dueMs: due };
+    return { kind: "once", task, dueMs: due, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
   }
 
   return null;
@@ -300,7 +315,7 @@ export class ScheduleStore {
   /** Add a schedule for a chat. Returns the stored record, or null if the chat is at its cap. */
   add(chatId: number, p: ParsedSchedule, now: number): Schedule | null {
     if (this.items.filter((s) => s.chatId === chatId).length >= this.maxPerChat) return null;
-    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, weekdays: p.weekdays, intervalMs: p.intervalMs, created: now };
+    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, weekdays: p.weekdays, intervalMs: p.intervalMs, ...(p.reminderOnly ? { reminderOnly: true } : {}), created: now };
     this.items.push(s);
     this.persist();
     return s;

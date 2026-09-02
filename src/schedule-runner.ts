@@ -157,6 +157,19 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         taskToRun = resolved;
         label = `${label} (${recipeMatch[1]!.trim()})`;
       }
+      // Reminder-only (reminder-only-no-agent): a pure personal to-do ("take my meds") just re-sends
+      // the note — running the browser agent on it appended a confused 20-40s browse/refusal. Echo and
+      // return. Recipes never set reminderOnly, so this only hits plain "remind me to X" schedules.
+      if (s.reminderOnly && !recipeMatch) {
+        const echo = `⏰ Reminder: ${taskToRun}`;
+        await deps.send(s.chatId, echo);
+        deps.recordSend?.(s.chatId, echo);
+        noteSend(s.chatId, deps.now());
+        deps.store.complete(s.id, deps.now());
+        log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, reminderOnly: true, ok: true })}`);
+        deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
+        return;
+      }
       res = await deps.runAgent(taskToRun, { llm: deps.llm, context: deps.contextFor?.(s.chatId) || undefined }, []);
       const body = deps.formatReply(res.reply);
       // A degraded reply (agent ran out of steps / no answer, DEV-0176) is a soft failure, not a real

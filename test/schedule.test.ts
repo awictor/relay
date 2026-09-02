@@ -32,6 +32,18 @@ describe("parseSchedule — relative", () => {
     expect(parseSchedule("in 10 minutes", NOW)).toBeNull();
     expect(parseSchedule("remind me in 5 mins", NOW)).toBeNull();
   });
+
+  it("marks a pure personal to-do as reminderOnly, but not an info-fetch reminder (reminder-only-no-agent)", () => {
+    // Personal to-dos: echo at fire time, don't run the browser agent.
+    expect(parseSchedule("remind me to take my meds in 3 hours", NOW)!.reminderOnly).toBe(true);
+    expect(parseSchedule("remind me to call mom at 5pm", NOW)!.reminderOnly).toBe(true);
+    expect(parseSchedule("remind me to stretch every 2 hours", NOW)!.reminderOnly).toBe(true);
+    // Info-fetch reminders stay on the agent path (a fetch cue present).
+    expect(parseSchedule("remind me to check the weather at 8am", NOW)!.reminderOnly).toBeUndefined();
+    expect(parseSchedule("remind me to get me the top HN story in 1 hour", NOW)!.reminderOnly).toBeUndefined();
+    // A non-reminder schedule ("in 2 hours check the news") is never reminder-only.
+    expect(parseSchedule("in 2 hours check the news", NOW)!.reminderOnly).toBeUndefined();
+  });
 });
 
 describe("parseSchedule — 24-hour clock (DEV-0189)", () => {
