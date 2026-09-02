@@ -56,6 +56,13 @@ describe("parseUpdates — inbound delivery contract", () => {
     expect(messages[0]).toMatchObject({ chatId: 88, text: "", voiceFileId: "v1" });
   });
 
+  it("maps a document to an InboundMessage with documentFileId + caption + mime (product-loop)", () => {
+    const doc = { update_id: 33, message: { message_id: 11, chat: { id: 99 }, caption: "summarize this",
+      document: { file_id: "d1", mime_type: "application/pdf", file_name: "statement.pdf" } } } as Parameters<typeof parseUpdates>[0][0];
+    const { messages } = parseUpdates([doc], 0);
+    expect(messages[0]).toMatchObject({ chatId: 99, text: "summarize this", documentFileId: "d1", documentMime: "application/pdf" });
+  });
+
   it("from falls back username -> first_name -> chatId string", () => {
     const r1 = parseUpdates([textMsg(1, 42, "x", { username: "u", first_name: "F" })], 0);
     expect(r1.messages[0].from).toBe("u");

@@ -168,6 +168,17 @@ const handle = createHandler({
         return llm.transcribeAudio!(file.bytes, file.mimeType);
       }
     : undefined,
+  // Inbound document/PDF (product-loop): download + ask the multimodal LLM (Gemini reads PDFs via the
+  // same inlineData path as images). Reuses describeImage; the downloaded mime (application/pdf) is
+  // passed through so Gemini treats it as a document.
+  describeDocument: llm.describeImage
+    ? async (fileId, caption) => {
+        const file = await downloadFile(fileId);
+        if (!file) return "I couldn't download that file — try resending it.";
+        const prompt = caption?.trim() || "Summarize this document and flag anything important (totals, dates, actions).";
+        return llm.describeImage!(file.bytes, file.mimeType, prompt);
+      }
+    : undefined,
   scheduleAdd: (chatId, text, now) => {
     const p = parseSchedule(text, now);
     if (!p) return { ok: false, reason: "unparsed" };

@@ -131,7 +131,7 @@
       "title": "Understand forwarded documents/PDFs",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Forwarding a PDF/statement + 'summarize this' is dropped; asymmetric (bot sends PDFs, can't receive). A+C.",
       "how": "parseUpdates emits document file_id; downloadFile; Gemini reads PDF bytes (multimodal) -> answer. Mirror photo path."
     }
@@ -178,6 +178,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 14: built voice-notes (audit A+C unanimous, Instinct parity). InboundMessage.voiceFileId; parseUpdates maps voice messages; downloadFile mime map gained audio types (oga/ogg/mp3/m4a/wav). LLMClient.transcribeAudio + GeminiClient impl (refactored describeImage+transcribeAudio onto a shared inlineCall for the model-failover boilerplate). Handler voice branch: transcribe -> echo '🎤 \"...\"' -> RUN transcript as a normal task (falls through to command routing+agent); no-dep -> 'cant do voice' note; empty transcript -> 'couldnt make out' retry. index wires transcribeVoice = download+llm.transcribeAudio. +tests: parseUpdates voice, handler (transcribe-run + no-dep + unintelligible), GeminiClient.transcribeAudio inlineData shape. 641 pass, tsc clean. call-tested false (no real audio fixture; shares the live-PROVEN inlineCall path with photo-vision). Remaining: inbound-document-pdf -> then audit refills."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 15: built inbound-document-pdf (audit A+C). InboundMessage.documentFileId+documentMime; parseUpdates maps document messages (caption as question); downloadFile MIME map gained pdf/txt. Handler document branch (mirrors photo: rate-limited, before empty-text guard, friendlyError) -> describeDocument. index wires describeDocument = download + llm.describeImage (Gemini reads PDFs via the same inlineData path; default prompt summarizes + flags totals/dates/actions). +tests: parseUpdates document, handler (answered-not-agent + no-dep). 644 pass, tsc clean. LIVE-VERIFIED: real Gemini read a 1-page PDF invoice -> extracted '88 dollars'. call-tested TRUE. Backlog DRY -> audit refills next iteration."
     }
   ],
   "audits": [

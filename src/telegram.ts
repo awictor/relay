@@ -21,6 +21,9 @@ export interface InboundMessage {
                         // largest size; `text` carries the caption (may be empty). Handler downloads it.
   voiceFileId?: string; // set when the message is a voice note (product-loop): file_id of the audio.
                         // Handler downloads + transcribes it, then runs the transcript as a task.
+  documentFileId?: string; // set when the message is a document/PDF (product-loop): file_id; `text`
+                           // carries the caption. Handler downloads + asks the vision LLM about it.
+  documentMime?: string;   // the document's declared mime_type (e.g. application/pdf), if any.
 }
 
 export function hasToken(): boolean {
@@ -60,7 +63,8 @@ export async function downloadFile(fileId: string): Promise<{ bytes: Uint8Array;
     const bytes = new Uint8Array(await dl.arrayBuffer());
     const ext = path.split(".").pop()?.toLowerCase();
     const MIME: Record<string, string> = { png: "image/png", webp: "image/webp", jpg: "image/jpeg", jpeg: "image/jpeg",
-      oga: "audio/ogg", ogg: "audio/ogg", mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav" };
+      oga: "audio/ogg", ogg: "audio/ogg", mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav",
+      pdf: "application/pdf", txt: "text/plain" };
     const mimeType = (ext && MIME[ext]) || "image/jpeg"; // photos are the common case + have no reliable ext
     return { bytes, mimeType };
   } catch {
@@ -132,6 +136,7 @@ interface TgUpdate {
     caption?: string;                                  // photo/media caption
     photo?: Array<{ file_id: string; width?: number; height?: number }>; // size variants, ascending
     voice?: { file_id: string; duration?: number; mime_type?: string };  // voice note
+    document?: { file_id: string; mime_type?: string; file_name?: string }; // forwarded file/PDF
     from?: { username?: string; first_name?: string };
   };
 }
@@ -161,6 +166,9 @@ export function parseUpdates(updates: TgUpdate[], offset: number): { messages: I
     } else if (m.voice?.file_id) {
       // Voice note: transcribed + run by the handler (product-loop). No text of its own.
       messages.push({ chatId: m.chat.id, text: "", from, messageId: m.message_id, voiceFileId: m.voice.file_id });
+    } else if (m.document?.file_id) {
+      // Forwarded document/PDF (product-loop): handler downloads + asks the vision LLM. Caption = the question.
+      messages.push({ chatId: m.chat.id, text: (m.caption ?? "").trim(), from, messageId: m.message_id, documentFileId: m.document.file_id, documentMime: m.document.mime_type });
     } else if (m.text) {
       messages.push({ chatId: m.chat.id, text: m.text, from, messageId: m.message_id });
     }

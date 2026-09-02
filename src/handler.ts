@@ -42,6 +42,9 @@ export interface HandlerDeps {
   // Inbound voice note (product-loop): transcribe the audio to text; the handler then runs the
   // transcript as a normal task. Optional; absent -> a voice note gets a "can't do voice" note.
   transcribeVoice?: (fileId: string) => Promise<string>;
+  // Inbound document/PDF (product-loop): describe/answer about a forwarded file (caption = question).
+  // Optional; absent -> a document gets a "can't read files" note.
+  describeDocument?: (fileId: string, caption: string) => Promise<string>;
   // Scheduled/proactive tasks (m4 sched-3). All optional so older wiring stays valid; when
   // absent, a "remind me" message just falls through to the normal agent.
   scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number } | { ok: false; reason: "unparsed" | "capped" };
@@ -101,7 +104,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   const log = deps.log ?? console.log;
 
   return async function handle(msg: InboundMessage): Promise<void> {
-    log(`[in] ${msg.from}: ${msg.photoFileId ? "[photo] " : ""}${msg.voiceFileId ? "[voice] " : ""}${deps.redactText(msg.text).slice(0, 120)}`);
+    log(`[in] ${msg.from}: ${msg.photoFileId ? "[photo] " : ""}${msg.voiceFileId ? "[voice] " : ""}${msg.documentFileId ? "[doc] " : ""}${deps.redactText(msg.text).slice(0, 120)}`);
 
     // Inbound photo (product-loop): answer about the image (caption = question, or a default). This is
     // a vision call, not the browser agent — handled before the empty-text guard so a captionless
@@ -113,6 +116,22 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       try {
         await deps.sendTyping(msg.chatId);
         const answer = await deps.describeImage(msg.photoFileId, msg.text);
+        await deps.sendMessage(msg.chatId, formatReply(answer));
+      } catch (e) {
+        await deps.sendMessage(msg.chatId, friendlyError(e instanceof Error ? e.message : String(e)));
+      }
+      return;
+    }
+
+    // Inbound document/PDF (product-loop): answer about the forwarded file (caption = question). Same
+    // shape as the photo branch — a vision call, before the empty-text guard, rate-limited.
+    if (msg.documentFileId) {
+      const rl = deps.checkRateLimit(msg.chatId);
+      if (!rl.allowed) { await deps.sendMessage(msg.chatId, `You're sending a lot — give me ${rl.retryAfterSec}s to catch up.`); return; }
+      if (!deps.describeDocument) { await deps.sendMessage(msg.chatId, "I can't read files yet — send me a task in words for now."); return; }
+      try {
+        await deps.sendTyping(msg.chatId);
+        const answer = await deps.describeDocument(msg.documentFileId, msg.text);
         await deps.sendMessage(msg.chatId, formatReply(answer));
       } catch (e) {
         await deps.sendMessage(msg.chatId, friendlyError(e instanceof Error ? e.message : String(e)));

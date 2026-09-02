@@ -205,6 +205,25 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/couldn't make out/i);
   });
 
+  it("a document message is answered via describeDocument, not the browser agent (product-loop)", async () => {
+    let agentCalled = false; let gotFile = ""; let gotCaption = "";
+    const { handle, sent } = harness({
+      describeDocument: async (fileId, caption) => { gotFile = fileId; gotCaption = caption; return "Statement: total due $88 on the 15th."; },
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle({ chatId: 5, from: "u", text: "summarize this", messageId: 1, documentFileId: "D1" } as InboundMessage);
+    expect(agentCalled).toBe(false);
+    expect(gotFile).toBe("D1");
+    expect(gotCaption).toBe("summarize this");
+    expect(sent[0]!.text).toMatch(/\$88/);
+  });
+
+  it("a document with no describeDocument dep gets a clear note", async () => {
+    const { handle, sent } = harness();
+    await handle({ chatId: 5, from: "u", text: "", messageId: 1, documentFileId: "D1" } as InboundMessage);
+    expect(sent[0]!.text).toMatch(/can't read files/i);
+  });
+
   it("a location message stores it and does NOT run the agent (product-loop)", async () => {
     let agentCalled = false;
     const { handle, sent } = harness({
