@@ -40,6 +40,9 @@ export interface ScheduleRunnerDeps {
   // name (null if it was deleted) and run it as the agent task — so editing the recipe changes what
   // fires + forgetting it stops it (a stable marker, unlike storing the raw task). Optional.
   recipeResolveTask?: (chatId: number, name: string) => string | null;
+  // Record a proactive send into the shared last-result cache so a user can reply "more"/"send the
+  // link" to a digest/alert ping (proactive-ping-drilldown-cache). Optional.
+  recordSend?: (chatId: number, text: string) => void;
   // m14 degrade-4: what to tell the user when a scheduled fire FAILS. Default (absent) is silent
   // (the historical contract — a failed run is a logged miss, not a message, so a misfiring daily
   // can't storm). When provided, the runner sends its return value on failure; return null to stay
@@ -153,6 +156,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     }
     await deps.send(s.chatId, sendText!); // non-null here (alert-silent path returned early)
     alertCommit?.(); // send succeeded -> NOW advance the alert baseline (a throw above skips this)
+    deps.recordSend?.(s.chatId, sendText!); // cache for a "more"/"send the link" reply to this ping
     noteSend(s.chatId, deps.now());
     deps.store.complete(s.id, deps.now());
     // Observability (m8): structured proactive-run line + Metrics record (same as inbound).

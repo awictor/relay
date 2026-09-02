@@ -452,6 +452,19 @@ describe("createHandler", () => {
     expect(sent[1]!.text).toMatch(/line 30/); // the dropped tail
   });
 
+  it("'send the link' works on a proactive ping via the shared last-result store (proactive-ping-drilldown-cache)", async () => {
+    const store = new Map<number, { full: string; sent: number }>();
+    store.set(8, { full: "🔔 btc changed: see https://x.com/p", sent: 999 }); // as if a runner ping cached it
+    let agentCalls = 0;
+    const { handle, sent } = harness({
+      lastResultStore: store,
+      runAgentFn: async () => { agentCalls++; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("send the link", 8));
+    expect(sent[0]!.text).toMatch(/https:\/\/x\.com\/p/);
+    expect(agentCalls).toBe(0);
+  });
+
   it("'send the link' returns URLs from the last answer, no agent re-run", async () => {
     let agentCalls = 0;
     const { handle, sent } = harness({

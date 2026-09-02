@@ -47,6 +47,10 @@ export interface HandlerDeps {
   // Auto-suggest saving a repeated ask as a recipe (product-loop). When true, a reply to a task that
   // closely matches an earlier one this chat asked gets a one-line "want me to save this?" nudge.
   suggestSaves?: boolean;
+  // Shared last-result cache (proactive-ping-drilldown-cache): when provided, the handler stores each
+  // answer here AND the schedule-runner writes its proactive sends here, so "more"/"send the link"
+  // works after an unprompted digest/alert ping too. Absent -> handler uses a private map (inbound only).
+  lastResultStore?: Map<number, { full: string; sent: number }>;
   // Inbound photo (product-loop): when a message carries photoFileId, describeImage answers about it
   // (caption = the question). Optional; absent -> a photo message gets a "can't read images yet" note.
   describeImage?: (fileId: string, caption: string) => Promise<string>;
@@ -143,9 +147,10 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   // Last recipe-recall message we offered per chat (normalized). Lets a re-send of the same phrase
   // fall through to a fresh answer instead of re-offering forever (recipe-auto-recall escape hatch).
   const recallOffered = new Map<number, string>();
-  // Last text answer per chat (shown = what we sent, full = untrimmed) for "more"/"link" follow-ups
-  // (last-result-drilldown). In-memory; a restart just means "more" says there's nothing cached.
-  const lastResult = new Map<number, { full: string; sent: number }>();
+  // Last text answer per chat (full = untrimmed, sent = chars delivered) for "more"/"link" follow-ups
+  // (last-result-drilldown). Uses the SHARED store when provided so a proactive digest/alert ping can
+  // also be drilled into ("more"/"link" after an unprompted message); else a private in-memory map.
+  const lastResult = deps.lastResultStore ?? new Map<number, { full: string; sent: number }>();
   function handle(msg: InboundMessage): Promise<void> {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });

@@ -87,6 +87,18 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.list(1)).toHaveLength(0); // once dropped
   });
 
+  it("records the proactive send into the shared cache for a 'more'/'link' drilldown (proactive-ping-drilldown-cache)", async () => {
+    const clock = { t: NOW };
+    const store = new Map<number, { full: string; sent: number }>();
+    const { store: sched, runner } = harness(clock, {
+      runAgent: async () => ({ reply: "the news is X, see https://ex.com/a" }),
+      recordSend: (chatId, text) => store.set(chatId, { full: text, sent: text.length }),
+    });
+    sched.add(1, { kind: "once", task: "news", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(store.get(1)!.full).toMatch(/the news is X/); // cached for a follow-up drilldown
+  });
+
   it("a daily task fires then reschedules forward (stays in the store)", async () => {
     const clock = { t: NOW };
     const { store, runner, sent } = harness(clock);
