@@ -88,6 +88,27 @@ describe("checkAlert", () => {
     expect(r.message).toMatch(/rainy/);
   });
 
+  it("a numeric change shows was->now + delta + direction (alert-delta-in-ping)", async () => {
+    const r = await checkAlert(alert({ lastValue: "$65,000", threshold: 1000 }), deps("$67,000").d);
+    expect(r.notify).toBe(true);
+    expect(r.message).toMatch(/was \$65,000/);
+    expect(r.message).toMatch(/now \$67,000/);
+    expect(r.message).toMatch(/↑2000/); // +2000 up
+  });
+  it("a down move shows the down arrow", async () => {
+    const r = await checkAlert(alert({ lastValue: "$67,000", threshold: 1000 }), deps("$65,000").d);
+    expect(r.message).toMatch(/↓2000/);
+  });
+  it("a non-numeric change stays plain (no delta line)", async () => {
+    const r = await checkAlert(alert({ lastValue: "sunny" }), deps("rainy").d);
+    expect(r.message).not.toMatch(/was |→|↑|↓/);
+  });
+  it("first run has no delta line (nothing to compare)", async () => {
+    const r = await checkAlert(alert({ threshold: 1000 }), deps("$65,000").d); // no lastValue
+    expect(r.notify).toBe(true);
+    expect(r.message).not.toMatch(/was |→/);
+  });
+
   it("threshold: small numeric move is silent, big move notifies", async () => {
     const small = await checkAlert(alert({ lastValue: "$65,000", threshold: 1000 }), deps("$65,200").d);
     expect(small.notify).toBe(false);

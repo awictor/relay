@@ -82,5 +82,19 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
 
   if (!didChange) return { notify: false, message: null, value };
   const header = firstRun ? `🔔 ${alert.name} (watching)` : `🔔 ${alert.name} changed`;
-  return { notify: true, message: `${header}:\n${value}`, value };
+  // Show the move, not just the new value: on a real change where BOTH the prior baseline and the new
+  // value are numeric, append "was <prev> → now <new> (±<delta>, up/down)" so the ping is a
+  // self-contained answer the user doesn't have to go check. Non-numeric (or first-run) stays plain.
+  let delta = "";
+  if (!firstRun) {
+    const pv = extractValue(alert.lastValue!), nv = extractValue(value);
+    if (pv !== null && nv !== null && nv !== pv) {
+      const d = nv - pv;
+      const arrow = d > 0 ? "↑" : "↓";
+      const mag = Math.abs(d);
+      const num = Number.isInteger(pv) && Number.isInteger(nv) ? String(mag) : mag.toFixed(2);
+      delta = `\n(was ${alert.lastValue!.trim()} → now ${value.trim()}; ${arrow}${num})`;
+    }
+  }
+  return { notify: true, message: `${header}:\n${value}${delta}`, value };
 }

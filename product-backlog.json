@@ -455,7 +455,7 @@
       "title": "Show was->now (+delta, direction) in an alert ping",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A change/threshold alert fires '🔔 btc changed: $67,000' — the user sees the new value but not what it moved FROM or which way, so they must go check to understand it. checkAlert holds the prior baseline at the exact moment it composes the message (audit 12 C#1).",
       "how": "In checkAlert's notify branches, when prior + new both carry a numeric value, append 'was <prev> -> now <new> (±<delta>, up/down)'. Reuse extractValue for both; fall back to the plain message when non-numeric."
     },
@@ -517,6 +517,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 51: built alert-delta-in-ping (audit 12 C#1, high/S). A change/threshold alert fired '🔔 btc changed: $67,000' — the user saw the new value but not what it moved FROM or which way, so they had to go check to understand it. checkAlert already holds the prior baseline at notify time; on a real change where BOTH prev + new are numeric it now appends '(was $65,000 → now $67,000; ↑2000)' (integer delta when both ints, else 2dp; ↑/↓ direction). Non-numeric changes + first-run stay plain. +4 tests (up move was->now+↑delta, down ↓, non-numeric plain, first-run plain). 743 pass, tsc clean. call-tested false (pure runner logic, unit-tested). Remaining: save-that-as -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 50: built inline-cmd-rate-limit (audit 12 B#1, high/M, real DoS/cost hole). digestRun (one agent per member) + alertRunNow (define/edit immediate check) ran full LLM+anvil work BEFORE checkRateLimit, so spamming '/run <digest>' / 'watch x: ... below 1' / 'change x to below 1' opened many concurrent anvil Chrome sessions, exhausted the bounded pool + made OTHER chats fail 'browser down', plus unbounded model cost. Now: '/run <digest>' is rate-gated like the agent path (over-cap -> 'sending a lot' + no run); the alert define + edit immediate checks are skipped when over cap (define/edit still confirm; the scheduled cadence still covers it). A recipe /run already falls through to the rate-checked agent path. +2 tests (digest over-cap blocked no run; alert-define over-cap confirms but skips immediate check). 739 pass, tsc clean. call-tested false (routing + rate wiring). Remaining: alert-delta-in-ping, save-that-as."
