@@ -115,7 +115,7 @@ const ALERT_CADENCE = process.env.RELAY_ALERT_CADENCE ?? "every day at 09:00"; /
 const SCHED_TICK_MS = intEnv(process.env.RELAY_SCHED_TICK_MS, { fallback: 30_000, allowZeroDisable: true }); // 0 disables
 // Shared last-result cache (proactive-ping-drilldown-cache): the handler stores answers here + the
 // runner records proactive sends, so "more"/"send the link" works after an unprompted ping too.
-const lastResultStore = new Map<number, { full: string; sent: number }>();
+const lastResultStore = new Map<number, { full: string; sent: number; proactive?: boolean }>();
 const scheduleRunner = makeScheduleRunner({
   store: schedules, llm, runAgent, send: sendMessage, formatReply, contextFor: (c) => profiles.contextLine(c),
   now: () => Date.now(), periodMs: SCHED_TICK_MS,
@@ -125,7 +125,7 @@ const scheduleRunner = makeScheduleRunner({
   digestRun: (chatId, name) => digestRunText(chatId, name), // scheduled digests (m9)
   alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
   recipeResolveTask: (chatId, name) => { const r = recipes.get(chatId, name); return r ? r.task : null; }, // scheduled recipes: resolve current task at fire time
-  recordSend: (chatId, text) => lastResultStore.set(chatId, { full: text, sent: text.length }), // proactive ping -> drilldown cache
+  recordSend: (chatId, text) => lastResultStore.set(chatId, { full: text, sent: text.length, proactive: true }), // proactive ping -> drilldown + follow-up context
   // m14 degrade-4: a failed ONE-SHOT reminder shouldn't vanish silently — tell the user, once,
   // with a friendly (non-leaking) line. A "daily" stays silent (it retries tomorrow; a misfiring
   // daily must not storm the chat with failure pings).

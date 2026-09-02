@@ -716,7 +716,7 @@
       "title": "Reply to a proactive ping is understood in that ping's context",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Replying 'why?'/'what about ETH?' to an alert/digest ping is treated as a cold new task (no context), so the natural two-way thread on an unprompted message breaks. The ping text is already cached (recordSend) (audit 19 C#2).",
       "how": "If the last outbound was a proactive send + the inbound isn't a command/more/link/known-shape, prepend the cached ping text as agent context (a system line) so the follow-up resolves against it. Reuse the shared lastResultStore."
     },
@@ -778,6 +778,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 75: built proactive-followup-context (audit 19 C#2, medium/S). Replying 'why?'/'what about ETH?' to an alert/digest ping was a cold task (no context). Added a proactive flag to the shared lastResultStore entries (recordSend sets true, the handler's inbound cache write sets false); when the last cached entry is proactive AND the reply is short (<=8 words), the handler prepends 'The user is replying to this message I just sent: \"<ping>\". Answer their follow-up in that context.' to the agent context (alongside profile ctx). So a one-hop follow-up to a ping resolves against it. +2 tests (short follow-up to proactive ping gets ping ctx; follow-up to a normal inbound answer does NOT). 795 pass, tsc clean. call-tested false (wiring, unit-tested). Remaining: quiet-hours -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 74: built watch-schedule-that-by-ref (audit 19 C#1, high/S). 'save that as <name>' captured the last task as a recipe, but there was no zero-retype on-ramp to the OTHER automations — the top retention move (one-off -> standing automation at peak intent). New parseWatchThat ('watch that [below N / in stock / by N]') + parseScheduleThat ('schedule that <when>' / 'do that every morning') in recipes.ts; handler resolves the most recent REAL user task from memory (skips command/media turns), then: watch-that -> alertDefine('watch <derived-name>: <task> <clause>') + immediate rate-gated check; schedule-that -> scheduleAdd('<task> <clause>') w/ next-fire echo. Guarded the 'schedule <name>' branch to skip 'schedule that/this/it'. HELP updated. +9 tests (parseWatchThat/parseScheduleThat forms + nulls; handler watch-that->alert, schedule-that->scheduleAdd, nothing-recent). 793 pass, tsc clean. call-tested false (parser + handler-memory wiring, unit-tested). Remaining: proactive-followup-context, quiet-hours."

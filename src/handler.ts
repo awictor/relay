@@ -50,7 +50,7 @@ export interface HandlerDeps {
   // Shared last-result cache (proactive-ping-drilldown-cache): when provided, the handler stores each
   // answer here AND the schedule-runner writes its proactive sends here, so "more"/"send the link"
   // works after an unprompted digest/alert ping too. Absent -> handler uses a private map (inbound only).
-  lastResultStore?: Map<number, { full: string; sent: number }>;
+  lastResultStore?: Map<number, { full: string; sent: number; proactive?: boolean }>;
   // Inbound photo (product-loop): when a message carries photoFileId, describeImage answers about it
   // (caption = the question). Optional; absent -> a photo message gets a "can't read images yet" note.
   describeImage?: (fileId: string, caption: string) => Promise<string>;
@@ -150,7 +150,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   // Last text answer per chat (full = untrimmed, sent = chars delivered) for "more"/"link" follow-ups
   // (last-result-drilldown). Uses the SHARED store when provided so a proactive digest/alert ping can
   // also be drilled into ("more"/"link" after an unprompted message); else a private in-memory map.
-  const lastResult = deps.lastResultStore ?? new Map<number, { full: string; sent: number }>();
+  const lastResult = deps.lastResultStore ?? new Map<number, { full: string; sent: number; proactive?: boolean }>();
   function handle(msg: InboundMessage): Promise<void> {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -665,7 +665,16 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     const clearProgress = () => { if (progressHandle !== null) { clearTimer(progressHandle); progressHandle = null; } };
     try {
       await deps.sendTyping(msg.chatId);
-      const context = deps.profileContext?.(msg.chatId) || undefined;
+      const profileCtx = deps.profileContext?.(msg.chatId) || "";
+      // Proactive-ping follow-up (proactive-followup-context): if the last message this chat got was an
+      // unprompted digest/alert ping (cached, proactive flag) and this reply is a short follow-up
+      // ("why?", "what about ETH?"), give the agent that ping as context so it resolves against it
+      // instead of cold-starting. Bounded so it's only a genuine follow-up, not a fresh full task.
+      const cachedPing = lastResult.get(msg.chatId);
+      const pingCtx = (cachedPing?.proactive && msg.text.trim().split(/\s+/).length <= 8)
+        ? `The user is replying to this message I just sent them: "${cachedPing.full.slice(0, 600)}". Answer their follow-up in that context.`
+        : "";
+      const context = [profileCtx, pingCtx].filter(Boolean).join(" ") || undefined;
       const { reply, steps, tools, photo, doc, degraded } = await runIt(msg.text, { llm: deps.llm, context }, history);
       clearProgress();
       // A degraded reply is a soft-failure fallback (agent ran out of steps / produced no answer,
@@ -678,7 +687,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       // Cache the full (untrimmed) reply + what we showed, so a follow-up "more"/"link" serves the
       // dropped tail / source URLs without re-running the agent (last-result-drilldown). Text replies
       // only (a photo/doc has no pageable text).
-      if (!photo && !doc) lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, body) });
+      if (!photo && !doc) lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, body), proactive: false });
       // Retention nudge (product-loop): if this task repeats one the user already asked, offer to save
       // it as a recipe. Only on a clean text reply (not degraded / not a binary), so it never clutters
       // a partial answer or a screenshot/PDF caption. Appended AFTER the body so the answer leads.

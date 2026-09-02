@@ -509,6 +509,30 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/Nothing recent to watch/i);
   });
 
+  it("a short follow-up to a proactive ping gets that ping as agent context (proactive-followup-context)", async () => {
+    const store = new Map<number, { full: string; sent: number; proactive?: boolean }>();
+    store.set(4, { full: "🔔 btc changed: now $67,000 (was $65,000)", sent: 999, proactive: true });
+    let gotCtx: string | undefined;
+    const { handle } = harness({
+      lastResultStore: store,
+      runAgentFn: async (_t, deps) => { gotCtx = (deps as { context?: string }).context; return { reply: "because demand rose", steps: 1, tools: [] }; },
+    });
+    await handle(msg("why?", 4));
+    expect(gotCtx).toMatch(/replying to this message.*btc changed/i);
+  });
+
+  it("a follow-up to a NORMAL (inbound) answer does NOT get proactive-ping context", async () => {
+    const store = new Map<number, { full: string; sent: number; proactive?: boolean }>();
+    store.set(4, { full: "an earlier answer", sent: 999, proactive: false });
+    let gotCtx: string | undefined;
+    const { handle } = harness({
+      lastResultStore: store,
+      runAgentFn: async (_t, deps) => { gotCtx = (deps as { context?: string }).context; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("why?", 4));
+    expect(gotCtx ?? "").not.toMatch(/replying to this message/i);
+  });
+
   it("passes the profile context into the agent run", async () => {
     let gotContext: string | undefined;
     const { handle } = harness({
