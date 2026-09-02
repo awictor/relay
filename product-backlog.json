@@ -311,7 +311,7 @@
       "title": "Run a check after editing an alert into an already-true predicate",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The define path runs alertRunNow to catch an already-satisfied predicate, but alertEdit just updates + returns; 'change btc to below 55000' when BTC is already below confirms 'Updated...' then never pings (no edge vs the preserved lastValue) -> user waits for a fire that may never come (audit 8 B#4).",
       "how": "After a successful alertEdit, run alertRunNow(chatId, name) like the define path and relay the message if it fires. Reset the baseline so the edited predicate edge-triggers correctly."
     },
@@ -373,6 +373,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 35: built alert-edit-check-now (audit 8 B#4, medium/S). The define path runs alertRunNow to catch an already-satisfied predicate, but alertEdit just updated + returned; 'change btc to below 55000' when BTC is already below confirmed 'Updated...' then never pinged (edge-triggered vs the preserved lastValue = no edge) -> user waits for a fire that may never come. Now: updateTrigger clears lastValue (new trigger evaluates fresh), and the handler runs alertRunNow after a successful edit + relays the message if it fires, guarded so a flaky check can't break the confirmation. Updated the updateTrigger test (lastValue now reset) + 2 handler tests (post-edit check relays when holds; throwing check safe). 691 pass, tsc clean. call-tested false (handler+store wiring over the live-proven checkAlert path). Remaining: profile-view-reset -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 34: built threshold-alert-numberless-guard (audit 8 B#2, high/S, real bug). checkAlert guarded the indeterminate case only for PREDICATE alerts; the threshold/'by N' path had no equivalent, so a transient numberless reply ('price unavailable') made changed() fall back to text-diff (numeric-vs-non-numeric = 'changed'), false-pinged '🔔 changed', AND stored the non-numeric string as baseline -> the threshold was silently bypassed across the gap. Now: numeric-threshold alert + extractValue(new)===null -> skip notify + skip setLast (keep last good baseline), mirroring the predicate-refire + degraded guards. First-run-no-number still seeds (nothing to protect yet). +2 tests (numberless keeps baseline + no fire + next-real-check still vs preserved value; first-run-seeds). 689 pass, tsc clean. call-tested false (runner logic, unit-tested). Remaining: alert-edit-check-now, profile-view-reset."

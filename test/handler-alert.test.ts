@@ -101,6 +101,28 @@ describe("handler — alert routing", () => {
     expect(calls()).toBe(0);
   });
 
+  it("running one check after an edit relays it when the new predicate already holds (alert-edit-check-now)", async () => {
+    const ran: string[] = [];
+    const { handle, sent } = harness({
+      alertEdit: () => ({ ok: true, name: "btc", summary: "now alerts below 55000" }),
+      alertRunNow: async (_c, name) => { ran.push(name); return "🔔 btc:\n$50,000 (below 55000)"; },
+    });
+    await handle(msg("change btc to below 55000"));
+    expect(sent[0]).toMatch(/Updated "btc"/);   // confirmation first
+    expect(sent[1]).toMatch(/50,000/);          // immediate post-edit check second
+    expect(ran).toEqual(["btc"]);
+  });
+
+  it("a throwing post-edit check never breaks the update confirmation", async () => {
+    const { handle, sent } = harness({
+      alertEdit: () => ({ ok: true, name: "btc", summary: "now alerts below 55000" }),
+      alertRunNow: async () => { throw new Error("flaky"); },
+    });
+    await handle(msg("change btc to below 55000"));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatch(/Updated "btc"/);
+  });
+
   it("editing an unknown alert says so, no agent", async () => {
     const { handle, sent, calls } = harness({ alertEdit: () => ({ ok: false, reason: "unknown" }) });
     await handle(msg("make ferrari fire under 200"));

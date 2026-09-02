@@ -239,6 +239,10 @@ export class AlertStore {
     if (!a) return null;
     if (patch.condition !== undefined) { a.condition = patch.condition; a.threshold = undefined; }
     else if (patch.threshold !== undefined) { a.threshold = patch.threshold; a.condition = undefined; }
+    // Clear the baseline so the NEW trigger evaluates fresh (edge-triggered against no prior value):
+    // an edit into an already-true predicate then fires on the immediate check-on-edit instead of
+    // being suppressed by a lastValue captured under the old trigger.
+    a.lastValue = undefined;
     this.persist();
     return a;
   }

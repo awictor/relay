@@ -154,7 +154,7 @@ describe("AlertStore", () => {
     expect(r.condition).toEqual({ op: "below", operand: 45000 });
     expect(r.threshold).toBeUndefined();       // mutually exclusive -> cleared
     expect(r.task).toBe("price of bitcoin");   // task preserved
-    expect(r.lastValue).toBe("$65k");          // baseline preserved
+    expect(r.lastValue).toBeUndefined();       // baseline reset so the NEW trigger evaluates fresh (alert-edit-check-now)
     expect(s.updateTrigger(1, "nope", { threshold: 5 })).toBeNull(); // unknown name
   });
 });

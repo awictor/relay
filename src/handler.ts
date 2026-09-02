@@ -288,7 +288,18 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // Only fires when a trigger clause is present, so "change my flight" still goes to the agent.
     if (deps.alertEdit && /^\s*(?:change|update|edit|set|make)\s+.+\s(?:below|under|above|over|hits?|reaches?|in\s+stock|by)\b/i.test(msg.text)) {
       const r = deps.alertEdit(msg.chatId, msg.text);
-      if (r.ok) { await deps.sendMessage(msg.chatId, `Updated "${r.name}" — ${r.summary}.`); return; }
+      if (r.ok) {
+        await deps.sendMessage(msg.chatId, `Updated "${r.name}" — ${r.summary}.`);
+        // Run one check now, like the define path: editing into an already-true predicate ("change
+        // btc to below 55000" when it's already below) produces no future edge, so without this the
+        // user would hear nothing until it crosses again — maybe never. alertRunNow re-baselines +
+        // notifies if it already holds. Guarded so a flaky check can't break the confirmation.
+        if (deps.alertRunNow) {
+          try { const msgNow = await deps.alertRunNow(msg.chatId, r.name); if (msgNow) await deps.sendMessage(msg.chatId, msgNow); }
+          catch { /* a flaky post-edit check must not break the update confirmation */ }
+        }
+        return;
+      }
       if (r.reason === "unknown") { await deps.sendMessage(msg.chatId, "I don't have an alert by that name — see /alerts."); return; }
       // unparsed: fall through to define / agent
     }
