@@ -923,7 +923,7 @@
       "title": "first-run city capture does not infer timezone",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A user answers \"which city?\" with \"Austin\" then schedules \"every morning 7am\" — fires at 7am UTC because parseCityReply only sets tz when the user literally types UTC-5. /setlocation copy even PROMISES local-time reminders.",
       "how": "Map a city name to a tz offset (static table of major cities, or a free geocode/timezone API via fetch_json), or ask one follow-up \"what timezone?\" when a city is captured without one."
     },
@@ -1264,6 +1264,10 @@
     {
       "id": "bg-reliability-cluster",
       "note": "Fixed 3 regressions in the just-shipped background-errand path (found by the refill audit): (1) result now written to conversation memory so a follow-up has context; (2) delivery writes the PING sub-slot instead of clobbering the inbound answer paging (same class as proactive-clobbers-drilldown-cache); (3) cap 2 concurrent detached runs per chat, over-cap runs synchronously (no browser-pool starvation). Plus recall-staleness-label: recalled answers now show a relativeAge + a >6h refresh nudge. 903 tests green."
+    },
+    {
+      "id": "city-to-tz-inference",
+      "note": "A bare city now sets the right reminder timezone without the user typing UTC-5 — closes the wrong-hour reminder bug at its root. inferTzFromLocation maps ~150 common cities / US state abbrevs / countries to a standard (non-DST) offset; parseSetLocation + parseCityReply infer tz from the city when no explicit UTC given (explicit still wins, unknown city -> no guess). 907 tests green."
     }
   ],
   "audits": [

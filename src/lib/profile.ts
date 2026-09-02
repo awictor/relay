@@ -71,7 +71,10 @@ export function parseSetLocation(text: string): { location: string; units?: "met
   if (!loc) return null;
   const out: { location: string; units?: "metric" | "imperial"; tzOffsetMin?: number } = { location: loc };
   if (units) out.units = units;
-  if (tzOffsetMin !== undefined) out.tzOffsetMin = tzOffsetMin;
+  // Explicit "UTC-5" wins; else infer the tz from the city name (city-to-tz-inference) so a plain
+  // "/setlocation Austin" still fires reminders at the right local hour.
+  const off = tzOffsetMin !== undefined ? tzOffsetMin : inferTzFromLocation(loc);
+  if (off !== null && off !== undefined) out.tzOffsetMin = off;
   return out;
 }
 
@@ -81,6 +84,54 @@ export function parseSetLocation(text: string): { location: string; units?: "met
 const LOCATION_ERRAND_RE = /\b(weather|forecast|temperature|will it (?:rain|snow)|is it (?:raining|snowing)|sunset|sunrise|near\s?me|nearby|near here|around here|closest|nearest|how far|directions?|commute)\b/i;
 export function needsLocationContext(text: string): boolean {
   return LOCATION_ERRAND_RE.test(text.trim());
+}
+
+// City / region -> tz offset (minutes east of UTC), so "Austin" alone sets the right reminder timing
+// without the user typing "UTC-5" (city-to-tz-inference — the root of the wrong-hour reminder bug).
+// A pragmatic table of common cities + US state abbreviations + country/region names. Uses STANDARD
+// (non-DST) offsets — DST drift is a separately-tracked deferred item. Keys are lowercased whole tokens.
+// Not exhaustive: a miss just leaves tz unset (caller can still ask), never guesses wrong.
+const CITY_TZ: Record<string, number> = {
+  // US cities
+  "new york": -300, nyc: -300, brooklyn: -300, boston: -300, philadelphia: -300, philly: -300, atlanta: -300, miami: -300, "washington": -300, dc: -300, orlando: -300, detroit: -300, pittsburgh: -300, charlotte: -300, cleveland: -300,
+  chicago: -360, houston: -360, dallas: -360, austin: -360, "san antonio": -360, "kansas city": -360, minneapolis: -360, "new orleans": -360, milwaukee: -360, memphis: -360, nashville: -360, "oklahoma city": -360,
+  denver: -420, phoenix: -420, "salt lake city": -420, albuquerque: -420, boise: -420, tucson: -420,
+  "los angeles": -480, la: -480, "san francisco": -480, sf: -480, "san diego": -480, seattle: -480, portland: -480, "san jose": -480, sacramento: -480, "las vegas": -480, vegas: -480, oakland: -480,
+  anchorage: -540, honolulu: -600,
+  // US state abbreviations (approx — most-populous zone)
+  ny: -300, nj: -300, fl: -300, ga: -300, ma: -300, pa: -300, va: -300, nc: -300, oh: -300, mi: -300, tx: -360, il: -360, tn: -360, mo: -360, mn: -360, co: -420, az: -420, ut: -420, nm: -420, ca: -480, wa: -480, or: -480, nv: -480,
+  // World cities
+  london: 0, dublin: 0, lisbon: 0, reykjavik: 0,
+  paris: 60, berlin: 60, madrid: 60, rome: 60, amsterdam: 60, brussels: 60, vienna: 60, prague: 60, warsaw: 60, zurich: 60, milan: 60, munich: 60, barcelona: 60, stockholm: 60, oslo: 60, copenhagen: 60,
+  athens: 120, helsinki: 120, cairo: 120, "cape town": 120, johannesburg: 120, kyiv: 120, kiev: 120, istanbul: 180, moscow: 180, "tel aviv": 120, dubai: 240, "abu dhabi": 240,
+  mumbai: 330, delhi: 330, bangalore: 330, bengaluru: 330, kolkata: 330, chennai: 330, hyderabad: 330,
+  bangkok: 420, jakarta: 420, hanoi: 420, singapore: 480, "hong kong": 480, beijing: 480, shanghai: 480, shenzhen: 480, taipei: 480, "kuala lumpur": 480, manila: 480, perth: 480,
+  tokyo: 540, osaka: 540, seoul: 540, adelaide: 570, sydney: 600, melbourne: 600, brisbane: 600, canberra: 600, auckland: 720, wellington: 720,
+  toronto: -300, ottawa: -300, montreal: -300, vancouver: -480, calgary: -420, edmonton: -420, "mexico city": -360, guadalajara: -360, monterrey: -360,
+  "sao paulo": -180, "rio de janeiro": -180, rio: -180, "buenos aires": -180, santiago: -180, lima: -300, bogota: -300,
+  // Countries / regions (single-zone or dominant zone)
+  uk: 0, ireland: 0, portugal: 0, france: 60, germany: 60, spain: 60, italy: 60, netherlands: 60, poland: 60, sweden: 60, norway: 60, switzerland: 60, greece: 120, israel: 120, india: 330, japan: 540, "south korea": 540, korea: 540, singapore_: 480, thailand: 420, australia: 600, "new zealand": 720, nz: 720, brazil: -180, argentina: -180, mexico: -360, canada: -300,
+};
+
+/** Infer a tz offset (minutes east of UTC) from a free-text location, or null if unknown. Matches the
+ * whole location, then a trailing "City, ST"/"City, Country" token, then any word — most specific first.
+ * Standard (non-DST) offsets. Exported for tests. */
+export function inferTzFromLocation(location: string): number | null {
+  const norm = location.toLowerCase().replace(/[^\p{L}\p{N}\s,]/gu, " ").replace(/\s+/g, " ").trim();
+  if (!norm) return null;
+  // 1. whole string ("new york")
+  if (norm in CITY_TZ) return CITY_TZ[norm]!;
+  // 2. comma-separated parts, most specific (leftmost city) first, then the region tail ("austin, tx")
+  const parts = norm.split(",").map((p) => p.trim()).filter(Boolean);
+  for (const p of parts) if (p in CITY_TZ) return CITY_TZ[p]!;
+  // 3. any whole word / adjacent word pair
+  const words = norm.replace(/,/g, " ").split(/\s+/).filter(Boolean);
+  for (let i = 0; i < words.length; i++) {
+    const pair = i + 1 < words.length ? `${words[i]} ${words[i + 1]}` : "";
+    if (pair && pair in CITY_TZ) return CITY_TZ[pair]!;
+    if (words[i]! in CITY_TZ) return CITY_TZ[words[i]!]!;
+  }
+  return null;
 }
 
 /** Parse a user's reply to "which city?" into a location (+ optional tz) — permissive because we're
@@ -99,8 +150,12 @@ export function parseCityReply(text: string): { location: string; tzOffsetMin?: 
   if (!s || s.split(/\s+/).length > 5 || !/[a-z]/i.test(s)) return null; // a place is short, not a sentence
   // Reject if it reads like a fresh task rather than a place.
   if (/\b(remind|schedule|watch|remember|weather|forecast|story|price|news|search|find|show me)\b/i.test(s)) return null;
-  const out: { location: string; tzOffsetMin?: number } = { location: s.slice(0, 120) };
-  if (tz !== null) out.tzOffsetMin = tz;
+  const location = s.slice(0, 120);
+  const out: { location: string; tzOffsetMin?: number } = { location };
+  // Prefer an explicit "UTC-5" if given; else infer from the city name (city-to-tz-inference) so a bare
+  // "Austin" still fires reminders at the right local hour without the user typing an offset.
+  const off = tz !== null ? tz : inferTzFromLocation(location);
+  if (off !== null) out.tzOffsetMin = off;
   return out;
 }
 

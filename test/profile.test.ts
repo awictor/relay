@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply } from "../src/lib/profile.js";
+import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply, inferTzFromLocation } from "../src/lib/profile.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -9,17 +9,20 @@ function tmp() { const d = mkdtempSync(join(tmpdir(), "relay-prof-")); dirs.push
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
 describe("parseSetLocation", () => {
-  it("parses the /setlocation command", () => {
-    expect(parseSetLocation("/setlocation Austin, TX")).toEqual({ location: "Austin, TX" });
+  it("parses the /setlocation command (+infers tz from the city, city-to-tz-inference)", () => {
+    expect(parseSetLocation("/setlocation Austin, TX")).toEqual({ location: "Austin, TX", tzOffsetMin: -360 });
   });
-  it("parses natural phrasings", () => {
-    expect(parseSetLocation("set my location to London")).toEqual({ location: "London" });
-    expect(parseSetLocation("I'm in Paris")).toEqual({ location: "Paris" });
-    expect(parseSetLocation("my location is Berlin")).toEqual({ location: "Berlin" });
+  it("parses natural phrasings (+infers tz)", () => {
+    expect(parseSetLocation("set my location to London")).toEqual({ location: "London", tzOffsetMin: 0 });
+    expect(parseSetLocation("I'm in Paris")).toEqual({ location: "Paris", tzOffsetMin: 60 });
+    expect(parseSetLocation("my location is Berlin")).toEqual({ location: "Berlin", tzOffsetMin: 60 });
   });
-  it("captures units in parens or 'in metric'", () => {
-    expect(parseSetLocation("/setlocation Denver (imperial)")).toEqual({ location: "Denver", units: "imperial" });
-    expect(parseSetLocation("I'm in Tokyo in metric")).toEqual({ location: "Tokyo", units: "metric" });
+  it("captures units in parens or 'in metric' (+infers tz)", () => {
+    expect(parseSetLocation("/setlocation Denver (imperial)")).toEqual({ location: "Denver", units: "imperial", tzOffsetMin: -420 });
+    expect(parseSetLocation("I'm in Tokyo in metric")).toEqual({ location: "Tokyo", units: "metric", tzOffsetMin: 540 });
+  });
+  it("leaves tz unset for an unknown city (no wrong guess)", () => {
+    expect(parseSetLocation("/setlocation Smallville")).toEqual({ location: "Smallville" });
   });
   it("captures a UTC offset clause without swallowing the place (tz-from-location)", () => {
     expect(parseSetLocation("/setlocation NYC UTC-5")).toEqual({ location: "NYC", tzOffsetMin: -300 });
@@ -32,12 +35,12 @@ describe("parseSetLocation", () => {
     expect(parseSetLocation("I am in a rush today")).toBeNull();
     expect(parseSetLocation("I'm in line at the store and need the weather")).toBeNull();
   });
-  it("still accepts a bare 'I'm in <place>' and explicit forms", () => {
-    expect(parseSetLocation("I'm in Paris")).toEqual({ location: "Paris" });
-    expect(parseSetLocation("I'm in New York City")).toEqual({ location: "New York City" });
-    expect(parseSetLocation("I'm in Tokyo in metric")).toEqual({ location: "Tokyo", units: "metric" });
+  it("still accepts a bare 'I'm in <place>' and explicit forms (tz inferred where known)", () => {
+    expect(parseSetLocation("I'm in Paris")).toEqual({ location: "Paris", tzOffsetMin: 60 });
+    expect(parseSetLocation("I'm in New York City")).toEqual({ location: "New York City", tzOffsetMin: -300 });
+    expect(parseSetLocation("I'm in Tokyo in metric")).toEqual({ location: "Tokyo", units: "metric", tzOffsetMin: 540 });
     // explicit forms stay permissive (a comma place is fine there)
-    expect(parseSetLocation("set my location to Austin, TX")).toEqual({ location: "Austin, TX" });
+    expect(parseSetLocation("set my location to Austin, TX")).toEqual({ location: "Austin, TX", tzOffsetMin: -360 });
   });
   it("returns null for a non-location message", () => {
     expect(parseSetLocation("what's the weather")).toBeNull();
@@ -114,6 +117,26 @@ describe("ProfileStore", () => {
   });
 });
 
+describe("inferTzFromLocation (city-to-tz-inference)", () => {
+  it("maps common cities to their standard offset", () => {
+    expect(inferTzFromLocation("Austin")).toBe(-360);
+    expect(inferTzFromLocation("New York")).toBe(-300);
+    expect(inferTzFromLocation("London")).toBe(0);
+    expect(inferTzFromLocation("Tokyo")).toBe(540);
+    expect(inferTzFromLocation("Mumbai")).toBe(330);
+    expect(inferTzFromLocation("Sydney")).toBe(600);
+  });
+  it("matches a 'City, ST'/'City, Country' form and state abbreviations", () => {
+    expect(inferTzFromLocation("Austin, TX")).toBe(-360);
+    expect(inferTzFromLocation("Portland, OR")).toBe(-480); // city wins (OR would also be -480)
+    expect(inferTzFromLocation("somewhere in CA")).toBe(-480);
+  });
+  it("null for an unknown place (never a wrong guess)", () => {
+    expect(inferTzFromLocation("Smallville")).toBeNull();
+    expect(inferTzFromLocation("")).toBeNull();
+  });
+});
+
 describe("needsLocationContext (first-location-capture)", () => {
   it("true for location-dependent errands", () => {
     for (const t of ["weather", "what's the weather", "weather tomorrow", "sushi near me", "coffee nearby", "how far to the airport", "directions to downtown", "will it rain today"]) {
@@ -128,11 +151,12 @@ describe("needsLocationContext (first-location-capture)", () => {
 });
 
 describe("parseCityReply (first-location-capture)", () => {
-  it("accepts a bare city, stripping a polite lead-in + a tz clause", () => {
-    expect(parseCityReply("Austin, TX")).toEqual({ location: "Austin, TX" });
-    expect(parseCityReply("I'm in London")).toEqual({ location: "London" });
-    expect(parseCityReply("it's Paris")).toEqual({ location: "Paris" });
-    expect(parseCityReply("Denver UTC-7")).toEqual({ location: "Denver", tzOffsetMin: -420 });
+  it("accepts a bare city, stripping a polite lead-in + a tz clause, inferring tz from the city", () => {
+    expect(parseCityReply("Austin, TX")).toEqual({ location: "Austin, TX", tzOffsetMin: -360 });
+    expect(parseCityReply("I'm in London")).toEqual({ location: "London", tzOffsetMin: 0 });
+    expect(parseCityReply("it's Paris")).toEqual({ location: "Paris", tzOffsetMin: 60 });
+    expect(parseCityReply("Denver UTC-7")).toEqual({ location: "Denver", tzOffsetMin: -420 }); // explicit wins
+    expect(parseCityReply("Smallville")).toEqual({ location: "Smallville" }); // unknown -> no tz guess
   });
   it("rejects a reply that clearly isn't a place (bail-out / fresh task / question)", () => {
     expect(parseCityReply("/help")).toBeNull();
