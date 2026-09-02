@@ -75,6 +75,35 @@ export function parseSetLocation(text: string): { location: string; units?: "met
   return out;
 }
 
+// A location-dependent errand: the answer changes with WHERE the user is, so with no saved location
+// Relay would ask the city every time. Used to offer a one-time "save your city?" capture on the first
+// such ask (first-location-capture). Deliberately specific so a generic task isn't intercepted.
+const LOCATION_ERRAND_RE = /\b(weather|forecast|temperature|will it (?:rain|snow)|is it (?:raining|snowing)|sunset|sunrise|near\s?me|nearby|near here|around here|closest|nearest|how far|directions?|commute)\b/i;
+export function needsLocationContext(text: string): boolean {
+  return LOCATION_ERRAND_RE.test(text.trim());
+}
+
+/** Parse a user's reply to "which city?" into a location (+ optional tz) — permissive because we're
+ * EXPECTING a place here, but rejects a reply that's clearly NOT a city (a slash command, a question,
+ * or a long sentence) so an abandoned capture ("actually never mind, top HN story") falls through
+ * instead of being saved as a bogus location. */
+export function parseCityReply(text: string): { location: string; tzOffsetMin?: number } | null {
+  let s = text.trim();
+  if (!s || s.length > 60 || s.startsWith("/")) return null;
+  if (/[?]/.test(s)) return null;                        // a question, not a place
+  const tz = parseUtcOffset(s);
+  if (tz !== null) s = s.replace(/[([]?\b(?:utc|gmt)\s*[+-]\s*\d{1,2}(?::?\d{2})?\b[)\]]?/i, "").trim();
+  // Strip a polite lead-in ("it's", "i'm in", "i live in") so "I'm in Austin" -> "Austin".
+  s = s.replace(/^\s*(?:it'?s\s+|i'?m\s+in\s+|i\s+live\s+in\s+|in\s+)/i, "").trim();
+  s = s.replace(/["']|[.,;]\s*$/g, "").trim();
+  if (!s || s.split(/\s+/).length > 5 || !/[a-z]/i.test(s)) return null; // a place is short, not a sentence
+  // Reject if it reads like a fresh task rather than a place.
+  if (/\b(remind|schedule|watch|remember|weather|forecast|story|price|news|search|find|show me)\b/i.test(s)) return null;
+  const out: { location: string; tzOffsetMin?: number } = { location: s.slice(0, 120) };
+  if (tz !== null) out.tzOffsetMin = tz;
+  return out;
+}
+
 export class ProfileStore {
   private file: string;
   private items: Profile[] = [];

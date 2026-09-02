@@ -29,7 +29,7 @@ import { matchRecipe } from "./lib/task-suggest.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand, parseAlertEdit } from "./lib/alerts.js";
-import { ProfileStore, parseSetLocation } from "./lib/profile.js";
+import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { checkAlert } from "./alert-runner.js";
 import { parseScheduleFor } from "./lib/schedule.js";
@@ -200,6 +200,16 @@ const handle = createHandler({
     return { removed: forgotten.length, all: false, forgotten };
   },
   notesList: (chatId) => notes.list(chatId).map((n) => n.text),
+  // First-run location capture (first-location-capture): does this chat have a home location yet, and
+  // save a bare "which city?" reply (+re-stamp recurring reminders if a tz came with it).
+  hasLocation: (chatId) => !!profiles.get(chatId)?.location,
+  captureLocation: (chatId, text) => {
+    const c = parseCityReply(text);
+    if (!c) return null;
+    const rec = profiles.set(chatId, { location: c.location, ...(c.tzOffsetMin !== undefined ? { tzOffsetMin: c.tzOffsetMin } : {}) });
+    if (c.tzOffsetMin !== undefined) schedules.restampTz(chatId, c.tzOffsetMin, Date.now());
+    return { location: rec.location!, tzOffsetMin: rec.tzOffsetMin };
+  },
   suggestSaves: true, // offer to save a repeated ask as a recipe (product-loop retention nudge)
   lastResultStore, // shared with the schedule runner so drilldown works on proactive pings too
   // Inbound photo (product-loop): download the Telegram file, ask the LLM to answer about it. Needs

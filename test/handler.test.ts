@@ -4,6 +4,7 @@ import type { InboundMessage } from "../src/telegram.js";
 import type { LLMMessage } from "../src/llm.js";
 import { formatReply } from "../src/lib/format-reply.js";
 import { NotesStore, parseRemember, parseForgetFact } from "../src/lib/notes.js";
+import { parseCityReply } from "../src/lib/profile.js";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -830,5 +831,54 @@ describe("long-term memory (remember-facts-store)", () => {
     // "remember to call mom" is a to-do, not a fact — parseRemember returns null so it reaches the agent.
     await handle(msg("remember to call mom", 5));
     expect(notes.list(5)).toHaveLength(0); // not stored as a fact
+  });
+});
+
+describe("first-run location capture (first-location-capture)", () => {
+  function locHarness(hasLoc = false) {
+    let stored: { location: string; tzOffsetMin?: number } | null = hasLoc ? { location: "Austin" } : null;
+    let agentRan: string | null = null;
+    const h = harness({
+      hasLocation: () => stored !== null,
+      captureLocation: (_c, text) => {
+        const c = parseCityReply(text);
+        if (!c) return null;
+        stored = c;
+        return c;
+      },
+      runAgentFn: async (t: string) => { agentRan = t; return { reply: "sunny, 70F", steps: 1, tools: [] }; },
+    });
+    return { ...h, agentRan: () => agentRan, city: () => stored };
+  }
+
+  it("first weather ask with no city asks for it + stashes the errand, no agent run", async () => {
+    const { handle, sent, agentRan } = locHarness(false);
+    await handle(msg("weather tomorrow", 5));
+    expect(sent[0]!.text).toMatch(/what city are you in/i);
+    expect(agentRan()).toBeNull(); // didn't run the errand yet
+  });
+
+  it("the city reply is saved and the original errand re-runs", async () => {
+    const { handle, sent, agentRan, city } = locHarness(false);
+    await handle(msg("weather tomorrow", 5));
+    await handle(msg("Denver UTC-7", 5));
+    expect(city()).toEqual({ location: "Denver", tzOffsetMin: -420 });
+    expect(sent[1]!.text).toMatch(/saved Denver/i);
+    expect(agentRan()).toBe("weather tomorrow"); // re-ran the stashed errand
+    expect(sent[2]!.text).toMatch(/sunny/);
+  });
+
+  it("a non-city reply bails out — routes normally, errand NOT re-run", async () => {
+    const { handle, sent, agentRan } = locHarness(false);
+    await handle(msg("sushi near me", 5));
+    await handle(msg("actually never mind, top HN story", 5)); // not a place
+    expect(agentRan()).toBe("actually never mind, top HN story"); // ran THIS message, not the stashed errand
+  });
+
+  it("does NOT ask when a city is already saved", async () => {
+    const { handle, sent, agentRan } = locHarness(true);
+    await handle(msg("weather", 5));
+    expect(sent.some((m) => /what city/i.test(m.text))).toBe(false);
+    expect(agentRan()).toBe("weather"); // straight to the agent
   });
 });

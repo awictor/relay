@@ -878,7 +878,7 @@
       "title": "no first-run location/tz capture on a location errand",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "\"weather\"/\"near me\" with no profile asks the city every time until the user finds /setlocation buried in ~14 commands; also leaves tz unset (feeds the wrong-hour reminder bug).",
       "how": "On the first location-dependent ask with an empty profile, offer to save the city (+infer/ask tz once)."
     },
@@ -1185,6 +1185,10 @@
     {
       "id": "notes-cap-silent-evict",
       "note": "At the 30-fact memory cap, adding a new fact used to silently drop the oldest (often the most important). add() now returns the evicted fact text + a dup flag; the remember confirm warns and NAMES what aged out (\"I was at my memory limit, so I let go of: ...\"). 868 tests green."
+    },
+    {
+      "id": "first-location-capture",
+      "note": "First location-dependent errand (weather/near me/directions) with no saved city now asks once, stashes the errand, saves the reply (+infers tz and re-stamps recurring reminders), then re-runs the errand — instead of the agent asking the city every time and leaving tz unset. needsLocationContext + parseCityReply in profile.ts; pendingLocation map + hasLocation/captureLocation deps; a non-city reply bails out cleanly. 876 tests green."
     }
   ],
   "audits": [

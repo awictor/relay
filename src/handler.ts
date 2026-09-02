@@ -14,6 +14,7 @@ import { splitScheduleCommand } from "./lib/schedule.js";
 import { repeatedTaskNudge, recurringCta } from "./lib/task-suggest.js";
 import { formatUtcOffset } from "./lib/profile.js";
 import { isRecallRequest } from "./lib/notes.js";
+import { needsLocationContext } from "./lib/profile.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat } from "./lib/recipes.js";
 
 export interface HandlerDeps {
@@ -48,6 +49,13 @@ export interface HandlerDeps {
   // visible, not silently wrong on every weather/reminder. profileClear forgets it. Both optional.
   profileView?: (chatId: number) => string | null; // human-readable summary, or null if nothing set
   profileClear?: (chatId: number) => boolean;       // true if there was a profile to clear
+  // First-run location capture (first-location-capture): hasLocation tells the handler whether this
+  // chat has a saved home location; captureLocation parses a bare "which city?" reply + stores it
+  // (returns the saved location, or null if the reply isn't a place). When both are present, the first
+  // location-dependent errand ("weather", "near me") with no saved location offers to save the city
+  // once, then re-runs the original errand — instead of the agent asking the city every time. Optional.
+  hasLocation?: (chatId: number) => boolean;
+  captureLocation?: (chatId: number, text: string) => { location: string; tzOffsetMin?: number } | null;
   // Long-term memory (remember-facts-store): rememberFact parses + stores a "remember X" message
   // (returns the stored fact, or null if it isn't one); forgetFact deletes matching facts (returns a
   // count, or a "cleared all" total); notesList returns the remembered facts for a "what do you know
@@ -164,6 +172,11 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   // Last recipe-recall message we offered per chat (normalized). Lets a re-send of the same phrase
   // fall through to a fresh answer instead of re-offering forever (recipe-auto-recall escape hatch).
   const recallOffered = new Map<number, string>();
+  // First-run location capture (first-location-capture): when a chat's first location errand has no
+  // saved city, we ask "which city?" and stash the ORIGINAL errand here; the next message is treated
+  // as the city reply, saved, and the errand re-run. Cleared on capture / on a non-city reply (so the
+  // user can bail out with any other message).
+  const pendingLocation = new Map<number, string>();
   // Last text answer per chat (full = untrimmed, sent = chars delivered) for "more"/"link" follow-ups
   // (last-result-drilldown). Uses the SHARED store when provided so a proactive digest/alert ping can
   // also be drilled into ("more"/"link" after an unprompted message); else a private in-memory map.
@@ -251,6 +264,22 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       return;
     }
 
+    // First-run location capture (first-location-capture): if we just asked this chat "which city?",
+    // treat THIS message as the answer — save it and re-run the errand we stashed. A reply that isn't a
+    // place (a slash command, a fresh task, "never mind") returns null from captureLocation: we drop the
+    // pending state and let the message route normally, so the user is never trapped.
+    if (deps.captureLocation && pendingLocation.has(msg.chatId)) {
+      const errand = pendingLocation.get(msg.chatId)!;
+      const saved = deps.captureLocation(msg.chatId, msg.text);
+      pendingLocation.delete(msg.chatId);
+      if (saved) {
+        await deps.sendMessage(msg.chatId, `Thanks — saved ${saved.location}. (Change it anytime with /setlocation.)`);
+        // Re-run the original errand now that we have the location.
+        msg = { ...msg, text: errand };
+      }
+      // else: not a city — fall through and route THIS message normally (no re-run).
+    }
+
     // /reset (alias /clear): wipe THIS chat's memory. Needs chatId, so it's handled here rather
     // than in the pure handleCommand. Short-circuits before rate-limit/agent, like other commands.
     let first = msg.text.trim().toLowerCase().split(/\s+/)[0]?.split("@")[0];
@@ -331,6 +360,17 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         await deps.sendMessage(msg.chatId, `Got it — I'll use ${set.location}${u} for "weather", "near me", and the like.${tz}${fixed}`);
         return;
       }
+    }
+
+    // First-run location capture (first-location-capture): a location-dependent errand ("weather",
+    // "near me") with NO saved city — ask once for the city + stash this errand, instead of letting the
+    // agent ask every time (and leaving tz unset, which mis-times reminders). Next message is the reply,
+    // handled above. Only when the deps are wired + nothing else already owns this message shape.
+    if (deps.hasLocation && deps.captureLocation && !deps.hasLocation(msg.chatId)
+        && !pendingLocation.has(msg.chatId) && needsLocationContext(msg.text)) {
+      pendingLocation.set(msg.chatId, msg.text);
+      await deps.sendMessage(msg.chatId, "What city are you in? I'll save it so I don't have to ask again (add \"UTC-5\" and I'll get your reminder times right too).");
+      return;
     }
 
     // Long-term memory (remember-facts-store). "what do you know about me" -> recite the stored facts;

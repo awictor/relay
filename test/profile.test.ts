@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore } from "../src/lib/profile.js";
+import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply } from "../src/lib/profile.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -111,5 +111,34 @@ describe("ProfileStore", () => {
     expect(s.get(1)).toBeUndefined();
     expect(s.clear(1)).toBe(false); // nothing left
     expect(new ProfileStore({ file: f }).get(1)).toBeUndefined(); // persisted
+  });
+});
+
+describe("needsLocationContext (first-location-capture)", () => {
+  it("true for location-dependent errands", () => {
+    for (const t of ["weather", "what's the weather", "weather tomorrow", "sushi near me", "coffee nearby", "how far to the airport", "directions to downtown", "will it rain today"]) {
+      expect(needsLocationContext(t), t).toBe(true);
+    }
+  });
+  it("false for errands that don't depend on where you are", () => {
+    for (const t of ["top HN story", "price of bitcoin", "who won the game", "summarize this link", "remind me to stretch"]) {
+      expect(needsLocationContext(t), t).toBe(false);
+    }
+  });
+});
+
+describe("parseCityReply (first-location-capture)", () => {
+  it("accepts a bare city, stripping a polite lead-in + a tz clause", () => {
+    expect(parseCityReply("Austin, TX")).toEqual({ location: "Austin, TX" });
+    expect(parseCityReply("I'm in London")).toEqual({ location: "London" });
+    expect(parseCityReply("it's Paris")).toEqual({ location: "Paris" });
+    expect(parseCityReply("Denver UTC-7")).toEqual({ location: "Denver", tzOffsetMin: -420 });
+  });
+  it("rejects a reply that clearly isn't a place (bail-out / fresh task / question)", () => {
+    expect(parseCityReply("/help")).toBeNull();
+    expect(parseCityReply("actually never mind show me the top HN story")).toBeNull();
+    expect(parseCityReply("what can you do?")).toBeNull();
+    expect(parseCityReply("remind me to call mom")).toBeNull();
+    expect(parseCityReply("")).toBeNull();
   });
 });
