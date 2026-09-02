@@ -23,7 +23,7 @@
       "title": "Alerts compare extracted value not raw LLM prose",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "watch-alerts false-ping on wording drift or miss real moves (firstNumber grabs wrong number).",
       "how": "Extract a normalized value (number/text) to compare, not the free-text reply; fix firstNumber."
     },
@@ -52,6 +52,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 2: built progress-ping (audit A#2, top impact/effort). Handler arms a one-shot timer around the agent run; if it outlasts progressDelayMs (default 6s, RELAY_PROGRESS_DELAY_MS, 0 disables) it sends ONE 'Still working on it - reading the web, hang tight...' then the reply; timer cleared on success AND error. Injectable setTimer/clearTimer for offline tests. So a 30-60s multi-step browse no longer reads as a dead bot. +3 handler tests (ping-then-reply, no-ping-when-unset, cleared-on-error). 577 pass, tsc clean. call-tested false (UX-timer wiring, unit-tested via injected timer). Remaining todos: alert-value-compare, atomic-store-writes, tz-daily-schedules."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 3: built alert-value-compare (audit B, core proactive-promise fix). changed() now compares the SALIENT VALUE via new extractValue() (currency-tagged > decimal > largest-magnitude) instead of raw LLM prose + firstNumber (which grabbed a date/count). So a watch-alert no longer false-pings when wording drifts run-to-run but the tracked price is identical, and a real move still fires. Non-numeric watches (in-stock/sold-out) fall back to text-diff. firstNumber kept (signature unchanged). +8 tests incl the drift-same-value + incidental-date cases. 584 pass, tsc clean. call-tested false (pure compare logic, exhaustively unit-tested). Remaining: atomic-store-writes, tz-daily-schedules."
     }
   ],
   "audits": [

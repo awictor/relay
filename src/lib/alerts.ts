@@ -49,18 +49,43 @@ export function firstNumber(s: string): number | null {
 }
 
 /**
- * Did the value change enough to notify? Text: any non-trivial difference (trimmed). With a
- * threshold + both sides numeric: only when |new - prev| >= threshold. No prev (first run)
- * is treated as "changed" by the caller (seed + notify), so this only compares two values.
+ * The SALIENT numeric value a watched task is tracking, or null. An agent reply is prose that
+ * varies run-to-run ("Bitcoin is $65,000 as of 3pm" vs "BTC sits at $65,010 right now") and the
+ * FIRST number is often a date/count, not the value — so instead of firstNumber we prefer, in order:
+ *   1. a currency-tagged amount ($65,000.50 / 65,000 USD / €1.2)
+ *   2. a decimal number (prices/rates usually have one)
+ *   3. the largest-magnitude number (a price dwarfs a "3pm"/"1st")
+ * This is what makes a change-alert compare the real value, not the wording around it.
+ */
+export function extractValue(s: string): number | null {
+  const t = s.replace(/,/g, "");
+  const nums: number[] = [];
+  // currency-tagged first (symbol before, or code/word after)
+  const cur = [...t.matchAll(/(?:[$€£]\s?)(-?\d+(?:\.\d+)?)|(-?\d+(?:\.\d+)?)\s?(?:usd|eur|gbp|dollars?|euros?)/gi)];
+  if (cur.length) return parseFloat(cur[0]![1] ?? cur[0]![2]!);
+  for (const m of t.matchAll(/-?\d+(?:\.\d+)?/g)) nums.push(parseFloat(m[0]));
+  if (!nums.length) return null;
+  const dec = nums.find((n) => !Number.isInteger(n));
+  if (dec !== undefined) return dec;
+  return nums.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a));
+}
+
+/**
+ * Did the value change enough to notify? Compares the SALIENT VALUE, not raw prose — so a reply
+ * whose wording drifted but whose tracked number is identical does NOT false-fire, and a real move
+ * always does. If BOTH replies carry a value: changed iff |new - prev| >= (threshold || any nonzero
+ * delta). If neither is numeric: fall back to trimmed-text inequality (e.g. "in stock"/"sold out").
+ * First run (no prev) is handled by the caller (seed + notify).
  */
 export function changed(prev: string, next: string, threshold?: number): boolean {
   const a = prev.trim(), b = next.trim();
-  if (a === b) return false;
-  if (threshold && threshold > 0) {
-    const pn = firstNumber(a), nn = firstNumber(b);
-    if (pn !== null && nn !== null) return Math.abs(nn - pn) >= threshold;
+  const pv = extractValue(a), nv = extractValue(b);
+  if (pv !== null && nv !== null) {
+    const delta = Math.abs(nv - pv);
+    return threshold && threshold > 0 ? delta >= threshold : delta > 0;
   }
-  return true;
+  // No comparable number on one/both sides — compare the meaningful text, not incidental whitespace.
+  return a !== b;
 }
 
 export interface AlertStoreOptions { file: string; maxPerChat?: number; }

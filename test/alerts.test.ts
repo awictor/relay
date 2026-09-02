@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseAlertCommand, changed, firstNumber, AlertStore } from "../src/lib/alerts.js";
+import { parseAlertCommand, changed, firstNumber, extractValue, AlertStore } from "../src/lib/alerts.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -32,6 +32,22 @@ describe("firstNumber", () => {
   });
 });
 
+describe("extractValue (salient value, not first number)", () => {
+  it("prefers a currency-tagged amount over an incidental date/count", () => {
+    expect(extractValue("As of 3pm, Bitcoin is $65,000.50 today")).toBe(65000.5);
+    expect(extractValue("At 9am the price is 65000 USD")).toBe(65000);
+  });
+  it("prefers a decimal over an integer date/time", () => {
+    expect(extractValue("On the 1st, the rate was 1.085")).toBe(1.085);
+  });
+  it("falls back to the largest-magnitude number", () => {
+    expect(extractValue("3 sources say about 65000")).toBe(65000);
+  });
+  it("null when there's no number", () => {
+    expect(extractValue("out of stock")).toBeNull();
+  });
+});
+
 describe("changed", () => {
   it("text: any non-trivial diff, ignoring surrounding whitespace", () => {
     expect(changed("sunny", "sunny")).toBe(false);
@@ -44,6 +60,18 @@ describe("changed", () => {
   });
   it("threshold but non-numeric -> falls back to text-diff", () => {
     expect(changed("up", "down", 10)).toBe(true);
+  });
+  // The core fix: wording drifts run-to-run but the tracked value is identical -> NO false ping.
+  it("does NOT fire when prose changed but the salient value is the same", () => {
+    expect(changed("Bitcoin is $65,000 as of 3pm.", "BTC sits at $65,000 right now.")).toBe(false);
+    expect(changed("The price today is $65,000.", "Currently: $65,000 (updated).")).toBe(false);
+  });
+  it("DOES fire on a real value move even when wording also changed (no threshold)", () => {
+    expect(changed("Bitcoin is $65,000 as of 3pm.", "BTC now $66,120 this evening.")).toBe(true);
+  });
+  it("ignores an incidental date/count difference when the value is unchanged", () => {
+    // first-number would grab the date and false-fire; extractValue tracks the price.
+    expect(changed("On the 1st: $500.", "On the 2nd: $500.")).toBe(false);
   });
 });
 
