@@ -536,7 +536,7 @@
       "title": "Offer to make a good one-shot answer recurring",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The automation loop (query -> saved -> scheduled/watched) is the retention engine, but auto-suggest-save only nudges on a REPEAT + only offers a recipe (on-demand), never a recurring schedule/alert — a first satisfied answer teaches the user nothing about proactive value (audit 14 A#4 + C#1).",
       "how": "On a first clean text reply per chat, append one line: 'Tip: I can text this to you every morning or watch it for changes — just say \"every morning <this>\" or \"watch ...\".' Gate to fire once per chat (a flag in memory/profile). Keep it terse."
     }
@@ -589,6 +589,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 59: built post-answer-recurring-offer (audit 14 A#4/C#1, medium/S). The automation loop (query -> saved -> scheduled/watched) is the retention engine, but auto-suggest-save only nudges on a REPEAT + only offers a recipe; a first satisfied answer taught the user nothing about proactive value. On a chat's FIRST clean text reply (empty prior history) with no repeat-nudge, the handler appends ONE '💡 Tip: I can keep this coming — say \"every morning <task>\" for a daily text, or \"watch ...\" to be pinged on changes.' Gated per-chat via an in-memory tippedChats set (fires once; at worst re-tips after restart) + never stacks with the save-nudge. +1 test (tip on first answer, absent on the second). 755 pass, tsc clean. call-tested false (handler wiring, unit-tested). Backlog DRY -> ran 15th audit (same iteration)."
     },
     {
       "event": "PRODUCT-LOOP iter 58: built orphaned-schedule-on-forget (audit 14 B#3, high/M, real bug). digestForget/recipeForget/alertForget removed the store entry but NOT the ScheduleStore row targeting it, so the runner kept firing — a forgotten scheduled digest sent '(digest is empty or was removed)' every morning forever + the user couldn't stop it the obvious way (they deleted it). New ScheduleStore.removeByTask(chatId, task) (chat-scoped exact-task match). index forget paths read the canonical stored item BEFORE removal + cancel the matching schedule: recipe -> its task string, digest -> 'digest:<name>', alert -> 'alert:<name>'. +1 store test (chat-scoped remove, no-match=0) . 754 pass, tsc clean. LIVE-VERIFIED vs real DigestStore+ScheduleStore: define+schedule digest -> 1 schedule; forget -> digest gone + schedule removed (0). call-tested TRUE. Remaining: post-answer-recurring-offer -> then backlog dry -> audit refills."

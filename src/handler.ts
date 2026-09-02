@@ -131,6 +131,11 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   // they run strictly in order (other chats stay fully concurrent). The chain never rejects (each
   // link is caught) so one failure can't wedge the queue.
   const chainByChat = new Map<number, Promise<void>>();
+  // Chats we've already shown the one-time "you can make this recurring" tip to (post-answer-recurring-
+  // offer). Fires once, on a chat's FIRST clean answer, to teach the proactive loop a new user won't
+  // discover otherwise (auto-suggest-save only nudges on a REPEAT). In-memory: at worst re-tips after a
+  // restart, which is harmless.
+  const tippedChats = new Set<number>();
   function handle(msg: InboundMessage): Promise<void> {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -566,6 +571,13 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       if (deps.suggestSaves && !degraded && !photo && !doc) {
         const nudge = repeatedTaskNudge(msg.text, history);
         if (nudge) out += nudge;
+        // First clean answer for this chat (empty prior history) + no repeat-nudge already shown ->
+        // teach the proactive loop once: this reply can become recurring. Gated so it fires a single
+        // time per chat and never stacks with the save-nudge.
+        else if (history.length === 0 && !tippedChats.has(msg.chatId)) {
+          tippedChats.add(msg.chatId);
+          out += `\n\n💡 Tip: I can keep this coming — say "every morning ${msg.text.trim()}" for a daily text, or "watch ..." to be pinged when something changes.`;
+        }
       }
       // If the agent produced a binary (screenshot image or PDF), send it first with the reply as
       // caption, then the text if the caption overflowed. Falls back to text-only when nothing was

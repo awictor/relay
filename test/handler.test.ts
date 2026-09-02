@@ -318,6 +318,29 @@ describe("createHandler", () => {
     expect(sent[0]).toMatch(/want me to save it/i); // ...then the nudge
   });
 
+  it("shows the make-it-recurring tip ONCE on a chat's first clean answer (post-answer-recurring-offer)", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    const sent: string[] = [];
+    const handle = createHandler({
+      llm: {} as never,
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      memoryClear: () => false,
+      sendMessage: async (_id, text) => { sent.push(text); },
+      sendTyping: async () => {},
+      handleCommand: () => null,
+      checkRateLimit: () => ({ allowed: true }),
+      redactText: (t) => t, hasModelKey: () => true, recordTurn: () => {}, now: () => 0,
+      suggestSaves: true,
+      runAgentFn: async (text) => ({ reply: `answer:${text}`, steps: 1, tools: [] }),
+      log: () => {},
+    });
+    await handle(msg("top HN story", 3));
+    expect(sent[0]).toMatch(/Tip: I can keep this coming/);
+    await handle(msg("weather in Paris", 3));   // second turn: no tip again
+    expect(sent[1]).not.toMatch(/Tip: I can keep this coming/);
+  });
+
   it("no save-nudge when suggestSaves is off (default)", async () => {
     const mem = new Map<number, LLMMessage[]>();
     mem.set(9, [{ role: "user", content: "check the price of bitcoin" }, { role: "assistant", content: "$65k" }]);
