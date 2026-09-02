@@ -245,6 +245,20 @@ export function nextWeeklyMs(now: number, hh: number, mm: number, weekdays: numb
   return now + 7 * DAY;
 }
 
+// Quiet-hours (quiet-hours): if `now` falls inside a [startHour, endHour) window in the user's zone
+// (wrapping midnight when start>end, e.g. 22->7), return the epoch-ms of the NEXT endHour boundary so
+// a proactive send defers to then; else 0 (not quiet -> send now). startHour===endHour = no window.
+export function quietUntilMs(now: number, startHour: number, endHour: number, offsetMin = tzOffsetMin()): number {
+  if (startHour === endHour) return 0;
+  const d = new Date(now + offsetMin * 60_000);
+  const h = d.getUTCHours() + d.getUTCMinutes() / 60;
+  const inWindow = startHour < endHour ? (h >= startHour && h < endHour) : (h >= startHour || h < endHour);
+  if (!inWindow) return 0;
+  // Next endHour boundary: today if we're before it, else tomorrow (wrapping case, pre-midnight).
+  const endToday = h < endHour ? 0 : 1;
+  return dayAtMs(now, endHour, 0, endToday, offsetMin);
+}
+
 function cleanTask(raw: string, timeClause: string): string {
   // Remove the time clause (case-insensitive) + reminder prefix + dangling connectors.
   const idx = raw.toLowerCase().indexOf(timeClause.toLowerCase());
@@ -303,6 +317,16 @@ export class ScheduleStore {
     const removed = this.items.length < before;
     if (removed) this.persist();
     return removed;
+  }
+
+  /** Push a schedule's next fire to a specific instant (quiet-hours defer) without advancing its
+   * recurrence. Only moves it FORWARD (never earlier). Returns true if found + moved. */
+  deferTo(id: string, whenMs: number): boolean {
+    const s = this.items.find((x) => x.id === id);
+    if (!s || whenMs <= s.dueMs) return false;
+    s.dueMs = whenMs;
+    this.persist();
+    return true;
   }
 
   /** Remove every schedule for a chat whose task exactly matches `task`. Returns how many were

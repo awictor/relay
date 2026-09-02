@@ -725,7 +725,7 @@
       "title": "Quiet-hours / DND window for proactive sends",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "An ill-timed 3am ping is a top churn driver for a proactive bot; there's an hourly cap but no time-of-day window, so a mis-timed schedule or alert can wake the user (audit 19 C#3).",
       "how": "A per-chat quiet window (default ~10pm-7am local via profile tz, override via a /quiet cmd); the runner defers a proactive send that lands in the window to the window's end. Profile already stores the tz offset."
     }
@@ -778,6 +778,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 76: built quiet-hours (audit 19 C#3, medium/S). A mis-timed schedule/alert could ping at 3am (hourly cap but no time-of-day window) — a top churn driver for a proactive bot. New quietUntilMs(now, startH, endH, offsetMin) (in the user's tz, wraps midnight) + ScheduleStore.deferTo(id, whenMs) (forward-only). schedule-runner: a due send whose chat is inside its quiet window bumps that schedule's dueMs to the window's end (no send this tick) via quietUntil + deferTo deps. index wires them from RELAY_QUIET_START/END (default start===end = disabled) + the chat's profile tz; .env.example documents it. +3 tests (quietUntilMs inside/outside/disabled; store.deferTo forward-only; runner defers-in-window no-send). 798 pass, tsc clean. call-tested false (pure time math + runner wiring, unit-tested). Backlog DRY -> ran 20th audit (same iteration)."
     },
     {
       "event": "PRODUCT-LOOP iter 75: built proactive-followup-context (audit 19 C#2, medium/S). Replying 'why?'/'what about ETH?' to an alert/digest ping was a cold task (no context). Added a proactive flag to the shared lastResultStore entries (recordSend sets true, the handler's inbound cache write sets false); when the last cached entry is proactive AND the reply is short (<=8 words), the handler prepends 'The user is replying to this message I just sent: \"<ping>\". Answer their follow-up in that context.' to the agent context (alongside profile ctx). So a one-hop follow-up to a ping resolves against it. +2 tests (short follow-up to proactive ping gets ping ctx; follow-up to a normal inbound answer does NOT). 795 pass, tsc clean. call-tested false (wiring, unit-tested). Remaining: quiet-hours -> then backlog dry -> audit refills."

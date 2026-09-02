@@ -21,7 +21,7 @@ import { runAgent } from "./agent.js";
 import { formatReply } from "./lib/format-reply.js";
 import { friendlyError } from "./lib/failure.js";
 import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
-import { ScheduleStore, parseSchedule, tzOffsetMin } from "./lib/schedule.js";
+import { ScheduleStore, parseSchedule, tzOffsetMin, quietUntilMs } from "./lib/schedule.js";
 import { formatWhen } from "./lib/format-when.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots } from "./lib/recipes.js";
@@ -112,6 +112,10 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
   return { message: r.notify ? r.message : null, commit: r.commit };
 };
 const ALERT_CADENCE = process.env.RELAY_ALERT_CADENCE ?? "every day at 09:00"; // default alert check cadence
+// Quiet-hours window (hours 0-23, local per-chat tz). Equal start===end (default) = disabled. Set
+// RELAY_QUIET_START/END (e.g. 22 and 7) to hold proactive sends overnight until the window ends.
+const QUIET_START = intEnv(process.env.RELAY_QUIET_START, { fallback: 0, min: 0 }) % 24;
+const QUIET_END = intEnv(process.env.RELAY_QUIET_END, { fallback: 0, min: 0 }) % 24;
 const SCHED_TICK_MS = intEnv(process.env.RELAY_SCHED_TICK_MS, { fallback: 30_000, allowZeroDisable: true }); // 0 disables
 // Shared last-result cache (proactive-ping-drilldown-cache): the handler stores answers here + the
 // runner records proactive sends, so "more"/"send the link" works after an unprompted ping too.
@@ -126,6 +130,10 @@ const scheduleRunner = makeScheduleRunner({
   alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
   recipeResolveTask: (chatId, name) => { const r = recipes.get(chatId, name); return r ? r.task : null; }, // scheduled recipes: resolve current task at fire time
   recordSend: (chatId, text) => lastResultStore.set(chatId, { full: text, sent: text.length, proactive: true }), // proactive ping -> drilldown + follow-up context
+  // Quiet hours (quiet-hours): defer a proactive send that lands in the window to its end, in the
+  // chat's tz. Off unless RELAY_QUIET_START/END set (default start===end 0 = no window).
+  quietUntil: (chatId, now) => quietUntilMs(now, QUIET_START, QUIET_END, profiles.offsetMin(chatId) ?? tzOffsetMin()),
+  deferTo: (id, whenMs) => { schedules.deferTo(id, whenMs); },
   // m14 degrade-4: a failed ONE-SHOT reminder shouldn't vanish silently — tell the user, once,
   // with a friendly (non-leaking) line. A "daily" stays silent (it retries tomorrow; a misfiring
   // daily must not storm the chat with failure pings).

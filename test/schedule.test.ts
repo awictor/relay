@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSchedule, parseScheduleFor, splitScheduleCommand, ScheduleStore } from "../src/lib/schedule.js";
+import { parseSchedule, parseScheduleFor, splitScheduleCommand, ScheduleStore, quietUntilMs } from "../src/lib/schedule.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -272,6 +272,28 @@ describe("ScheduleStore", () => {
     expect(after).toBeTruthy();
     expect(after.dueMs).toBeGreaterThan(NOW);
     expect(new Date(after.dueMs).getUTCDay()).toBe(1); // next Monday
+  });
+
+  it("quietUntilMs: inside the overnight window -> next end boundary; outside -> 0 (quiet-hours)", () => {
+    // NOW = Tue 22:13 UTC. Window 22->7 (offset 0): 22:13 is inside -> defer to Wed 07:00.
+    const until = quietUntilMs(NOW, 22, 7, 0);
+    expect(until).toBeGreaterThan(NOW);
+    const d = new Date(until);
+    expect(d.getUTCHours()).toBe(7);
+    expect(d.getUTCDate()).toBe(new Date(NOW).getUTCDate() + 1); // tomorrow 7am
+    // A daytime window (9->17) at 22:13 UTC -> not inside -> 0 (send now).
+    expect(quietUntilMs(NOW, 9, 17, 0)).toBe(0);
+    // Disabled when start===end.
+    expect(quietUntilMs(NOW, 0, 0, 0)).toBe(0);
+  });
+
+  it("deferTo moves a schedule's next fire forward only (quiet-hours)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const r = s.add(1, { kind: "daily", task: "x", dueMs: NOW, hourMin: "09:00" }, NOW)!;
+    expect(s.deferTo(r.id, NOW + HR)).toBe(true);
+    expect(s.list(1)[0]!.dueMs).toBe(NOW + HR);
+    expect(s.deferTo(r.id, NOW)).toBe(false); // never earlier
+    expect(s.deferTo("nope", NOW + 999)).toBe(false); // unknown id
   });
 
   it("removeByTask cancels the schedule(s) running a given task, chat-scoped (orphaned-schedule-on-forget)", () => {

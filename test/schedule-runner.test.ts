@@ -99,6 +99,21 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.get(1)!.full).toMatch(/the news is X/); // cached for a follow-up drilldown
   });
 
+  it("defers a proactive send that lands in quiet hours to the window's end, no send (quiet-hours)", async () => {
+    const clock = { t: NOW };
+    const sent: unknown[] = [];
+    const { store, runner } = harness(clock, {
+      send: async () => { sent.push(1); },
+      quietUntil: () => NOW + 8 * 3_600_000, // in quiet window -> defer 8h out
+      deferTo: (id, when) => { store.deferTo(id, when); },
+    });
+    store.add(1, { kind: "once", task: "meds", dueMs: NOW - 1 }, NOW);
+    const n = await runner.tick();
+    expect(n).toBe(0);                               // nothing fired
+    expect(sent).toHaveLength(0);                    // no 3am ping
+    expect(store.list(1)[0]!.dueMs).toBe(NOW + 8 * 3_600_000); // pushed to window end
+  });
+
   it("a daily task fires then reschedules forward (stays in the store)", async () => {
     const clock = { t: NOW };
     const { store, runner, sent } = harness(clock);
