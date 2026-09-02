@@ -55,7 +55,7 @@ describe("makeScheduleRunner.tick", () => {
     const { store, runner, sent } = harness(clock);
     store.add(1, { kind: "daily", task: "weather", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
     await runner.tick();
-    expect(sent[0]!.text).toMatch(/Daily/);
+    expect(sent[0]!.text).toMatch(/Recurring/);
     const after = store.list(1);
     expect(after).toHaveLength(1);
     expect(after[0]!.dueMs).toBeGreaterThan(NOW); // moved to next occurrence
@@ -343,7 +343,7 @@ describe("makeScheduleRunner observability (m8 pobs-1)", () => {
     expect(recorded).toEqual([{ ok: false }]);
     // it's still delivered (a daily shouldn't silently vanish) but clearly marked partial
     expect(sent[0]).toMatch(/Partial/i);
-    expect(sent[0]).toContain("⏰ Daily: morning report");
+    expect(sent[0]).toContain("⏰ Recurring: morning report");
   });
 
   it("logs a [proactive] failure line + records a failed turn when the agent throws", async () => {

@@ -103,7 +103,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     } else {
       res = await deps.runAgent(s.task, { llm: deps.llm, context: deps.contextFor?.(s.chatId) || undefined }, []);
       const body = deps.formatReply(res.reply);
-      const label = s.kind === "daily" ? "⏰ Daily" : "⏰ Reminder";
+      const label = s.kind === "once" ? "⏰ Reminder" : "⏰ Recurring";
       // A degraded reply (agent ran out of steps / no answer, DEV-0176) is a soft failure, not a real
       // proactive result. Marking the unprompted message as partial keeps a flaky daily from pushing a
       // failure string as if it were the briefing, and the ok:!degraded below keeps it out of the

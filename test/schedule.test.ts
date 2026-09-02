@@ -152,6 +152,42 @@ describe("nextDailyMs — timezone offset (tz-daily fix)", () => {
   });
 });
 
+describe("parseSchedule — recurring (weekly / interval)", () => {
+  it("'every 2 hours' -> interval", () => {
+    const s = parseSchedule("every 2 hours check the site", NOW)!;
+    expect(s.kind).toBe("interval");
+    expect(s.intervalMs).toBe(2 * 60 * 60 * 1000);
+    expect(s.dueMs).toBe(NOW + 2 * 60 * 60 * 1000);
+    expect(s.task).toMatch(/check the site/);
+  });
+  it("'every 30 min' -> interval", () => {
+    const s = parseSchedule("every 30 min ping me the price", NOW)!;
+    expect(s.kind).toBe("interval");
+    expect(s.intervalMs).toBe(30 * 60 * 1000);
+  });
+  it("'every monday at 9am' -> weekly on [Mon]", () => {
+    const s = parseSchedule("every monday at 9am send the report", NOW)!;
+    expect(s.kind).toBe("weekly");
+    expect(s.weekdays).toEqual([1]);
+    expect(s.hourMin).toBe("09:00");
+    expect(new Date(s.dueMs).getUTCDay()).toBe(1); // lands on a Monday (UTC offset 0 in test)
+  });
+  it("'every weekday at 8' -> weekly Mon-Fri", () => {
+    const s = parseSchedule("every weekday at 8 remind me to stand up", NOW)!;
+    expect(s.kind).toBe("weekly");
+    expect(s.weekdays).toEqual([1, 2, 3, 4, 5]);
+    expect(s.hourMin).toBe("08:00");
+  });
+  it("'weekends at 10am' -> weekly Sat+Sun", () => {
+    const s = parseSchedule("weekends at 10am brunch spots near me", NOW)!;
+    expect(s.kind).toBe("weekly");
+    expect(s.weekdays).toEqual([0, 6]);
+  });
+  it("a bare weekday inside a task is NOT a weekly schedule", () => {
+    expect(parseSchedule("email bob the monday report", NOW)).toBeNull();
+  });
+});
+
 describe("parseSchedule — absolute", () => {
   it("tomorrow at 9am -> once, >= ~1 day out", () => {
     const s = parseSchedule("tomorrow at 9am check the deploy", NOW)!;
@@ -196,6 +232,25 @@ describe("ScheduleStore", () => {
     expect(rec.offsetMin).toBe(-300); // carried onto the stored record
     s.complete(rec.id, NOW + 2 * HR);
     expect(new Date(s.list(1)[0]!.dueMs).getUTCHours()).toBe(14);
+  });
+
+  it("an interval task reschedules forward by whole intervals on complete", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const rec = s.add(1, { kind: "interval", task: "ping", dueMs: NOW, intervalMs: HR }, NOW)!;
+    s.complete(rec.id, NOW + 90 * MIN); // fired 1.5h later
+    const after = s.list(1)[0]!;
+    expect(after).toBeTruthy();
+    expect(after.dueMs).toBeGreaterThan(NOW + 90 * MIN); // moved past now, not a backlog burst
+    expect((after.dueMs - NOW) % HR).toBe(0);            // still on the hourly grid
+  });
+  it("a weekly task reschedules to the next matching weekday on complete", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const rec = s.add(1, { kind: "weekly", task: "report", dueMs: NOW, hourMin: "09:00", weekdays: [1] }, NOW)!;
+    s.complete(rec.id, NOW + MIN);
+    const after = s.list(1)[0]!;
+    expect(after).toBeTruthy();
+    expect(after.dueMs).toBeGreaterThan(NOW);
+    expect(new Date(after.dueMs).getUTCDay()).toBe(1); // next Monday
   });
 
   it("persists across a reload", () => {

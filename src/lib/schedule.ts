@@ -6,7 +6,9 @@
 
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
 
-export type ScheduleKind = "once" | "daily";
+// once = fire + drop; daily = re-fire every day at hourMin; weekly = re-fire on the given weekdays at
+// hourMin ("every monday", "weekdays at 8"); interval = re-fire every intervalMs ("every 2 hours").
+export type ScheduleKind = "once" | "daily" | "weekly" | "interval";
 
 export interface Schedule {
   id: string;
@@ -14,8 +16,10 @@ export interface Schedule {
   kind: ScheduleKind;
   task: string;        // the natural-language task to hand runAgent
   dueMs: number;       // next fire time (epoch ms)
-  hourMin?: string;    // "HH:MM" local, for daily reschedule
-  offsetMin?: number;  // tz offset (min east of UTC) the hourMin is measured in, for daily reschedule
+  hourMin?: string;    // "HH:MM" local, for daily/weekly reschedule
+  offsetMin?: number;  // tz offset (min east of UTC) the hourMin is measured in, for daily/weekly reschedule
+  weekdays?: number[]; // for weekly: days-of-week to fire on (0=Sun..6=Sat), in the user's zone
+  intervalMs?: number; // for interval: gap between fires
   attempts?: number;   // failed fire attempts (once-reminder transient-retry); dropped after a cap
   created: number;
 }
@@ -26,6 +30,8 @@ export interface ParsedSchedule {
   dueMs: number;
   hourMin?: string;
   offsetMin?: number;  // tz offset used to compute dueMs, carried so reschedule stays in the user's zone
+  weekdays?: number[];
+  intervalMs?: number;
 }
 
 const MINUTE = 60_000;
@@ -95,6 +101,46 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     const task = cleanTask(raw, rel[0]!);
     if (!task) return null;
     return { kind: "once", task, dueMs: now + ms };
+  }
+
+  // --- interval: "every 2 hours", "every 30 min", "every 90 minutes" (sub-daily recurring) ---
+  const interval = lower.match(/\bevery\s+(\d+)\s*(min(?:ute)?s?|hours?|hrs?)\b/);
+  if (interval) {
+    const n = parseInt(interval[1]!, 10);
+    const unit = interval[2]!;
+    const ms = /^h/.test(unit) ? n * HOUR : n * MINUTE;
+    if (n >= 1 && ms >= MINUTE) {
+      const task = cleanTask(raw, interval[0]!);
+      if (!task) return null;
+      return { kind: "interval", task, dueMs: now + ms, intervalMs: ms };
+    }
+  }
+
+  // --- weekly: "every monday", "every mon and thu", "every weekday", "weekends", optional "at HH:MM" ---
+  const WEEKDAY: Record<string, number> = { sun: 0, sunday: 0, mon: 1, monday: 1, tue: 2, tues: 2, tuesday: 2, wed: 3, weds: 3, wednesday: 3, thu: 4, thur: 4, thurs: 4, thursday: 4, fri: 5, friday: 5, sat: 6, saturday: 6 };
+  const weeklyClause = lower.match(/\b(?:every\s+)?((?:mon|tue|wed|thu|fri|sat|sun)[a-z]*(?:(?:\s*,\s*|\s+and\s+|\s+)(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*)*|weekdays?|weekends?)\b(?:\s+at\s+([0-9]{1,2})(?::([0-9]{2}))?\s*(am|pm)?)?/);
+  // Require a recurring cue ("every" / "weekday"/"weekend" / an explicit time) so a bare "monday" in
+  // a task ("email bob monday's report") isn't turned into a weekly schedule.
+  if (weeklyClause && /\bevery\b|weekday|weekend|\bat\b/.test(weeklyClause[0]!)) {
+    let weekdays: number[];
+    const grp = weeklyClause[1]!;
+    if (/weekday/.test(grp)) weekdays = [1, 2, 3, 4, 5];
+    else if (/weekend/.test(grp)) weekdays = [0, 6];
+    else {
+      weekdays = [...new Set(
+        (grp.match(/mon|tue|wed|thu|fri|sat|sun[a-z]*|[a-z]+day/g) ?? [])
+          .map((w) => WEEKDAY[w] ?? WEEKDAY[w.slice(0, 3)])
+          .filter((n): n is number => n !== undefined),
+      )];
+    }
+    if (weekdays.length) {
+      let hh = 9, mm = 0;
+      if (weeklyClause[2]) { hh = to24h(parseInt(weeklyClause[2], 10), weeklyClause[4]); mm = weeklyClause[3] ? parseInt(weeklyClause[3], 10) : 0; }
+      const hourMin = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+      const task = cleanTask(raw, weeklyClause[0]!);
+      if (!task) return null;
+      return { kind: "weekly", task, dueMs: nextWeeklyMs(now, hh, mm, weekdays, offsetMin), hourMin, offsetMin, weekdays };
+    }
   }
 
   // --- daily: "every morning", "every day at 8pm", "daily at 07:00" ---
@@ -171,6 +217,23 @@ export function nextDailyMs(now: number, hh: number, mm: number, offsetMin = tzO
   return t;
 }
 
+// Next occurrence of hh:mm on one of `weekdays` (0=Sun..6=Sat, in the user's zone) at/after now.
+// Scans up to 7 candidate days from today, returning the first that lands strictly after now.
+export function nextWeeklyMs(now: number, hh: number, mm: number, weekdays: number[], offsetMin = tzOffsetMin()): number {
+  const want = new Set(weekdays);
+  const userNow = now + offsetMin * 60_000;
+  const base = new Date(userNow);
+  for (let add = 0; add <= 7; add++) {
+    const atUser = Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate() + add, hh, mm, 0, 0);
+    const dow = new Date(atUser).getUTCDay();
+    if (!want.has(dow)) continue;
+    const t = atUser - offsetMin * 60_000;
+    if (t > now) return t;
+  }
+  // Fallback (shouldn't hit with a non-empty weekday set): a week out.
+  return now + 7 * DAY;
+}
+
 function cleanTask(raw: string, timeClause: string): string {
   // Remove the time clause (case-insensitive) + reminder prefix + dangling connectors.
   const idx = raw.toLowerCase().indexOf(timeClause.toLowerCase());
@@ -212,7 +275,7 @@ export class ScheduleStore {
   /** Add a schedule for a chat. Returns the stored record, or null if the chat is at its cap. */
   add(chatId: number, p: ParsedSchedule, now: number): Schedule | null {
     if (this.items.filter((s) => s.chatId === chatId).length >= this.maxPerChat) return null;
-    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, created: now };
+    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, weekdays: p.weekdays, intervalMs: p.intervalMs, created: now };
     this.items.push(s);
     this.persist();
     return s;
@@ -247,15 +310,22 @@ export class ScheduleStore {
     return s.attempts;
   }
 
-  /** After firing: drop a "once", or advance a "daily" to its next occurrence. */
+  /** After firing: drop a "once", or advance a recurring schedule to its next occurrence. */
   complete(id: string, now: number): void {
     const s = this.items.find((x) => x.id === id);
     if (!s) return;
+    const [hh, mm] = (s.hourMin ?? "9:0").split(":").map((n) => parseInt(n, 10));
+    // Reschedule in the SAME zone the schedule was created in (per-chat offset stamped at add time),
+    // falling back to the global default for schedules created before offsets existed.
+    const off = s.offsetMin ?? tzOffsetMin();
     if (s.kind === "daily" && s.hourMin) {
-      const [hh, mm] = s.hourMin.split(":").map((n) => parseInt(n, 10));
-      // Reschedule in the SAME zone the schedule was created in (per-chat offset stamped at add
-      // time), falling back to the global default for schedules created before offsets existed.
-      s.dueMs = nextDailyMs(now, hh!, mm!, s.offsetMin ?? tzOffsetMin());
+      s.dueMs = nextDailyMs(now, hh!, mm!, off);
+    } else if (s.kind === "weekly" && s.hourMin && s.weekdays?.length) {
+      s.dueMs = nextWeeklyMs(now, hh!, mm!, s.weekdays, off);
+    } else if (s.kind === "interval" && s.intervalMs) {
+      // Advance by whole intervals past now so a missed tick (downtime) doesn't fire a burst of backlog.
+      const next = s.dueMs + Math.max(1, Math.ceil((now - s.dueMs) / s.intervalMs)) * s.intervalMs;
+      s.dueMs = next > now ? next : now + s.intervalMs;
     } else {
       this.items = this.items.filter((x) => x.id !== id);
     }

@@ -347,7 +347,7 @@
       "title": "Weekly / weekday / interval reminders",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "schedule.ts parses only once + daily; 'every Monday', 'weekdays at 8', 'every 2 hours' silently fall through to a one-off agent run that does nothing — a core recurring-reminder shape fails on first try (audit 9 A#2).",
       "how": "Extend parseSchedule + Schedule kind to support day-of-week ('every monday'), weekday/weekend, and sub-daily intervals ('every N hours'); complete() advances to the next matching occurrence. New ScheduleKind values + nextOccurrence logic + tests."
     },
@@ -409,6 +409,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 39: built recurring-schedules (audit 9 A#2, high/M). schedule.ts parsed only once + daily, so 'every Monday', 'every weekday at 8', 'every 2 hours' silently fell through to a one-off agent run that did nothing. Added ScheduleKind 'weekly' + 'interval'; parseSchedule now matches an interval clause ('every N min/hours' -> intervalMs) + a weekly clause ('every monday', 'every mon and thu', 'every weekday', 'weekends', optional 'at HH:MM' -> weekdays[]), guarded so a bare weekday in a task ('email bob the monday report') isn't scheduled. New nextWeeklyMs (next matching weekday at hh:mm in the user's zone); complete() advances weekly (next weekday) + interval (forward by whole intervals past now, no backlog burst). Schedule/ParsedSchedule gained weekdays+intervalMs; add() carries them; runner label 'once'->Reminder else Recurring; once-retry gate + failureNotice already key off kind==='once' so recurring stays silent+advances. HELP + confirm message updated. +10 tests (5 parse forms + bare-weekday-null, interval+weekly complete-advance, 2 label updates). 708 pass, tsc clean. call-tested false (pure parse+store+runner, unit-tested incl weekday math). Remaining: auto-suggest-save -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 38: built once-reminder-transient-retry (audit 9 B#2, high/M, real bug). schedule-runner's fireOne catch always safeComplete()'d a 'once' on ANY throw, so 'remind me to take my meds at 3pm' vanished on a momentary anvil/LLM hiccup at 3pm (only the rate-cap path deferred). Now a failed 'once' calls store.recordFailure (new Schedule.attempts) and DEFERS (left due, retried next tick) until MAX_FIRE_ATTEMPTS (RELAY_ONCE_MAX_ATTEMPTS, default 5), then gives up: sends the failure notice once + drops it, so a permanently-broken task can't loop forever. A daily still advances (no attempts accrued). Updated the old drop-on-first-fail test + the failure-notice test (now fires after retries) + added give-up-after-cap + daily-still-advances tests. Added RELAY_ONCE_MAX_ATTEMPTS to .env.example. 700 pass, tsc clean. call-tested false (runner logic w/ mock clock). Remaining: recurring-schedules, auto-suggest-save."

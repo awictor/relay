@@ -272,7 +272,8 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     if (!isExplicitCommand && deps.scheduleAdd && /\b(remind me|every day|every morning|every evening|every night|daily)\b|\bin \d+\s*(min|hour|day)/i.test(msg.text)) {
       const r = deps.scheduleAdd(msg.chatId, msg.text, deps.now());
       if (r.ok) {
-        await deps.sendMessage(msg.chatId, `Got it — I'll ${r.kind === "daily" ? "do this daily" : "remind you"}: "${r.task}". Manage with /schedules.`);
+        const verb = r.kind === "once" ? "remind you" : r.kind === "daily" ? "do this daily" : r.kind === "weekly" ? "do this on the days you said" : "do this on that schedule";
+        await deps.sendMessage(msg.chatId, `Got it — I'll ${verb}: "${r.task}". Manage with /schedules.`);
         return;
       }
       if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the limit of scheduled tasks — cancel one with /schedules first."); return; }
