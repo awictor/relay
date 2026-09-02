@@ -145,12 +145,37 @@ export function extractValue(s: string): number | null {
   return pool.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a));
 }
 
+// Common lead-ins the agent varies run-to-run without the underlying answer changing
+// ("As of 3pm, the top story is X" vs "Right now the top story is X"). Stripped before comparing so
+// a non-numeric watch doesn't false-fire on pure phrasing drift.
+const PROSE_NOISE_RE = new RegExp(
+  "\\b(?:" +
+    "as of [\\w:apm. ]+?|right now|currently|at the moment|at present|today|this (?:morning|afternoon|evening)|" +
+    "the (?:current|latest)|it'?s|it is|here'?s|here is|according to [\\w. ]+?|" +
+    "\\d{1,2}:\\d{2}\\s?(?:am|pm)?|\\d{1,2}\\s?(?:am|pm)" +
+  ")\\b",
+  "gi",
+);
+
+/** Normalize a non-numeric reply to its stable content: lowercase, drop volatile lead-ins/timestamps,
+ * strip punctuation, collapse whitespace. So "As of 3pm, the top story is X." and "Right now the top
+ * story is X!" normalize equal and a watch on that prose doesn't false-fire every check. Exported for tests. */
+export function normalizeForCompare(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(PROSE_NOISE_RE, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ") // drop punctuation/emoji, keep letters+digits
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
  * Did the value change enough to notify? Compares the SALIENT VALUE, not raw prose — so a reply
  * whose wording drifted but whose tracked number is identical does NOT false-fire, and a real move
  * always does. If BOTH replies carry a value: changed iff |new - prev| >= (threshold || any nonzero
- * delta). If neither is numeric: fall back to trimmed-text inequality (e.g. "in stock"/"sold out").
- * First run (no prev) is handled by the caller (seed + notify).
+ * delta). If neither is numeric: compare NORMALIZED text (lead-ins/timestamps/punctuation stripped)
+ * so pure phrasing drift on a "watch top HN story" alert doesn't ping every check — only a real
+ * content change ("in stock" vs "sold out") fires. First run (no prev) is handled by the caller.
  */
 export function changed(prev: string, next: string, threshold?: number): boolean {
   const a = prev.trim(), b = next.trim();
@@ -159,8 +184,8 @@ export function changed(prev: string, next: string, threshold?: number): boolean
     const delta = Math.abs(nv - pv);
     return threshold && threshold > 0 ? delta >= threshold : delta > 0;
   }
-  // No comparable number on one/both sides — compare the meaningful text, not incidental whitespace.
-  return a !== b;
+  // No comparable number on one/both sides — compare the MEANINGFUL content, not phrasing/whitespace.
+  return normalizeForCompare(a) !== normalizeForCompare(b);
 }
 
 export interface AlertStoreOptions { file: string; maxPerChat?: number; }

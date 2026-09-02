@@ -239,7 +239,7 @@
       "title": "Stop non-numeric alerts false-firing on prose drift",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "changed() falls back to raw trimmed-text inequality when neither side is numeric, so a 'watch top HN story' style alert pings 'changed' nearly every check because the agent's wording varies run-to-run even when the answer is the same -> alert spam, user tunes it out (audit 6 B#2).",
       "how": "Normalize the compared text (lowercase, collapse whitespace/punctuation) and/or extract a salient token; only fire when the meaningful content differs, not incidental phrasing. Consider asking the LLM for a stable one-line key for the watched thing."
     },
@@ -301,6 +301,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 27: built nonnumeric-alert-drift (audit 6 B#2, high/M, real bug). changed() fell back to raw trimmed-text inequality when neither side is numeric, so a 'watch top HN story' alert pinged 'changed' nearly every check because the agent's wording drifts run-to-run even when the answer is identical -> spam, user tunes it out. New normalizeForCompare() lowercases, strips volatile lead-ins/timestamps ('as of 3pm', 'right now', 'currently', 'today', 'it's', 'HH:MM am'), drops punctuation/emoji, collapses whitespace; changed() compares the normalized content for the non-numeric path. So pure phrasing drift is silent, a real content change ('Apple buys OpenAI' -> 'Google buys Anthropic', 'in stock' -> 'sold out') still fires. Numeric path unchanged. +4 tests (drift-silent, real-change-fires, normalizeForCompare equal/distinct). 676 pass, tsc clean. call-tested false (pure compare logic, unit-tested). Remaining: clarify-once-ambiguous -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 26: built telegram-long-message-split (audit 6 B#4, high/S, real bug). sendMessage did text.slice(0,4096) -> a long digest/answer was cut mid-sentence with NO marker + read as complete. New splitMessage() chunks on natural boundaries (paragraph > line > space, past-50% guard, hard-cut only for one oversized token) into <=max pieces; sendMessage sends them sequentially with an '(i/n)' counter (8-char headroom reserved). Single-message case unchanged (no counter). splitMessage pure + exported. +4 tests (fits-unchanged, paragraph-split-nothing-dropped, oversized-token-preserves-all-chars, prefers-line-break). 672 pass, tsc clean. call-tested false (pure splitter, unit-tested; real send path unchanged mechanics). Remaining: nonnumeric-alert-drift, clarify-once-ambiguous."

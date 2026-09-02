@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseAlertCommand, parseAlertEdit, changed, firstNumber, extractValue, conditionHolds, AlertStore } from "../src/lib/alerts.js";
+import { parseAlertCommand, parseAlertEdit, changed, normalizeForCompare, firstNumber, extractValue, conditionHolds, AlertStore } from "../src/lib/alerts.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -107,6 +107,25 @@ describe("changed", () => {
   it("ignores an incidental date/count difference when the value is unchanged", () => {
     // first-number would grab the date and false-fire; extractValue tracks the price.
     expect(changed("On the 1st: $500.", "On the 2nd: $500.")).toBe(false);
+  });
+  // nonnumeric-alert-drift: a NON-numeric watch (e.g. "top HN story") must not fire on phrasing drift.
+  it("does NOT fire on pure prose drift of a non-numeric answer", () => {
+    expect(changed("As of 3pm, the top story is Apple buys OpenAI.", "Right now the top story is Apple buys OpenAI!")).toBe(false);
+    expect(changed("Currently: Sunny and warm", "Today it's sunny and warm.")).toBe(false);
+  });
+  it("DOES fire when the non-numeric content actually changes", () => {
+    expect(changed("The top story is Apple buys OpenAI.", "The top story is Google buys Anthropic.")).toBe(true);
+    expect(changed("In stock", "Sold out")).toBe(true);
+  });
+});
+
+describe("normalizeForCompare", () => {
+  it("strips lead-ins, timestamps, punctuation, case, and whitespace", () => {
+    expect(normalizeForCompare("As of 3pm, the top story is X.")).toBe(normalizeForCompare("Right now the top story is X!"));
+    expect(normalizeForCompare("Sunny   and warm")).toBe("sunny and warm");
+  });
+  it("keeps genuinely different content distinct", () => {
+    expect(normalizeForCompare("Apple wins")).not.toBe(normalizeForCompare("Google wins"));
   });
 });
 
