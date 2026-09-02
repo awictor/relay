@@ -770,9 +770,72 @@
       "title": "Tell the user when a watch keeps failing (don't go silently dead)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A recurring alert/digest that errors N times in a row (login expired, markup changed, 429) just advances with a log line; the user assumes 'no news = nothing changed' while the watch is actually dead — the #1 invisible retention killer (audit 20 C#1).",
       "how": "Count consecutive failures per schedule (extend the attempts field / a failStreak); after N (e.g. 3) send ONE throttled receipt ('your <name> watch has failed 3 checks — the site may have changed or a login expired') then reset the counter. Message-only, safe."
+    },
+    {
+      "id": "extractvalue-magnitude-suffix",
+      "title": "extractValue drops k/M/bn magnitude on prices",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "A \"below 50000\" BTC alert fired the instant the agent said \"$60k\" (parsed as 60) — price watches lied by 3+ orders of magnitude.",
+      "how": "Scale k/m/bn/thousand/million/billion/trillion suffixes in extractValue; bare m/t excluded on the untagged branch."
+    },
+    {
+      "id": "in-stock-cta-scoping",
+      "title": "in_stock matches buy-CTA text for cross-sell products",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "A \"back in stock\" watch pings to rush-buy while the item is still sold out, because a Buy/Add-to-cart button for a RELATED product satisfied the check.",
+      "how": "Scope the in_stock language check to the watched item vicinity, or require stock-affirmative near the product name; out-of-stock language already takes precedence — tighten the affirmative side."
+    },
+    {
+      "id": "proactive-clobbers-drilldown-cache",
+      "title": "proactive ping overwrites inbound more/link paging cache",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "User asks a question, a scheduled digest fires, then \"more\" says \"that is the whole answer\" and the dropped tail is unrecoverable.",
+      "how": "recordSend (index.ts ~132) sets sent=text.length, clobbering the handler-seeded paging offset. Namespace proactive vs inbound last-result, or do not overwrite an inbound entry that still has unsent tail."
+    },
+    {
+      "id": "reminder-only-no-agent",
+      "title": "pure personal reminders run the browser agent instead of echoing",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "\"remind me to take my meds at 8pm\" fires \"Reminder: take my meds\" then a confused 20-40s agent browse/refusal appended.",
+      "how": "Detect a non-informational to-do at schedule time (imperative personal task, no fetch verb) and mark reminderOnly; fireOne echoes the stored text instead of calling runAgent."
+    },
+    {
+      "id": "remember-facts-store",
+      "title": "no durable remember-this fact store",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "\"remember my wife birthday is June 3\" has nowhere to live — chat memory is a short rolling window wiped by /reset; agent acknowledges then forgets.",
+      "how": "Per-chat key-value note store (save/list/forget) injected into agent context like the location profile already is."
+    },
+    {
+      "id": "new-item-feed-watch",
+      "title": "watch for NEW items in a list (set-diff monitoring)",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "\"ping me when a new remote React job / PS5 restock appears\" is impossible — alerts only track a single changed value, not new entries in a list.",
+      "how": "Add a seen-set diff alert kind on top of the existing alert-runner + persistent store; notify only on genuinely new entries."
+    },
+    {
+      "id": "video-transcript-summary",
+      "title": "YouTube/video links cannot be summarized",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "Pasting a YouTube link + \"summarize this\" hits a JS shell, formatPageForModel <200-char guard fires, agent says the page was empty.",
+      "how": "Add a transcript-fetch path (video id -> timedtext/transcript endpoint -> summarize) as a tool."
     }
   ],
   "history": [
@@ -1015,6 +1078,14 @@
     },
     {
       "event": "PRODUCT-LOOP iter 17: built tz-from-location (audit A+B, high/M). Extends the global RELAY_TZ_OFFSET_MIN to a PER-CHAT offset so an Austin user's 'every morning 9am' fires at their 9am, not 9am UTC (3-4am). profile.ts: Profile.tzOffsetMin + parseUtcOffset (UTC-5/utc+1/GMT+5:30, ±14h clamp, -0 normalized) + parseSetLocation captures a 'UTC±N' clause anywhere in the tail without swallowing the place (e.g. '/setlocation NYC UTC-5', \"I'm in Berlin UTC+1 (metric)\"); ProfileStore.set persists it, .offsetMin(chatId) exposes it, contextLine shows 'timezone is UTC-5'. schedule.ts: Schedule+ParsedSchedule gained offsetMin; parseSchedule/parseScheduleFor take an offsetMin arg threaded into all nextDailyMs calls + stamped on the result; add() carries it; complete() reschedules dailies with the stored offset (falls back to global for pre-offset schedules). index wires profiles.offsetMin(chatId) into scheduleAdd + recipe/digest/alert schedule paths; setLocation returns tzOffsetMin; handler confirms 'I'll fire daily reminders at your local time (UTC-5)'. Fixed a pre-existing units regex that ate the 'in' in 'Berlin'. +6 tests (parseUtcOffset, parseSetLocation tz, ProfileStore offset+contextLine, parseSchedule offset-stamp, daily-reschedule-in-stored-zone). 651 pass, tsc clean. call-tested false (pure time+parse math, exhaustively unit-tested). Remaining: alert-check-on-define, extractvalue-percentage-guard, memory-on-error."
+    },
+    {
+      "id": "failed-watch-receipts",
+      "note": "Recurring watch/digest/alert that errors N (default 3) consecutive times now sends ONE failed-watch receipt then resets the streak — a dead watch no longer reads as \"no news\". recordFailure on recurring throw + resetFailures on success; failStreakNotice dep wired in index.ts; RELAY_FAIL_STREAK_NOTIFY tunable. 810 tests green."
+    },
+    {
+      "id": "extractvalue-magnitude-suffix",
+      "note": "extractValue now scales k/M/bn/thousand/million/billion/trillion magnitude suffixes on both currency-tagged and untagged numbers (bare m/t excluded untagged to avoid \"3m ago\"). A \"below 50000\" price watch no longer false-fires reading \"$60k\" as 60. 812 tests green."
     }
   ],
   "audits": [
@@ -1077,6 +1148,9 @@
     },
     {
       "note": "Audit 4 (post-15-features). A: tz-from-location(city->no tz), clarifying-Q, login-refusal-guidance, prompt-location-first-run, echo-fire-time. B: scheduled-slot-literal(built), extractValue-tracks-%, alert-check-on-define, over-cap-once-reminder-dropped, memory-on-error. C: human-in-loop-commit(when->then depth), trigger-chains, visual/any-content-watch, relay-to-group, conversational-edit-of-automations. Seeded: tz-from-location, alert-check-on-define, extractvalue-percentage-guard, memory-on-error."
+    },
+    {
+      "note": "Backlog dry -> 3-agent audit. A(new-user): reminder-only path, video transcript, remember-facts store, directions. B(reliability): extractValue magnitude bug (BUILT), in_stock CTA scoping, proactive clobbers drilldown cache, at-least-once dup delivery, unthresholded watch spam. C(power): confirm-to-act, new-item feed watch, long-term memory, inbound attachments, chained workflows. Seeded top user-impact picks; built extractValue magnitude fix (broken headline path, effort S) this iteration."
     }
   ]
 }

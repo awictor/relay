@@ -164,7 +164,47 @@ describe("makeScheduleRunner.tick", () => {
     const d = store.list(1)[0]!;
     expect(d).toBeTruthy();
     expect(d.dueMs).toBeGreaterThan(NOW);      // advanced, not left due
-    expect(d.attempts ?? 0).toBe(0);           // daily doesn't accumulate once-retry attempts
+    expect(d.attempts ?? 0).toBe(1);           // records a failure streak (failed-watch-receipts), still advances
+  });
+
+  // failed-watch-receipts: a recurring watch that fails N times in a row sends ONE receipt (a dead
+  // watch otherwise reads as "no news"), then resets the streak so it re-notifies only after another N.
+  it("a recurring watch failing FAIL_STREAK times in a row sends one receipt then resets the streak", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock, {
+      runAgent: async () => { throw new Error("markup changed"); },
+      failStreakNotice: (s, streak) => `⚠️ "${s.task}" failed ${streak} checks in a row.`,
+    });
+    store.add(1, { kind: "daily", task: "btc price", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    const forceDue = () => { store.list(1)[0]!.dueMs = clock.t - 1; }; // each fire advances dueMs to tomorrow; re-arm it
+    await runner.tick(); expect(sent).toHaveLength(0); forceDue(); // streak 1: silent
+    await runner.tick(); expect(sent).toHaveLength(0); forceDue(); // streak 2: silent
+    await runner.tick();                                           // streak 3: receipt
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.text).toMatch(/failed 3 checks/i);
+    expect(store.list(1)[0]!.attempts ?? 0).toBe(0);   // streak reset after the receipt
+    // Advances normally each time (a recurring watch keeps watching).
+    expect(store.list(1)[0]!.dueMs).toBeGreaterThan(NOW);
+  });
+
+  // A successful fire clears any accumulated failure streak so the receipt only fires on a TRUE
+  // consecutive run of failures.
+  it("a successful fire resets the failure streak", async () => {
+    const clock = { t: NOW };
+    let fail = true;
+    const { store, runner, sent } = harness(clock, {
+      runAgent: async () => { if (fail) throw new Error("down"); return { reply: "ok" }; },
+      failStreakNotice: () => "⚠️ dead watch",
+    });
+    store.add(1, { kind: "daily", task: "d", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick(); store.list(1)[0]!.dueMs = NOW - 1; // re-arm (fire advanced dueMs to tomorrow)
+    await runner.tick();                                    // streak 2
+    expect(store.list(1)[0]!.attempts).toBe(2);
+    fail = false;
+    store.list(1)[0]!.dueMs = NOW - 1; // force due for the success tick
+    await runner.tick();
+    expect(store.list(1)[0]!.attempts ?? 0).toBe(0);   // cleared by the successful fire
+    expect(sent.some((m) => /dead watch/.test(m.text))).toBe(false); // never hit threshold
   });
 
   // m14 degrade-2: completing a schedule persists to disk. If complete() throws (unwritable

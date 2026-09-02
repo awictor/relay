@@ -50,6 +50,10 @@ export interface ScheduleRunnerDeps {
   // Push a schedule's next fire to a specific instant (quiet-hours defer) without advancing its
   // recurrence. Optional; when absent the runner just sends (no defer).
   deferTo?: (id: string, whenMs: number) => void;
+  // Failed-watch receipt (failed-watch-receipts): what to tell the user when a RECURRING schedule has
+  // failed to fire this many consecutive times (a dead watch otherwise reads as 'no news'). Return the
+  // message, or null to stay silent. index wires it for daily/weekly/interval. Optional.
+  failStreakNotice?: (s: Schedule, streak: number) => string | null;
   // m14 degrade-4: what to tell the user when a scheduled fire FAILS. Default (absent) is silent
   // (the historical contract — a failed run is a logged miss, not a message, so a misfiring daily
   // can't storm). When provided, the runner sends its return value on failure; return null to stay
@@ -74,6 +78,9 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   // A "once" reminder that keeps failing at fire time is retried on later ticks up to this many total
   // attempts, then given up (notify + drop) so a permanently-broken task can't loop forever.
   const MAX_FIRE_ATTEMPTS = Math.max(1, Number(process.env.RELAY_ONCE_MAX_ATTEMPTS) || 5);
+  // A recurring schedule that fails to fire this many consecutive times gets ONE failed-watch receipt
+  // (then the streak resets, so it re-notifies only after another N failures — no spam).
+  const FAIL_STREAK_NOTIFY = Math.max(2, Number(process.env.RELAY_FAIL_STREAK_NOTIFY) || 3);
   const cap = deps.maxPerChatPerHour ?? 0;
   const sendTimes = new Map<number, number[]>(); // chatId -> recent send epochs (rolling hour)
 
@@ -220,7 +227,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
             continue;
           }
         }
-        try { await fireOne(s); fired++; }
+        try { await fireOne(s); fired++; deps.store.resetFailures(s.id); } // success clears any failure streak
         catch (e) {
           deps.onError?.(e);
           const raw = e instanceof Error ? e.message : String(e);
@@ -237,7 +244,20 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
             }
             log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, gave_up_after: attempts, error: raw.slice(0, 120) })}`);
           } else {
-            log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, error: raw.slice(0, 120) })}`);
+            // Recurring (daily/weekly/interval): count consecutive failures; after FAIL_STREAK_NOTIFY
+            // send ONE failed-watch receipt (a dead watch otherwise reads as 'no news') + reset the
+            // streak so it re-notifies only after another N failures. Subject to the anti-spam cap.
+            const streak = deps.store.recordFailure(s.id);
+            log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, fail_streak: streak, error: raw.slice(0, 120) })}`);
+            if (streak >= FAIL_STREAK_NOTIFY && deps.failStreakNotice && !overCap(s.chatId, deps.now())) {
+              const notice = deps.failStreakNotice(s, streak);
+              if (notice) {
+                try { await deps.send(s.chatId, notice); noteSend(s.chatId, deps.now()); } catch (sendErr) { deps.onError?.(sendErr); }
+              }
+              deps.store.resetFailures(s.id); // re-notify only after another N failures
+            }
+            safeComplete(s); // advance the recurring schedule to its next occurrence
+            continue;        // handled here; skip the shared failureNotice/safeComplete below
           }
           // m14 degrade-4: tell the user the run failed (default silent). For a "once" this fires only
           // after the retries are exhausted (above). Best-effort + subject to the anti-spam cap; a send

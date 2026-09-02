@@ -124,18 +124,37 @@ export function firstNumber(s: string): number | null {
  * fired/never-fired against a percent. A %-tagged number is only used if it's the ONLY number.
  * This is what makes a change-alert compare the real value, not the wording around it.
  */
+// Magnitude suffixes: "$60k" is 60,000, "$1.2M" is 1,200,000. Without scaling, extractValue read the
+// leading digits only (60, 1.2) and a "below 50000" price alert fired the instant the agent phrased
+// the price as "$60k" — off by 3+ orders of magnitude, so the headline watch feature lied. Bare "m"/"t"
+// are excluded from the untagged branch (a "3m ago" / "5t" in prose isn't millions/trillions); the
+// currency-tagged branch is unambiguous so it accepts "m"/"mn"/"mm"/"t" too.
+const MAG: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, mn: 1e6, mm: 1e6, million: 1e6, b: 1e9, bn: 1e9, billion: 1e9, t: 1e12, trillion: 1e12 };
+function magMult(sfx: string | undefined, allowBareMT: boolean): number {
+  if (!sfx) return 1;
+  const key = sfx.toLowerCase();
+  if (!allowBareMT && (key === "m" || key === "t")) return 1;
+  return MAG[key] ?? 1;
+}
+
 export function extractValue(s: string): number | null {
   const t = s.replace(/,/g, "");
-  // currency-tagged first (symbol before, or code/word after)
-  const cur = [...t.matchAll(/(?:[$€£]\s?)(-?\d+(?:\.\d+)?)|(-?\d+(?:\.\d+)?)\s?(?:usd|eur|gbp|dollars?|euros?)/gi)];
-  if (cur.length) return parseFloat(cur[0]![1] ?? cur[0]![2]!);
-  // Collect every number, flagging those immediately followed by % (a rate/change, not the value).
+  // currency-tagged first (symbol before, or code/word after) — scale a k/m/bn/billion suffix.
+  const cur = [...t.matchAll(/(?:[$€£]\s?)(-?\d+(?:\.\d+)?)\s?(k|mm|mn|bn|b|m|t|thousand|million|billion|trillion)?\b|(-?\d+(?:\.\d+)?)\s?(k|mm|mn|bn|b|m|t|thousand|million|billion|trillion)?\s?(?:usd|eur|gbp|dollars?|euros?)/gi)];
+  if (cur.length) {
+    const c = cur[0]!;
+    const num = c[1] ?? c[3]!;
+    const sfx = c[1] !== undefined ? c[2] : c[4];
+    return parseFloat(num) * magMult(sfx, true);
+  }
+  // Collect every number, flagging those immediately followed by % (a rate/change, not the value)
+  // and scaling a trailing k/bn/billion/million/thousand magnitude suffix (bare m/t excluded here).
   const all: number[] = [], nonPct: number[] = [];
-  for (const m of t.matchAll(/(-?\d+(?:\.\d+)?)(\s?%)?/g)) {
+  for (const m of t.matchAll(/(-?\d+(?:\.\d+)?)\s?(k|bn|b|thousand|million|billion|trillion)?(\s?%)?/gi)) {
     if (!m[1]) continue;
-    const n = parseFloat(m[1]);
+    const n = parseFloat(m[1]) * magMult(m[2], false);
     all.push(n);
-    if (!m[2]) nonPct.push(n);
+    if (!m[3]) nonPct.push(n);
   }
   if (!all.length) return null;
   // Prefer real (non-percent) numbers; fall back to percents only if that's all there is.

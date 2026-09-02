@@ -357,6 +357,12 @@ export class ScheduleStore {
     return s.attempts;
   }
 
+  /** Clear a schedule's failure streak (after a successful fire). No-op if not found / already 0. */
+  resetFailures(id: string): void {
+    const s = this.items.find((x) => x.id === id);
+    if (s && s.attempts) { s.attempts = 0; this.persist(); }
+  }
+
   /** After firing: drop a "once", or advance a recurring schedule to its next occurrence. */
   complete(id: string, now: number): void {
     const s = this.items.find((x) => x.id === id);

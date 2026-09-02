@@ -139,6 +139,13 @@ const scheduleRunner = makeScheduleRunner({
   // daily must not storm the chat with failure pings).
   failureNotice: (s, raw) =>
     s.kind === "once" ? `⏰ I tried to run "${s.task}" but ${friendlyError(raw).charAt(0).toLowerCase()}${friendlyError(raw).slice(1)}` : null,
+  // Failed-watch receipt (failed-watch-receipts): after N straight failures of a recurring task, tell
+  // the user once so a dead watch/digest/schedule doesn't read as 'no news'. Names the human task
+  // (strips the digest:/alert:/recipe: marker) so it's recognizable.
+  failStreakNotice: (s, streak) => {
+    const label = s.task.replace(/^(?:digest|alert|recipe):/, "");
+    return `⚠️ Heads up — "${label}" has failed ${streak} checks in a row. The site may have changed or a login expired; check it or /cancel + re-add it.`;
+  },
 });
 
 const handle = createHandler({

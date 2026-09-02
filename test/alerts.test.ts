@@ -81,6 +81,19 @@ describe("extractValue (salient value, not first number)", () => {
   it("still uses a percent when it's the only number", () => {
     expect(extractValue("interest rate is 4.5%")).toBe(4.5);
   });
+  it("scales magnitude suffixes on currency values (extractvalue-magnitude-suffix)", () => {
+    expect(extractValue("BTC is trading at $60k right now")).toBe(60_000);
+    expect(extractValue("Bitcoin sits around $1.2M")).toBe(1_200_000);
+    expect(extractValue("market cap is $1.3bn")).toBe(1.3e9);
+    expect(extractValue("about 65k USD")).toBe(65_000);
+    expect(extractValue("valued at $2.5 trillion")).toBe(2.5e12);
+    // Regression: a "below 50000" watch must NOT read "$60k" as 60 (it's 60000, above 50000).
+    expect(conditionHolds({ op: "below", operand: 50_000 }, "BTC is $60k")).toBe(false);
+  });
+  it("does NOT treat a bare 'm'/'t' in prose as millions/trillions (untagged branch)", () => {
+    expect(extractValue("posted 3m ago, score is 4200")).toBe(4200); // "3m" = 3 min, not 3 million
+    expect(extractValue("the reading is 500 units")).toBe(500);
+  });
 });
 
 describe("changed", () => {
