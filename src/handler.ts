@@ -56,7 +56,7 @@ export interface HandlerDeps {
   describeDocument?: (fileId: string, caption: string) => Promise<string>;
   // Scheduled/proactive tasks (m4 sched-3). All optional so older wiring stays valid; when
   // absent, a "remind me" message just falls through to the normal agent.
-  scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number; whenText?: string } | { ok: false; reason: "unparsed" | "capped" };
+  scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number; whenText?: string; noTz?: boolean } | { ok: false; reason: "unparsed" | "capped" };
   scheduleList?: (chatId: number) => Array<{ id: string; kind: string; task: string; dueMs: number }>;
   scheduleCancel?: (chatId: number, which: string) => { removed: number };
   // Saved recipes (m7 recipe-2). All optional so older wiring stays valid. recipeSave parses a
@@ -288,7 +288,10 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         const verb = r.kind === "once" ? "remind you" : r.kind === "daily" ? "do this daily" : r.kind === "weekly" ? "do this on the days you said" : "do this on that schedule";
         // Echo the resolved next-fire time so a wrong/absent timezone is caught before it fires late.
         const when = r.whenText ? ` Next: ${r.whenText}.` : "";
-        await deps.sendMessage(msg.chatId, `Got it — I'll ${verb}: "${r.task}".${when} Manage with /schedules.`);
+        // No timezone set + a clock-time schedule -> it fires against UTC (likely the user's night).
+        // Flag it so they can fix it now instead of finding out when the first one lands at 3am.
+        const tzWarn = r.noTz ? ` ⚠️ No timezone set, so this is UTC — set yours with "/setlocation <city> UTC-5" so it fires at your local time.` : "";
+        await deps.sendMessage(msg.chatId, `Got it — I'll ${verb}: "${r.task}".${when}${tzWarn} Manage with /schedules.`);
         return;
       }
       if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the limit of scheduled tasks — cancel one with /schedules first."); return; }

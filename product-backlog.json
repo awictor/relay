@@ -428,7 +428,7 @@
       "title": "Warn when an absolute clock-time schedule is set with no timezone",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A new user with no profile has tzOffsetMin=0 (UTC), so their first 'remind me at 8am' fires in the middle of their night; the confirm echoes a time but doesn't flag it's UTC (audit 11 A#2).",
       "how": "When scheduleAdd creates a clock-time (daily/weekly/at) schedule + the chat has no saved offset, append 'heads up: no timezone set, fires at Xam UTC — set yours with /setlocation ... UTC-5'. Needs a hasOffset signal from the profile into scheduleAdd."
     }
@@ -481,6 +481,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 48: built no-tz-clock-warning (audit 11 A#2, medium/S). A new user with no profile has tzOffsetMin=0 (UTC), so their first clock-time 'remind me at 8am' fired at 8am UTC = their night, with no signal. index scheduleAdd now flags noTz when the schedule is clock-time (daily/weekly, or a once 'at <time>'/morning/evening/etc) AND the chat has no saved offset AND the global default is 0; the handler appends '⚠️ No timezone set, so this is UTC — set yours with /setlocation <city> UTC-5'. A relative 'in N min' reminder has no wall-clock dependency -> never flagged. +2 tests (clock-time+noTz warns; relative/no-noTz doesn't). 735 pass, tsc clean. call-tested false (routing + flag logic). Backlog DRY -> ran 12th audit (same iteration)."
     },
     {
       "event": "PRODUCT-LOOP iter 47: built reminder-intent-clarify (audit 11 A#1, high/M). 'remind me to call mom at 3' (no am/pm), 'remind me to X tonight' failed parseSchedule + fell through to an immediate agent run (no reminder tool -> reminder silently never set). Now on an unparsed schedule where the user meant to SET a reminder — /remind me (to|about|that)/ and NOT a question form (/remind me (why|what|who|when|where|how)/), OR 'remind' + a vague-time word (tonight/later/this evening/soon/in a bit/at <n>) — the handler ASKS 'When should I remind you? (at 3pm / in 2 hours / tomorrow at 9am)' instead of running it. A 'remind me why the sky is blue' question still reaches the agent. +2 tests (to-task+bare-3 asks; tonight asks) + renamed the falls-through test to the why-question case. 733 pass, tsc clean. call-tested false (routing logic). Remaining: no-tz-clock-warning -> then backlog dry -> audit refills."

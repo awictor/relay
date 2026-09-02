@@ -50,6 +50,23 @@ describe("handler — schedule routing", () => {
     expect(sent[0]).toMatch(/Next: tomorrow 9:00am/);
   });
 
+  it("warns about UTC when a clock-time schedule is set with no timezone (no-tz-clock-warning)", async () => {
+    const { handle, sent } = harness({
+      scheduleAdd: () => ({ ok: true, kind: "daily", task: "weather", whenMs: 0, whenText: "tomorrow 8:00am", noTz: true }),
+    });
+    await handle(msg("every morning at 8 tell me the weather"));
+    expect(sent[0]).toMatch(/No timezone set/i);
+    expect(sent[0]).toMatch(/setlocation/i);
+  });
+
+  it("no UTC warning when noTz is not set (tz known, or a relative reminder)", async () => {
+    const { handle, sent } = harness({
+      scheduleAdd: () => ({ ok: true, kind: "once", task: "stretch", whenMs: 0, whenText: "today 3:40pm" }),
+    });
+    await handle(msg("remind me to stretch in 10 min"));
+    expect(sent[0]).not.toMatch(/No timezone set/i);
+  });
+
   it("\"every morning ...\" routes to scheduleAdd as daily", async () => {
     const { handle, sent } = harness({
       scheduleAdd: () => ({ ok: true, kind: "daily", task: "weather", whenMs: 0 }),
