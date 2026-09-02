@@ -67,12 +67,24 @@ export function feedItemKey(item: string): string {
   return normalizeForCompare(item).slice(0, 120);
 }
 
+// Out-of-stock language (checked first — takes precedence over any affirmative on the same page).
+const OUT_OF_STOCK_RE = /\b(out of stock|sold out|unavailable|out-of-stock|currently unavailable|not available)\b/i;
+// STRONG availability phrases: an explicit statement the item itself is in stock. Enough on their own.
+const IN_STOCK_STRONG_RE = /\b(in stock|in-stock|available (?:now|to (?:buy|order|purchase))|available for (?:purchase|order)|back in stock)\b/i;
+// WEAK signals: a purchase CTA. On a product page these ride along with CROSS-SELL/recommended items
+// too ("Add to cart" on a related product), so a CTA alone must NOT confirm the watched item is in
+// stock (in-stock-cta-scoping) — it only counts when no recommendation framing is present.
+const CTA_RE = /\b(add to cart|add to bag|add to basket|buy now|buy it now|order now|pre-?order)\b/i;
+// Recommendation / cross-sell framing whose CTAs belong to OTHER products, not the watched one.
+const CROSS_SELL_RE = /\b(you (?:may|might) also|related|recommended|similar (?:items?|products?)|customers also|frequently bought|sponsored|people also|more like this|you'll also love)\b/i;
+
 /** Evaluate a condition against an observed value string. below/above use extractValue; in_stock
  * looks for stock language. Returns null when the value can't be assessed (so the caller holds). */
 export function conditionHolds(cond: AlertCondition, value: string): boolean | null {
   if (cond.op === "in_stock") {
-    if (/\b(out of stock|sold out|unavailable|out-of-stock)\b/i.test(value)) return false;
-    if (/\b(in stock|available|add to cart|buy now|in-stock)\b/i.test(value)) return true;
+    if (OUT_OF_STOCK_RE.test(value)) return false;                 // negation wins
+    if (IN_STOCK_STRONG_RE.test(value)) return true;               // explicit availability statement
+    if (CTA_RE.test(value)) return CROSS_SELL_RE.test(value) ? null : true; // CTA only if no cross-sell framing
     return null; // ambiguous
   }
   const v = extractValue(value);

@@ -788,7 +788,7 @@
       "title": "in_stock matches buy-CTA text for cross-sell products",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A \"back in stock\" watch pings to rush-buy while the item is still sold out, because a Buy/Add-to-cart button for a RELATED product satisfied the check.",
       "how": "Scope the in_stock language check to the watched item vicinity, or require stock-affirmative near the product name; out-of-stock language already takes precedence — tighten the affirmative side."
     },
@@ -1102,6 +1102,10 @@
     {
       "id": "new-item-feed-watch",
       "note": "Added feed-watch: \"watch jobs: remote react roles for new listings\" / \"watch x: new PS5 restocks\" pings ONLY when a new list entry appears, not on any value change. New Alert.feed + seen-set (capped 200, oldest-drop); extractListItems strips bullets/lead-ins, feedItemKey normalizes for stable dedupe. First run seeds silently (no dump). Seen-set advance deferred to post-send commit (failed send re-reports). Price/stock trigger wins over feed cue. /alerts marks (new items); help + confirm updated. 842 tests green."
+    },
+    {
+      "id": "in-stock-cta-scoping",
+      "note": "Scoped the in_stock check so a cross-sell/recommended product Buy button no longer false-confirms a back-in-stock watch. Split into OUT_OF_STOCK (wins), IN_STOCK_STRONG (explicit availability, enough alone), and weak CTA (add to cart/buy now) which now confirms ONLY when no cross-sell framing (you may also like / recommended / similar items / sponsored) is present, else holds (null). No more rush-buy pings while the item is still sold out. 845 tests green."
     }
   ],
   "audits": [

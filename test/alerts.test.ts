@@ -49,6 +49,19 @@ describe("conditionHolds", () => {
     expect(conditionHolds({ op: "below", operand: 50000 }, "no price here")).toBeNull();
     expect(conditionHolds({ op: "in_stock" }, "some page text")).toBeNull();
   });
+  it("does NOT confirm in_stock from a cross-sell product's Buy CTA (in-stock-cta-scoping)", () => {
+    // Watched item is sold out; a RELATED product below it has an "Add to cart" button.
+    expect(conditionHolds({ op: "in_stock" }, "This item is currently unavailable. You may also like: Acme X — Add to cart")).toBe(false);
+    // No out-of-stock line, but the only purchase CTA belongs to a "Recommended" cross-sell block ->
+    // can't confirm the watched item is in stock (hold, don't false-fire a rush-buy ping).
+    expect(conditionHolds({ op: "in_stock" }, "Recommended for you: Widget Pro — Buy now")).toBeNull();
+  });
+  it("a CTA WITHOUT cross-sell framing still confirms in_stock (real product page)", () => {
+    expect(conditionHolds({ op: "in_stock" }, "PS5 Console. Add to cart. Free shipping.")).toBe(true);
+  });
+  it("a strong 'in stock' statement confirms even alongside a recommendations block", () => {
+    expect(conditionHolds({ op: "in_stock" }, "PS5 is in stock! Recommended: extra controller — add to cart")).toBe(true);
+  });
 });
 
 describe("firstNumber", () => {
