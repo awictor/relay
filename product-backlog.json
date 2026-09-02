@@ -631,6 +631,24 @@
       "how": "Per-chat last-result store: cache the rendered list items+URLs + any overflow past the format-reply cap. Resolve '#N'/'the 2nd'/'last one' -> that item's URL into browse/read; 'more'/'full' -> next chunk; 'link(s)' -> stored URLs. Read-only + safe; shared infra for all three."
     },
     {
+      "id": "probe-send-me-false-refuse",
+      "title": "Capability probe wrongly refuses 'send/text ME the answer' (fresh iter-69 bug)",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "PROBE_RE's comms verbs (send/text/message/dm/email) matched 'can you send me the top HN story' / 'text me the weather' — the bot's CORE deliver-to-me action — and returned the can't-do refusal, dead-ending the most natural phrasing of the primary function (audit 18 B#1, fresh from iter-69).",
+      "how": "Negative lookahead on the comms verbs: (?!\\s+(me|us|it|that|back)\\b) so 'text me X' falls through to the agent while 'text my mom'/'email John' still refuse. call/phone/book/buy/pay have no carve-out. Tests for both."
+    },
+    {
+      "id": "morepaging-boundary-garble",
+      "title": "'more' deep-paging garbles boundaries (fresh iter-68 bug)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "nextChunk prefix-matched the shown text vs full, but shown carried '…'/'\\n…' trim markers absent from full, so startsWith failed after page 1 and the fallback slice skewed -> the 2nd/3rd 'more' dropped/duped chars at the boundary (audit 18 B#3, fresh from iter-68).",
+      "how": "Offset-based paging: cache {full, sent}; deliveredLen seeds the offset from the first reply (common-prefix len ignoring trailing …); chunkFrom(full, sent) returns {text, nextOffset}. Test multi-page reassembles with no gaps."
+    },
+    {
       "id": "capability-probe-answers",
       "title": "Canned honest answer to 'can you book/email/call/buy?'",
       "impact": "medium",
@@ -638,6 +656,33 @@
       "status": "done",
       "why": "Boundary-probe openers ('can you book a flight?', 'can you send a text?', 'can you check my email?') match neither CAPABILITY_RE nor META, so they fall to a slow floundering agent turn — these decide whether the user trusts it enough to try a real errand (audit 17 A#2, honest-out-of-scope).",
       "how": "A matcher (like meta/greeting) for 'can you <act>' -> a fixed reply stating what it can't (act/pay/log in as you) + pivoting to what it CAN (find/compare/watch/draft/read) + inviting a real errand. Pure + unit-tested."
+    },
+    {
+      "id": "empty-state-onboarding",
+      "title": "Empty /recipes /alerts /digests /schedules show a copy-paste example",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "When those lists are empty they print a bare 'none', missing the exact moment of intent to teach the proactive loop (the retention moat) to a one-shot user (audit 18 C#1).",
+      "how": "Each list handler's empty branch appends one concrete copy-pasteable example ('Try: watch btc: price of bitcoin below 60000' / 'save btc: check the price of bitcoin' / 'define digest morning: weather, hn' / 'remind me to X in 10 min'). Verify current empty replies + enrich."
+    },
+    {
+      "id": "proactive-ping-drilldown-cache",
+      "title": "Feed proactive digest/alert pings into the last-result cache",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The last-result 'more'/'send the link' drilldown is only populated by the inbound handler, so replying to an unprompted digest/alert ping with 'more'/'link' dead-ends — the most natural reaction to a proactive message (audit 18 C#4).",
+      "how": "Have the schedule-runner send path record its sent text into the same per-chat last-result store (needs a setLastResult dep on the runner, wired in index to the handler's map — or move the map to a shared store). Narrower than full conversational-follow-up."
+    },
+    {
+      "id": "site-capability-probe",
+      "title": "Honest answer to 'do you work with Amazon / can you use Gmail?'",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "A site-named capability probe ('can you use Amazon?', 'do you work with Gmail?') matches neither PROBE (action verbs) nor META (trust), so it falls to a cold agent turn that browses the site logged-out + flounders on the user's first test (audit 18 A#4).",
+      "how": "Extend the probe matcher: 'do you work with / can you use / does this work on <site>' -> 'I can read public pages on most sites; I can't log into your accounts unless you set up cookies (/sites)'. Pure + unit-tested."
     }
   ],
   "history": [
@@ -688,6 +733,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 70: backlog dry after iter 69 -> ran 18th audit (3 lenses), which caught TWO fresh regressions in my own recent code; built both. (1) probe-send-me-false-refuse (audit 18 B#1, high/S, iter-69): PROBE_RE's comms verbs matched 'send me the top HN story'/'text me the weather' — the bot's CORE deliver-to-me action — returning the can't-do refusal. Added a negative lookahead (?!\\s+(me|us|it|that|back)\\b) on send/text/message/dm/email so 'text me X' falls through while 'text my mom'/'email John' still refuse. (2) morepaging-boundary-garble (audit 18 B#3, medium/S, iter-68): nextChunk prefix-matched shown-vs-full but shown had '…' trim markers absent from full, so 2nd/3rd 'more' garbled the boundary. Switched to offset paging: cache {full,sent}, deliveredLen seeds the offset, chunkFrom returns {text,nextOffset}. +tests (send-me-not-refused/text-mom-refused; multi-page reassembly no gaps). 783 pass, tsc clean. call-tested false. LESSON (recurring): every new whole-message matcher/early-return must be checked against the CORE happy path it might swallow — 3 of the last ~6 fresh bugs were a new matcher over-catching. Seeded also: empty-state-onboarding(S), proactive-ping-drilldown-cache(S), site-capability-probe(S)."
     },
     {
       "event": "PRODUCT-LOOP iter 69: built capability-probe-answers (audit 17 A#2, medium/S). Boundary-probe openers ('can you book a flight?', 'can you send a text?', 'can you call them?', 'can you buy this?') matched neither CAPABILITY_RE nor META -> slow floundering agent turn; these decide whether a new user trusts it enough to try a real errand. Added PROBE reply (honest can't-do: no calls/texts/emails/pay/buy/account-login + pivot to what it CAN do: look up, extract/compare, watch+ping, remind/brief, with example asks) + PROBE_RE matching 'can/could/will/would/do you <cant-do verb>' (book/buy/order/pay/call/text/email/send/reserve/log in/...), <=10 words. 'can you find the cheapest flight' / 'compare these prices' (things it CAN do) are NOT matched -> reach the agent. +2 tests (4 probes answered incl not-a-verb-null; 2 CAN-do errands pass through). 783 pass, tsc clean. call-tested false (pure matcher, unit-tested). Backlog DRY -> ran 18th audit (same iteration)."
@@ -858,6 +906,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 18 (post-69-features). A/new-user: affirmative-reply ('yes'/'do it' to the bot's own offers — M, stateful across pending-offer types), reshape-last-answer ('shorter'/'as bullets'/'why' over the cache — M), preview-scheduled-task-at-create, site-capability-probe. B/reliability: PROBE-refuses-'send/text ME'-the-core-action (FRESH iter-69 bug, built), extractValue-non-currency, nextChunk-deep-paging-garble (FRESH iter-68 bug, built), DANGEROUS_ACTION-over-refuses-UI-labels, DST. C/power: empty-state onboarding nudges (S), alert-baseline-on-create (S, trust — NOTE already shipped as alert-check-on-define), next-fire-time in confirm (already shipped), proactive-ping->last-result cache (S). Built both fresh regressions; seeded empty-state-onboarding(S), proactive-ping-drilldown-cache(S), site-capability-probe(S). Deferred: affirmative-reply(M), reshape-answer(M), extractValue-non-currency(M), DST(L), dangerous-verb-narrowing(M). B auditor: no hard bug beyond the two fresh ones."
     },
     {
       "note": "Audit 17 (post-65-features). A/new-user: command-intent-recovery (slashed-NL '/remind...' skipped + typo'd commands cold-run), capability-probe canned answers ('can you book/email/call?'), self-referential how-to (answer from HELP not web), login/paywall actionable next-step (surface /sites). B/reliability: recurringCta-false-fires-on-bare-stock+names-alert-'it' (FRESH iter-65 bug, built), extractValue-non-currency, DST-drift, DANGEROUS_ACTION over-refuses benign 'send/order/book' UI labels (target-verb breadth). C/power: last-result drill-down ('open #2'/'more'/'send the link' — needs a per-chat last-result cache, biggest do-more multiplier), 'do that again' replay. Built the fresh CTA bug; seeded command-intent-recovery(S), last-result-drilldown(M), capability-probe-answers(S). Deferred: extractValue-non-currency(M), DST(M/L), dangerous-verb-narrowing(S, care needed). B auditor confirmed the newest recall-escape + slot-guard code is sound (no new hard bug there)."

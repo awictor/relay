@@ -23,15 +23,24 @@ export function extractLinks(text: string, limit = 5): string[] {
   return out;
 }
 
-/** The chunk of `full` after `alreadyShown`, trimmed to `max` chars, or null if there's nothing more.
- * Used to page out the tail a prior trim() dropped. Falls back to a tail slice if the shown text
- * isn't a clean prefix (e.g. it ended with an "…" ellipsis marker). */
-export function nextChunk(full: string, alreadyShown: string, max = 1200): string | null {
-  const shownCore = alreadyShown.replace(/[\s…]+$/, "");
-  let rest: string;
-  if (full.startsWith(shownCore)) rest = full.slice(shownCore.length);
-  else rest = full.length > shownCore.length ? full.slice(shownCore.length) : "";
-  rest = rest.replace(/^[\s…]+/, "");
+/** How many chars of `full` a `shown` reply actually delivered — the common-prefix length, ignoring
+ * a trailing "…"/whitespace the trim added. Used to seed the paging offset from the first reply. */
+export function deliveredLen(full: string, shown: string): number {
+  const core = shown.replace(/[\s…]+$/, "");
+  let i = 0;
+  while (i < core.length && i < full.length && core[i] === full[i]) i++;
+  return i;
+}
+
+/** Page out `full` from character offset `sent`, up to `max` chars. Returns the chunk text + the new
+ * offset, or null when nothing remains. OFFSET-based (not prefix-matching the shown text) so repeated
+ * "more" pages don't garble at the boundary — the earlier version compared against a `shown` string
+ * that carried "…" trim markers absent from `full`, so startsWith failed after page 1. */
+export function chunkFrom(full: string, sent: number, max = 1200): { text: string; nextOffset: number } | null {
+  const rest = full.slice(sent).replace(/^\s+/, "");
+  const start = full.length - full.slice(sent).replace(/^\s+/, "").length; // offset after skipping leading ws
   if (!rest) return null;
-  return rest.length > max ? rest.slice(0, max - 1).trimEnd() + "…" : rest;
+  if (rest.length <= max) return { text: rest, nextOffset: full.length };
+  const text = rest.slice(0, max - 1).trimEnd() + "…";
+  return { text, nextOffset: start + (text.length - 1) }; // -1 for the appended ellipsis
 }

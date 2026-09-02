@@ -78,7 +78,12 @@ const META_RE = /^(?:(?:are|r)\s+(?:you|u)\s+(?:a\s+)?(?:real|human|person|bot|a
 const PROBE = `I can't do that one — I don't place calls, send texts/emails, pay/buy, or log into your accounts.
 
 What I CAN do: look things up on the web, pull out + compare data, watch a page and ping you when it changes, and text you reminders/briefings. Want me to try one? e.g. "cheapest flight LAX to NYC next Fri", "watch this product's price", "every morning the weather".`;
-const PROBE_RE = /^(?:can|could|will|would|do)\s+(?:you|u)\s+(?:please\s+)?(?:book|buy|order|purchase|pay|call|phone|ring|text|email|message|dm|send\b|reserve|schedule an appointment|log ?in|sign ?in|apply|subscribe|cancel my|make a (?:call|reservation|booking|payment))\b[\s\w'./-]*\??$/i;
+// NOTE: comms verbs (send/text/email/message/dm) must NOT match "send/text ME <the answer>" — that's
+// Relay's CORE action (deliver the result to this chat), not an outbound message it can't do. The
+// negative lookahead (?!\s+(?:me|us|it|that|back)\b) lets "text me the weather" fall through to the
+// agent while still refusing "text my mom" / "email John". call/phone/book/buy/pay have no such
+// carve-out (Relay genuinely can't do them).
+const PROBE_RE = /^(?:can|could|will|would|do)\s+(?:you|u)\s+(?:please\s+)?(?:book|buy|order|purchase|pay|call|phone|ring|reserve|schedule an appointment|log ?in|sign ?in|apply|subscribe|cancel my|make a (?:call|reservation|booking|payment)|(?:text|email|message|dm|send)(?!\s+(?:me|us|it|that|back)\b))\b[\s\w'./-]*\??$/i;
 
 /** Returns a canned reply for /start, /help, a bare greeting/capability question, a meta/trust
  * question, or a can't-do capability probe; else null. */

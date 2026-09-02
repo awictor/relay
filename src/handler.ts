@@ -7,7 +7,7 @@ import type { InboundMessage } from "./telegram.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
 import { runAgent, type AgentDeps } from "./agent.js";
 import { formatReply, formatReplyParts } from "./lib/format-reply.js";
-import { isMoreRequest, isLinkRequest, extractLinks, nextChunk } from "./lib/last-result.js";
+import { isMoreRequest, isLinkRequest, extractLinks, chunkFrom, deliveredLen } from "./lib/last-result.js";
 import { formatTurnLog } from "./lib/turn-log.js";
 import { friendlyError } from "./lib/failure.js";
 import { splitScheduleCommand } from "./lib/schedule.js";
@@ -145,7 +145,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   const recallOffered = new Map<number, string>();
   // Last text answer per chat (shown = what we sent, full = untrimmed) for "more"/"link" follow-ups
   // (last-result-drilldown). In-memory; a restart just means "more" says there's nothing cached.
-  const lastResult = new Map<number, { shown: string; full: string }>();
+  const lastResult = new Map<number, { full: string; sent: number }>();
   function handle(msg: InboundMessage): Promise<void> {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -566,8 +566,8 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     {
       const cached = lastResult.get(msg.chatId);
       if (isMoreRequest(msg.text)) {
-        const chunk = cached ? nextChunk(cached.full, cached.shown) : null;
-        if (chunk) { lastResult.set(msg.chatId, { shown: cached!.shown + chunk, full: cached!.full }); await deps.sendMessage(msg.chatId, chunk); return; }
+        const chunk = cached ? chunkFrom(cached.full, cached.sent) : null;
+        if (chunk) { lastResult.set(msg.chatId, { full: cached!.full, sent: chunk.nextOffset }); await deps.sendMessage(msg.chatId, chunk.text); return; }
         if (cached) { await deps.sendMessage(msg.chatId, "That's the whole answer — nothing more to show."); return; }
         // no cached answer -> fall through (treat as a normal task)
       }
@@ -636,7 +636,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       // Cache the full (untrimmed) reply + what we showed, so a follow-up "more"/"link" serves the
       // dropped tail / source URLs without re-running the agent (last-result-drilldown). Text replies
       // only (a photo/doc has no pageable text).
-      if (!photo && !doc) lastResult.set(msg.chatId, { shown: body, full: parts.full });
+      if (!photo && !doc) lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, body) });
       // Retention nudge (product-loop): if this task repeats one the user already asked, offer to save
       // it as a recipe. Only on a clean text reply (not degraded / not a binary), so it never clutters
       // a partial answer or a screenshot/PDF caption. Appended AFTER the body so the answer leads.

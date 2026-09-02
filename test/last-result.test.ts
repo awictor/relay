@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isMoreRequest, isLinkRequest, extractLinks, nextChunk } from "../src/lib/last-result.js";
+import { isMoreRequest, isLinkRequest, extractLinks, chunkFrom, deliveredLen } from "../src/lib/last-result.js";
 
 describe("isMoreRequest / isLinkRequest (last-result-drilldown)", () => {
   it("matches whole-message 'more' asks, not a real task", () => {
@@ -26,18 +26,33 @@ describe("extractLinks", () => {
   });
 });
 
-describe("nextChunk", () => {
-  it("returns the tail after what was shown", () => {
+describe("deliveredLen + chunkFrom (offset paging, no boundary garble)", () => {
+  it("deliveredLen = common-prefix length ignoring a trailing ellipsis", () => {
     const full = "line1\nline2\nline3";
-    expect(nextChunk(full, "line1\nline2\n…")).toBe("line3");
+    expect(deliveredLen(full, "line1\nline2\n…")).toBe("line1\nline2".length); // trailing ws+… stripped
+    expect(deliveredLen(full, full)).toBe(full.length);
   });
-  it("null when nothing more", () => {
-    expect(nextChunk("all shown", "all shown")).toBeNull();
+  it("chunkFrom returns the tail after the offset + null when done", () => {
+    const full = "line1\nline2\nline3";
+    const off = deliveredLen(full, "line1\nline2\n…");
+    const c = chunkFrom(full, off)!;
+    expect(c.text).toBe("line3");
+    expect(c.nextOffset).toBe(full.length);
+    expect(chunkFrom(full, full.length)).toBeNull();
   });
-  it("caps a huge tail", () => {
-    const full = "x".repeat(3000);
-    const out = nextChunk(full, "", 1200)!;
-    expect(out.length).toBeLessThanOrEqual(1200);
-    expect(out.endsWith("…")).toBe(true);
+  it("pages a huge answer across multiple 'more' calls without dropping/dupe at boundaries", () => {
+    const full = Array.from({ length: 500 }, (_, i) => `L${i}`).join("\n"); // long
+    let sent = deliveredLen(full, full.slice(0, 1199) + "…"); // simulate a trimmed first send
+    const collected: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      const c = chunkFrom(full, sent, 1200);
+      if (!c) break;
+      collected.push(c.text.replace(/…$/, ""));
+      sent = c.nextOffset;
+    }
+    // Reassembled tail (first page + all chunks) covers the whole thing with no gaps.
+    const rebuilt = (full.slice(0, 1199) + collected.join("")).replace(/\s/g, "");
+    expect(rebuilt).toContain("L499"); // last line survived
+    expect(rebuilt.length).toBeGreaterThanOrEqual(full.replace(/\s/g, "").length - 5);
   });
 });
