@@ -70,6 +70,13 @@ export interface HandlerDeps {
   // commands still short-circuit before the agent — this only tallies which are used.
   recordCommand?: (name: string) => void;
   now: () => number;
+  // Progress ping (product-loop): a multi-step browse can take 30-60s and the bot otherwise goes
+  // silent after the one ~5s typing indicator, so a user assumes it hung. If the agent run exceeds
+  // progressDelayMs, send ONE interim "still working" line. Optional — absent/0 disables it, so
+  // existing wiring + tests are unaffected. setTimer/clearTimer are injectable for offline tests.
+  progressDelayMs?: number;
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (h: unknown) => void;
   // Optional override so tests don't hit the real agent loop.
   runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; degraded?: boolean }>;
   log?: (line: string) => void;
@@ -281,9 +288,22 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
 
     const history = deps.memoryGet(msg.chatId);
     const startedAt = deps.now();
+    // Progress ping: arm a one-shot timer; if the agent run outlasts progressDelayMs, tell the user
+    // we're still working (once) so a long browse doesn't read as a hang. Cleared as soon as the run
+    // settles (success or error). Disabled when progressDelayMs is absent/0.
+    const setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+    const clearTimer = deps.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
+    let progressHandle: unknown = null;
+    if (deps.progressDelayMs && deps.progressDelayMs > 0) {
+      progressHandle = setTimer(() => {
+        void deps.sendMessage(msg.chatId, "Still working on it — reading the web, hang tight…").catch(() => {});
+      }, deps.progressDelayMs);
+    }
+    const clearProgress = () => { if (progressHandle !== null) { clearTimer(progressHandle); progressHandle = null; } };
     try {
       await deps.sendTyping(msg.chatId);
       const { reply, steps, tools, photo, doc, degraded } = await runIt(msg.text, { llm: deps.llm }, history);
+      clearProgress();
       // A degraded reply is a soft-failure fallback (agent ran out of steps / produced no answer,
       // DEV-0176), not a real answer. Prepend a one-line hint so a live-bot user knows the result is
       // partial, and count the turn as NOT-ok so the success metric isn't inflated by soft failures
@@ -309,6 +329,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       log(formatTurnLog({ chatId: msg.chatId, steps, tools, elapsedMs, replyChars: out.length, ok: !degraded }));
       deps.recordTurn({ steps, tools, elapsedMs, ok: !degraded, degraded });
     } catch (e) {
+      clearProgress();
       const emsg = e instanceof Error ? e.message : String(e);
       console.error("agent error:", emsg);
       const elapsedMs = deps.now() - startedAt;

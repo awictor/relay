@@ -118,6 +118,45 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/example\.com/);
   });
 
+  it("sends a progress ping when the agent run outlasts progressDelayMs, then the reply (product-loop)", async () => {
+    // Injected timer that fires synchronously = simulate the run outlasting the delay.
+    let fired: (() => void) | null = null;
+    let cleared = false;
+    const { handle, sent } = harness({
+      progressDelayMs: 6000,
+      setTimer: (fn) => { fired = fn as () => void; return 7; },
+      clearTimer: () => { cleared = true; },
+      runAgentFn: async () => { fired?.(); return { reply: "the answer", steps: 3, tools: ["web_search"] }; },
+    });
+    await handle(msg("who won the game", 5));
+    expect(sent.map((s) => s.text)).toEqual([
+      "Still working on it — reading the web, hang tight…",
+      "the answer",
+    ]);
+    expect(cleared).toBe(true); // timer cleared once the run settled
+  });
+
+  it("no progress ping when progressDelayMs is unset (default wiring unchanged)", async () => {
+    const { handle, sent } = harness({
+      runAgentFn: async () => ({ reply: "quick", steps: 1, tools: [] }),
+    });
+    await handle(msg("hi", 6));
+    expect(sent).toEqual([{ chatId: 6, text: "quick" }]);
+  });
+
+  it("progress timer is cleared on agent error (no ping after failure resolves)", async () => {
+    let cleared = false;
+    const { handle, sent } = harness({
+      progressDelayMs: 6000,
+      setTimer: () => 1,
+      clearTimer: () => { cleared = true; },
+      runAgentFn: async () => { throw new Error("boom"); },
+    });
+    await handle(msg("do it", 7));
+    expect(cleared).toBe(true);
+    expect(sent[0]!.text).toMatch(/something went wrong/i);
+  });
+
   it("a rate-limited chat gets the limit message, no agent", async () => {
     let agentCalled = false;
     const { handle, sent, recorded } = harness({

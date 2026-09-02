@@ -14,7 +14,7 @@
       "title": "Stream progress on long errands",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Handler goes silent 30-60s during multi-step browse; new user thinks bot is dead and gives up.",
       "how": "Send an interim working-on-it message when the agent takes >1 browse step or after N seconds."
     },
@@ -49,6 +49,9 @@
   "history": [
     {
       "event": "PRODUCT-LOOP iter 1: bootstrapped backlog via 3-agent parallel audit; web_search TOP in all 3 lenses -> built it. anvil.webSearch (Bing HTML + unwrapBingUrl; DDG html+lite CAPTCHA a headless Chrome, Bing does not), agent web_search tool + system-prompt use-first, optional BrowserBackend.webSearch. +8 tests. 574 pass, tsc clean. LIVE-VERIFIED: real Bing results unwrapped to clean https (wikipedia/britannica) 5/5. Seeded 4 more high-impact todos."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 2: built progress-ping (audit A#2, top impact/effort). Handler arms a one-shot timer around the agent run; if it outlasts progressDelayMs (default 6s, RELAY_PROGRESS_DELAY_MS, 0 disables) it sends ONE 'Still working on it - reading the web, hang tight...' then the reply; timer cleared on success AND error. Injectable setTimer/clearTimer for offline tests. So a 30-60s multi-step browse no longer reads as a dead bot. +3 handler tests (ping-then-reply, no-ping-when-unset, cleared-on-error). 577 pass, tsc clean. call-tested false (UX-timer wiring, unit-tested via injected timer). Remaining todos: alert-value-compare, atomic-store-writes, tz-daily-schedules."
     }
   ],
   "audits": [

@@ -224,6 +224,8 @@ const handle = createHandler({
   recordTurn,
   recordCommand: (name) => metrics.recordCommand(name),
   now: () => Date.now(),
+  // Interim "still working" ping if an errand outlasts this (product-loop). 0 disables. Default 6s.
+  progressDelayMs: Number(process.env.RELAY_PROGRESS_DELAY_MS ?? 6000),
 });
 
 async function main() {
