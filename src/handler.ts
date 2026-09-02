@@ -16,7 +16,7 @@ import { formatUtcOffset } from "./lib/profile.js";
 import { isRecallRequest } from "./lib/notes.js";
 import { needsLocationContext } from "./lib/profile.js";
 import { isBackgroundErrand, stripDispatchPhrasing, BACKGROUND_MAX_STEPS } from "./lib/background.js";
-import { isAnswerRecall } from "./lib/answer-log.js";
+import { isAnswerRecall, relativeAge } from "./lib/answer-log.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat } from "./lib/recipes.js";
 
 export interface HandlerDeps {
@@ -190,6 +190,12 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   // as the city reply, saved, and the errand re-run. Cleared on capture / on a non-city reply (so the
   // user can bail out with any other message).
   const pendingLocation = new Map<number, string>();
+  // In-flight detached background errands per chat (async-background-errands). A detached run lives for
+  // minutes off the rate-limited chain, so without a cap a user firing several "get back to me" tasks
+  // (the ack invites it) spawns unbounded parallel agent runs that exhaust the browser pool + starve
+  // other chats. Bounded per-chat; over the cap the task runs SYNCHRONOUSLY instead (still answered).
+  const bgInFlight = new Map<number, number>();
+  const MAX_BG_PER_CHAT = 2;
   // Last text answer per chat (full = untrimmed, sent = chars delivered) for "more"/"link" follow-ups
   // (last-result-drilldown). Uses the SHARED store when provided so a proactive digest/alert ping can
   // also be drilled into ("more"/"link" after an unprompted message); else a private in-memory map.
@@ -393,8 +399,15 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     if (deps.recallAnswers && isAnswerRecall(msg.text)) {
       const hits = deps.recallAnswers(msg.chatId, msg.text);
       if (hits.length) {
-        const body = hits.map((h) => `• You asked "${h.task}" — I said:\n${h.reply}`).join("\n\n");
-        await deps.sendMessage(msg.chatId, body);
+        const nowMs = deps.now();
+        const body = hits.map((h) => {
+          // Show HOW OLD the answer is so the user knows a recalled price/story may be stale (a recall
+          // replays a past answer verbatim — without an age it reads as current).
+          const age = relativeAge(nowMs - h.at);
+          return `• You asked "${h.task}"${age ? ` (${age})` : ""} — I said:\n${h.reply}`;
+        }).join("\n\n");
+        const stale = hits.some((h) => nowMs - h.at > 6 * 3_600_000); // >6h old: nudge a refresh
+        await deps.sendMessage(msg.chatId, body + (stale ? "\n\n(That's from earlier — ask me to check again for the latest.)" : ""));
         return;
       }
       await deps.sendMessage(msg.chatId, "I don't have a past answer matching that. Ask me fresh and I'll look it up.");
@@ -801,11 +814,13 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // Background errand (async-background-errands): a large "get back to me" task — ACK now and run it
     // DETACHED with a raised step budget, delivering the result unprompted. This returns immediately so
     // the per-chat chain isn't blocked for minutes (the user can keep texting). Guarded by the dep flag.
-    if (deps.enableBackgroundErrands && isBackgroundErrand(msg.text)) {
+    if (deps.enableBackgroundErrands && isBackgroundErrand(msg.text)
+        && (bgInFlight.get(msg.chatId) ?? 0) < MAX_BG_PER_CHAT) {
       const errand = stripDispatchPhrasing(msg.text) || msg.text;
       await deps.sendMessage(msg.chatId, "On it — this one's bigger, so I'll work on it and text you when it's done. Keep texting me anything else meanwhile.");
       const bgHistory = deps.memoryGet(msg.chatId);
       const startedAt = deps.now();
+      bgInFlight.set(msg.chatId, (bgInFlight.get(msg.chatId) ?? 0) + 1);
       // Detached: NOT awaited + NOT on chainByChat, so other messages interleave. Errors are caught +
       // reported so a failed background run still tells the user (never a silent black hole).
       void (async () => {
@@ -813,14 +828,25 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
           const r = await runIt(errand, { llm: deps.llm, context: deps.profileContext?.(msg.chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, maxSteps: BACKGROUND_MAX_STEPS }, bgHistory);
           const parts = formatReplyParts(r.reply);
           const out = r.degraded ? `⚠️ Here's what I got (I couldn't fully finish):\n\n${parts.shown}` : `✅ Done with "${errand}":\n\n${parts.shown}`;
-          lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, parts.shown) });
-          if (!r.degraded) deps.logAnswer?.(msg.chatId, errand, parts.shown); // recall a background result later too
+          // Deliver unprompted like a proactive ping: write the PING sub-slot (preserving any inbound
+          // answer's paging), not the main slot — else a later "more" pages the wrong thing (the same
+          // clobber the proactive path was fixed for). Full text so "more"/"link" drill into the result.
+          const prev = lastResult.get(msg.chatId);
+          lastResult.set(msg.chatId, { full: prev?.full ?? "", sent: prev?.sent ?? 0, ping: { full: parts.full, sent: deliveredLen(parts.full, parts.shown) } });
+          if (!r.degraded) {
+            deps.logAnswer?.(msg.chatId, errand, parts.shown); // recall a background result later too
+            // Persist to conversation memory so a follow-up ("book the first one", "more on #2") has the
+            // errand + its result as context, like the synchronous path does.
+            deps.memorySet(msg.chatId, [...bgHistory, { role: "user", content: msg.text }, { role: "assistant", content: parts.shown }]);
+          }
           await deps.sendMessage(msg.chatId, out);
           deps.recordTurn({ steps: r.steps, tools: r.tools, elapsedMs: deps.now() - startedAt, ok: !r.degraded, degraded: r.degraded });
         } catch (e) {
           const friendly = friendlyError(e instanceof Error ? e.message : String(e));
           deps.recordTurn({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: false });
           await deps.sendMessage(msg.chatId, `That background errand ("${errand}") failed: ${friendly}`).catch(() => {});
+        } finally {
+          bgInFlight.set(msg.chatId, Math.max(0, (bgInFlight.get(msg.chatId) ?? 1) - 1));
         }
       })();
       return;

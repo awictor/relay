@@ -42,6 +42,20 @@ export function recallKeywords(text: string): string[] {
     .filter((w) => w && !RECALL_STOP.has(w));
 }
 
+/** A short human "how long ago" label for a past answer (answer-history-recall) so a recalled
+ * price/story isn't mistaken for current. "" for <1 min (effectively now). Exported for tests. */
+export function relativeAge(ms: number): string {
+  if (ms < 60_000) return "";
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  const weeks = Math.floor(days / 7);
+  return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
+}
+
 export class AnswerLog {
   private file: string;
   private items: ChatLog[] = [];

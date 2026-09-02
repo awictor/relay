@@ -976,3 +976,73 @@ describe("answer history recall (answer-history-recall)", () => {
     expect(ran).toBe("weather in Paris");
   });
 });
+
+describe("background errand reliability (audit fixes)", () => {
+  it("persists the errand + result to memory so a follow-up has context", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    let resolveRun: ((r: { reply: string; steps: number; tools: string[] }) => void) | null = null;
+    const { handle } = harness({
+      enableBackgroundErrands: true,
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      runAgentFn: () => new Promise((res) => { resolveRun = res; }),
+    });
+    await handle(msg("compare the 5 best laptops and get back to me", 5));
+    resolveRun!({ reply: "The XPS wins.", steps: 3, tools: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    const h = mem.get(5)!;
+    expect(h[h.length - 1]).toEqual({ role: "assistant", content: "The XPS wins." });
+  });
+
+  it("a background result writes the PING slot, not clobbering an inbound answer's paging", async () => {
+    const store = new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
+    store.set(5, { full: "an earlier long answer tail", sent: 4 }); // inbound answer mid-paging
+    let resolveRun: ((r: { reply: string; steps: number; tools: string[] }) => void) | null = null;
+    const { handle } = harness({
+      enableBackgroundErrands: true,
+      lastResultStore: store,
+      runAgentFn: () => new Promise((res) => { resolveRun = res; }),
+    });
+    await handle(msg("research the best CRMs and get back to me", 5));
+    resolveRun!({ reply: "Found: HubSpot, Pipedrive.", steps: 2, tools: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    const e = store.get(5)!;
+    expect(e.full).toBe("an earlier long answer tail"); // inbound answer slot untouched
+    expect(e.sent).toBe(4);
+    expect(e.ping!.full).toMatch(/HubSpot/); // result in the ping slot
+  });
+
+  it("caps concurrent background runs per chat — over the cap does NOT detach (no unbounded acks)", async () => {
+    let started = 0;
+    const { handle, sent } = harness({
+      enableBackgroundErrands: true,
+      // Never resolves: the two detached runs stay in flight, so the 3rd is over the cap.
+      runAgentFn: () => new Promise(() => { started++; }),
+    });
+    // Two detached errands (each ACKs immediately + stays in flight).
+    await handle(msg("find the 5 cheapest flights and get back to me", 5));
+    await handle(msg("compare the 10 best laptops and report back", 5));
+    expect(sent.filter((m) => /on it/i.test(m.text))).toHaveLength(2); // both detached + ACKed
+    // 3rd is over the cap (2 in flight) -> does NOT detach: no 3rd "on it" ack. It falls to the
+    // synchronous path (which hangs on this never-resolving mock), so run it WITHOUT awaiting.
+    void handle(msg("research the top CRMs and get back to me", 5));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sent.filter((m) => /on it/i.test(m.text))).toHaveLength(2); // still 2 — the 3rd didn't detach
+    expect(started).toBe(3); // the 3rd DID start a run (synchronously), just not detached
+  });
+});
+
+describe("answer recall shows staleness (audit fix)", () => {
+  it("labels a recalled answer's age and nudges a refresh when old", async () => {
+    let nowMs = 100 * 86_400_000; // fixed clock
+    const past = nowMs - 3 * 86_400_000; // 3 days ago
+    const { handle, sent } = harness({
+      now: () => nowMs,
+      recallAnswers: () => [{ task: "best sushi", reply: "Sushi Zen", at: past }],
+      logAnswer: () => {},
+    });
+    await handle(msg("what was that sushi place you found?", 5));
+    expect(sent[0]!.text).toMatch(/3 days ago/);
+    expect(sent[0]!.text).toMatch(/ask me to check again/i);
+  });
+});

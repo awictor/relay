@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { AnswerLog, isAnswerRecall, recallKeywords } from "../src/lib/answer-log.js";
+import { AnswerLog, isAnswerRecall, recallKeywords, relativeAge } from "../src/lib/answer-log.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -24,6 +24,18 @@ describe("isAnswerRecall (answer-history-recall)", () => {
     for (const t of ["weather in Paris", "what's the price of bitcoin", "what do you know about me", "remind me to stretch"]) {
       expect(isAnswerRecall(t), t).toBe(false);
     }
+  });
+});
+
+describe("relativeAge (answer-history-recall staleness)", () => {
+  it("renders a short human age, empty for <1 min", () => {
+    expect(relativeAge(30_000)).toBe("");
+    expect(relativeAge(5 * 60_000)).toBe("5 min ago");
+    expect(relativeAge(3 * 3_600_000)).toBe("3h ago");
+    expect(relativeAge(2 * 86_400_000)).toBe("2 days ago");
+    expect(relativeAge(86_400_000)).toBe("1 day ago");
+    expect(relativeAge(10 * 86_400_000)).toBe("1 week ago");
+    expect(relativeAge(21 * 86_400_000)).toBe("3 weeks ago");
   });
 });
 
