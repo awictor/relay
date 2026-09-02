@@ -26,6 +26,7 @@ import { RecipeStore, parseRecipeCommand, parseRunCommand } from "./lib/recipes.
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand } from "./lib/alerts.js";
+import { ProfileStore, parseSetLocation } from "./lib/profile.js";
 import { checkAlert } from "./alert-runner.js";
 import { parseScheduleFor } from "./lib/schedule.js";
 
@@ -91,6 +92,7 @@ const schedules = new ScheduleStore({ file: paths.schedules });
 const recipes = new RecipeStore({ file: paths.recipes });
 const digests = new DigestStore({ file: paths.digests });
 const alerts = new AlertStore({ file: paths.alerts });
+const profiles = new ProfileStore({ file: paths.profile });
 // Run a digest -> composed briefing text (member recipes -> one message). Shared by /run + schedule.
 const digestRunText = (chatId: number, name: string): Promise<string | null> => {
   const d = digests.get(chatId, name);
@@ -139,6 +141,14 @@ const handle = createHandler({
       ? `I'm signed in for these sites (via cookies you configured):\n${hosts.map((h) => `• ${h}`).join("\n")}`
       : "No site logins configured — I can only read public pages. (Set RELAY_COOKIES to authorize sites.)";
   },
+  // Per-user profile (product-loop): parse+store "set my location", and hand the agent a context line.
+  setLocation: (chatId, text) => {
+    const p = parseSetLocation(text);
+    if (!p) return null;
+    const rec = profiles.set(chatId, p);
+    return { location: rec.location!, units: rec.units };
+  },
+  profileContext: (chatId) => profiles.contextLine(chatId),
   scheduleAdd: (chatId, text, now) => {
     const p = parseSchedule(text, now);
     if (!p) return { ok: false, reason: "unparsed" };

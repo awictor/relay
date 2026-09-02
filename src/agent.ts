@@ -214,6 +214,10 @@ export interface AgentDeps {
   backend?: BrowserBackend;
   // Back-compat: tests may pass just scrapeFn.
   scrapeFn?: (url: string) => Promise<{ title: string; content: string; url: string }>;
+  // Per-user context (product-loop): a short profile line — home location, units — injected as a
+  // system message so "weather" / "sushi near me" resolve without asking the city every time.
+  // Optional + trimmed; absent = no change.
+  context?: string;
 }
 
 export async function runAgent(
@@ -229,8 +233,10 @@ export async function runAgent(
   let photo: Uint8Array | undefined; // last screenshot captured this turn, sent by the handler
   let doc: Uint8Array | undefined; // last PDF rendered this turn, sent by the handler
 
+  const ctx = deps.context?.trim();
   const messages: LLMMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
+    ...(ctx ? [{ role: "system" as const, content: `About this user: ${ctx}. Use this for location/units when they don't specify (e.g. "weather", "near me").` }] : []),
     ...history,
     { role: "user", content: userText },
   ];

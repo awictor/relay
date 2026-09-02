@@ -157,6 +157,27 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/something went wrong/i);
   });
 
+  it("a location message stores it and does NOT run the agent (product-loop)", async () => {
+    let agentCalled = false;
+    const { handle, sent } = harness({
+      setLocation: (_id, t) => (/paris/i.test(t) ? { location: "Paris" } : null),
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("I'm in Paris", 5));
+    expect(agentCalled).toBe(false);
+    expect(sent[0]!.text).toMatch(/Paris/);
+  });
+
+  it("passes the profile context into the agent run", async () => {
+    let gotContext: string | undefined;
+    const { handle } = harness({
+      profileContext: () => "home location is Paris",
+      runAgentFn: async (_t, deps) => { gotContext = (deps as { context?: string }).context; return { reply: "ok", steps: 1, tools: [] }; },
+    });
+    await handle(msg("weather?", 5));
+    expect(gotContext).toBe("home location is Paris");
+  });
+
   it("a rate-limited chat gets the limit message, no agent", async () => {
     let agentCalled = false;
     const { handle, sent, recorded } = harness({

@@ -65,6 +65,7 @@ describe("handleCommand", () => {
         // Every optional capability stubbed so its branch is reachable.
         statusLine: () => "status",
         sitesLine: () => "sites",
+        setLocation: (_id, t) => (/^\/setlocation\b/i.test(t) ? { location: "Testville" } : null),
         scheduleList: () => [],
         scheduleCancel: () => ({ removed: 0 }),
         recipeList: () => [],

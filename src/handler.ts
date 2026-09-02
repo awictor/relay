@@ -31,6 +31,11 @@ export interface HandlerDeps {
   // /sites reply (m30): the hosts the cookie jar authorizes the agent for — NAMES only, never
   // values. Optional; absent -> /sites falls through to the agent.
   sitesLine?: () => string;
+  // Per-user profile (product-loop). setLocation parses + stores a "set my location" message (null
+  // if it isn't one); profileContext returns the agent context line for a chat (""/absent = none).
+  // All optional so older wiring/tests are unaffected.
+  setLocation?: (chatId: number, text: string) => { location: string; units?: string } | null;
+  profileContext?: (chatId: number) => string;
   // Scheduled/proactive tasks (m4 sched-3). All optional so older wiring stays valid; when
   // absent, a "remind me" message just falls through to the normal agent.
   scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number } | { ok: false; reason: "unparsed" | "capped" };
@@ -120,6 +125,17 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     if (first === "/sites" && deps.sitesLine) {
       await deps.sendMessage(msg.chatId, deps.sitesLine());
       return;
+    }
+
+    // "set my location" / "/setlocation X" / "i'm in X" -> store home location (+ optional units) so
+    // "weather" / "near me" resolve without asking. Detected before the agent so it isn't run as a task.
+    if (deps.setLocation) {
+      const set = deps.setLocation(msg.chatId, msg.text);
+      if (set) {
+        const u = set.units ? ` (${set.units})` : "";
+        await deps.sendMessage(msg.chatId, `Got it — I'll use ${set.location}${u} for "weather", "near me", and the like.`);
+        return;
+      }
     }
 
     // /schedules: list this chat's pending scheduled tasks. No agent run.
@@ -302,7 +318,8 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     const clearProgress = () => { if (progressHandle !== null) { clearTimer(progressHandle); progressHandle = null; } };
     try {
       await deps.sendTyping(msg.chatId);
-      const { reply, steps, tools, photo, doc, degraded } = await runIt(msg.text, { llm: deps.llm }, history);
+      const context = deps.profileContext?.(msg.chatId) || undefined;
+      const { reply, steps, tools, photo, doc, degraded } = await runIt(msg.text, { llm: deps.llm, context }, history);
       clearProgress();
       // A degraded reply is a soft-failure fallback (agent ran out of steps / produced no answer,
       // DEV-0176), not a real answer. Prepend a one-line hint so a live-bot user knows the result is

@@ -59,7 +59,7 @@
       "title": "Per-user profile: home location + units",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'near me' + bare 'weather' run location-less searches -> generic/wrong results; README even advertises 'best sushi near me'. Unanimous A+C.",
       "how": "Small per-chat JSON profile store (location, units, tz); a /setlocation or set-my-location flow; agent gets it as context. Ties into the tz work already done."
     },
@@ -109,6 +109,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 6: backlog was dry -> ran 3-agent audit (2nd audit). Built truncation-marker (audit B#1, high/S): truncateForModel() appends a visible marker when scrape/read/fetch_json output is cut past 6000 chars, so the agent stops answering confidently from a fragment. +5 tests; bumped agent-result-cap HEADER_MARGIN 200->400 for the marker. 599 pass, tsc clean. call-tested false (pure, unit-tested). Seeded 4 from the audit: user-profile-location(S), parameterized-recipes(S), absolute-threshold-alerts(S), inbound-photo-vision(M)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 7: built user-profile-location (audit A+C unanimous, high/S). New src/lib/profile.ts (ProfileStore, atomic+corrupt-safe, per-chat location+units) + parseSetLocation (/setlocation X, 'set my location to X', \"I'm in X\", optional (metric)/(imperial) or 'in metric'). Handler: setLocation branch stores it (no agent run) + profileContext feeds a system line to runAgent (new AgentDeps.context). state-paths gained profile; index wires ProfileStore; commands.ts lists /setlocation + HELP. +tests: profile (parse+store+merge+persist), 2 handler (store-no-agent, context-reaches-agent), commands harness stub. 607 pass, tsc clean. LIVE-VERIFIED: bare 'weather' with context 'Reykjavik, metric' -> agent replied Reykjavik 10C/5 m/s. call-tested TRUE. Remaining: parameterized-recipes, absolute-threshold-alerts, inbound-photo-vision."
     }
   ],
   "audits": [
