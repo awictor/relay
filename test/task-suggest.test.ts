@@ -41,8 +41,8 @@ describe("repeatedTaskNudge (auto-suggest-save)", () => {
 describe("matchRecipe (recipe-auto-recall)", () => {
   const recipes = [{ name: "btc", task: "check the price of bitcoin" }, { name: "hn", task: "top hacker news story" }];
   it("matches a free-text message to a strongly-overlapping saved recipe", () => {
-    expect(matchRecipe("check bitcoin price", recipes)).toEqual({ name: "btc" });
-    expect(matchRecipe("top hacker news story right now", recipes)).toEqual({ name: "hn" });
+    expect(matchRecipe("check bitcoin price", recipes)).toEqual({ name: "btc" });   // {check,bitcoin,price} vs {check,price,bitcoin} = 1.0
+    expect(matchRecipe("top hacker news story", recipes)).toEqual({ name: "hn" });  // exact salient tokens = 1.0
   });
   it("returns null when nothing overlaps enough (conservative)", () => {
     expect(matchRecipe("weather in Paris tomorrow", recipes)).toBeNull();

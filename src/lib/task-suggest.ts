@@ -62,7 +62,7 @@ export function matchRecipe(text: string, recipes: Array<{ name: string; task: s
   let best: { name: string; score: number } | null = null;
   for (const r of recipes) {
     const score = overlap(cur, tokens(r.task));
-    if (score >= 0.6 && (!best || score > best.score)) best = { name: r.name, score };
+    if (score >= 0.7 && (!best || score > best.score)) best = { name: r.name, score };
   }
   return best ? { name: best.name } : null;
 }

@@ -139,6 +139,9 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   // discover otherwise (auto-suggest-save only nudges on a REPEAT). In-memory: at worst re-tips after a
   // restart, which is harmless.
   const tippedChats = new Set<number>();
+  // Last recipe-recall message we offered per chat (normalized). Lets a re-send of the same phrase
+  // fall through to a fresh answer instead of re-offering forever (recipe-auto-recall escape hatch).
+  const recallOffered = new Map<number, string>();
   function handle(msg: InboundMessage): Promise<void> {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -538,7 +541,16 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // Only when the message ISN'T already a command shape (recipeMatch returns null for those).
     if (deps.recipeMatch) {
       const m = deps.recipeMatch(msg.chatId, msg.text);
-      if (m) { await deps.sendMessage(msg.chatId, `That looks like your saved "${m.name}" — run it with /run ${m.name}, or ignore this and I'll do it fresh.`); return; }
+      // Offer ONCE per phrase: if we just offered this exact message and the user sent it again (they
+      // ignored the /run suggestion), fall through to a FRESH agent answer — so "ignore this and I'll
+      // do it fresh" is true, not an inescapable loop for any phrasing that matches a saved recipe.
+      const norm = msg.text.trim().toLowerCase();
+      if (m && recallOffered.get(msg.chatId) !== norm) {
+        recallOffered.set(msg.chatId, norm);
+        await deps.sendMessage(msg.chatId, `That looks like your saved "${m.name}" — run it with /run ${m.name}, or send it again and I'll do it fresh.`);
+        return;
+      }
+      recallOffered.delete(msg.chatId); // this message wasn't a fresh recall; clear so a later match re-offers
     }
 
     const rl = deps.checkRateLimit(msg.chatId);

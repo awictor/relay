@@ -559,6 +559,15 @@
       "how": "Schedule recipes under 'recipe:<name>' + resolve the task at fire time (mirror digest:/alert:); runner looks up the recipe by name on fire. recipeForget removeByTask('recipe:<name>'). Migrate/accept old rows."
     },
     {
+      "id": "recipe-auto-recall-escape",
+      "title": "Recipe auto-recall escape hatch + threshold fix (fresh iter-62 bug)",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "iter-62 recall returned early on a match with no marker, so a phrase matching a saved recipe re-offered FOREVER + 'ignore and I'll do it fresh' was a lie (no fresh run possible without rewording) — an inescapable loop on the core reactive path. Threshold was also 0.6 vs the documented 0.7 (over-eager) (audit 16 B#1+B#3).",
+      "how": "Per-chat recallOffered map: re-sending the same phrase after an offer falls through to a fresh agent run (offer once). Align matchRecipe threshold to 0.7. Tests: same-phrase-twice runs fresh."
+    },
+    {
       "id": "recipe-auto-recall",
       "title": "Route a natural message to a matching saved recipe",
       "impact": "medium",
@@ -566,6 +575,33 @@
       "status": "done",
       "why": "Saved recipes are write-only: /run needs the EXACT name a phone user never remembers, so the save flywheel dies at reuse. auto-suggest-save matches inbound vs history to CREATE; nothing matches inbound vs the recipe STORE to REUSE (audit 15 C#1).",
       "how": "Reuse the task-suggest tokenizer/overlap against recipes[].task; on a high-overlap inbound (not already a command), offer 'Run your saved \"<name>\"? (yes)' or run it. Conservative threshold so it doesn't hijack."
+    },
+    {
+      "id": "scheduled-recipe-slot-refire",
+      "title": "A scheduled recipe edited to add a {slot} fires literal {slot} daily",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "recipeSchedule guards hasSlots at schedule time + runDigest guards per-member, but the scheduled-recipe FIRE path (runner resolves recipe:<name> -> current task) has no hasSlots re-check. Editing a scheduled recipe to add a {slot} makes it run 'track {coin}' literally every morning -> garbage unprompted (audit 16 B#2, gap opened by recipe-schedule-stable-marker).",
+      "how": "In schedule-runner's recipe:<name> branch, if the resolved task hasSlots -> skip firing + log/notify once (mirror digest-slot-guard); don't run the broken task. Needs hasSlots available to the runner (dep or import)."
+    },
+    {
+      "id": "confirm-to-act",
+      "title": "Confirm-to-act: one committing click via a text 'yes'",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "safety.ts flat-refuses EVERY committing action + the prompt says 'tell the user instead', so Relay is structurally read-only — it can't finish the errands (submit/reserve/order) that beat Instinct, even for a trusting user (audit 16 C#1).",
+      "how": "On a DANGEROUS_ACTION click, instead of refusing, reply 'This will <action> on <site> — reply YES to do it' + hold a per-chat pending single action across one turn; a 'yes' next turn resumes just that click. Plain-text confirm, single action, no keyboards. Careful safety review — keep the refusal default for anything without an explicit confirm."
+    },
+    {
+      "id": "content-aware-cta",
+      "title": "Make the post-answer follow-up offer answer-specific",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The post-answer tip + save-nudge fire on shape not meaning (templated), so they're easy to ignore + don't convert. A price answer should offer 'watch it under $X?', a how-to 'save as PDF?' (audit 16 C#2).",
+      "how": "A heuristic on the reply text + which tools ran picks ONE relevant CTA (price/number -> watch; list -> save recipe; page -> PDF/screenshot). Replace the generic recurring tip when a specific one applies; keep terse."
     }
   ],
   "history": [
@@ -616,6 +652,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 63: backlog dry after iter 62 -> ran 16th audit (3 lenses), which caught a FRESH bug in my iter-62 recall code; built it. recipe-auto-recall-escape (audit 16 B#1+B#3, high/S): the recall branch returned early on a match with no marker, so any free-text phrase matching a saved recipe re-offered FOREVER + 'ignore and I'll do it fresh' was a lie (the only escape was rewording) — an inescapable loop on the core reactive path; matchRecipe threshold was also 0.6 vs the documented 0.7. Fix: per-chat recallOffered map -> re-sending the same phrase after an offer falls through to a FRESH agent run (offer once); message now says 'send it again and I'll do it fresh'; threshold aligned to 0.7. +1 handler test (same phrase twice -> fresh run) + updated matchRecipe test to exact-token matches. 763 pass, tsc clean. call-tested false (routing logic). LESSON: a new reactive branch that returns early needs an escape/marker (like the save-nudge) — audit every early-return for a loop. Seeded also: scheduled-recipe-slot-refire(S bug), confirm-to-act(M), content-aware-cta(S)."
     },
     {
       "event": "PRODUCT-LOOP iter 62: built recipe-auto-recall (audit 15 C#1, medium/S). Saved recipes were write-only — /run needs the EXACT name a phone user never remembers, so the save flywheel died at reuse. New matchRecipe(text, recipes) reuses the task-suggest tokenizer/Jaccard-overlap (>=0.6, >=2 tokens) to find a strongly-matching saved recipe; the handler OFFERS it ('That looks like your saved \"btc\" — run it with /run btc, or ignore and I'll do it fresh') and stops, never auto-running (a surprise re-run is worse than a fresh answer). index recipeMatch skips command-shaped messages so it can't double-handle. +5 tests (matchRecipe match/null/empty, handler offer + no-match-normal-run). 762 pass, tsc clean. call-tested false (pure match + handler wiring, unit-tested). Backlog DRY -> ran 16th audit (same iteration)."
@@ -765,6 +804,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 16 (post-62-features). A/new-user: accept Telegram location pin (near-me in one tap), voice-note reply for voice-in, cheap 'tell me more' (retain last fetched page), chain inbound photo into a browse errand. B/reliability: recipe-auto-recall-no-escape-hatch (FRESH iter-62 bug — inescapable loop + false 'do it fresh', built), scheduled-recipe-edited-to-slot-fires-literal (gap from recipe-schedule-stable-marker), matchRecipe-threshold-0.6-vs-doc-0.7 (built w/ escape), extractValue-non-currency, DST. C/power: confirm-to-act single committing click (THE read-only ceiling vs Instinct), content-aware CTA, auto-proof screenshot on alerts (S), first-run activation flow. Built the fresh recall bug (escape hatch + 0.7 threshold); seeded scheduled-recipe-slot-refire(S bug), confirm-to-act(M), content-aware-cta(S). Deferred: extractValue-non-currency(M), DST(L/M), + power/UX bets. LESSON (again): a new reactive branch that returns early needs an escape/marker like the save-nudge — check every early-return for a loop."
     },
     {
       "note": "Audit 15 (post-59-features). A/new-user: persist-bare-city-reply-after-location-ask, operate-on-pasted-text (no URL), absolute-date/next-weekday/monthly-yearly reminders, quiet-hours. B/reliability: alert-redefine-stacks-dup-schedules (built), recipe-schedule-marker-orphan-on-edit (raw task not stable marker), extractValue-non-currency, DST-drift. C/power: recipe-auto-recall (match inbound vs recipe store to REUSE — save flywheel's missing half), cookie-session-expiry-nudge, unified /mine inventory, fuzzy /run, cross-session repeat detection. Built alert-redefine-dup-schedule (S bug, live-verified); seeded recipe-schedule-stable-marker(M bug), recipe-auto-recall(S). Deferred: extractValue-non-currency(M), DST(L), quiet-hours(M), pasted-text(S), absolute-date-reminders(M), + power bets."

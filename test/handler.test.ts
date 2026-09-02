@@ -415,6 +415,19 @@ describe("createHandler", () => {
     expect(agentCalled).toBe(false); // offered, didn't cold-run
   });
 
+  it("re-sending the same phrase after a recall offer runs it fresh (escape hatch, no loop)", async () => {
+    let agentCalls = 0;
+    const { handle, sent } = harness({
+      recipeMatch: () => ({ name: "btc" }),
+      runAgentFn: async () => { agentCalls++; return { reply: "fresh answer", steps: 1, tools: [] }; },
+    });
+    await handle(msg("check bitcoin price", 7));
+    expect(sent[0]!.text).toMatch(/saved "btc"/);   // first: offered
+    expect(agentCalls).toBe(0);
+    await handle(msg("check bitcoin price", 7));      // same phrase again
+    expect(agentCalls).toBe(1);                       // second: fresh agent run, no re-offer loop
+  });
+
   it("no recipe match -> normal agent run", async () => {
     let agentCalled = false;
     const { handle } = harness({
