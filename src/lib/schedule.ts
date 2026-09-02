@@ -166,8 +166,10 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
   if (at24) {
     const hh = parseInt(at24[2]!, 10);
     const mm = parseInt(at24[3]!, 10);
-    let due = nextDailyMs(now, hh, mm, offsetMin);
-    if (at24[1] && due - now < DAY) due += DAY; // "tomorrow" forces the next day if the time is still today
+    // "tomorrow" -> the calendar next day at hh:mm (dayAtMs, no double-roll); otherwise the next
+    // occurrence today-or-later (nextDailyMs). DEV: the old "nextDailyMs then +DAY if <DAY away" made
+    // "tomorrow at 9am" said after 9am fire ~47h out because nextDailyMs had already advanced to tomorrow.
+    const due = at24[1] ? dayAtMs(now, hh, mm, 1, offsetMin) : nextDailyMs(now, hh, mm, offsetMin);
     const task = cleanTask(raw, at24[0]!);
     if (!task) return null;
     return { kind: "once", task, dueMs: due };
@@ -178,9 +180,8 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
   if (at && (at[1] || at[4])) { // require "tomorrow" or an am/pm to avoid matching stray numbers
     const hh = to24h(parseInt(at[2]!, 10), at[4]);
     const mm = at[3] ? parseInt(at[3], 10) : 0;
-    let due = nextDailyMs(now, hh, mm, offsetMin);
-    if (at[1]) due = due <= now + DAY ? due : due; // "tomorrow" -> ensure at least today+1 handled by nextDailyMs
-    if (at[1] && due - now < DAY) due += DAY; // force tomorrow if the time is still today
+    // "tomorrow at 9am" -> calendar next day at hh:mm (dayAtMs); "at 5pm" -> next occurrence today-or-later.
+    const due = at[1] ? dayAtMs(now, hh, mm, 1, offsetMin) : nextDailyMs(now, hh, mm, offsetMin);
     const task = cleanTask(raw, at[0]!);
     if (!task) return null;
     return { kind: "once", task, dueMs: due };
@@ -219,6 +220,16 @@ export function nextDailyMs(now: number, hh: number, mm: number, offsetMin = tzO
 
 // Next occurrence of hh:mm on one of `weekdays` (0=Sun..6=Sat, in the user's zone) at/after now.
 // Scans up to 7 candidate days from today, returning the first that lands strictly after now.
+// The instant for hh:mm on a specific offset-from-today day (in the user's zone), as epoch ms.
+// dayOffset=1 => tomorrow. Used for "tomorrow at 9am": the calendar next day at that time, computed
+// directly so it never double-rolls the way nextDailyMs + a "+DAY if still today" guard did (that
+// made "tomorrow at 9am" said after 9am land ~47h out — nextDailyMs had ALREADY advanced to tomorrow).
+export function dayAtMs(now: number, hh: number, mm: number, dayOffset: number, offsetMin = tzOffsetMin()): number {
+  const d = new Date(now + offsetMin * 60_000);
+  const atUser = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + dayOffset, hh, mm, 0, 0);
+  return atUser - offsetMin * 60_000;
+}
+
 export function nextWeeklyMs(now: number, hh: number, mm: number, weekdays: number[], offsetMin = tzOffsetMin()): number {
   const want = new Set(weekdays);
   const userNow = now + offsetMin * 60_000;

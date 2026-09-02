@@ -195,6 +195,27 @@ describe("parseSchedule — absolute", () => {
     expect(s.dueMs - NOW).toBeGreaterThan(0);
     expect(s.task).toMatch(/deploy/);
   });
+  it("'tomorrow at 9am' lands on the CALENDAR next day, not two days out, when 9am already passed today (tomorrow-off-by-a-day)", () => {
+    // NOW = Tue 22:13 UTC. Tomorrow (Wed) 09:00 UTC is ~10.75h away; the old double-+DAY made it ~34h.
+    const s = parseSchedule("tomorrow at 9am check the deploy", NOW, 0)!;
+    const d = new Date(s.dueMs);
+    expect(d.getUTCHours()).toBe(9);
+    expect(d.getUTCDate()).toBe(new Date(NOW).getUTCDate() + 1); // exactly the next calendar day
+    expect(s.dueMs - NOW).toBeLessThan(24 * 3600_000);           // < 1 day out, not ~2
+  });
+  it("'tomorrow at 09:00' (24h form) also lands on the next calendar day", () => {
+    const s = parseSchedule("tomorrow at 09:00 send it", NOW, 0)!;
+    const d = new Date(s.dueMs);
+    expect(d.getUTCHours()).toBe(9);
+    expect(d.getUTCDate()).toBe(new Date(NOW).getUTCDate() + 1);
+  });
+  it("'tomorrow at 11pm' when 11pm is still ahead today still means tomorrow (not tonight)", () => {
+    // NOW 22:13; 23:00 is ahead today. "tomorrow" must still push to the next day, not fire tonight.
+    const s = parseSchedule("tomorrow at 11pm wind down", NOW, 0)!;
+    const d = new Date(s.dueMs);
+    expect(d.getUTCHours()).toBe(23);
+    expect(d.getUTCDate()).toBe(new Date(NOW).getUTCDate() + 1);
+  });
   it("a bare number is NOT a schedule (needs tomorrow/am-pm)", () => {
     expect(parseSchedule("get me 5 links about cats", NOW)).toBeNull();
   });

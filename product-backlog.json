@@ -374,7 +374,7 @@
       "title": "'tomorrow at 9am' fires two days out when 9am already passed today",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The am/pm + 24h parse branches add DAY when due-now<DAY, but nextDailyMs already rolled to tomorrow when today's time passed, so 'remind me tomorrow at 9am' at 10am fires ~47h later — an explicit next-day reminder a full day late (audit 10 B#2).",
       "how": "In parseSchedule, only apply the 'tomorrow' +DAY when the computed dueMs is still TODAY (dueMs - now < time-until-midnight), i.e. don't double-roll when nextDailyMs already advanced. Add tests at now-before and now-after the stated time."
     },
@@ -445,6 +445,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 42: built tomorrow-off-by-a-day (audit 10 B#2, high/S, real bug). Both 'tomorrow at <time>' branches did nextDailyMs (which ALREADY rolls to tomorrow when today's time passed) THEN +DAY if <DAY away, so 'remind me tomorrow at 9am' said after 9am fired ~47h out (a full day late). New dayAtMs(now,hh,mm,dayOffset,offsetMin) computes the calendar day+1 instant directly; the tomorrow branches (am/pm + 24h) now use it, non-tomorrow keeps nextDailyMs (today-or-next). +3 tests (9am-passed lands next calendar day <24h out; 24h form; 'tomorrow at 11pm' still tomorrow though 11pm ahead today). 719 pass, tsc clean. call-tested false (pure time math, unit-tested). Remaining: schedule-confirm-fire-time, cite-source-link."
     },
     {
       "event": "PRODUCT-LOOP iter 41: backlog dry after iter 40 -> ran 10th audit (3 lenses), seeded 4, built schedule-gate-recurring (audit 10 B#1+B#3, high/S — a REGRESSION I shipped in iter 39). recurring-schedules added weekly/interval parsing but the handler's scheduleAdd CUE regex still only matched daily/once cues, so 'every monday', 'every 2 hours', 'every weekday', 'weekends' fell through the gate + ran ONCE — the whole feature was unreachable from chat. Broadened the gate cue to every shape parseSchedule accepts (every <weekday>, every N min/hours, weekday/weekend). Also fixed /schedules list + recipe/digest-schedule confirms that collapsed weekly/interval to 'once' -> now show the real s.kind. +1 gate test (4 recurring phrasings reach scheduleAdd) + updated 2 digest confirm-wording asserts. 716 pass, tsc clean. call-tested false (routing regex, unit-tested). LESSON: when adding a parser kind, update the handler gate that feeds it — a green parser test hid a dead end-to-end path. Seeded also: tomorrow-off-by-a-day(S bug), schedule-confirm-fire-time(S), cite-source-link(S)."
