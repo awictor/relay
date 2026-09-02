@@ -85,6 +85,13 @@ What I CAN do: look things up on the web, pull out + compare data, watch a page 
 // carve-out (Relay genuinely can't do them).
 const PROBE_RE = /^(?:can|could|will|would|do)\s+(?:you|u)\s+(?:please\s+)?(?:book|buy|order|purchase|pay|call|phone|ring|reserve|schedule an appointment|log ?in|sign ?in|apply|subscribe|cancel my|make a (?:call|reservation|booking|payment)|(?:text|email|message|dm|send)(?!\s+(?:me|us|it|that|back)\b))\b[\s\w'./-]*\??$/i;
 
+// A site-named capability probe: "do you work with Amazon?", "can you use Gmail?", "does this work
+// on Twitter?". These fell to a cold agent turn that browsed the site logged-out + floundered. One
+// honest reply: reads public pages on most sites, can't log into your accounts unless you set up
+// cookies (/sites). Matches the shape, not a specific site list, so any site name works.
+const SITE = `I can read public pages on most sites and pull data from them. I can't log into your accounts on my own — but you can authorize specific sites by configuring cookies (see /sites), and then I'll act signed-in for those. Want me to try reading a page? Just send the link or name the site + what you want.`;
+const SITE_RE = /^(?:can|could|do|does|will|would)\s+(?:you|u|this|relay|it)\s+(?:please\s+)?(?:work with|use|access|read|browse|go on|handle|support|work on)\s+[\w][\w'. -]*\??$/i;
+
 /** Returns a canned reply for /start, /help, a bare greeting/capability question, a meta/trust
  * question, or a can't-do capability probe; else null. */
 export function handleCommand(text: string): string | null {
@@ -103,5 +110,7 @@ export function handleCommand(text: string): string | null {
   if (t.split(/\s+/).length <= 8 && META_RE.test(t)) return META;
   // Can't-do capability probe -> honest reply + pivot to what it CAN do.
   if (t.split(/\s+/).length <= 10 && PROBE_RE.test(t)) return PROBE;
+  // Site-named capability probe ("do you work with Amazon?") -> public-pages + cookie-auth answer.
+  if (t.split(/\s+/).length <= 8 && SITE_RE.test(t)) return SITE;
   return null;
 }

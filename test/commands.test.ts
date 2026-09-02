@@ -66,6 +66,15 @@ describe("handleCommand", () => {
     expect(handleCommand("can you compare these two prices")).toBeNull();
   });
 
+  it("answers a site-named capability probe with the public-pages/cookies reply (site-capability-probe)", () => {
+    expect(handleCommand("do you work with Amazon")).toMatch(/public pages/i);
+    expect(handleCommand("can you use Gmail?")).toMatch(/log into your accounts/i);
+    expect(handleCommand("does this work on Twitter")).toMatch(/\/sites/);
+  });
+  it("does NOT hijack a real read errand naming a site + a task", () => {
+    expect(handleCommand("read the top story on Hacker News and summarize it")).toBeNull(); // long, real task
+  });
+
   it("does NOT hijack a real errand that looks meta-ish", () => {
     expect(handleCommand("is this article free to read: example.com/x")).toBeNull(); // real errand + long
     expect(handleCommand("do you save documents to a folder on that site")).toBeNull();

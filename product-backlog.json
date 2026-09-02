@@ -680,7 +680,7 @@
       "title": "Honest answer to 'do you work with Amazon / can you use Gmail?'",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A site-named capability probe ('can you use Amazon?', 'do you work with Gmail?') matches neither PROBE (action verbs) nor META (trust), so it falls to a cold agent turn that browses the site logged-out + flounders on the user's first test (audit 18 A#4).",
       "how": "Extend the probe matcher: 'do you work with / can you use / does this work on <site>' -> 'I can read public pages on most sites; I can't log into your accounts unless you set up cookies (/sites)'. Pure + unit-tested."
     }
@@ -733,6 +733,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 72: built site-capability-probe (audit 18 A#4, medium/S). A site-named probe ('do you work with Amazon?', 'can you use Gmail?', 'does this work on Twitter?') matched neither PROBE (action verbs) nor META (trust) -> cold agent turn browsing the site logged-out + floundering on a new user's first test. Added SITE reply (reads public pages on most sites; can't log into your accounts on its own but you can authorize sites via cookies /sites; invites a real read) + SITE_RE ('can/do/does you/this/it work with|use|access|read|browse|support <site>', <=8 words). PROBE runs first so 'can you use amazon to BUY x' still refuses. +2 tests (3 site probes answered; a long real read-errand naming a site passes through). 787 pass, tsc clean. call-tested false (pure matcher). Backlog DRY -> ran 19th audit (same iteration)."
     },
     {
       "event": "PRODUCT-LOOP iter 71: TRIAGE found empty-state-onboarding (top todo) was ALREADY satisfied — all four list handlers' empty branches already print a concrete copy-paste example (schedules/recipes/alerts/digests), so flipped it done (no build) + moved to the next. Built proactive-ping-drilldown-cache (audit 18 C#4, medium/S): the 'more'/'send the link' drilldown cache was inbound-only, so replying to an unprompted digest/alert ping dead-ended. Added an optional shared lastResultStore: handler uses it when provided (else a private map), runner records each proactive send via a new recordSend dep; index creates the shared Map + wires both. So 'more'/'send the link' now works after a proactive ping too. +2 tests (runner recordSend populates the store; handler 'send the link' reads a preset proactive entry). 785 pass, tsc clean. call-tested false (wiring, unit-tested). Remaining: site-capability-probe."
