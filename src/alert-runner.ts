@@ -5,7 +5,7 @@
 
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Alert } from "./lib/alerts.js";
-import { changed, conditionHolds } from "./lib/alerts.js";
+import { changed, conditionHolds, extractValue } from "./lib/alerts.js";
 
 export interface AlertRunResult {
   notify: boolean;   // did the value change (or first run)?
@@ -60,6 +60,16 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
       return { notify: true, message: `🔔 ${alert.name}:\n${value}`, value };
     }
     return { notify: false, message: null, value };
+  }
+
+  // Numeric-threshold watch ("... by 1000") + a transient reply with NO comparable number ("price
+  // unavailable right now"): don't fire + don't poison the baseline. changed() would fall back to
+  // text-diff (numeric-vs-non-numeric = "changed"), spuriously ping, and store the numberless string
+  // as lastValue — silently bypassing the threshold across the gap. Keep the last GOOD value + stay
+  // silent this tick (mirrors the predicate-refire guard above + the degraded guard). First run with
+  // no number still seeds (nothing to protect yet).
+  if (!firstRun && alert.threshold !== undefined && extractValue(value) === null) {
+    return { notify: false, message: null, value: alert.lastValue ?? value };
   }
 
   const didChange = firstRun ? true : changed(alert.lastValue!, value, alert.threshold);

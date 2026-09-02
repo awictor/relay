@@ -60,6 +60,26 @@ describe("checkAlert", () => {
     expect(s2.lastSet).toEqual([{ name: "btc", value: "$66,200" }]); // advances only now
   });
 
+  it("a numeric-threshold watch stays silent + keeps baseline on a numberless reply (threshold-alert-numberless-guard)", async () => {
+    // "by 1000" watch, last $65,000; a transient "price unavailable" has no number -> must NOT fire
+    // (text-diff would) and must NOT overwrite the baseline (poisoning it bypasses the threshold).
+    const { d, lastSet } = deps("Price temporarily unavailable");
+    const r = await checkAlert(alert({ lastValue: "$65,000", threshold: 1000 }), d);
+    expect(r.notify).toBe(false);
+    expect(lastSet).toEqual([]);
+    expect(r.value).toBe("$65,000");
+    // next real check still measured vs the preserved 65000
+    const again = await checkAlert(alert({ lastValue: "$65,000", threshold: 1000 }), deps("$65,200").d);
+    expect(again.notify).toBe(false); // +200 < 1000
+  });
+
+  it("first run with no number still seeds (nothing to protect yet)", async () => {
+    const { d, lastSet } = deps("Price unavailable");
+    const r = await checkAlert(alert({ threshold: 1000 }), d); // no lastValue
+    expect(r.notify).toBe(true); // first run notifies (baseline)
+    expect(lastSet).toEqual([{ name: "btc", value: "Price unavailable" }]);
+  });
+
   it("changed value -> notify with a 'changed' message", async () => {
     const { d } = deps("rainy");
     const r = await checkAlert(alert({ lastValue: "sunny" }), d);

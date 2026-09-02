@@ -302,7 +302,7 @@
       "title": "Threshold change-alert shouldn't fire/poison baseline on a numberless check",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "checkAlert guards the indeterminate case only for PREDICATE alerts; the threshold/plain-change path has no equivalent, so a transient numberless reply ('price unavailable') makes changed() fall back to text-diff, false-pings '🔔 changed', and stores the non-numeric string as baseline -> the 'by N' threshold is silently bypassed across the gap (audit 8 B#2).",
       "how": "In checkAlert's non-predicate path, if the alert has a numeric threshold and extractValue(newValue) is null, skip notify + skip setLast (keep last good baseline), mirroring the predicate-refire-guard + the degraded guard."
     },
@@ -373,6 +373,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 34: built threshold-alert-numberless-guard (audit 8 B#2, high/S, real bug). checkAlert guarded the indeterminate case only for PREDICATE alerts; the threshold/'by N' path had no equivalent, so a transient numberless reply ('price unavailable') made changed() fall back to text-diff (numeric-vs-non-numeric = 'changed'), false-pinged '🔔 changed', AND stored the non-numeric string as baseline -> the threshold was silently bypassed across the gap. Now: numeric-threshold alert + extractValue(new)===null -> skip notify + skip setLast (keep last good baseline), mirroring the predicate-refire + degraded guards. First-run-no-number still seeds (nothing to protect yet). +2 tests (numberless keeps baseline + no fire + next-real-check still vs preserved value; first-run-seeds). 689 pass, tsc clean. call-tested false (runner logic, unit-tested). Remaining: alert-edit-check-now, profile-view-reset."
     },
     {
       "event": "PRODUCT-LOOP iter 33: backlog dry after iter 32 -> ran 8th audit (3 lenses), seeded 4, built greedy-location-setter (audit 8 B#1, high/S, real bug). parseSetLocation's `i'm in (.+)` matched ANY conversational 'I'm in ...' and ran before schedule-parse + the agent, so 'I'm in a meeting, remind me in 10 min' was swallowed: reminder never scheduled, no answer, and 'a meeting, remind me...' saved as home location -> corrupts every future weather/near-me. Split the parse: explicit forms (/setlocation, 'set my location to', 'my location is') stay permissive; the bare 'I'm in X'/'I am in X' form now requires the tail to look like a place (no task/scheduling keywords, no 'in N'/'at N', <=5 words) or it returns null and falls through to scheduling/agent. +2 tests (4 conversational false-positives return null; bare place + explicit-comma-place still accepted). 687 pass, tsc clean. call-tested false (pure parser, unit-tested). Remaining: threshold-alert-numberless-guard, alert-edit-check-now, profile-view-reset."
