@@ -56,6 +56,17 @@ describe("handler — digest routing", () => {
     expect(agentTexts).toHaveLength(0); // digest composed directly, not an agent run
   });
 
+  it("/run <digest> is rate-limited (inline-cmd-rate-limit): over-cap blocks the run, no digestRun", async () => {
+    let ran = 0;
+    const { handle, sent } = harness({
+      checkRateLimit: () => ({ allowed: false, retryAfterSec: 30 }),
+      digestRun: async () => { ran++; return "📋 morning"; },
+    });
+    await handle(msg("/run morning"));
+    expect(ran).toBe(0);                        // the expensive digest run never fired
+    expect(sent[0]).toMatch(/sending a lot|30s/i);
+  });
+
   it("/run <recipe> (not a digest) still rewrites to the recipe task -> agent", async () => {
     const { handle, agentTexts } = harness();
     await handle(msg("/run btc"));

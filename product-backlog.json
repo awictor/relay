@@ -446,7 +446,7 @@
       "title": "Rate-limit the agent-executing inline commands (/run digest, alert check)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "digestRun (one agent per member) + alertRunNow run full LLM+anvil work BEFORE checkRateLimit, so spamming '/run <digest>' or 'watch x: ... below 1' / 'change x to below 1' opens many concurrent anvil sessions, exhausts the Chrome pool + makes OTHER chats fail 'browser down', plus unbounded model cost (audit 12 B#1).",
       "how": "Gate the expensive inline paths (digestRun, alertRunNow-on-define/edit) behind checkRateLimit like the agent path, or move the rate check earlier. Keep cheap read-only commands (/schedules, /alerts list) ungated."
     },
@@ -517,6 +517,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 50: built inline-cmd-rate-limit (audit 12 B#1, high/M, real DoS/cost hole). digestRun (one agent per member) + alertRunNow (define/edit immediate check) ran full LLM+anvil work BEFORE checkRateLimit, so spamming '/run <digest>' / 'watch x: ... below 1' / 'change x to below 1' opened many concurrent anvil Chrome sessions, exhausted the bounded pool + made OTHER chats fail 'browser down', plus unbounded model cost. Now: '/run <digest>' is rate-gated like the agent path (over-cap -> 'sending a lot' + no run); the alert define + edit immediate checks are skipped when over cap (define/edit still confirm; the scheduled cadence still covers it). A recipe /run already falls through to the rate-checked agent path. +2 tests (digest over-cap blocked no run; alert-define over-cap confirms but skips immediate check). 739 pass, tsc clean. call-tested false (routing + rate wiring). Remaining: alert-delta-in-ping, save-that-as."
     },
     {
       "event": "PRODUCT-LOOP iter 49: backlog dry after iter 48 -> ran 12th audit (3 lenses), seeded 4, built media-answer-memory (audit 12 B#5, high/S, real bug). The inbound photo + document branches sent the vision answer + returned WITHOUT memorySet (the text + error paths both persist), so a follow-up ('what about the 2nd item?', 'is that safe to eat?') ran blind + the bot appeared to instantly forget the image/PDF it just described. Both success paths now memorySet a [user '[photo]/[document] <caption or placeholder>', assistant <answer>] pair onto memoryGet. +2 tests (photo persisted w/ caption; document persisted w/ placeholder). 737 pass, tsc clean. call-tested false (handler memory wiring, unit-tested). Seeded also: inline-cmd-rate-limit(M bug), alert-delta-in-ping(S), save-that-as(S)."

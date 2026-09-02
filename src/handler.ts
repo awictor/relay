@@ -368,7 +368,9 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         // btc to below 55000" when it's already below) produces no future edge, so without this the
         // user would hear nothing until it crosses again — maybe never. alertRunNow re-baselines +
         // notifies if it already holds. Guarded so a flaky check can't break the confirmation.
-        if (deps.alertRunNow) {
+        // Rate-gate the immediate check: it's a full LLM+anvil run, so skip it when the chat is over
+        // its limit (the scheduled cadence still covers it) rather than letting spam open sessions.
+        if (deps.alertRunNow && deps.checkRateLimit(msg.chatId).allowed) {
           try { const msgNow = await deps.alertRunNow(msg.chatId, r.name); if (msgNow) await deps.sendMessage(msg.chatId, msgNow); }
           catch { /* a flaky post-edit check must not break the update confirmation */ }
         }
@@ -385,7 +387,8 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         await deps.sendMessage(msg.chatId, `Watching "${r.name}" — I'll only message you when it changes. See /alerts.`);
         // Run one check now so the user isn't silent until the first scheduled cadence (~24h). If the
         // predicate already holds (e.g. "below 50000" and it's already there), tell them right away.
-        if (deps.alertRunNow) {
+        // Rate-gate this full LLM+anvil check so spamming define can't open unbounded sessions.
+        if (deps.alertRunNow && deps.checkRateLimit(msg.chatId).allowed) {
           try {
             const msgNow = await deps.alertRunNow(msg.chatId, r.name);
             if (msgNow) await deps.sendMessage(msg.chatId, msgNow);
@@ -458,6 +461,11 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       const explicitRecipe = /^(?:\/run|run)\s+recipe\s+\S/i.test(msg.text.trim());
       const nameOnly = msg.text.trim().replace(/^\/run\b\s*/i, "").replace(/^run\s+/i, "").replace(/^recipe\s+/i, "").trim();
       if (!explicitRecipe && nameOnly && deps.isDigest?.(msg.chatId, nameOnly) && deps.digestRun) {
+        // A digest runs ONE agent per member (many anvil sessions) — the most expensive inline op, so
+        // rate-gate it like the agent path (spamming "/run <digest>" otherwise exhausts the browser
+        // pool + starves other chats). A recipe /run falls through to the rate-checked agent path below.
+        const rl = deps.checkRateLimit(msg.chatId);
+        if (!rl.allowed) { await deps.sendMessage(msg.chatId, `You're sending a lot — give me ${rl.retryAfterSec}s to catch up.`); return; }
         const composed = await deps.digestRun(msg.chatId, nameOnly);
         await deps.sendMessage(msg.chatId, composed ?? "That digest is empty or gone — see /digests.");
         return;

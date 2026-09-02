@@ -76,6 +76,17 @@ describe("handler — alert routing", () => {
     expect(sent[1]).toMatch(/48,000/);          // immediate check second
   });
 
+  it("skips the immediate check when the chat is over its rate limit (inline-cmd-rate-limit)", async () => {
+    let ran = 0;
+    const { handle, sent } = harness({
+      checkRateLimit: () => ({ allowed: false, retryAfterSec: 30 }),
+      alertRunNow: async () => { ran++; return "🔔 btc: $48,000"; },
+    });
+    await handle(msg("watch btc: price of bitcoin below 50000"));
+    expect(sent[0]).toMatch(/Watching "btc"/); // define still confirmed
+    expect(ran).toBe(0);                        // but the expensive immediate check was skipped
+  });
+
   it("silent immediate check sends only the confirmation", async () => {
     const { handle, sent } = harness({ alertRunNow: async () => null });
     await handle(msg("watch btc: price of bitcoin below 50000"));
