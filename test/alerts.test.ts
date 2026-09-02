@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseAlertCommand, changed, firstNumber, extractValue, AlertStore } from "../src/lib/alerts.js";
+import { parseAlertCommand, changed, firstNumber, extractValue, conditionHolds, AlertStore } from "../src/lib/alerts.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -21,6 +21,33 @@ describe("parseAlertCommand", () => {
   it("null without the colon form", () => {
     expect(parseAlertCommand("what's the price")).toBeNull();
     expect(parseAlertCommand("alert me btc:")).toBeNull();
+  });
+  it("parses a 'below N' predicate (strips it from the task)", () => {
+    expect(parseAlertCommand("watch btc: price of bitcoin below 50000")).toEqual({ name: "btc", task: "price of bitcoin", condition: { op: "below", operand: 50000 } });
+    expect(parseAlertCommand("alert me btc: bitcoin price drops below $50,000")).toEqual({ name: "btc", task: "bitcoin price", condition: { op: "below", operand: 50000 } });
+  });
+  it("parses an 'above N' predicate", () => {
+    expect(parseAlertCommand("watch eth: ethereum price above 4000")).toEqual({ name: "eth", task: "ethereum price", condition: { op: "above", operand: 4000 } });
+    expect(parseAlertCommand("watch t: temp hits 30")).toEqual({ name: "t", task: "temp", condition: { op: "above", operand: 30 } });
+  });
+  it("parses a 'back in stock' predicate", () => {
+    expect(parseAlertCommand("watch ps5: the PS5 on bestbuy back in stock")).toEqual({ name: "ps5", task: "the PS5 on bestbuy", condition: { op: "in_stock" } });
+  });
+});
+
+describe("conditionHolds", () => {
+  it("below/above compare the extracted value", () => {
+    expect(conditionHolds({ op: "below", operand: 50000 }, "BTC is $48,000")).toBe(true);
+    expect(conditionHolds({ op: "below", operand: 50000 }, "BTC is $52,000")).toBe(false);
+    expect(conditionHolds({ op: "above", operand: 4000 }, "ETH at $4,200")).toBe(true);
+  });
+  it("in_stock reads stock language", () => {
+    expect(conditionHolds({ op: "in_stock" }, "In stock — add to cart")).toBe(true);
+    expect(conditionHolds({ op: "in_stock" }, "Sold out")).toBe(false);
+  });
+  it("null when the value can't be assessed", () => {
+    expect(conditionHolds({ op: "below", operand: 50000 }, "no price here")).toBeNull();
+    expect(conditionHolds({ op: "in_stock" }, "some page text")).toBeNull();
   });
 });
 

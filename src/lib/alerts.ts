@@ -11,13 +11,35 @@ export interface Alert {
   task: string;        // task run each check
   lastValue?: string;  // last agent reply, for change comparison
   threshold?: number;  // optional: only notify if a numeric value moved >= this much
+  condition?: AlertCondition; // optional: notify when a predicate holds (below/above/in-stock)
   created: number;
+}
+
+// A predicate alert: notify when the watched value satisfies it (edge-triggered — fires when it
+// FIRST becomes true, not every check while true, so "below 50k" pings once on the drop).
+export interface AlertCondition {
+  op: "below" | "above" | "in_stock";
+  operand?: number; // for below/above
 }
 
 export interface ParsedAlert {
   name: string;
   task: string;
   threshold?: number;
+  condition?: AlertCondition;
+}
+
+/** Evaluate a condition against an observed value string. below/above use extractValue; in_stock
+ * looks for stock language. Returns null when the value can't be assessed (so the caller holds). */
+export function conditionHolds(cond: AlertCondition, value: string): boolean | null {
+  if (cond.op === "in_stock") {
+    if (/\b(out of stock|sold out|unavailable|out-of-stock)\b/i.test(value)) return false;
+    if (/\b(in stock|available|add to cart|buy now|in-stock)\b/i.test(value)) return true;
+    return null; // ambiguous
+  }
+  const v = extractValue(value);
+  if (v === null || cond.operand === undefined) return null;
+  return cond.op === "below" ? v < cond.operand : v > cond.operand;
 }
 
 function normalizeName(s: string): string {
@@ -25,9 +47,13 @@ function normalizeName(s: string): string {
 }
 
 /**
- * Parse an alert definition. Returns {name, task, threshold?} or null.
+ * Parse an alert definition. Returns {name, task, threshold?, condition?} or null.
  *   "alert me <name>: <task>"          "watch <name>: <task>"
- *   ... optionally trailing "when it changes by <n>" / "by <n>" -> numeric threshold.
+ * Optional trailing clause, checked in order:
+ *   "... below <n>" / "under <n>" / "drops below <n>"   -> condition below n
+ *   "... above <n>" / "over <n>"  / "hits <n>"          -> condition above n
+ *   "... back in stock" / "when it's in stock"          -> condition in_stock
+ *   "... (when it changes) by <n>"                       -> numeric change threshold
  */
 export function parseAlertCommand(text: string): ParsedAlert | null {
   const m = text.trim().match(/^\s*(?:alert(?:\s+me)?|watch)\s+([^:]+?)\s*:\s*(.+)$/i);
@@ -35,10 +61,20 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
   const name = normalizeName(m[1]!);
   let task = m[2]!.trim();
   let threshold: number | undefined;
+  let condition: AlertCondition | undefined;
+
+  const below = task.match(/\s+(?:when\s+it\s+)?(?:drops?\s+)?(?:below|under|<)\s+\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s*$/i);
+  const above = task.match(/\s+(?:when\s+it\s+)?(?:goes?\s+|rises?\s+)?(?:above|over|hits?|reaches?|>)\s+\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s*$/i);
+  const stock = task.match(/\s+(?:when\s+(?:it'?s\s+)?)?(?:back\s+)?in\s+stock\s*$/i);
   const th = task.match(/\s+(?:when it changes\s+)?by\s+(\d+(?:\.\d+)?)\s*$/i);
-  if (th) { threshold = parseFloat(th[1]!); task = task.slice(0, th.index).trim(); }
+
+  if (below) { condition = { op: "below", operand: parseFloat(below[1]!.replace(/,/g, "")) }; task = task.slice(0, below.index).trim(); }
+  else if (above) { condition = { op: "above", operand: parseFloat(above[1]!.replace(/,/g, "")) }; task = task.slice(0, above.index).trim(); }
+  else if (stock) { condition = { op: "in_stock" }; task = task.slice(0, stock.index).trim(); }
+  else if (th) { threshold = parseFloat(th[1]!); task = task.slice(0, th.index).trim(); }
+
   if (!name || !task) return null;
-  return { name, task, threshold };
+  return threshold !== undefined ? { name, task, threshold } : condition ? { name, task, condition } : { name, task };
 }
 
 /** First number found in a string (handles $, commas: "$65,000.50" -> 65000.5). null if none. */
@@ -114,8 +150,8 @@ export class AlertStore {
     const name = normalizeName(a.name);
     const existing = this.items.find((x) => x.chatId === chatId && x.name === name);
     if (!existing && this.items.filter((x) => x.chatId === chatId).length >= this.maxPerChat) return null;
-    if (existing) { existing.task = a.task; existing.threshold = a.threshold; this.persist(); return existing; }
-    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, created: now };
+    if (existing) { existing.task = a.task; existing.threshold = a.threshold; existing.condition = a.condition; this.persist(); return existing; }
+    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, created: now };
     this.items.push(rec);
     this.persist();
     return rec;

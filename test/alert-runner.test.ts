@@ -61,6 +61,36 @@ describe("checkAlert", () => {
     expect(big.notify).toBe(true);
   });
 
+  describe("predicate alerts (below/above/in_stock) — edge-triggered", () => {
+    const below = { op: "below" as const, operand: 50000 };
+    it("fires once when the value FIRST drops below, not while it stays below", async () => {
+      // was above -> now below: fire
+      const cross = await checkAlert(alert({ lastValue: "$52,000", condition: below }), deps("$48,000").d);
+      expect(cross.notify).toBe(true);
+      expect(cross.message).toMatch(/btc/);
+      // already below, still below: silent (no repeat spam)
+      const still = await checkAlert(alert({ lastValue: "$49,000", condition: below }), deps("$48,000").d);
+      expect(still.notify).toBe(false);
+    });
+    it("stays silent while above the threshold", async () => {
+      const r = await checkAlert(alert({ lastValue: "$52,000", condition: below }), deps("$51,000").d);
+      expect(r.notify).toBe(false);
+    });
+    it("first run already-true: fires immediately (the condition holds now — tell the user)", async () => {
+      const r = await checkAlert(alert({ condition: below }), deps("$48,000").d); // no lastValue, already below
+      expect(r.notify).toBe(true);
+    });
+    it("first run not-yet-true: silent (seeds, waits for the crossing)", async () => {
+      const r = await checkAlert(alert({ condition: below }), deps("$52,000").d);
+      expect(r.notify).toBe(false);
+    });
+    it("in_stock fires on out-of-stock -> in-stock transition", async () => {
+      const cond = { op: "in_stock" as const };
+      const r = await checkAlert(alert({ lastValue: "Sold out", condition: cond }), deps("In stock — add to cart").d);
+      expect(r.notify).toBe(true);
+    });
+  });
+
   it("an agent failure -> no notify, no spam, value left as-is", async () => {
     const { d } = deps("ignored", { runAgent: async () => { throw new Error("boom"); } });
     const r = await checkAlert(alert({ lastValue: "prev" }), d);

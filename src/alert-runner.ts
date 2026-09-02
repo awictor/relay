@@ -5,7 +5,7 @@
 
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Alert } from "./lib/alerts.js";
-import { changed } from "./lib/alerts.js";
+import { changed, conditionHolds } from "./lib/alerts.js";
 
 export interface AlertRunResult {
   notify: boolean;   // did the value change (or first run)?
@@ -41,6 +41,20 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   }
 
   const firstRun = alert.lastValue === undefined;
+
+  // Predicate alert (below/above/in_stock): edge-triggered — notify when the condition FIRST becomes
+  // true (was false/unknown last time), so "below 50k" pings once on the drop, not every check while
+  // it stays below. On first run we seed silently unless it's already true.
+  if (alert.condition) {
+    const nowHolds = conditionHolds(alert.condition, value);
+    const prevHolds = firstRun || alert.lastValue === undefined ? null : conditionHolds(alert.condition, alert.lastValue);
+    deps.setLast(alert.chatId, alert.name, value);
+    if (nowHolds === true && prevHolds !== true) {
+      return { notify: true, message: `🔔 ${alert.name}:\n${value}`, value };
+    }
+    return { notify: false, message: null, value };
+  }
+
   const didChange = firstRun ? true : changed(alert.lastValue!, value, alert.threshold);
   deps.setLast(alert.chatId, alert.name, value);
 

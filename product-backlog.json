@@ -77,7 +77,7 @@
       "title": "Absolute-threshold + back-in-stock alerts",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Alerts only do 'changed by N'; users think in 'below 50k' / 'back in stock'. Extends the most retention-driving feature.",
       "how": "Parse a comparison operator (below/above/back in stock) in the watch command; alert-runner evaluates the predicate vs extractValue/text."
     },
@@ -115,6 +115,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 8: built parameterized-recipes (audit C, high/S). recipes.ts: parseRunWithArgs (first token=name, rest=args) + applySlots ({slot} in the task filled with the arg string; every slot gets it; no-slot=unchanged). index recipeResolve now uses them so '/run track sneakers' runs a saved 'price of {item}' recipe with item=sneakers. HELP documents the {slot} form. parseRunCommand kept (back-compat). +6 tests (parseRunWithArgs name/args/none/null, applySlots fill/multi/no-slot). 613 pass, tsc clean. call-tested false (pure parse+substitute; dispatch wired, covered by existing recipe-run tests). Remaining: absolute-threshold-alerts, inbound-photo-vision."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 9: built absolute-threshold-alerts (audit C, high/S). alerts.ts: AlertCondition {op: below|above|in_stock, operand?} + conditionHolds() (below/above via extractValue, in_stock via stock-language) + parseAlertCommand parses trailing 'below/under N', 'above/over/hits N', 'back in stock'; AlertStore.add persists condition. alert-runner: predicate alerts are EDGE-triggered — notify when the condition FIRST becomes true (fires on crossing + on first-run-already-true; silent while it stays true) so 'below 50k' pings once on the drop not every check. HELP documents the forms. +tests: parse (below/above/in-stock), conditionHolds (compare/stock/ambiguous), runner edge-fire (cross/stay/first-run-both-ways/in-stock). 624 pass, tsc clean. call-tested false (pure parse+predicate, unit-tested). LAST seeded todo -> inbound-photo-vision next, then backlog dry -> audit refills."
     }
   ],
   "audits": [
