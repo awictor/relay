@@ -90,19 +90,30 @@ export function firstNumber(s: string): number | null {
  *   1. a currency-tagged amount ($65,000.50 / 65,000 USD / €1.2)
  *   2. a decimal number (prices/rates usually have one)
  *   3. the largest-magnitude number (a price dwarfs a "3pm"/"1st")
+ * PERCENTAGES are excluded from 2+3: "BTC up 2.5% at 68000" tracks 68000, not the 2.5 delta —
+ * otherwise the decimal-preference grabbed 2.5 and every "below 50000"/"above 70000" predicate
+ * fired/never-fired against a percent. A %-tagged number is only used if it's the ONLY number.
  * This is what makes a change-alert compare the real value, not the wording around it.
  */
 export function extractValue(s: string): number | null {
   const t = s.replace(/,/g, "");
-  const nums: number[] = [];
   // currency-tagged first (symbol before, or code/word after)
   const cur = [...t.matchAll(/(?:[$€£]\s?)(-?\d+(?:\.\d+)?)|(-?\d+(?:\.\d+)?)\s?(?:usd|eur|gbp|dollars?|euros?)/gi)];
   if (cur.length) return parseFloat(cur[0]![1] ?? cur[0]![2]!);
-  for (const m of t.matchAll(/-?\d+(?:\.\d+)?/g)) nums.push(parseFloat(m[0]));
-  if (!nums.length) return null;
-  const dec = nums.find((n) => !Number.isInteger(n));
+  // Collect every number, flagging those immediately followed by % (a rate/change, not the value).
+  const all: number[] = [], nonPct: number[] = [];
+  for (const m of t.matchAll(/(-?\d+(?:\.\d+)?)(\s?%)?/g)) {
+    if (!m[1]) continue;
+    const n = parseFloat(m[1]);
+    all.push(n);
+    if (!m[2]) nonPct.push(n);
+  }
+  if (!all.length) return null;
+  // Prefer real (non-percent) numbers; fall back to percents only if that's all there is.
+  const pool = nonPct.length ? nonPct : all;
+  const dec = pool.find((n) => !Number.isInteger(n));
   if (dec !== undefined) return dec;
-  return nums.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a));
+  return pool.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a));
 }
 
 /**

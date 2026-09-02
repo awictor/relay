@@ -73,6 +73,14 @@ describe("extractValue (salient value, not first number)", () => {
   it("null when there's no number", () => {
     expect(extractValue("out of stock")).toBeNull();
   });
+  it("ignores a percentage change and tracks the price (extractvalue-percentage-guard)", () => {
+    expect(extractValue("BTC up 2.5% at 68000")).toBe(68000);
+    expect(extractValue("Down 1.2% to 48,500 today")).toBe(48500);
+    expect(extractValue("gained 3% — now $71,200")).toBe(71200); // currency still wins outright
+  });
+  it("still uses a percent when it's the only number", () => {
+    expect(extractValue("interest rate is 4.5%")).toBe(4.5);
+  });
 });
 
 describe("changed", () => {

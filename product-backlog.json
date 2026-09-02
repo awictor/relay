@@ -167,7 +167,7 @@
       "title": "Stop extractValue tracking a % / rating over the price",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "extractValue prefers the first decimal, so 'BTC up 2.5% at 68000' tracks 2.5 -> 'below 50000' always fires, 'above 70000' never. Breaks predicate alerts.",
       "how": "Prefer a currency-tagged or largest-magnitude number over a %/small decimal; ignore numbers immediately followed by % when a bigger bare number exists."
     },
@@ -229,6 +229,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 19: built extractvalue-percentage-guard (audit 4 B, high/M). extractValue's decimal-preference grabbed the % delta in 'BTC up 2.5% at 68000' (returned 2.5), so 'below 50000' always fired + 'above 70000' never did — predicate alerts silently broken. Now every number is scanned WITH a trailing-% flag; non-percent numbers are preferred for the decimal/largest-magnitude pick, and a percent is used only when it's the sole number ('interest rate 4.5%'). Currency-tag still wins outright. +2 tests (ignores-% tracks price incl currency-wins, %-only fallback). 656 pass, tsc clean. call-tested false (pure extraction, unit-tested). Remaining: memory-on-error -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 18: built alert-check-on-define (audit 4 B, high/S). 'watch btc below 50000' previously first checked at the 09:00 cadence -> up to ~24h silence even when already true; user thinks it's broken. Added alertRunNow dep on the handler; after a successful alertDefine + confirmation, run one check now via index's existing alertCheck helper (same path the scheduler uses) and relay its message if the baseline/predicate fires. Wrapped in try/catch so a flaky first check never breaks the define confirm. checkAlert already handles first-run baseline (change-alerts) + predicate-already-true (edge-triggered). +3 handler tests (relays-when-holds, silent-sends-only-confirm, throwing-check-safe). 654 pass, tsc clean. call-tested false (handler wiring over the live-proven checkAlert path). Remaining: extractvalue-percentage-guard, memory-on-error."
