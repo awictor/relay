@@ -761,7 +761,7 @@
       "title": "Auto-dismiss cookie/consent overlays before reading",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "scrape/read grab innerText ~600ms after load; on most news/EU pages the only thing there is the consent modal, so 'summarize this article <link>' summarizes the cookie banner (audit 20 A#2). No overlay handling exists in anvil.ts.",
       "how": "Before reading, best-effort click common consent selectors (Accept/Agree/OK buttons, #onetrust-accept..., [aria-label*=accept]) or evaluate-remove fixed full-screen overlays; then read. Bounded + swallow errors. anvil.ts scrape/readCurrent."
     },
@@ -823,6 +823,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 80: built cookie-consent-dismiss (audit 20 A#2, high/M). scrape read innerText ~600ms after load; on most news/EU pages that's just the consent modal, so 'summarize this article' summarized the cookie banner. New anvil.dismissConsent(sessionId): evaluate in-page — click a common Accept/Agree/OK/Got-it control (button text regex + known ids/attrs like #onetrust-accept-btn-handler, [aria-label*=accept]), else remove fixed/sticky full-viewport overlays; never throws. scrape now navigates -> 600ms settle -> dismissConsent -> 200ms re-settle -> read. 808 pass, tsc clean. LIVE-VERIFIED vs real anvil: theguardian.com scrape returned 17KB of real article text ('Trump's bullying of Canada...'), NO cookie banner at the top (bannerish-top:false). call-tested TRUE. Remaining: failed-watch-receipts -> then backlog dry -> audit refills. (Unit-testing skipped: pure in-browser evaluate, live-verified instead.)"
     },
     {
       "event": "PRODUCT-LOOP iter 79: built empty-read-escalation (audit 20 A#4, high/S). scrape/readCurrent had no empty-content check (only extract had an all-null fallback), so a login wall / JS-only shell / blocked page returned ~0 chars + the agent answered from nothing (hallucinated / weak) with no signal. New formatPageForModel(title,url,content): if non-whitespace content <200 chars, returns '[The page at <url> came back nearly empty (<n> chars) — likely needs a login, is JS-only, or blocked me. Don't answer from this; try a screenshot / different source / web_search, tell the user if you can't read it.]'; else the normal TITLE + truncateForModel body. Both the scrape + read tool branches use it. +5 tests (formatPageForModel empty/normal; agent near-empty-scrape flags-not-answers; bumped 2 short mock contents that now would trip the threshold). 808 pass, tsc clean. call-tested false (pure formatter + tool wiring, unit-tested). Remaining: cookie-consent-dismiss, failed-watch-receipts."

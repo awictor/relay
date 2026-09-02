@@ -169,6 +169,37 @@ export async function readCurrent(sessionId: string): Promise<{ content: string;
   };
 }
 
+/**
+ * Best-effort dismiss cookie/consent/GDPR interstitials before reading (cookie-consent-dismiss).
+ * On most news/EU pages the only thing in innerText ~600ms after load is the consent modal, so a
+ * plain scrape would "summarize" the banner. Clicks a common Accept/Agree/OK control (matched by
+ * button text + a few known ids/attrs), else removes fixed full-screen overlays. Runs in the page
+ * via evaluate; never throws (swallows any error) so a normal page is unaffected.
+ */
+export async function dismissConsent(sessionId: string): Promise<void> {
+  const script = `(() => {
+    const wants = /^(accept all|accept|agree|i agree|got it|allow all|ok|continue|yes, i agree|accept cookies)$/i;
+    const btns = Array.from(document.querySelectorAll('button, a[role=button], [role=button], input[type=button], input[type=submit]'));
+    for (const b of btns) {
+      const t = (b.innerText || b.textContent || b.value || '').trim();
+      if (wants.test(t)) { try { b.click(); return 'clicked'; } catch (e) {} }
+    }
+    for (const sel of ['#onetrust-accept-btn-handler','[aria-label*="accept" i]','[data-testid*="accept" i]','.cookie-accept','#accept-cookies']) {
+      const el = document.querySelector(sel); if (el) { try { el.click(); return 'clicked-sel'; } catch (e) {} }
+    }
+    // Fallback: strip fixed full-viewport overlays that would otherwise BE the innerText.
+    let removed = 0;
+    for (const el of Array.from(document.querySelectorAll('body *'))) {
+      const s = getComputedStyle(el);
+      if ((s.position === 'fixed' || s.position === 'sticky') && el.offsetHeight > window.innerHeight * 0.5 && el.offsetWidth > window.innerWidth * 0.5) {
+        el.remove(); removed++;
+      }
+    }
+    return 'removed:' + removed;
+  })()`;
+  try { await action(sessionId, "/v1/actions/evaluate", { script }); } catch { /* best-effort */ }
+}
+
 // ---- cookies (m29): let the agent act on a page the user is entitled to ----
 // A cookie for anvil's /v1/cookies (puppeteer CookieParam shape). `domain` is required so a cookie
 // is HOST-SCOPED — we never inject a cookie whose domain doesn't match the target host, so one
@@ -358,8 +389,11 @@ export async function scrape(
   const session = await createSession();
   try {
     await navigate(session.id, url, "domcontentloaded");
-    // brief settle for client-rendered content, then read the DOM text
+    // brief settle for client-rendered content, dismiss any cookie/consent overlay (so we read the
+    // article not the banner), a short re-settle, then read the DOM text.
     await new Promise((r) => setTimeout(r, 600));
+    await dismissConsent(session.id);
+    await new Promise((r) => setTimeout(r, 200));
     return await readCurrent(session.id);
   } finally {
     await releaseSession(session.id);
