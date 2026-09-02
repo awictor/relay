@@ -22,6 +22,22 @@ describe("handleCommand", () => {
     expect(handleCommand("")).toBeNull();
   });
 
+  it("greets a new user's bare greeting / capability question with the intro (greeting-onboarding)", () => {
+    expect(handleCommand("hi")).toMatch(/I'm Relay/);
+    expect(handleCommand("Hey!")).toMatch(/I'm Relay/);
+    expect(handleCommand("hello there")).toMatch(/I'm Relay/);
+    expect(handleCommand("what can you do?")).toMatch(/I'm Relay/);
+    expect(handleCommand("what do you do")).toMatch(/I'm Relay/);
+    expect(handleCommand("get started")).toMatch(/I'm Relay/);
+  });
+
+  it("does NOT hijack a real task that merely starts like a greeting/question", () => {
+    expect(handleCommand("hi, book me a table at Nobu tonight")).toBeNull(); // too long + real task
+    expect(handleCommand("say hi to Sam on the forum")).toBeNull();
+    expect(handleCommand("what can you tell me about the new iPhone")).toBeNull();
+    expect(handleCommand("how do I reset my router")).toBeNull();
+  });
+
   // DEV-0043/0044: /help must advertise EVERY user-facing capability, or a shipped tool is hidden
   // from users (screenshot/pdf were missing). Guard sync: a new tool without a HELP line fails here.
   it("/help mentions every user-facing capability keyword", () => {

@@ -194,7 +194,7 @@
       "title": "Greet + show intro on 'hi'/'what can you do', not just /start",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Onboarding fires only on the literal /start command a new user doesn't know; 'hi'/'hey'/'what can you do?' get run as a browser task -> wasted first message, user bounces (audit 5 A#1).",
       "how": "Detect a bare greeting / capability question in the handler (before the agent) and reply with the /start intro. Keep it tight so it doesn't swallow real tasks."
     },
@@ -265,6 +265,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 22: built greeting-onboarding (audit 5 A#1, high/S). Onboarding fired only on the literal /start command a new user doesn't know; 'hi'/'hey'/'what can you do?' got run as a browser task = wasted first message. handleCommand now returns the /start intro for a WHOLE-message bare greeting (GREETING_RE, incl 'hello there'/'get started') or capability question (CAPABILITY_RE, 'what can you do'), guarded to <=6 words + anchored so a real task ('say hi to Sam on the forum', 'what can you tell me about X', 'how do I reset my router', 'hi, book me a table...') still falls through to the agent. No handler change needed — handleCommand already short-circuits before the agent. +2 tests (greets bare greeting/capability; does NOT hijack lookalike tasks). 660 pass, tsc clean. call-tested false (pure string match, unit-tested). Remaining: predicate-refire-guard, conversational-edit-automations."
     },
     {
       "event": "PRODUCT-LOOP iter 21: built alert-baseline-ratchet (audit 5 B#1, high/S, real bug). checkAlert's change/threshold path called setLast on EVERY check, so a 'watch btc by 1000' baseline chased the newest value and a cumulative move made in sub-threshold steps (65000->65600->66200) never fired — the core threshold promise silently broken. Now the baseline advances ONLY when the alert notifies (or first run), so drift is measured against the last value the user actually saw. Predicate + degraded + first-run paths unchanged. Updated the 'unchanged refreshes lastValue' test (it pinned the bug) + added a cumulative-drift test. 658 pass, tsc clean. call-tested false (pure runner logic, unit-tested). Remaining: greeting-onboarding, predicate-refire-guard, conversational-edit-automations."

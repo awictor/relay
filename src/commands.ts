@@ -44,12 +44,23 @@ Start over anytime: /reset clears our conversation history.
 
 Just text me the task in plain English.`;
 
-/** Returns a canned reply for /start or /help, else null (not a command). */
+// A bare greeting or "what can you do" — a new user's natural first message. Onboarding used to
+// fire ONLY on the literal /start command (which they don't know to type), so "hi" / "what can you
+// do?" got run as a browser task and wasted the highest-leverage first message. Match only when the
+// WHOLE message is a greeting/capability question (anchored + short) so a real task like "say hi to
+// Sam on the forum" or "what can you tell me about X" still falls through to the agent.
+const GREETING_RE = /^(?:hi|hey|hello|yo|hiya|heya|sup|howdy|gm|good morning|good evening|start|get started|help me)(?:\s+(?:there|relay|bot))?[!.?]*$/i;
+const CAPABILITY_RE = /^(?:what|who|how)\s+(?:can|do|are|is)\s+(?:you|u|this|relay)(?:\s+(?:can\s+)?do)?[\s\w]*\??$/i;
+
+/** Returns a canned reply for /start, /help, or a bare greeting/capability question; else null. */
 export function handleCommand(text: string): string | null {
   const t = text.trim().toLowerCase();
   // Telegram commands can carry a bot suffix, e.g. /help@relaybot
   const cmd = t.split(/\s+/)[0]?.split("@")[0];
   if (cmd === "/start") return START;
   if (cmd === "/help") return HELP;
+  // Greet a new user who opened with "hi" / "what can you do?" instead of the /start they don't know.
+  // Keep it short (<= 6 words) so a longer sentence that merely starts with "how do you" is a real task.
+  if (t.split(/\s+/).length <= 6 && (GREETING_RE.test(t) || CAPABILITY_RE.test(t))) return START;
   return null;
 }
