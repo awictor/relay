@@ -329,6 +329,28 @@ describe("createHandler", () => {
     expect(sent[0]!.text).not.toMatch(/want me to save/i);
   });
 
+  it("'save that as <name>' captures the prior task as a recipe (save-that-as)", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    mem.set(5, [{ role: "user", content: "check the price of bitcoin" }, { role: "assistant", content: "$65k" }]);
+    const saved: Array<{ name: string; task: string }> = [];
+    const { handle, sent } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      recipeSaveNamed: (_c, name, task) => { saved.push({ name, task }); return { ok: true, name }; },
+    });
+    await handle(msg("save that as btc", 5));
+    expect(saved).toEqual([{ name: "btc", task: "check the price of bitcoin" }]);
+    expect(sent[0]!.text).toMatch(/Saved recipe "btc" from your last task/);
+  });
+
+  it("'save that as <name>' with nothing to save says so, no crash", async () => {
+    const { handle, sent } = harness({
+      memoryGet: () => [],
+      recipeSaveNamed: () => ({ ok: true, name: "x" }),
+    });
+    await handle(msg("save that as x", 5));
+    expect(sent[0]!.text).toMatch(/Nothing recent to save/i);
+  });
+
   it("passes the profile context into the agent run", async () => {
     let gotContext: string | undefined;
     const { handle } = harness({

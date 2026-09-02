@@ -36,6 +36,16 @@ export function parseRecipeCommand(text: string): ParsedRecipe | null {
   return null;
 }
 
+/** Recognize "save (that|this|the last one) as <name>" -> the recipe name, for capturing the task the
+ * user JUST ran without retyping it (the caller supplies the task from the prior turn). Returns the
+ * normalized name, or null if it isn't this form. Distinct from parseRecipeCommand's "save <name>: <task>". */
+export function parseSaveThatAs(text: string): string | null {
+  const m = text.trim().match(/^\s*save\s+(?:that|this|the\s+last(?:\s+one)?|it)\s+as\s+(.+)$/i);
+  if (!m) return null;
+  const name = normalizeName(m[1]!);
+  return name || null;
+}
+
 /** Recognize a run command: "/run [recipe] <name>" or "run [recipe] <name>". The optional
  * "recipe" keyword (DEV-0130: explicit recipe intent so a same-named digest can't shadow it) is
  * stripped from BOTH the slash and natural forms. Returns the name or null. */

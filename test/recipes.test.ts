@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, applySlots, hasSlots, RecipeStore } from "../src/lib/recipes.js";
+import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, parseSaveThatAs, applySlots, hasSlots, RecipeStore } from "../src/lib/recipes.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -20,6 +20,20 @@ describe("parseRunWithArgs (parameterized recipes)", () => {
   });
   it("null for a non-run message", () => {
     expect(parseRunWithArgs("what's the weather")).toBeNull();
+  });
+});
+
+describe("parseSaveThatAs (save-that-as)", () => {
+  it("captures the name from 'save that/this/it/the last one as <name>'", () => {
+    expect(parseSaveThatAs("save that as morning-btc")).toBe("morning-btc");
+    expect(parseSaveThatAs("save this as weather")).toBe("weather");
+    expect(parseSaveThatAs("save it as hn")).toBe("hn");
+    expect(parseSaveThatAs("save the last one as report")).toBe("report");
+  });
+  it("returns null for the colon form + non-save messages", () => {
+    expect(parseSaveThatAs("save btc: check the price")).toBeNull(); // that's parseRecipeCommand's job
+    expect(parseSaveThatAs("what's the weather")).toBeNull();
+    expect(parseSaveThatAs("save that")).toBeNull(); // no name
   });
 });
 

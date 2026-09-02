@@ -12,6 +12,7 @@ import { friendlyError } from "./lib/failure.js";
 import { splitScheduleCommand } from "./lib/schedule.js";
 import { repeatedTaskNudge } from "./lib/task-suggest.js";
 import { formatUtcOffset } from "./lib/profile.js";
+import { parseSaveThatAs } from "./lib/recipes.js";
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -63,6 +64,9 @@ export interface HandlerDeps {
   // "save <name>: <task>" message (null if it isn't one); recipeResolve returns a saved task by
   // name (null if unknown); recipeList/recipeForget manage them.
   recipeSave?: (chatId: number, text: string) => { ok: true; name: string } | { ok: false; reason: "unparsed" | "capped" };
+  // "save that as <name>" (product-loop): save a name + an explicit task (the prior turn's task,
+  // resolved by the handler from memory) without the user retyping it. Optional.
+  recipeSaveNamed?: (chatId: number, name: string, task: string) => { ok: true; name: string } | { ok: false; reason: "capped" };
   // parses a run command + looks up. { missingArg } = a slotted recipe was run with no value, so the
   // handler asks for it instead of running a broken (empty-slot) task (product-loop).
   recipeResolve?: (chatId: number, text: string) => { name: string; task: string } | { name: string; missingArg: true } | null;
@@ -442,6 +446,24 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         if (r?.ok) { await deps.sendMessage(msg.chatId, `Scheduled "${name}" (${r.kind}). Manage with /schedules.`); return; }
         const why = r?.reason === "unknown" ? "No recipe or digest by that name." : r?.reason === "capped" ? "You've hit the scheduled-task limit — /cancel one first." : r?.reason === "needsarg" ? `"${name}" has a fill-in value ({...}), so it can't run on a schedule with a fixed value. Save a version without the {slot} to schedule it.` : "I couldn't parse that time. Try \"schedule <name> every morning\".";
         await deps.sendMessage(msg.chatId, why); return;
+      }
+    }
+
+    // "save that as <name>" -> capture the task the user JUST ran as a recipe, without retyping it
+    // after a colon (product-loop). Resolve the most recent real USER task from memory (skip command-
+    // shaped / media-placeholder turns); if there's nothing to save, say so instead of saving junk.
+    if (deps.recipeSaveNamed) {
+      const staName = parseSaveThatAs(msg.text);
+      if (staName) {
+        const hist = deps.memoryGet(msg.chatId);
+        const prior = [...hist].reverse().find((m) => m.role === "user" && typeof m.content === "string"
+          && !/^\s*(save|\/|run\b|watch\b|alert\b|change\b|remind|every\b|schedule\b|digest\b)/i.test(m.content as string)
+          && !/^\[(photo|document)\]/.test(m.content as string));
+        if (!prior) { await deps.sendMessage(msg.chatId, "Nothing recent to save — run a task first, then \"save that as <name>\"."); return; }
+        const r = deps.recipeSaveNamed(msg.chatId, staName, (prior.content as string).trim());
+        if (r.ok) { await deps.sendMessage(msg.chatId, `Saved recipe "${r.name}" from your last task. Run it anytime with /run ${r.name}.`); return; }
+        await deps.sendMessage(msg.chatId, "You've hit the recipe limit — /forget one first.");
+        return;
       }
     }
 

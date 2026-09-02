@@ -216,6 +216,12 @@ const handle = createHandler({
     if (!rec) return { ok: false, reason: "capped" };
     return { ok: true, name: rec.name };
   },
+  // "save that as <name>" (product-loop): store a name + the handler-supplied prior task.
+  recipeSaveNamed: (chatId, name, task) => {
+    const rec = recipes.add(chatId, { name, task }, Date.now());
+    if (!rec) return { ok: false, reason: "capped" };
+    return { ok: true, name: rec.name };
+  },
   recipeResolve: (chatId, text) => {
     // Parse name + args so a recipe with {slots} runs with the user's values (product-loop).
     const parsed = parseRunWithArgs(text);

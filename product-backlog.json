@@ -464,7 +464,7 @@
       "title": "\"save that as <name>\" captures the task you just ran",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Starting a recipe forces retyping the whole task after a colon; after a good one-off the natural move is 'save that as morning-btc' referencing the prior turn. recipes.ts has a half-built UNWIRED 'save this as X' hook; auto-suggest-save still makes them retype (audit 12 C#2).",
       "how": "Parse 'save (that|this) as <name>' -> take the last USER task turn from memory as the recipe task; wire the existing recipes hook. Reject if the prior turn was itself a command/empty."
     }
@@ -517,6 +517,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 52: built save-that-as (audit 12 C#2, medium/S). Starting a recipe forced retyping the whole task after a colon; after a good one-off the natural move is 'save that as morning-btc' referencing the prior turn. New parseSaveThatAs ('save that/this/it/the last one as <name>'); handler resolves the most recent REAL user task from memory (skips command-shaped + [photo]/[document] turns), calls new recipeSaveNamed dep (index -> recipes.add) with the prior task; 'Saved recipe X from your last task'. Nothing to save -> 'run a task first' (no junk saved). HELP updated. +8 tests (parseSaveThatAs 4 forms + 3 non-forms, handler capture + nothing-to-save). 747 pass, tsc clean. call-tested false (parser + handler-memory wiring, unit-tested). Backlog DRY -> ran 13th audit (same iteration)."
     },
     {
       "event": "PRODUCT-LOOP iter 51: built alert-delta-in-ping (audit 12 C#1, high/S). A change/threshold alert fired '🔔 btc changed: $67,000' — the user saw the new value but not what it moved FROM or which way, so they had to go check to understand it. checkAlert already holds the prior baseline at notify time; on a real change where BOTH prev + new are numeric it now appends '(was $65,000 → now $67,000; ↑2000)' (integer delta when both ints, else 2dp; ↑/↓ direction). Non-numeric changes + first-run stay plain. +4 tests (up move was->now+↑delta, down ↓, non-numeric plain, first-run plain). 743 pass, tsc clean. call-tested false (pure runner logic, unit-tested). Remaining: save-that-as -> then backlog dry -> audit refills."

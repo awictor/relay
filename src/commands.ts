@@ -30,7 +30,7 @@ Limits: I won't log in as you, pay, buy, or do anything destructive. If a task n
 
 Schedule me: "remind me to X in 10 min", "every morning tell me Y", "every Monday at 9am ...", "every weekday at 8 ...", or "every 2 hours ..." — I'll text you when it's time. /schedules lists them, /cancel <id> (or /cancel all) removes them.
 
-Save recipes: "save <name>: <task>" stores a task you can re-run with /run <name>. /recipes lists them, /forget <name> removes one. Use a {slot} for a reusable recipe — "save track: price of {item}" then "/run track sneakers".
+Save recipes: "save <name>: <task>" stores a task you can re-run with /run <name>, or just "save that as <name>" right after I answer to keep the last task. /recipes lists them, /forget <name> removes one. Use a {slot} for a reusable recipe — "save track: price of {item}" then "/run track sneakers".
 
 Bundle into a briefing: "define digest morning: weather, hn, btc" then /run morning (or schedule morning every morning) for one combined message. /digests lists them, /forget-digest <name> removes one.
 
