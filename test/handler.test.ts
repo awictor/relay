@@ -3,6 +3,10 @@ import { createHandler, type HandlerDeps } from "../src/handler.js";
 import type { InboundMessage } from "../src/telegram.js";
 import type { LLMMessage } from "../src/llm.js";
 import { formatReply } from "../src/lib/format-reply.js";
+import { NotesStore, parseRemember, parseForgetFact } from "../src/lib/notes.js";
+import { mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 // Build a handler with fakes; capture what got sent / recorded / persisted.
 function harness(over: Partial<HandlerDeps> = {}) {
@@ -777,5 +781,52 @@ describe("createHandler", () => {
     expect(h[1]!.content).toMatch(/that attempt failed/i);
     expect(h[2]).toEqual({ role: "user", content: "works" });
     expect(h[3]).toEqual({ role: "assistant", content: "ok:works" });
+  });
+});
+
+describe("long-term memory (remember-facts-store)", () => {
+  function notesHarness() {
+    const notes = new NotesStore({ file: join(mkdtempSync(join(tmpdir(), "relay-h-notes-")), "n.json") });
+    let ctxSeen: string | undefined;
+    const h = harness({
+      rememberFact: (chatId, text) => { const f = parseRemember(text); if (!f) return null; notes.add(chatId, f, 0); return f; },
+      forgetFact: (chatId, text) => {
+        const p = parseForgetFact(text);
+        if (!p) return null;
+        return "all" in p ? { removed: notes.clear(chatId), all: true } : { removed: notes.forget(chatId, p.term), all: false };
+      },
+      notesList: (chatId) => notes.list(chatId).map((n) => n.text),
+      profileContext: (chatId) => notes.contextLine(chatId),
+      runAgentFn: async (_t, deps) => { ctxSeen = (deps as { context?: string }).context; return { reply: "ok", steps: 1, tools: [] }; },
+    });
+    return { ...h, notes, ctx: () => ctxSeen };
+  }
+
+  it("'remember X' stores a fact and a later answer gets it as agent context", async () => {
+    const { handle, sent, notes, ctx } = notesHarness();
+    await handle(msg("remember I'm vegetarian", 5));
+    expect(sent[0]!.text).toMatch(/I'll remember that I'm vegetarian/);
+    expect(notes.list(5).map((n) => n.text)).toEqual(["I'm vegetarian"]);
+    await handle(msg("suggest a dinner", 5));
+    expect(ctx()).toMatch(/asked me to remember: I'm vegetarian/);
+  });
+
+  it("'what do you know about me' recites the stored facts, no agent run", async () => {
+    const { handle, sent, recorded } = notesHarness();
+    await handle(msg("remember I park in section G", 5));
+    await handle(msg("what do you know about me", 5));
+    expect(sent[1]!.text).toMatch(/I park in section G/);
+    expect(recorded).toHaveLength(0); // never hit the agent
+  });
+
+  it("'forget that X' deletes a matching fact; 'remember to X' falls through (not a fact)", async () => {
+    const { handle, sent, notes } = notesHarness();
+    await handle(msg("remember I'm vegetarian", 5));
+    await handle(msg("forget that I'm vegetarian", 5));
+    expect(sent[1]!.text).toMatch(/Forgot 1 thing/);
+    expect(notes.list(5)).toHaveLength(0);
+    // "remember to call mom" is a to-do, not a fact — parseRemember returns null so it reaches the agent.
+    await handle(msg("remember to call mom", 5));
+    expect(notes.list(5)).toHaveLength(0); // not stored as a fact
   });
 });

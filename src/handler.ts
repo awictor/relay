@@ -13,6 +13,7 @@ import { friendlyError } from "./lib/failure.js";
 import { splitScheduleCommand } from "./lib/schedule.js";
 import { repeatedTaskNudge, recurringCta } from "./lib/task-suggest.js";
 import { formatUtcOffset } from "./lib/profile.js";
+import { isRecallRequest } from "./lib/notes.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat } from "./lib/recipes.js";
 
 export interface HandlerDeps {
@@ -47,6 +48,14 @@ export interface HandlerDeps {
   // visible, not silently wrong on every weather/reminder. profileClear forgets it. Both optional.
   profileView?: (chatId: number) => string | null; // human-readable summary, or null if nothing set
   profileClear?: (chatId: number) => boolean;       // true if there was a profile to clear
+  // Long-term memory (remember-facts-store): rememberFact parses + stores a "remember X" message
+  // (returns the stored fact, or null if it isn't one); forgetFact deletes matching facts (returns a
+  // count, or a "cleared all" total); notesList returns the remembered facts for a "what do you know
+  // about me" recall. profileContext already carries facts into the agent via the wired contextLine.
+  // All optional so older wiring/tests are unaffected.
+  rememberFact?: (chatId: number, text: string) => string | null;
+  forgetFact?: (chatId: number, text: string) => { removed: number; all: boolean } | null;
+  notesList?: (chatId: number) => string[];
   // Auto-suggest saving a repeated ask as a recipe (product-loop). When true, a reply to a task that
   // closely matches an earlier one this chat asked gets a one-line "want me to save this?" nudge.
   suggestSaves?: boolean;
@@ -317,6 +326,31 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         await deps.sendMessage(msg.chatId, `Got it — I'll use ${set.location}${u} for "weather", "near me", and the like.${tz}`);
         return;
       }
+    }
+
+    // Long-term memory (remember-facts-store). "what do you know about me" -> recite the stored facts;
+    // "forget that X" / "forget everything you know" -> delete; "remember X" -> store a durable fact.
+    // All detected before the scheduler + agent so a fact isn't run as a web task. "remember TO X" and
+    // a "remember X at 5pm" fall through (parseRemember returns null) to the reminder/scheduler path.
+    if (deps.notesList && isRecallRequest(msg.text)) {
+      const facts = deps.notesList(msg.chatId);
+      await deps.sendMessage(msg.chatId, facts.length
+        ? `Here's what I remember:\n${facts.map((f) => `• ${f}`).join("\n")}\n\nForget one with "forget that <fact>", or all with "forget everything you know".`
+        : "I don't have anything saved about you yet. Tell me with \"remember ...\" (e.g. \"remember I'm vegetarian\").");
+      return;
+    }
+    if (deps.forgetFact) {
+      const r = deps.forgetFact(msg.chatId, msg.text);
+      if (r) {
+        await deps.sendMessage(msg.chatId, r.all
+          ? (r.removed ? `Done — cleared all ${r.removed} thing${r.removed === 1 ? "" : "s"} I remembered about you.` : "I didn't have anything saved to forget.")
+          : (r.removed ? `Forgot ${r.removed} thing${r.removed === 1 ? "" : "s"}.` : "I couldn't find anything matching that to forget — try \"what do you know about me\"."));
+        return;
+      }
+    }
+    if (deps.rememberFact) {
+      const fact = deps.rememberFact(msg.chatId, msg.text);
+      if (fact) { await deps.sendMessage(msg.chatId, `Got it — I'll remember that ${fact}.`); return; }
     }
 
     // /schedules: list this chat's pending scheduled tasks. No agent run.

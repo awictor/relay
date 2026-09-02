@@ -30,6 +30,7 @@ import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand, parseAlertEdit } from "./lib/alerts.js";
 import { ProfileStore, parseSetLocation } from "./lib/profile.js";
+import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { checkAlert } from "./alert-runner.js";
 import { parseScheduleFor } from "./lib/schedule.js";
 
@@ -96,6 +97,7 @@ const recipes = new RecipeStore({ file: paths.recipes });
 const digests = new DigestStore({ file: paths.digests });
 const alerts = new AlertStore({ file: paths.alerts });
 const profiles = new ProfileStore({ file: paths.profile });
+const notes = new NotesStore({ file: paths.notes });
 // Run a digest -> composed briefing text (member recipes -> one message). Shared by /run + schedule.
 const digestRunText = (chatId: number, name: string): Promise<string | null> => {
   const d = digests.get(chatId, name);
@@ -177,12 +179,23 @@ const handle = createHandler({
     const rec = profiles.set(chatId, p);
     return { location: rec.location!, units: rec.units, tzOffsetMin: rec.tzOffsetMin };
   },
-  profileContext: (chatId) => profiles.contextLine(chatId),
+  // Agent context = profile (location/units/tz) + remembered facts (remember-facts-store), so every
+  // answer is filtered through both without the user re-stating them.
+  profileContext: (chatId) => [profiles.contextLine(chatId), notes.contextLine(chatId)].filter(Boolean).join("; "),
   chatTzOffsetMin: (chatId) => profiles.offsetMin(chatId) ?? tzOffsetMin(), // for the agent's current-datetime line
 
   // /profile view + clear (product-loop): echo the stored profile so a wrong city/tz is visible.
   profileView: (chatId) => { const l = profiles.contextLine(chatId); return l ? l.charAt(0).toUpperCase() + l.slice(1) : null; },
   profileClear: (chatId) => profiles.clear(chatId),
+  // Long-term memory (remember-facts-store): parse+store "remember X", forget matching facts, list them.
+  rememberFact: (chatId, text) => { const f = parseRemember(text); if (!f) return null; notes.add(chatId, f, Date.now()); return f; },
+  forgetFact: (chatId, text) => {
+    const p = parseForgetFact(text);
+    if (!p) return null;
+    if ("all" in p) return { removed: notes.clear(chatId), all: true };
+    return { removed: notes.forget(chatId, p.term), all: false };
+  },
+  notesList: (chatId) => notes.list(chatId).map((n) => n.text),
   suggestSaves: true, // offer to save a repeated ask as a recipe (product-loop retention nudge)
   lastResultStore, // shared with the schedule runner so drilldown works on proactive pings too
   // Inbound photo (product-loop): download the Telegram file, ask the LLM to answer about it. Needs

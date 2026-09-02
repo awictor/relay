@@ -815,7 +815,7 @@
       "title": "no durable remember-this fact store",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "\"remember my wife birthday is June 3\" has nowhere to live — chat memory is a short rolling window wiped by /reset; agent acknowledges then forgets.",
       "how": "Per-chat key-value note store (save/list/forget) injected into agent context like the location profile already is."
     },
@@ -1094,6 +1094,10 @@
     {
       "id": "proactive-clobbers-drilldown-cache",
       "note": "Split the shared last-result cache into a pageable ANSWER slot (full/sent) and a separate PING slot. A proactive digest/alert firing between an answer and a \"more\" no longer clobbers the answer paging offset (was set sent=text.length), so \"more\" recovers the dropped tail instead of saying \"that is the whole answer\". Links + follow-up context read the newer ping; more pages answer then ping. 815 tests green."
+    },
+    {
+      "id": "remember-facts-store",
+      "note": "Added durable long-term memory: \"remember I am vegetarian\" / \"remember my wife birthday is June 3\" stores a per-chat fact (NotesStore mirrors ProfileStore, atomic JSON, 30-fact cap, dedupe). Facts inject into every agent run via the combined profileContext line. \"what do you know about me\" recites them (no agent run); \"forget that X\" fuzzy-deletes; \"forget everything you know\" clears. \"remember TO X\" still falls through to the scheduler. Help text + RELAY_NOTES_FILE documented. 833 tests green."
     }
   ],
   "audits": [

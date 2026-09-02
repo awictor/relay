@@ -1,0 +1,121 @@
+// Per-user long-term memory (remember-facts-store): a user tells Relay a durable fact once
+// ("remember my wife's birthday is June 3", "remember I'm vegetarian") and every future answer is
+// filtered through it. Chat history is a short rolling window wiped by /reset — this is the persistent
+// key-value note store, keyed by chatId, injected into the agent's context like the profile line.
+// Small atomic + corrupt-safe JSON store (safe-store), free-infra. Mirrors ProfileStore.
+import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
+
+export interface Note {
+  text: string;    // the remembered fact, verbatim-ish (prefix stripped, trimmed)
+  created: number;  // epoch ms, for stable ordering + "forget the oldest" if ever capped
+}
+interface ChatNotes { chatId: number; notes: Note[] }
+
+// A remembered fact is capped per chat so the injected context can't grow unbounded (and blow the
+// model's context / cost). Oldest-first drop when over.
+const MAX_NOTES_PER_CHAT = 30;
+const MAX_NOTE_LEN = 300;
+
+/** Parse a "remember X" command -> the fact to store, or null if it isn't one.
+ *   "remember my wife's birthday is June 3"   "remember that I'm vegetarian"
+ *   "note that I park in section G"           "/remember the wifi code is swordfish"
+ * NOT a reminder ("remember to call mom" / "remind me to X") — that's a scheduled task, handled
+ * elsewhere; a trailing time clause also disqualifies it so it reaches the scheduler instead. */
+export function parseRemember(text: string): string | null {
+  const m = text.trim().match(/^\s*(?:\/remember|remember|note)\s+(?:that\s+)?(.+)$/i);
+  if (!m) return null;
+  let fact = m[1]!.trim();
+  // "remember to X" is a to-do, not a fact — let it fall through to the scheduler / reminder path.
+  if (/^to\s+/i.test(fact)) return null;
+  // Trim trailing sentence punctuation, then surrounding quotes (order matters: `"…".` leaves a `"`
+  // if quotes are stripped before the period).
+  fact = fact.replace(/[.;]\s*$/, "").replace(/^["']|["']$/g, "").replace(/[.;]\s*$/, "").trim().slice(0, MAX_NOTE_LEN);
+  return fact || null;
+}
+
+/** Parse a "forget X" fact-recall command -> a match term, or a "clear all" sentinel, or null.
+ *   "forget that I'm vegetarian"  -> "i'm vegetarian"   (fuzzy delete by substring)
+ *   "forget what you know" / "forget everything you know about me" -> { all: true }
+ * Scoped to FACT-forget phrasings so it doesn't collide with /forget <recipe-name>. */
+export function parseForgetFact(text: string): { term: string } | { all: true } | null {
+  const t = text.trim();
+  if (/^\s*forget\s+(?:everything|all|what)\b.*\byou\s+know\b/i.test(t) || /^\s*forget\s+(?:everything|all)\s+about\s+me\b/i.test(t)) {
+    return { all: true };
+  }
+  const m = t.match(/^\s*forget\s+(?:that\s+|the\s+fact\s+that\s+)(.+)$/i);
+  if (!m) return null;
+  const term = m[1]!.trim().replace(/^["']|["']$/g, "").replace(/[.;?]\s*$/, "").trim();
+  return term ? { term } : null;
+}
+
+/** True if the WHOLE message asks what Relay remembers ("what do you know about me", "what do you
+ * remember"). Lets the handler answer from the store directly, no agent run. */
+export function isRecallRequest(text: string): boolean {
+  return /^\s*what\s+(?:do\s+you\s+(?:know|remember)|have\s+i\s+told\s+you)\b.*\??\s*$/i.test(text.trim());
+}
+
+export class NotesStore {
+  private file: string;
+  private items: ChatNotes[] = [];
+  constructor(opts: { file: string }) { this.file = opts.file; this.load(); }
+
+  private load(): void {
+    const obj = readJsonSafe<{ items?: ChatNotes[] }>(this.file);
+    if (obj && Array.isArray(obj.items)) {
+      this.items = obj.items.filter((c) => c && typeof c.chatId === "number" && Array.isArray(c.notes));
+    }
+  }
+  private persist(): void { atomicWriteJson(this.file, { v: 1, items: this.items }); }
+
+  private forChat(chatId: number): ChatNotes {
+    let c = this.items.find((x) => x.chatId === chatId);
+    if (!c) { c = { chatId, notes: [] }; this.items.push(c); }
+    return c;
+  }
+
+  list(chatId: number): Note[] { return this.items.find((c) => c.chatId === chatId)?.notes ?? []; }
+
+  /** Add a fact. De-dupes an exact (case-insensitive) repeat. Drops the oldest when over the cap.
+   * Returns the stored note. */
+  add(chatId: number, text: string, now: number): Note {
+    const c = this.forChat(chatId);
+    const norm = text.trim().toLowerCase();
+    const existing = c.notes.find((n) => n.text.trim().toLowerCase() === norm);
+    if (existing) return existing; // already known — don't duplicate
+    const note: Note = { text: text.trim(), created: now };
+    c.notes.push(note);
+    if (c.notes.length > MAX_NOTES_PER_CHAT) c.notes.splice(0, c.notes.length - MAX_NOTES_PER_CHAT);
+    this.persist();
+    return note;
+  }
+
+  /** Delete facts matching `term` (case-insensitive substring). Returns how many were removed. */
+  forget(chatId: number, term: string): number {
+    const c = this.items.find((x) => x.chatId === chatId);
+    if (!c) return 0;
+    const needle = term.trim().toLowerCase();
+    if (!needle) return 0;
+    const before = c.notes.length;
+    c.notes = c.notes.filter((n) => !n.text.toLowerCase().includes(needle));
+    const removed = before - c.notes.length;
+    if (removed) this.persist();
+    return removed;
+  }
+
+  /** Forget every fact for a chat. Returns how many were cleared. */
+  clear(chatId: number): number {
+    const c = this.items.find((x) => x.chatId === chatId);
+    const n = c?.notes.length ?? 0;
+    if (n) { c!.notes = []; this.persist(); }
+    return n;
+  }
+
+  /** A context string for the agent injecting the remembered facts, or "" if none. */
+  contextLine(chatId: number): string {
+    const notes = this.list(chatId);
+    if (!notes.length) return "";
+    return `things the user asked me to remember: ${notes.map((n) => n.text).join("; ")}`;
+  }
+
+  size(): number { return this.items.reduce((a, c) => a + c.notes.length, 0); }
+}
