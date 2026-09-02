@@ -76,6 +76,10 @@ export interface HandlerDeps {
   // Change-alerts (m10 alert-3): "watch <name>: <task>" defines + auto-schedules a check.
   // All optional. alertDefine parses + stores + schedules (default cadence); returns the cadence.
   alertDefine?: (chatId: number, text: string, now: number) => { ok: true; name: string } | { ok: false; reason: "unparsed" | "capped" };
+  // Run one check immediately on define (product-loop): baseline + notify if the predicate already
+  // holds, instead of ~24h of silence until the first scheduled cadence check. Returns the notify
+  // message or null (silent). Optional; absent -> define just schedules as before.
+  alertRunNow?: (chatId: number, name: string) => Promise<string | null>;
   alertList?: (chatId: number) => Array<{ name: string; task: string; lastValue?: string; threshold?: number }>;
   alertForget?: (chatId: number, name: string) => boolean;
   checkRateLimit: (chatId: number) => { allowed: boolean; retryAfterSec?: number };
@@ -278,7 +282,18 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // "watch <name>: <task>" / "alert me <name>: <task>" -> define + auto-schedule a change-alert.
     if (deps.alertDefine && /^\s*(?:alert(?:\s+me)?|watch)\s+[^:]+:\s*\S/i.test(msg.text)) {
       const r = deps.alertDefine(msg.chatId, msg.text, deps.now());
-      if (r.ok) { await deps.sendMessage(msg.chatId, `Watching "${r.name}" — I'll only message you when it changes. See /alerts.`); return; }
+      if (r.ok) {
+        await deps.sendMessage(msg.chatId, `Watching "${r.name}" — I'll only message you when it changes. See /alerts.`);
+        // Run one check now so the user isn't silent until the first scheduled cadence (~24h). If the
+        // predicate already holds (e.g. "below 50000" and it's already there), tell them right away.
+        if (deps.alertRunNow) {
+          try {
+            const msgNow = await deps.alertRunNow(msg.chatId, r.name);
+            if (msgNow) await deps.sendMessage(msg.chatId, msgNow);
+          } catch { /* a flaky first check must not break the define confirmation */ }
+        }
+        return;
+      }
       if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the alert limit — /forget-alert one first."); return; }
       // unparsed: fall through
     }

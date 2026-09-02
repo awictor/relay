@@ -158,7 +158,7 @@
       "title": "Run an alert check immediately on define",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'watch btc below 50000' first checks at the default 09:00 cadence -> up to ~24h silence even if already true; user thinks it's broken.",
       "how": "After alertDefine, run checkAlert once now (baseline + notify if the predicate already holds), like the inbound /run alert path."
     },
@@ -229,6 +229,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 18: built alert-check-on-define (audit 4 B, high/S). 'watch btc below 50000' previously first checked at the 09:00 cadence -> up to ~24h silence even when already true; user thinks it's broken. Added alertRunNow dep on the handler; after a successful alertDefine + confirmation, run one check now via index's existing alertCheck helper (same path the scheduler uses) and relay its message if the baseline/predicate fires. Wrapped in try/catch so a flaky first check never breaks the define confirm. checkAlert already handles first-run baseline (change-alerts) + predicate-already-true (edge-triggered). +3 handler tests (relays-when-holds, silent-sends-only-confirm, throwing-check-safe). 654 pass, tsc clean. call-tested false (handler wiring over the live-proven checkAlert path). Remaining: extractvalue-percentage-guard, memory-on-error."
     },
     {
       "event": "PRODUCT-LOOP iter 17: built tz-from-location (audit A+B, high/M). Extends the global RELAY_TZ_OFFSET_MIN to a PER-CHAT offset so an Austin user's 'every morning 9am' fires at their 9am, not 9am UTC (3-4am). profile.ts: Profile.tzOffsetMin + parseUtcOffset (UTC-5/utc+1/GMT+5:30, ±14h clamp, -0 normalized) + parseSetLocation captures a 'UTC±N' clause anywhere in the tail without swallowing the place (e.g. '/setlocation NYC UTC-5', \"I'm in Berlin UTC+1 (metric)\"); ProfileStore.set persists it, .offsetMin(chatId) exposes it, contextLine shows 'timezone is UTC-5'. schedule.ts: Schedule+ParsedSchedule gained offsetMin; parseSchedule/parseScheduleFor take an offsetMin arg threaded into all nextDailyMs calls + stamped on the result; add() carries it; complete() reschedules dailies with the stored offset (falls back to global for pre-offset schedules). index wires profiles.offsetMin(chatId) into scheduleAdd + recipe/digest/alert schedule paths; setLocation returns tzOffsetMin; handler confirms 'I'll fire daily reminders at your local time (UTC-5)'. Fixed a pre-existing units regex that ate the 'in' in 'Berlin'. +6 tests (parseUtcOffset, parseSetLocation tz, ProfileStore offset+contextLine, parseSchedule offset-stamp, daily-reschedule-in-stored-zone). 651 pass, tsc clean. call-tested false (pure time+parse math, exhaustively unit-tested). Remaining: alert-check-on-define, extractvalue-percentage-guard, memory-on-error."

@@ -69,6 +69,27 @@ describe("handler — alert routing", () => {
     expect(calls()).toBe(0);
   });
 
+  it("runs one check on define and relays it when the predicate already holds (product-loop)", async () => {
+    const { handle, sent } = harness({ alertRunNow: async () => "🔔 btc:\n$48,000 (below 50000)" });
+    await handle(msg("watch btc: price of bitcoin below 50000"));
+    expect(sent[0]).toMatch(/Watching "btc"/); // confirmation first
+    expect(sent[1]).toMatch(/48,000/);          // immediate check second
+  });
+
+  it("silent immediate check sends only the confirmation", async () => {
+    const { handle, sent } = harness({ alertRunNow: async () => null });
+    await handle(msg("watch btc: price of bitcoin below 50000"));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatch(/Watching "btc"/);
+  });
+
+  it("a throwing immediate check never breaks the define confirmation", async () => {
+    const { handle, sent } = harness({ alertRunNow: async () => { throw new Error("flaky"); } });
+    await handle(msg("watch btc: price of bitcoin below 50000"));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatch(/Watching "btc"/);
+  });
+
   it("a normal message is unaffected", async () => {
     const { handle, calls } = harness();
     await handle(msg("what's the weather"));

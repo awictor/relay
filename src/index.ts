@@ -259,6 +259,8 @@ const handle = createHandler({
     if (sp) schedules.add(chatId, sp, now);
     return { ok: true, name: rec.name };
   },
+  // Run one check right after define (product-loop) via the same path the scheduler uses.
+  alertRunNow: (chatId, name) => alertCheck(chatId, name),
   alertList: (chatId) => alerts.list(chatId).map((a) => ({ name: a.name, task: a.task, lastValue: a.lastValue, threshold: a.threshold })),
   alertForget: (chatId, name) => alerts.remove(chatId, name),
   sendMessage,
