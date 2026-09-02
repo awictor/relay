@@ -212,9 +212,45 @@
       "title": "Edit a saved recipe/digest/alert by talking to it",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "To change a digest time or an alert threshold a user must delete + recreate; the parse layers already exist, so an edit path is cheap and grows how many automations a user keeps alive (audit 5 C#4).",
       "how": "Parse an edit intent ('change my morning digest to 7am', 'make that alert fire under 200') -> find by name -> update the stored item in place via the existing stores. Start with the highest-value field (schedule time / threshold)."
+    },
+    {
+      "id": "digest-slot-guard",
+      "title": "Skip (or flag) an unfilled {slot} recipe inside a digest",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "runDigest hands rec.task straight to runAgent with no hasSlots check (unlike /run + schedule which guard it), so a digest member like 'track price of {item}' runs the literal broken task and silently poisons the briefing the user reads as authoritative (audit 6 B#3).",
+      "how": "In digest-runner, hasSlots(member.task) -> skip it with a one-line 'skipped <name> (needs a value)' note in the composed briefing instead of running the broken task."
+    },
+    {
+      "id": "telegram-long-message-split",
+      "title": "Split long replies instead of silently truncating at 4096",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "telegram.ts sendMessage does text.slice(0,4096) with no marker, so a long digest/answer is cut mid-sentence and the user reads a partial result believing it's complete (audit 6 B#4).",
+      "how": "Chunk a >4096-char message on paragraph/line boundaries into sequential sends (Telegram max 4096), or at minimum append a visible '…(continued)'/'[truncated]' marker. Prefer real multi-message send."
+    },
+    {
+      "id": "nonnumeric-alert-drift",
+      "title": "Stop non-numeric alerts false-firing on prose drift",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "changed() falls back to raw trimmed-text inequality when neither side is numeric, so a 'watch top HN story' style alert pings 'changed' nearly every check because the agent's wording varies run-to-run even when the answer is the same -> alert spam, user tunes it out (audit 6 B#2).",
+      "how": "Normalize the compared text (lowercase, collapse whitespace/punctuation) and/or extract a salient token; only fire when the meaningful content differs, not incidental phrasing. Consider asking the LLM for a stable one-line key for the watched thing."
+    },
+    {
+      "id": "clarify-once-ambiguous",
+      "title": "Ask one clarifying question before an ambiguous first errand",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "A vague opener ('find me a good laptop', 'cheap flights to Lisbon') runs immediately against guessed sites/params, spending the highest-leverage first message on a guess the user didn't ask for (audit 6 A#3).",
+      "how": "Detect a genuinely underspecified task (missing dates/budget/target) and ask ONE targeted question before running; keep it rare so it doesn't nag on clear tasks. Likely a light heuristic + a system-prompt nudge."
     }
   ],
   "history": [
@@ -267,6 +303,12 @@
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
     },
     {
+      "event": "PRODUCT-LOOP iter 25: backlog dry after iter 24 -> ran 6th audit (3 lenses), seeded 4, built digest-slot-guard (audit 6 B#3, high/S, real bug). runDigest handed rec.task straight to runAgent with no hasSlots check (unlike /run + schedule which guard it), so a digest member like 'track price of {item}' ran the literal broken task + silently poisoned the composed briefing the user reads as authoritative. Now hasSlots(rec.task) -> skip with '• <name>: (skipped — needs a value; can't run in a digest)'; the broken task never reaches the agent or output. +1 test (slotted skipped + never run, non-slotted still runs, no {item} leak). 668 pass, tsc clean. call-tested false (pure runner guard, unit-tested). Seeded also: telegram-long-message-split(S), nonnumeric-alert-drift(M), clarify-once-ambiguous(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 24: built conversational-edit-automations (audit 5 C#4, high/S). Users had to delete+recreate an alert to retune its trigger. New parseAlertEdit ('change btc to below 45000', 'make ps5 fire under 200', 'update sneakers to back in stock', 'set btc to by 500') reuses the below/above/in-stock/by grammar; verb-anchored + requires a trigger clause so 'change my flight to Tuesday' still goes to the agent. AlertStore.updateTrigger retunes in place, preserving task + lastValue and clearing the mutually-exclusive other trigger. Handler alertEdit branch runs BEFORE define (edit != new watch), confirms 'Updated btc — now alerts below 45000', says so on unknown name. index wires parseAlertEdit->updateTrigger with a summary; HELP documents it. +6 tests (parseAlertEdit 5 forms + 3 non-edits, updateTrigger preserve/clear/unknown, 3 handler: retune/unknown/not-hijacked). 667 pass, tsc clean. call-tested false (pure parse+store+handler wiring, unit-tested). Scope: alerts only (highest-value trigger edit); digest-time + recipe-task edits deferred. Backlog DRY -> ran 6th audit (same iteration)."
+    },
+    {
       "event": "PRODUCT-LOOP iter 23: built predicate-refire-guard (audit 5 B#5, high/S, real bug). A real-but-numberless reply ('price temporarily unavailable') isn't degraded, so it was stored as lastValue; the next successful check then saw prevHolds=null and the edge test re-fired 'below 50k' though the value never left the below state -> spurious double-ping trains users to ignore the alert. checkAlert's predicate path now returns early when conditionHolds(new)===null: no setLast, no notify, last GOOD value kept as baseline (mirrors the degraded guard). +1 test (numberless keeps baseline + no re-fire on the next real check). 661 pass, tsc clean. call-tested false (pure runner logic, unit-tested). Remaining: conversational-edit-automations -> then backlog dry -> audit refills."
     },
     {
@@ -297,6 +339,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 6 (post-24-features). A/new-user: local/maps errands (README promises 'sushi near me' but no places tool), video/podcast transcript summarize (scrape gets JS shell), clarify-once-before-ambiguous, fetch-and-forward an existing file (pdf tool re-renders viewer), cross-turn browse session continuity. B/reliability: extractValue-wrong-number-for-non-currency(temp/AQI), non-numeric-alert-drift-false-fires(prose !==), digest-runs-unfilled-slot(no hasSlots guard), telegram-4096-silent-truncate, DST-drift-on-fixed-offset. C/power: 2FA/OTP/CAPTCHA relay, outbound voice calls(Instinct parity, L), personal autofill vault, push-to-calendar/sheets, persistent tracked datasets w/ trends. Seeded top 4 by impact/effort: digest-slot-guard(S bug), telegram-long-message-split(S bug), nonnumeric-alert-drift(M), clarify-once-ambiguous(S). Deferred: maps/video tools(M), 2FA-relay + autofill-vault + push-to-tools(M/L power bets), DST (fixed-offset acceptable near-term), extractValue-non-currency (overlaps nonnumeric-drift)."
     },
     {
       "note": "Audit 5 (post-19-features). A/new-user: greeting-onboarding(hi/what-can-you-do != /start), dev-flavored-help-examples, confirm-to-submit for benign forms, drive-to-confirm-screen for buy/book, package/order-status surfacing. B/reliability: alert-baseline-ratchet(setLast every check kills 'by N' cumulative moves), memory-clobber-on-concurrent-messages, DANGEROUS_ACTION_RE matches TYPED text (over-refuses 'search for this book'), once-reminder-dropped-at-hourly-cap, predicate-refire-after-numberless-check. C/power: trigger->action chains(alert fires recipe), inline-keyboard one-tap actions, multi-step booking w/ confirm gate, conversational-edit-automations, share-to-group. Seeded top 4 by impact/effort: alert-baseline-ratchet, greeting-onboarding, predicate-refire-guard, conversational-edit-automations (all high/S). Deferred bigger C items (inline-keyboards, trigger-chains, booking-confirm) + the safety-refusal rework as M/L for later."

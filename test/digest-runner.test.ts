@@ -30,6 +30,20 @@ describe("runDigest", () => {
     expect(out).toContain("• gone: (no such recipe anymore)");
   });
 
+  it("a slotted member is skipped with a clear note, never run (digest-slot-guard)", async () => {
+    let ran = false;
+    const out = await runDigest(digest(["weather", "track"]), deps({
+      resolveRecipe: (_c: number, name: string) =>
+        name === "weather" ? { task: "get the weather" } : name === "track" ? { task: "price of {item}" } : null,
+      runAgent: async (task: string) => { ran = true; return { reply: `RESULT[${task}]` }; },
+    }));
+    expect(out).toContain("• weather: RESULT[get the weather]");
+    expect(out).toMatch(/• track: \(skipped — needs a value/);
+    expect(out).not.toContain("{item}"); // the broken task never reached the agent/output
+    // the non-slotted member still ran (ran flips true for weather), but track never did
+    expect(ran).toBe(true);
+  });
+
   it("a failed member run becomes a fallback line, others still run", async () => {
     let n = 0;
     const out = await runDigest(digest(["weather", "hn"]), deps({

@@ -7,6 +7,7 @@
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Digest } from "./lib/digests.js";
 import { mapPool } from "./lib/pool.js";
+import { hasSlots } from "./lib/recipes.js";
 
 // Cap on how many member agents run at once (DEV-0140). Each member opens an anvil browser session;
 // the self-hosted anvil has a bounded Chrome pool, so an unbounded fan-out (DEV-0139's Promise.all)
@@ -40,6 +41,11 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
   const sections = await mapPool(members, DIGEST_CONCURRENCY, async (name) => {
     const rec = deps.resolveRecipe(digest.chatId, name);
     if (!rec) return `• ${name}: (no such recipe anymore)`;
+    // A slotted recipe ("track price of {item}") has no per-fire value inside a digest, so running
+    // it would hand the literal "{item}" to the agent and silently poison the briefing with an
+    // off-topic/garbage section (the /run + schedule paths already refuse this). Skip it with a clear
+    // note instead so the composed briefing stays trustworthy.
+    if (hasSlots(rec.task)) return `• ${name}: (skipped — needs a value; can't run in a digest)`;
     try {
       const res = await deps.runAgent(rec.task, { llm: deps.llm, context: deps.contextFor?.(digest.chatId) || undefined }, []);
       // A degraded reply (agent ran out of steps / produced no answer, DEV-0176) is NOT briefing

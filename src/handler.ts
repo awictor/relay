@@ -80,6 +80,10 @@ export interface HandlerDeps {
   // holds, instead of ~24h of silence until the first scheduled cadence check. Returns the notify
   // message or null (silent). Optional; absent -> define just schedules as before.
   alertRunNow?: (chatId: number, name: string) => Promise<string | null>;
+  // Conversationally retune an existing alert's trigger (product-loop): "change btc to below 45000".
+  // Returns {ok:true,name,summary} on success, or a reason. Optional; absent -> edit falls through.
+  alertEdit?: (chatId: number, text: string) =>
+    { ok: true; name: string; summary: string } | { ok: false; reason: "unparsed" | "unknown" };
   alertList?: (chatId: number) => Array<{ name: string; task: string; lastValue?: string; threshold?: number }>;
   alertForget?: (chatId: number, name: string) => boolean;
   checkRateLimit: (chatId: number) => { allowed: boolean; retryAfterSec?: number };
@@ -277,6 +281,16 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       const removed = deps.alertForget(msg.chatId, name);
       await deps.sendMessage(msg.chatId, removed ? `Stopped watching "${name}".` : "No alert by that name — see /alerts.");
       return;
+    }
+
+    // "change <name> to below 45000" / "make <name> fire under 200" -> retune an existing alert's
+    // trigger in place (conversational edit), before define so an edit isn't mistaken for a new watch.
+    // Only fires when a trigger clause is present, so "change my flight" still goes to the agent.
+    if (deps.alertEdit && /^\s*(?:change|update|edit|set|make)\s+.+\s(?:below|under|above|over|hits?|reaches?|in\s+stock|by)\b/i.test(msg.text)) {
+      const r = deps.alertEdit(msg.chatId, msg.text);
+      if (r.ok) { await deps.sendMessage(msg.chatId, `Updated "${r.name}" — ${r.summary}.`); return; }
+      if (r.reason === "unknown") { await deps.sendMessage(msg.chatId, "I don't have an alert by that name — see /alerts."); return; }
+      // unparsed: fall through to define / agent
     }
 
     // "watch <name>: <task>" / "alert me <name>: <task>" -> define + auto-schedule a change-alert.

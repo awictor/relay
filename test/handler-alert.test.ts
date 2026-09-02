@@ -90,6 +90,32 @@ describe("handler — alert routing", () => {
     expect(sent[0]).toMatch(/Watching "btc"/);
   });
 
+  it("'change <name> to below N' retunes an existing alert, no agent (conversational-edit)", async () => {
+    const edited: string[] = [];
+    const { handle, sent, calls } = harness({
+      alertEdit: (_c, text) => { edited.push(text); return { ok: true, name: "btc", summary: "now alerts below 45000" }; },
+    });
+    await handle(msg("change btc to below 45000"));
+    expect(edited).toHaveLength(1);
+    expect(sent[0]).toMatch(/Updated "btc".*below 45000/);
+    expect(calls()).toBe(0);
+  });
+
+  it("editing an unknown alert says so, no agent", async () => {
+    const { handle, sent, calls } = harness({ alertEdit: () => ({ ok: false, reason: "unknown" }) });
+    await handle(msg("make ferrari fire under 200"));
+    expect(sent[0]).toMatch(/don't have an alert by that name/i);
+    expect(calls()).toBe(0);
+  });
+
+  it("an edit-shaped message with no trigger clause is NOT hijacked (goes to agent)", async () => {
+    let edited = false;
+    const { handle, calls } = harness({ alertEdit: () => { edited = true; return { ok: false, reason: "unparsed" }; } });
+    await handle(msg("change my flight to Tuesday"));
+    expect(edited).toBe(false); // regex guard never invoked alertEdit
+    expect(calls()).toBe(1);
+  });
+
   it("a normal message is unaffected", async () => {
     const { handle, calls } = harness();
     await handle(msg("what's the weather"));

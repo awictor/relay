@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseAlertCommand, changed, firstNumber, extractValue, conditionHolds, AlertStore } from "../src/lib/alerts.js";
+import { parseAlertCommand, parseAlertEdit, changed, firstNumber, extractValue, conditionHolds, AlertStore } from "../src/lib/alerts.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -126,5 +126,31 @@ describe("AlertStore", () => {
     a.add(7, { name: "x", task: "t" }, NOW);
     a.setLast(7, "x", "v1");
     expect(new AlertStore({ file }).get(7, "x")!.lastValue).toBe("v1");
+  });
+  it("updateTrigger retunes in place, preserving task + lastValue, clearing the other trigger", () => {
+    const s = new AlertStore({ file: tmpFile() });
+    s.add(1, { name: "btc", task: "price of bitcoin", threshold: 1000 }, NOW);
+    s.setLast(1, "btc", "$65k");
+    const r = s.updateTrigger(1, "btc", { condition: { op: "below", operand: 45000 } })!;
+    expect(r.condition).toEqual({ op: "below", operand: 45000 });
+    expect(r.threshold).toBeUndefined();       // mutually exclusive -> cleared
+    expect(r.task).toBe("price of bitcoin");   // task preserved
+    expect(r.lastValue).toBe("$65k");          // baseline preserved
+    expect(s.updateTrigger(1, "nope", { threshold: 5 })).toBeNull(); // unknown name
+  });
+});
+
+describe("parseAlertEdit (conversational retune, product-loop)", () => {
+  it("parses below/above/in-stock/by edits", () => {
+    expect(parseAlertEdit("change btc to below 45000")).toEqual({ name: "btc", condition: { op: "below", operand: 45000 } });
+    expect(parseAlertEdit("make btc fire above 70000")).toEqual({ name: "btc", condition: { op: "above", operand: 70000 } });
+    expect(parseAlertEdit("update sneakers to back in stock")).toEqual({ name: "sneakers", condition: { op: "in_stock" } });
+    expect(parseAlertEdit("set btc to by 500")).toEqual({ name: "btc", threshold: 500 });
+    expect(parseAlertEdit("change btc under $200")).toEqual({ name: "btc", condition: { op: "below", operand: 200 } });
+  });
+  it("returns null for a non-edit / clauseless message", () => {
+    expect(parseAlertEdit("change my flight to Tuesday")).toBeNull(); // no trigger clause
+    expect(parseAlertEdit("what's the price of btc")).toBeNull();
+    expect(parseAlertEdit("watch btc: price of bitcoin below 50000")).toBeNull(); // a define, not an edit
   });
 });

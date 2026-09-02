@@ -77,6 +77,35 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
   return threshold !== undefined ? { name, task, threshold } : condition ? { name, task, condition } : { name, task };
 }
 
+/**
+ * Parse a conversational EDIT of an existing alert's trigger (product-loop). Returns
+ * {name, threshold?|condition?} or null. Lets a user retune an alert by talking instead of
+ * delete+recreate:
+ *   "change btc to below 45000"   "make btc fire under 200"   "set btc above 70000"
+ *   "update btc to back in stock"  "change btc to by 500"
+ * Only the trigger changes; the task + lastValue are preserved by the store. The trailing clause
+ * reuses the same below/above/in-stock/by grammar as parseAlertCommand.
+ */
+export function parseAlertEdit(text: string): { name: string; threshold?: number; condition?: AlertCondition } | null {
+  // "<verb> <name> [to|fire|so it fires] <clause>". Verb-anchored so it can't swallow a define.
+  const m = text.trim().match(/^\s*(?:change|update|edit|set|make)\s+(?:alert\s+)?(.+?)\s+(?:to\s+|fire\s+|so\s+it\s+fires?\s+)?((?:when\s+|drops?\s+|goes?\s+|rises?\s+|back\s+)?(?:below|under|<|above|over|hits?|reaches?|>|in\s+stock|by)\b.*)$/i);
+  if (!m) return null;
+  const name = normalizeName(m[1]!);
+  const clause = " " + m[2]!.trim();
+  if (!name) return null;
+
+  const below = clause.match(/\s+(?:when\s+it\s+)?(?:drops?\s+)?(?:below|under|<)\s+\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s*$/i);
+  const above = clause.match(/\s+(?:when\s+it\s+)?(?:goes?\s+|rises?\s+)?(?:above|over|hits?|reaches?|>)\s+\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s*$/i);
+  const stock = clause.match(/\s+(?:when\s+(?:it'?s\s+)?)?(?:back\s+)?in\s+stock\s*$/i);
+  const th = clause.match(/\s+by\s+(\d+(?:\.\d+)?)\s*$/i);
+
+  if (below) return { name, condition: { op: "below", operand: parseFloat(below[1]!.replace(/,/g, "")) } };
+  if (above) return { name, condition: { op: "above", operand: parseFloat(above[1]!.replace(/,/g, "")) } };
+  if (stock) return { name, condition: { op: "in_stock" } };
+  if (th) return { name, threshold: parseFloat(th[1]!) };
+  return null;
+}
+
 /** First number found in a string (handles $, commas: "$65,000.50" -> 65000.5). null if none. */
 export function firstNumber(s: string): number | null {
   const m = s.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
@@ -175,6 +204,18 @@ export class AlertStore {
 
   list(chatId: number): Alert[] {
     return this.items.filter((a) => a.chatId === chatId).sort((x, y) => x.name.localeCompare(y.name));
+  }
+
+  /** Retune an existing alert's trigger in place (conversational edit), preserving task + lastValue.
+   * A threshold and a condition are mutually exclusive, so setting one clears the other. Returns the
+   * updated record, or null if no alert by that name. */
+  updateTrigger(chatId: number, name: string, patch: { threshold?: number; condition?: AlertCondition }): Alert | null {
+    const a = this.get(chatId, name);
+    if (!a) return null;
+    if (patch.condition !== undefined) { a.condition = patch.condition; a.threshold = undefined; }
+    else if (patch.threshold !== undefined) { a.threshold = patch.threshold; a.condition = undefined; }
+    this.persist();
+    return a;
   }
 
   /** Record the latest observed value (after a check). */

@@ -26,7 +26,7 @@ import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots } from "./lib/recipes.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
-import { AlertStore, parseAlertCommand } from "./lib/alerts.js";
+import { AlertStore, parseAlertCommand, parseAlertEdit } from "./lib/alerts.js";
 import { ProfileStore, parseSetLocation } from "./lib/profile.js";
 import { checkAlert } from "./alert-runner.js";
 import { parseScheduleFor } from "./lib/schedule.js";
@@ -261,6 +261,17 @@ const handle = createHandler({
   },
   // Run one check right after define (product-loop) via the same path the scheduler uses.
   alertRunNow: (chatId, name) => alertCheck(chatId, name),
+  // Conversationally retune an existing alert's trigger (product-loop): parse -> update in place.
+  alertEdit: (chatId, text) => {
+    const e = parseAlertEdit(text);
+    if (!e) return { ok: false, reason: "unparsed" };
+    const rec = alerts.updateTrigger(chatId, e.name, { threshold: e.threshold, condition: e.condition });
+    if (!rec) return { ok: false, reason: "unknown" };
+    const summary = rec.condition
+      ? rec.condition.op === "in_stock" ? "back in stock" : `${rec.condition.op} ${rec.condition.operand}`
+      : `on any change of ${rec.threshold}`;
+    return { ok: true, name: rec.name, summary: `now alerts ${summary}` };
+  },
   alertList: (chatId) => alerts.list(chatId).map((a) => ({ name: a.name, task: a.task, lastValue: a.lastValue, threshold: a.threshold })),
   alertForget: (chatId, name) => alerts.remove(chatId, name),
   sendMessage,
