@@ -563,7 +563,7 @@
       "title": "Route a natural message to a matching saved recipe",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Saved recipes are write-only: /run needs the EXACT name a phone user never remembers, so the save flywheel dies at reuse. auto-suggest-save matches inbound vs history to CREATE; nothing matches inbound vs the recipe STORE to REUSE (audit 15 C#1).",
       "how": "Reuse the task-suggest tokenizer/overlap against recipes[].task; on a high-overlap inbound (not already a command), offer 'Run your saved \"<name>\"? (yes)' or run it. Conservative threshold so it doesn't hijack."
     }
@@ -616,6 +616,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 62: built recipe-auto-recall (audit 15 C#1, medium/S). Saved recipes were write-only — /run needs the EXACT name a phone user never remembers, so the save flywheel died at reuse. New matchRecipe(text, recipes) reuses the task-suggest tokenizer/Jaccard-overlap (>=0.6, >=2 tokens) to find a strongly-matching saved recipe; the handler OFFERS it ('That looks like your saved \"btc\" — run it with /run btc, or ignore and I'll do it fresh') and stops, never auto-running (a surprise re-run is worse than a fresh answer). index recipeMatch skips command-shaped messages so it can't double-handle. +5 tests (matchRecipe match/null/empty, handler offer + no-match-normal-run). 762 pass, tsc clean. call-tested false (pure match + handler wiring, unit-tested). Backlog DRY -> ran 16th audit (same iteration)."
     },
     {
       "event": "PRODUCT-LOOP iter 61: built recipe-schedule-stable-marker (audit 15 B#2, medium/M, real bug). Scheduled recipes stored the recipe's raw TASK STRING as the schedule marker (unlike digest:/alert:), so editing the recipe after scheduling left the schedule running the STALE task + recipeForget's removeByTask(new task) matched nothing -> orphaned zombie schedule the user couldn't stop. Now recipeSchedule stores a stable 'recipe:<name>' marker; the runner resolves the recipe's CURRENT task by name at fire time via a new recipeResolveTask dep (deleted recipe -> stop firing, no send; header shows the human task not the marker); recipeForget removeByTask('recipe:<name>'). +2 runner tests (resolves current task + hides marker; deleted recipe stops). 757 pass, tsc clean. LIVE-VERIFIED vs real Recipe+ScheduleStore: marker 'recipe:btc' stable; edit recipe -> fire resolves new task; forget -> schedule cleared. call-tested TRUE. Remaining: recipe-auto-recall -> then backlog dry -> audit refills."

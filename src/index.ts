@@ -25,6 +25,7 @@ import { ScheduleStore, parseSchedule, tzOffsetMin } from "./lib/schedule.js";
 import { formatWhen } from "./lib/format-when.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots } from "./lib/recipes.js";
+import { matchRecipe } from "./lib/task-suggest.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand, parseAlertEdit } from "./lib/alerts.js";
@@ -236,6 +237,12 @@ const handle = createHandler({
     return { name: rec.name, task: applySlots(rec.task, parsed.args) };
   },
   recipeList: (chatId) => recipes.list(chatId).map((r) => ({ name: r.name, task: r.task, schedule: r.schedule })),
+  // recipe-auto-recall: offer a saved recipe when a free-text message strongly matches its task. Skip
+  // command-shaped messages (a /run|save|watch... already routes elsewhere) so we never double-handle.
+  recipeMatch: (chatId, text) => {
+    if (/^\s*(?:\/|run\b|save\b|watch\b|alert\b|change\b|remind|every\b|schedule\b|digest\b)/i.test(text)) return null;
+    return matchRecipe(text, recipes.list(chatId).map((r) => ({ name: r.name, task: r.task })));
+  },
   recipeForget: (chatId, name) => {
     // Cancel the scheduled "recipe:<name>" marker too, else the runner keeps firing after the recipe
     // is gone (orphaned-schedule-on-forget). A stable marker (not the raw task) means this matches

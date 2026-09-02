@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { repeatedTaskNudge, SAVE_NUDGE_MARKER } from "../src/lib/task-suggest.js";
+import { repeatedTaskNudge, matchRecipe, SAVE_NUDGE_MARKER } from "../src/lib/task-suggest.js";
 import type { LLMMessage } from "../src/llm.js";
 
 const turn = (role: "user" | "assistant", content: string): LLMMessage => ({ role, content } as LLMMessage);
@@ -35,5 +35,20 @@ describe("repeatedTaskNudge (auto-suggest-save)", () => {
     const history = [turn("user", "what's the bitcoin price"), turn("assistant", "$65k")];
     // salient tokens both sides = {bitcoin, price}; overlap 1.0 -> nudge (stopwords 'whats'/'please' dropped)
     expect(repeatedTaskNudge("the bitcoin price please", history)).toMatch(/save it/i);
+  });
+});
+
+describe("matchRecipe (recipe-auto-recall)", () => {
+  const recipes = [{ name: "btc", task: "check the price of bitcoin" }, { name: "hn", task: "top hacker news story" }];
+  it("matches a free-text message to a strongly-overlapping saved recipe", () => {
+    expect(matchRecipe("check bitcoin price", recipes)).toEqual({ name: "btc" });
+    expect(matchRecipe("top hacker news story right now", recipes)).toEqual({ name: "hn" });
+  });
+  it("returns null when nothing overlaps enough (conservative)", () => {
+    expect(matchRecipe("weather in Paris tomorrow", recipes)).toBeNull();
+    expect(matchRecipe("bitcoin", recipes)).toBeNull(); // 1 token -> too weak
+  });
+  it("returns null for an empty recipe set", () => {
+    expect(matchRecipe("check bitcoin price", [])).toBeNull();
   });
 });

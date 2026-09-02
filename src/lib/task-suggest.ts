@@ -49,3 +49,20 @@ export function repeatedTaskNudge(current: string, history: LLMMessage[]): strin
   }
   return null;
 }
+
+/**
+ * Match a free-text inbound message against saved recipes so a user can REUSE one without recalling
+ * the exact /run name (recipe-auto-recall). Returns the best recipe {name} whose task strongly
+ * overlaps the message, or null. Conservative — high threshold (0.7) + >=2 salient tokens — so a
+ * normal task isn't hijacked into a stored recipe. Ties broken by first (stable). Exported for tests.
+ */
+export function matchRecipe(text: string, recipes: Array<{ name: string; task: string }>): { name: string } | null {
+  const cur = tokens(text);
+  if (cur.size < 2) return null;
+  let best: { name: string; score: number } | null = null;
+  for (const r of recipes) {
+    const score = overlap(cur, tokens(r.task));
+    if (score >= 0.6 && (!best || score > best.score)) best = { name: r.name, score };
+  }
+  return best ? { name: best.name } : null;
+}

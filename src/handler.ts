@@ -71,6 +71,9 @@ export interface HandlerDeps {
   // handler asks for it instead of running a broken (empty-slot) task (product-loop).
   recipeResolve?: (chatId: number, text: string) => { name: string; task: string } | { name: string; missingArg: true } | null;
   recipeList?: (chatId: number) => Array<{ name: string; task: string; schedule?: string }>;
+  // recipe-auto-recall (product-loop): a free-text message strongly matching a saved recipe -> the
+  // matching recipe name (else null), so the handler offers "/run <name>" instead of a cold agent run.
+  recipeMatch?: (chatId: number, text: string) => { name: string } | null;
   recipeForget?: (chatId: number, name: string) => boolean;
   // Schedule a saved recipe to run on a cadence (m7 recipe-3): "schedule <name> every morning".
   // Resolves the recipe's task + registers it with the scheduler. Optional.
@@ -528,6 +531,15 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // Slash commands reply instantly — no rate-limit/agent.
     const cmd = deps.handleCommand(msg.text);
     if (cmd) { await deps.sendMessage(msg.chatId, cmd); return; }
+
+    // Recipe auto-recall (product-loop): a saved recipe is otherwise write-only — /run needs the exact
+    // name a phone user never remembers. If this free-text message strongly matches a saved recipe,
+    // offer to run it by name (don't auto-run — a surprise re-run would be worse than a fresh answer).
+    // Only when the message ISN'T already a command shape (recipeMatch returns null for those).
+    if (deps.recipeMatch) {
+      const m = deps.recipeMatch(msg.chatId, msg.text);
+      if (m) { await deps.sendMessage(msg.chatId, `That looks like your saved "${m.name}" — run it with /run ${m.name}, or ignore this and I'll do it fresh.`); return; }
+    }
 
     const rl = deps.checkRateLimit(msg.chatId);
     if (!rl.allowed) {

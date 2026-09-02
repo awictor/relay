@@ -404,6 +404,27 @@ describe("createHandler", () => {
     expect(h[2]).toEqual({ role: "user", content: "second" });
   });
 
+  it("offers a matching saved recipe instead of a cold agent run (recipe-auto-recall)", async () => {
+    let agentCalled = false;
+    const { handle, sent } = harness({
+      recipeMatch: (_c, t) => (/bitcoin/i.test(t) ? { name: "btc" } : null),
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("check bitcoin price"));
+    expect(sent[0]!.text).toMatch(/saved "btc".*\/run btc/);
+    expect(agentCalled).toBe(false); // offered, didn't cold-run
+  });
+
+  it("no recipe match -> normal agent run", async () => {
+    let agentCalled = false;
+    const { handle } = harness({
+      recipeMatch: () => null,
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("weather in Paris"));
+    expect(agentCalled).toBe(true);
+  });
+
   it("passes the profile context into the agent run", async () => {
     let gotContext: string | undefined;
     const { handle } = harness({
