@@ -22,6 +22,15 @@ describe("handleCommand", () => {
     expect(handleCommand("")).toBeNull();
   });
 
+  it("bare 'help'/'menu'/'commands'/'?' (no slash) returns the help text (command-intent-recovery)", () => {
+    expect(handleCommand("help")).toMatch(/what I can do/);
+    expect(handleCommand("menu")).toMatch(/what I can do/);
+    expect(handleCommand("commands")).toMatch(/what I can do/);
+    expect(handleCommand("?")).toMatch(/what I can do/);
+    expect(handleCommand("/menu")).toMatch(/what I can do/);
+    expect(handleCommand("help me plan a trip")).toBeNull(); // real task, not a help request
+  });
+
   it("greets a new user's bare greeting / capability question with the intro (greeting-onboarding)", () => {
     expect(handleCommand("hi")).toMatch(/I'm Relay/);
     expect(handleCommand("Hey!")).toMatch(/I'm Relay/);

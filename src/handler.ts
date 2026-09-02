@@ -227,10 +227,31 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
 
     // /reset (alias /clear): wipe THIS chat's memory. Needs chatId, so it's handled here rather
     // than in the pure handleCommand. Short-circuits before rate-limit/agent, like other commands.
-    const first = msg.text.trim().toLowerCase().split(/\s+/)[0]?.split("@")[0];
+    let first = msg.text.trim().toLowerCase().split(/\s+/)[0]?.split("@")[0];
     // DEV-0108: tally slash-command usage (a separate metrics axis; commands still short-circuit
     // before the agent below). Any leading /token counts — /help, /start, /reset, /forget-digest, etc.
     if (first && first.startsWith("/")) deps.recordCommand?.(first);
+    // Command-intent recovery: a "/"-prefixed message that ISN'T a known command would otherwise be
+    // excluded by the schedule matcher's "/"-guard + fall to a cold agent run — so "/remind me at 7am"
+    // silently never schedules. If it's a bare mistyped command (one /token, no args) suggest the
+    // nearest real one; otherwise strip the stray slash so the rest routes normally ("/remind me ..."
+    // -> "remind me ..." reaches the schedule matcher; "/weather Paris" -> the agent as plain text).
+    const KNOWN_COMMANDS = new Set(["/start", "/help", "/menu", "/commands", "/reset", "/clear", "/status", "/sites", "/profile", "/setlocation", "/schedules", "/cancel", "/recipes", "/run", "/forget", "/forget-recipe", "/forget-alert", "/digests", "/forget-digest", "/alerts"]);
+    if (first && first.startsWith("/") && !KNOWN_COMMANDS.has(first)) {
+      const afterCmd = msg.text.trim().slice(first.length).trim(); // args after the /token
+      if (!afterCmd) {
+        // Bare unknown command -> suggest the closest known one (prefix match), else point to /help.
+        const bare = first.slice(1);
+        const near = [...KNOWN_COMMANDS].find((c) => c.slice(1).startsWith(bare) || bare.startsWith(c.slice(1)));
+        await deps.sendMessage(msg.chatId, near ? `Did you mean ${near}? Send /help for the full list.` : "Not a command — send /help for what I can do.");
+        return;
+      }
+      // Has args -> drop just the leading "/" + re-route the whole message as normal text
+      // ("/remind me to X" -> "remind me to X" reaches the schedule matcher).
+      const stripped = msg.text.trim().replace(/^\//, "");
+      msg = { ...msg, text: stripped };
+      first = stripped.toLowerCase().split(/\s+/)[0]?.split("@")[0]; // recompute so downstream routing sees the stripped text
+    }
     if (first === "/reset" || first === "/clear") {
       const had = deps.memoryClear(msg.chatId);
       await deps.sendMessage(msg.chatId, had ? "Cleared our conversation — starting fresh." : "Nothing to clear — we've got no history yet.");

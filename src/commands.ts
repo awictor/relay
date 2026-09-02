@@ -75,7 +75,10 @@ export function handleCommand(text: string): string | null {
   // Telegram commands can carry a bot suffix, e.g. /help@relaybot
   const cmd = t.split(/\s+/)[0]?.split("@")[0];
   if (cmd === "/start") return START;
-  if (cmd === "/help") return HELP;
+  if (cmd === "/help" || cmd === "/menu" || cmd === "/commands") return HELP;
+  // Bare "help" / "menu" / "commands" / "?" (no slash) — a new user asking for the list without
+  // knowing the slash syntax. Whole-message only so "help me plan X" (a real task) still runs.
+  if (/^(?:help|menu|commands|\?+)$/i.test(t)) return HELP;
   // Greet a new user who opened with "hi" / "what can you do?" instead of the /start they don't know.
   // Keep it short (<= 6 words) so a longer sentence that merely starts with "how do you" is a real task.
   if (t.split(/\s+/).length <= 6 && (GREETING_RE.test(t) || CAPABILITY_RE.test(t))) return START;

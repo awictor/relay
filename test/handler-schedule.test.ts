@@ -148,6 +148,21 @@ describe("handler — schedule routing", () => {
     expect(added).toHaveLength(0); // the cadence-word name did NOT get scheduled
   });
 
+  it("'/remind me ... in 10 min' (stray slash) still reaches scheduleAdd (command-intent-recovery)", async () => {
+    const added: Array<{ text: string }> = [];
+    const { handle } = harness({ scheduleAdd: (_c, text) => { added.push({ text }); return { ok: true, kind: "once", task: "stretch", whenMs: 0 }; } });
+    await handle(msg("/remind me to stretch in 10 min"));
+    expect(added).toHaveLength(1);
+    expect(added[0]!.text).toBe("remind me to stretch in 10 min"); // slash stripped, routed as NL
+  });
+
+  it("a bare unknown command suggests the nearest real one, no agent", async () => {
+    const { handle, sent, calls } = harness();
+    await handle(msg("/schedule"));
+    expect(sent[0]).toMatch(/did you mean \/schedules/i);
+    expect(calls()).toBe(0);
+  });
+
   it("a bare 'at 5' (no am/pm, no colon) does NOT trigger the scheduler", async () => {
     const added: string[] = [];
     const { handle, calls } = harness({ scheduleAdd: (_c, t) => { added.push(t); return { ok: true, kind: "once", task: t, whenMs: 0 }; } });

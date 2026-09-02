@@ -617,7 +617,7 @@
       "title": "Route slashed-NL + typo'd commands instead of a cold agent run",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'/remind me to stretch at 7am' is SKIPPED by the schedule matcher (it excludes any '/'-prefixed msg) -> silently never scheduled; bare 'help'/'menu'/'commands'/'?' + near-miss '/schedule'/'/weather'/'/list' hit no branch -> wasted cold agent turn. Users habitually guess '/' + command names in the first minutes (audit 17 A#1).",
       "how": "Before the agent: a bare 'help|menu|commands|?' -> HELP; a '/'-prefixed message that isn't a known command -> strip the slash + re-route (so '/remind ...' reaches the schedule matcher, '/weather X' the agent as text); a near-miss known-command typo -> 'did you mean /schedules?'. Deterministic, no LLM."
     },
@@ -688,6 +688,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 67: built command-intent-recovery (audit 17 A#1, high/S). '/remind me to X in 10 min' was SKIPPED by the schedule matcher (excludes '/'-prefixed) -> silently never scheduled + cold agent run; bare 'help'/'menu'/'commands'/'?' + typo'd '/schedule'/'/weather' hit no branch. Now: handleCommand answers bare help/menu/commands/? (+ /menu /commands aliases) with HELP; handler recovers a '/'-prefixed NON-command message — bare mistyped command ('/schedule') -> 'Did you mean /schedules?' (prefix match), with args ('/remind me ...') -> strip the leading '/' + re-route as NL so it reaches the schedule matcher (recomputes `first` so isExplicitCommand doesn't re-skip it). +5 tests (/remind reaches scheduleAdd, bare /schedule suggests, bare help/menu/?/-> HELP, 'help me plan' still a task). 772 pass, tsc clean. call-tested false (routing, unit-tested). Remaining: last-result-drilldown, capability-probe-answers."
     },
     {
       "event": "PRODUCT-LOOP iter 66: backlog dry after iter 65 -> ran 17th audit (3 lenses), which caught a FRESH bug in my iter-65 recurringCta; built it. cta-stock-false-fire (audit 17 B#4, medium/S): hasPrice matched bare \\bstock\\b anywhere, so a news answer ('the stock market fell') got the nonsensical 'watch it: <news> below <price>' tip; the literal 'it' name also meant two such watches collide by name (AlertStore updates in place). Fix: price tip only on an actual money amount ($NN) OR a price/cost/worth/in-stock ASK + a number in the reply; dropped bare 'stock'/'market'; template now 'watch <name>: ...' not 'watch it:'. +2 tests (money->watch<name> not 'it'; stock-prose->no watch). 769 pass, tsc clean. call-tested false (pure heuristic). Seeded also: command-intent-recovery(S), last-result-drilldown(M), capability-probe-answers(S)."
