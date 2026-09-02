@@ -89,6 +89,51 @@
       "status": "done",
       "why": "Image-only messages get rejected ('send a task in words'); texting a photo (menu/receipt/product) is a natural first move + the biggest input gap vs Instinct. A+C.",
       "how": "Download Telegram photo file_id, pass bytes to Gemini (already multimodal) as an image part; handler accepts media messages. Free (Gemini free tier is multimodal)."
+    },
+    {
+      "id": "proactive-profile-context",
+      "title": "Thread profile location into proactive runs",
+      "impact": "high",
+      "effort": "M",
+      "status": "done",
+      "why": "Scheduled 'weather'/'near me' digests+recipes+alerts dropped the profileContext the inbound path injects -> every location-based daily silently wrong.",
+      "how": "contextFor(chatId) dep on schedule/digest/alert runners -> runAgent({llm,context}); index wires profiles.contextLine."
+    },
+    {
+      "id": "extractone-truncation",
+      "title": "Mark truncation in extractOne (extract/compare/alerts)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "extract/compare/alerts read content.slice(0,8000) with no marker -> a value below the cut is silently missed + reported as fact.",
+      "how": "Apply truncateForModel (already exists) to the content passed to extractFieldsResult in extractOne."
+    },
+    {
+      "id": "empty-slot-arg",
+      "title": "Reject empty-arg on a slotted recipe",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "'/run track' on 'price of {item}' substitutes empty -> runs a broken task + confident nonsense.",
+      "how": "If a recipe task has {slots} but args is empty, reply asking for the value instead of running. applySlots/handler run-path."
+    },
+    {
+      "id": "voice-notes",
+      "title": "Accept inbound voice notes (transcribe + run)",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "Voice message = zero reply (dropped like non-photo media); voice-texting is a top interaction + Instinct's headline. Unanimous A+C.",
+      "how": "parseUpdates emits voice file_id; downloadFile bytes; Gemini audio transcription (free multimodal) -> run as a normal task. Mirror the photo path."
+    },
+    {
+      "id": "inbound-document-pdf",
+      "title": "Understand forwarded documents/PDFs",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "Forwarding a PDF/statement + 'summarize this' is dropped; asymmetric (bot sends PDFs, can't receive). A+C.",
+      "how": "parseUpdates emits document file_id; downloadFile; Gemini reads PDF bytes (multimodal) -> answer. Mirror photo path."
     }
   ],
   "history": [
@@ -121,6 +166,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 10: built inbound-photo-vision (audit A+C, biggest input gap vs Instinct). LLMClient.describeImage (optional) + GeminiClient impl (inlineData part, model-failover, free multimodal). telegram: InboundMessage.photoFileId, parseUpdates maps photo msgs (largest size + caption as text), downloadFile(fileId) via getFile. handler: photo branch BEFORE empty-text guard -> describeImage (rate-limited, friendlyError on fail, 'cant read images' if no dep). index wires describeImage = download + llm.describeImage. +tests: parseUpdates photo (caption + captionless), handler photo branch (answered-not-agent + no-dep), GeminiClient.describeImage (inlineData shape + 429 failover). 630 pass, tsc clean. LIVE-VERIFIED: real Gemini vision on a 1x1 PNG -> 'Coral' (read the pixel; assertion was too strict, path works). call-tested TRUE. Backlog DRY -> audit refills next iteration."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 11: backlog dry -> 3rd audit. Built proactive-profile-context (audit B#1, a real bug): schedule/digest/alert runners dropped the profile location the inbound path injects, so scheduled 'weather' etc were silently wrong. Added contextFor(chatId) dep to all 3 runners -> runAgent({llm,context}); index wires profiles.contextLine. +1 test (scheduled task gets the chat's context). 631 pass, tsc clean. call-tested false (wiring, unit-tested). Seeded 4: extractOne-truncation(S), empty-slot-arg(S), voice-notes(M), inbound-document-pdf(M)."
     }
   ],
   "audits": [
@@ -129,6 +177,9 @@
     },
     {
       "note": "Audit 2 (post-4-features). A/new-user: user-location (unanimous), photo-input, surface-ask-anything-in-help, clarifying-Q, tz(done). B/reliability: truncation-marker(built), over-cap-once-reminder-dropped, extractValue-picks-volume-not-price, fetch_json-200KB-cuts-valid-JSON, misparsed-reminder-runs-now. C/power: photo-vision, voice-notes, parameterized-recipes, absolute-threshold-alerts, user-profile. Seeded: user-profile-location, parameterized-recipes, absolute-threshold-alerts, inbound-photo-vision (truncation-marker built)."
+    },
+    {
+      "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
     }
   ]
 }

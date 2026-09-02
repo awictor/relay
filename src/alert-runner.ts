@@ -15,9 +15,11 @@ export interface AlertRunResult {
 
 export interface AlertRunnerDeps {
   llm: LLMClient;
-  runAgent: (userText: string, deps: { llm: LLMClient }, history: LLMMessage[]) => Promise<{ reply: string; degraded?: boolean }>;
+  runAgent: (userText: string, deps: { llm: LLMClient; context?: string }, history: LLMMessage[]) => Promise<{ reply: string; degraded?: boolean }>;
   formatReply: (text: string) => string;
   setLast: (chatId: number, name: string, value: string) => void;
+  // Per-user profile context (product-loop) so a watched "weather near me" uses the saved location.
+  contextFor?: (chatId: number) => string;
 }
 
 /**
@@ -31,7 +33,7 @@ export interface AlertRunnerDeps {
 export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<AlertRunResult> {
   let value: string;
   try {
-    const res = await deps.runAgent(alert.task, { llm: deps.llm }, []);
+    const res = await deps.runAgent(alert.task, { llm: deps.llm, context: deps.contextFor?.(alert.chatId) || undefined }, []);
     // A degraded (soft-failure) reply is NOT a real value — comparing it to lastValue would read as a
     // change and spam the user with the failure text. Skip notify, keep lastValue (DEV-0176).
     if (res.degraded) return { notify: false, message: null, value: alert.lastValue ?? "" };

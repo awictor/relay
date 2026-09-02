@@ -299,3 +299,17 @@ describe("makeScheduleRunner observability (m8 pobs-1)", () => {
     expect(recorded).toEqual([{ ok: false }]);
   });
 });
+
+describe("makeScheduleRunner — profile context (product-loop)", () => {
+  it("passes the chat's contextFor into runAgent so a scheduled 'weather' uses the saved location", async () => {
+    const clock = { t: NOW };
+    let gotContext: string | undefined;
+    const { store, runner } = harness(clock, {
+      contextFor: (chatId) => (chatId === 7 ? "home location is Reykjavik" : ""),
+      runAgent: async (_task, deps: { llm: unknown; context?: string }) => { gotContext = deps.context; return { reply: "sunny" }; },
+    });
+    store.add(7, { kind: "once", task: "weather", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(gotContext).toBe("home location is Reykjavik");
+  });
+});

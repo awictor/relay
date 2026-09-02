@@ -10,7 +10,10 @@ import type { Schedule, ScheduleStore } from "./lib/schedule.js";
 export interface ScheduleRunnerDeps {
   store: ScheduleStore;
   llm: LLMClient;
-  runAgent: (userText: string, deps: { llm: LLMClient }, history: LLMMessage[]) => Promise<{ reply: string; steps?: number; tools?: string[]; degraded?: boolean }>;
+  runAgent: (userText: string, deps: { llm: LLMClient; context?: string }, history: LLMMessage[]) => Promise<{ reply: string; steps?: number; tools?: string[]; degraded?: boolean }>;
+  // Per-user profile context for proactive runs (product-loop): a scheduled "weather" must use the
+  // user's saved location just like the inbound path does. Optional; absent = no context.
+  contextFor?: (chatId: number) => string;
   send: (chatId: number, text: string) => Promise<unknown>;
   formatReply: (text: string) => string;
   now: () => number;
@@ -95,7 +98,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       res = { reply: composed ?? "(digest is empty or was removed)" };
       sendText = deps.formatReply(res.reply); // digest text already labeled; no reminder prefix
     } else {
-      res = await deps.runAgent(s.task, { llm: deps.llm }, []);
+      res = await deps.runAgent(s.task, { llm: deps.llm, context: deps.contextFor?.(s.chatId) || undefined }, []);
       const body = deps.formatReply(res.reply);
       const label = s.kind === "daily" ? "⏰ Daily" : "⏰ Reminder";
       // A degraded reply (agent ran out of steps / no answer, DEV-0176) is a soft failure, not a real

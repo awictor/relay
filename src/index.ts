@@ -98,19 +98,19 @@ const profiles = new ProfileStore({ file: paths.profile });
 const digestRunText = (chatId: number, name: string): Promise<string | null> => {
   const d = digests.get(chatId, name);
   if (!d) return Promise.resolve(null);
-  return runDigest(d, { llm, resolveRecipe: (c, n) => { const r = recipes.get(c, n); return r ? { task: r.task } : null; }, runAgent, formatReply });
+  return runDigest(d, { llm, resolveRecipe: (c, n) => { const r = recipes.get(c, n); return r ? { task: r.task } : null; }, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c) });
 };
 // Check an alert -> the notify message ONLY if changed (null = silent). Shared by the runner.
 const alertCheck = async (chatId: number, name: string): Promise<string | null> => {
   const a = alerts.get(chatId, name);
   if (!a) return null;
-  const r = await checkAlert(a, { llm, runAgent, formatReply, setLast: (c, n, v) => alerts.setLast(c, n, v) });
+  const r = await checkAlert(a, { llm, runAgent, formatReply, setLast: (c, n, v) => alerts.setLast(c, n, v), contextFor: (c) => profiles.contextLine(c) });
   return r.notify ? r.message : null;
 };
 const ALERT_CADENCE = process.env.RELAY_ALERT_CADENCE ?? "every day at 09:00"; // default alert check cadence
 const SCHED_TICK_MS = intEnv(process.env.RELAY_SCHED_TICK_MS, { fallback: 30_000, allowZeroDisable: true }); // 0 disables
 const scheduleRunner = makeScheduleRunner({
-  store: schedules, llm, runAgent, send: sendMessage, formatReply,
+  store: schedules, llm, runAgent, send: sendMessage, formatReply, contextFor: (c) => profiles.contextLine(c),
   now: () => Date.now(), periodMs: SCHED_TICK_MS,
   log: (m) => console.log(m),
   recordTurn, // proactive fires count in the same Metrics as inbound turns (m8)
