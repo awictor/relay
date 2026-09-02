@@ -626,7 +626,7 @@
       "title": "Drill into a listed result by number (\"open #2\", \"more\", \"send the link\")",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A list answer is a dead end: nothing caches the last rendered result/URLs, so 'open the 2nd', 'more' (expand a 1200-char-capped reply), 'send the link' all can't work — the single biggest do-MORE multiplier is missing (audit 17 C#1/C#2/C#4).",
       "how": "Per-chat last-result store: cache the rendered list items+URLs + any overflow past the format-reply cap. Resolve '#N'/'the 2nd'/'last one' -> that item's URL into browse/read; 'more'/'full' -> next chunk; 'link(s)' -> stored URLs. Read-only + safe; shared infra for all three."
     },
@@ -688,6 +688,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 68: built last-result-drilldown (audit 17 C, high/M) — the 'more' + 'send the link' slices (the '#N open' slice deferred, needs list-item->URL mapping). A reply is trimmed to phone size (MAX 1200/12 lines) or summarizes away URLs, so the dropped detail + sources were unrecoverable without re-asking. format-reply now exposes formatReplyParts {shown, full}; the handler caches the last text answer per chat (shown+full). New src/lib/last-result.ts: isMoreRequest/isLinkRequest (whole-message only, so a real task isn't intercepted), extractLinks (deduped http(s), trailing-punct trimmed), nextChunk (tail after what was shown, capped). Handler branch before rate-limit: 'more'/'full' pages the tail from cache (no agent re-run), 'send the link'/'sources' returns the cached URLs; both fall through when there's no cache. HELP documents it. +9 tests (lib: more/link detect, extractLinks, nextChunk; handler: more-pages-tail-no-rerun, link-returns-urls). 781 pass, tsc clean. call-tested false (pure + handler wiring, unit-tested). Remaining: capability-probe-answers -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 67: built command-intent-recovery (audit 17 A#1, high/S). '/remind me to X in 10 min' was SKIPPED by the schedule matcher (excludes '/'-prefixed) -> silently never scheduled + cold agent run; bare 'help'/'menu'/'commands'/'?' + typo'd '/schedule'/'/weather' hit no branch. Now: handleCommand answers bare help/menu/commands/? (+ /menu /commands aliases) with HELP; handler recovers a '/'-prefixed NON-command message — bare mistyped command ('/schedule') -> 'Did you mean /schedules?' (prefix match), with args ('/remind me ...') -> strip the leading '/' + re-route as NL so it reaches the schedule matcher (recomputes `first` so isExplicitCommand doesn't re-skip it). +5 tests (/remind reaches scheduleAdd, bare /schedule suggests, bare help/menu/?/-> HELP, 'help me plan' still a task). 772 pass, tsc clean. call-tested false (routing, unit-tested). Remaining: last-result-drilldown, capability-probe-answers."

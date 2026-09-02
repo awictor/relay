@@ -6,7 +6,8 @@
 import type { InboundMessage } from "./telegram.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
 import { runAgent, type AgentDeps } from "./agent.js";
-import { formatReply } from "./lib/format-reply.js";
+import { formatReply, formatReplyParts } from "./lib/format-reply.js";
+import { isMoreRequest, isLinkRequest, extractLinks, nextChunk } from "./lib/last-result.js";
 import { formatTurnLog } from "./lib/turn-log.js";
 import { friendlyError } from "./lib/failure.js";
 import { splitScheduleCommand } from "./lib/schedule.js";
@@ -142,6 +143,9 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   // Last recipe-recall message we offered per chat (normalized). Lets a re-send of the same phrase
   // fall through to a fresh answer instead of re-offering forever (recipe-auto-recall escape hatch).
   const recallOffered = new Map<number, string>();
+  // Last text answer per chat (shown = what we sent, full = untrimmed) for "more"/"link" follow-ups
+  // (last-result-drilldown). In-memory; a restart just means "more" says there's nothing cached.
+  const lastResult = new Map<number, { shown: string; full: string }>();
   function handle(msg: InboundMessage): Promise<void> {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -556,6 +560,24 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     const cmd = deps.handleCommand(msg.text);
     if (cmd) { await deps.sendMessage(msg.chatId, cmd); return; }
 
+    // Follow-up on the last answer (last-result-drilldown): "more"/"full" pages out the tail a
+    // phone-size trim dropped; "send the link" returns the source URLs — both from cache, no agent
+    // re-run. Only when the WHOLE message is that ask, so a real task isn't intercepted.
+    {
+      const cached = lastResult.get(msg.chatId);
+      if (isMoreRequest(msg.text)) {
+        const chunk = cached ? nextChunk(cached.full, cached.shown) : null;
+        if (chunk) { lastResult.set(msg.chatId, { shown: cached!.shown + chunk, full: cached!.full }); await deps.sendMessage(msg.chatId, chunk); return; }
+        if (cached) { await deps.sendMessage(msg.chatId, "That's the whole answer — nothing more to show."); return; }
+        // no cached answer -> fall through (treat as a normal task)
+      }
+      if (isLinkRequest(msg.text)) {
+        const links = cached ? extractLinks(cached.full) : [];
+        if (links.length) { await deps.sendMessage(msg.chatId, links.join("\n")); return; }
+        if (cached) { await deps.sendMessage(msg.chatId, "No links in that last answer."); return; }
+      }
+    }
+
     // Recipe auto-recall (product-loop): a saved recipe is otherwise write-only — /run needs the exact
     // name a phone user never remembers. If this free-text message strongly matches a saved recipe,
     // offer to run it by name (don't auto-run — a surprise re-run would be worse than a fresh answer).
@@ -608,8 +630,13 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       // DEV-0176), not a real answer. Prepend a one-line hint so a live-bot user knows the result is
       // partial, and count the turn as NOT-ok so the success metric isn't inflated by soft failures
       // (DEV-0178 — handler is the 3rd consumer of the degraded flag, after alert-runner + digest-runner).
-      const body = formatReply(reply);
+      const parts = formatReplyParts(reply);
+      const body = parts.shown;
       let out = degraded ? `⚠️ Partial answer — I ran low on steps. Try narrowing the request.\n\n${body}` : body;
+      // Cache the full (untrimmed) reply + what we showed, so a follow-up "more"/"link" serves the
+      // dropped tail / source URLs without re-running the agent (last-result-drilldown). Text replies
+      // only (a photo/doc has no pageable text).
+      if (!photo && !doc) lastResult.set(msg.chatId, { shown: body, full: parts.full });
       // Retention nudge (product-loop): if this task repeats one the user already asked, offer to save
       // it as a recipe. Only on a clean text reply (not degraded / not a binary), so it never clutters
       // a partial answer or a screenshot/PDF caption. Appended AFTER the body so the answer leads.

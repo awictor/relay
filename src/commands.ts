@@ -42,6 +42,8 @@ Sites I'm signed in for: /sites lists the hosts you've authorized me for (via co
 
 Start over anytime: /reset clears our conversation history.
 
+After an answer: "more" shows the rest if I trimmed it, and "send the link" gives you the source URLs.
+
 Just text me the task in plain English.`;
 
 // A bare greeting or "what can you do" — a new user's natural first message. Onboarding used to

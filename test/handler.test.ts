@@ -438,6 +438,31 @@ describe("createHandler", () => {
     expect(agentCalled).toBe(true);
   });
 
+  it("'more' pages out the tail of a truncated answer, no agent re-run (last-result-drilldown)", async () => {
+    const long = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n"); // >12 lines -> trimmed
+    let agentCalls = 0;
+    const { handle, sent } = harness({
+      runAgentFn: async () => { agentCalls++; return { reply: long, steps: 1, tools: [] }; },
+    });
+    await handle(msg("give me the list", 4));
+    expect(agentCalls).toBe(1);
+    expect(sent[0]!.text).toMatch(/…$/); // first reply trimmed
+    await handle(msg("more", 4));
+    expect(agentCalls).toBe(1);          // served from cache, no re-run
+    expect(sent[1]!.text).toMatch(/line 30/); // the dropped tail
+  });
+
+  it("'send the link' returns URLs from the last answer, no agent re-run", async () => {
+    let agentCalls = 0;
+    const { handle, sent } = harness({
+      runAgentFn: async () => { agentCalls++; return { reply: "Top result: https://example.com/story", steps: 1, tools: ["web_search"] }; },
+    });
+    await handle(msg("top story", 4));
+    await handle(msg("send the link", 4));
+    expect(agentCalls).toBe(1);
+    expect(sent[1]!.text).toMatch(/https:\/\/example\.com\/story/);
+  });
+
   it("passes the profile context into the agent run", async () => {
     let gotContext: string | undefined;
     const { handle } = harness({

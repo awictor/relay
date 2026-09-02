@@ -44,15 +44,17 @@ function trim(s: string): string {
  * JSON block, render that data as compact lines; otherwise pass the text through.
  * Always trims to a phone-friendly size.
  */
-export function formatReply(text: string): string {
+/** The full (untrimmed) rendered reply + the phone-sized trimmed view. Lets the handler cache the
+ * full text so a follow-up "more" can page out what trim() dropped (last-result-drilldown). */
+export function formatReplyParts(text: string): { shown: string; full: string } {
   const raw = (text ?? "").trim();
-  if (!raw) return "Done.";
+  if (!raw) return { shown: "Done.", full: "Done." };
 
   // Whole reply is JSON?
   if (/^[[{]/.test(raw)) {
     try {
       const rendered = renderJson(JSON.parse(raw));
-      if (rendered) return trim(rendered);
+      if (rendered) return { shown: trim(rendered), full: rendered };
     } catch { /* not valid JSON — fall through */ }
   }
 
@@ -64,10 +66,20 @@ export function formatReply(text: string): string {
       const rendered = renderJson(JSON.parse(block));
       if (rendered) {
         const prose = raw.replace(fence?.[0] ?? block, "").trim();
-        return trim(prose ? `${prose}\n${rendered}` : rendered);
+        const full = prose ? `${prose}\n${rendered}` : rendered;
+        return { shown: trim(full), full };
       }
     } catch { /* leave as-is */ }
   }
 
-  return trim(raw);
+  return { shown: trim(raw), full: raw };
+}
+
+/**
+ * Format an outgoing reply for SMS. If the whole reply is JSON, or contains a fenced
+ * JSON block, render that data as compact lines; otherwise pass the text through.
+ * Always trims to a phone-friendly size.
+ */
+export function formatReply(text: string): string {
+  return formatReplyParts(text).shown;
 }
