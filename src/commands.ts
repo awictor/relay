@@ -70,8 +70,18 @@ Text me a task to try it — or /help for what I can do.`;
 // a bare "are you free (right now)" which is a real availability ask, not a privacy/cost question.
 const META_RE = /^(?:(?:are|r)\s+(?:you|u)\s+(?:a\s+)?(?:real|human|person|bot|ai|robot)|is\s+(?:this|it)\s+free|(?:is\s+it|are\s+you)\s+free\s+to\s+use|is\s+this\s+(?:safe|a\s+(?:bot|scam|person))|do\s+(?:you|u)\s+(?:save|store|keep|sell|share|record)\s+(?:my\s+)?(?:messages?|data|chats?|info)|who\s+(?:made|built|created|owns)\s+(?:you|this)|are\s+(?:you|u)\s+safe|is\s+my\s+data\s+safe)[\s\w']*\??$/i;
 
-/** Returns a canned reply for /start, /help, a bare greeting/capability question, or a meta/trust
- * question; else null. */
+// A boundary-probe: "can you book a flight / send a text / call them / check my email / buy this?".
+// These are things Relay CAN'T do (it doesn't act, pay, place calls, or log into your accounts) —
+// they used to fall to a slow floundering agent turn. An honest "can't, but here's what I CAN do +
+// try this" converts the probe into a real errand. Only matches the can't-do verbs; "can you find the
+// cheapest X" (something it CAN do) is NOT matched and reaches the agent.
+const PROBE = `I can't do that one — I don't place calls, send texts/emails, pay/buy, or log into your accounts.
+
+What I CAN do: look things up on the web, pull out + compare data, watch a page and ping you when it changes, and text you reminders/briefings. Want me to try one? e.g. "cheapest flight LAX to NYC next Fri", "watch this product's price", "every morning the weather".`;
+const PROBE_RE = /^(?:can|could|will|would|do)\s+(?:you|u)\s+(?:please\s+)?(?:book|buy|order|purchase|pay|call|phone|ring|text|email|message|dm|send\b|reserve|schedule an appointment|log ?in|sign ?in|apply|subscribe|cancel my|make a (?:call|reservation|booking|payment))\b[\s\w'./-]*\??$/i;
+
+/** Returns a canned reply for /start, /help, a bare greeting/capability question, a meta/trust
+ * question, or a can't-do capability probe; else null. */
 export function handleCommand(text: string): string | null {
   const t = text.trim().toLowerCase();
   // Telegram commands can carry a bot suffix, e.g. /help@relaybot
@@ -86,5 +96,7 @@ export function handleCommand(text: string): string | null {
   if (t.split(/\s+/).length <= 6 && (GREETING_RE.test(t) || CAPABILITY_RE.test(t))) return START;
   // Meta/trust question -> honest fixed reply (bounded length so a real errand isn't swallowed).
   if (t.split(/\s+/).length <= 8 && META_RE.test(t)) return META;
+  // Can't-do capability probe -> honest reply + pivot to what it CAN do.
+  if (t.split(/\s+/).length <= 10 && PROBE_RE.test(t)) return PROBE;
   return null;
 }

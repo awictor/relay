@@ -54,6 +54,18 @@ describe("handleCommand", () => {
     expect(handleCommand("who made you")).toMatch(/free to use/i);
     expect(handleCommand("is my data safe")).toMatch(/shared or sold/i);
   });
+  it("answers a can't-do capability probe honestly + pivots (capability-probe-answers)", () => {
+    expect(handleCommand("can you book a flight")).toMatch(/can't do that one/i);
+    expect(handleCommand("can you send a text to my mom")).toMatch(/what I CAN do/i);
+    expect(handleCommand("can you call the restaurant")).toMatch(/can't do that one/i);
+    expect(handleCommand("can you buy this for me")).toMatch(/can't/i);
+    expect(handleCommand("could you check my email")).toBeNull(); // "check" not a can't-do verb here -> agent
+  });
+  it("does NOT hijack a real errand it CAN do", () => {
+    expect(handleCommand("can you find the cheapest flight to NYC")).toBeNull();
+    expect(handleCommand("can you compare these two prices")).toBeNull();
+  });
+
   it("does NOT hijack a real errand that looks meta-ish", () => {
     expect(handleCommand("is this article free to read: example.com/x")).toBeNull(); // real errand + long
     expect(handleCommand("do you save documents to a folder on that site")).toBeNull();

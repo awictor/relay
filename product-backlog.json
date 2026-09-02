@@ -635,7 +635,7 @@
       "title": "Canned honest answer to 'can you book/email/call/buy?'",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Boundary-probe openers ('can you book a flight?', 'can you send a text?', 'can you check my email?') match neither CAPABILITY_RE nor META, so they fall to a slow floundering agent turn — these decide whether the user trusts it enough to try a real errand (audit 17 A#2, honest-out-of-scope).",
       "how": "A matcher (like meta/greeting) for 'can you <act>' -> a fixed reply stating what it can't (act/pay/log in as you) + pivoting to what it CAN (find/compare/watch/draft/read) + inviting a real errand. Pure + unit-tested."
     }
@@ -688,6 +688,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 69: built capability-probe-answers (audit 17 A#2, medium/S). Boundary-probe openers ('can you book a flight?', 'can you send a text?', 'can you call them?', 'can you buy this?') matched neither CAPABILITY_RE nor META -> slow floundering agent turn; these decide whether a new user trusts it enough to try a real errand. Added PROBE reply (honest can't-do: no calls/texts/emails/pay/buy/account-login + pivot to what it CAN do: look up, extract/compare, watch+ping, remind/brief, with example asks) + PROBE_RE matching 'can/could/will/would/do you <cant-do verb>' (book/buy/order/pay/call/text/email/send/reserve/log in/...), <=10 words. 'can you find the cheapest flight' / 'compare these prices' (things it CAN do) are NOT matched -> reach the agent. +2 tests (4 probes answered incl not-a-verb-null; 2 CAN-do errands pass through). 783 pass, tsc clean. call-tested false (pure matcher, unit-tested). Backlog DRY -> ran 18th audit (same iteration)."
     },
     {
       "event": "PRODUCT-LOOP iter 68: built last-result-drilldown (audit 17 C, high/M) — the 'more' + 'send the link' slices (the '#N open' slice deferred, needs list-item->URL mapping). A reply is trimmed to phone size (MAX 1200/12 lines) or summarizes away URLs, so the dropped detail + sources were unrecoverable without re-asking. format-reply now exposes formatReplyParts {shown, full}; the handler caches the last text answer per chat (shown+full). New src/lib/last-result.ts: isMoreRequest/isLinkRequest (whole-message only, so a real task isn't intercepted), extractLinks (deduped http(s), trailing-punct trimmed), nextChunk (tail after what was shown, capped). Handler branch before rate-limit: 'more'/'full' pages the tail from cache (no agent re-run), 'send the link'/'sources' returns the cached URLs; both fall through when there's no cache. HELP documents it. +9 tests (lib: more/link detect, extractLinks, nextChunk; handler: more-pages-tail-no-rerun, link-returns-urls). 781 pass, tsc clean. call-tested false (pure + handler wiring, unit-tested). Remaining: capability-probe-answers -> then backlog dry -> audit refills."
