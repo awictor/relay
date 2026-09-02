@@ -129,7 +129,7 @@ export interface HandlerDeps {
     { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" };
   // Change-alerts (m10 alert-3): "watch <name>: <task>" defines + auto-schedules a check.
   // All optional. alertDefine parses + stores + schedules (default cadence); returns the cadence.
-  alertDefine?: (chatId: number, text: string, now: number) => { ok: true; name: string; feed?: boolean } | { ok: false; reason: "unparsed" | "capped" };
+  alertDefine?: (chatId: number, text: string, now: number) => { ok: true; name: string; feed?: boolean; then?: string } | { ok: false; reason: "unparsed" | "capped" };
   // Run one check immediately on define (product-loop): baseline + notify if the predicate already
   // holds, instead of ~24h of silence until the first scheduled cadence check. Returns the notify
   // message or null (silent). Optional; absent -> define just schedules as before.
@@ -138,7 +138,7 @@ export interface HandlerDeps {
   // Returns {ok:true,name,summary} on success, or a reason. Optional; absent -> edit falls through.
   alertEdit?: (chatId: number, text: string) =>
     { ok: true; name: string; summary: string } | { ok: false; reason: "unparsed" | "unknown" };
-  alertList?: (chatId: number) => Array<{ name: string; task: string; lastValue?: string; threshold?: number; feed?: boolean }>;
+  alertList?: (chatId: number) => Array<{ name: string; task: string; lastValue?: string; threshold?: number; feed?: boolean; then?: string }>;
   alertForget?: (chatId: number, name: string) => boolean;
   checkRateLimit: (chatId: number) => { allowed: boolean; retryAfterSec?: number };
   redactText: (text: string) => string;
@@ -555,7 +555,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     if (first === "/alerts" && deps.alertList) {
       const list = deps.alertList(msg.chatId);
       if (!list.length) { await deps.sendMessage(msg.chatId, "No alerts. Set one: \"watch btc: price of bitcoin when it changes by 1000\" — I'll only ping you when it moves."); return; }
-      const lines = list.map((a) => `• ${a.name}${a.feed ? " (new items)" : a.threshold ? ` (±${a.threshold})` : ""} — ${a.task}${a.lastValue ? ` [last: ${a.lastValue.slice(0, 40)}]` : ""}`);
+      const lines = list.map((a) => `• ${a.name}${a.feed ? " (new items)" : a.threshold ? ` (±${a.threshold})` : ""} — ${a.task}${a.then ? ` → then run ${a.then}` : ""}${a.lastValue ? ` [last: ${a.lastValue.slice(0, 40)}]` : ""}`);
       await deps.sendMessage(msg.chatId, `Your alerts:\n${lines.join("\n")}\n\nRemove with /forget-alert <name>.`);
       return;
     }
@@ -596,9 +596,10 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     if (deps.alertDefine && /^\s*(?:alert(?:\s+me)?|watch)\s+[^:]+:\s*\S/i.test(msg.text)) {
       const r = deps.alertDefine(msg.chatId, msg.text, deps.now());
       if (r.ok) {
-        await deps.sendMessage(msg.chatId, r.feed
-          ? `Watching "${r.name}" for new items — I'll message you only when a NEW one shows up. See /alerts.`
-          : `Watching "${r.name}" — I'll only message you when it changes. See /alerts.`);
+        const thenNote = r.then ? ` Then I'll run your "${r.then}" recipe and include its result.` : "";
+        await deps.sendMessage(msg.chatId, (r.feed
+          ? `Watching "${r.name}" for new items — I'll message you only when a NEW one shows up.`
+          : `Watching "${r.name}" — I'll only message you when it changes.`) + thenNote + " See /alerts.");
         // Run one check now so the user isn't silent until the first scheduled cadence (~24h). If the
         // predicate already holds (e.g. "below 50000" and it's already there), tell them right away.
         // Rate-gate this full LLM+anvil check so spamming define can't open unbounded sessions.

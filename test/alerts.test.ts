@@ -238,3 +238,21 @@ describe("feed-watch (new-item-feed-watch)", () => {
     expect(a.seen).toBeUndefined();
   });
 });
+
+describe("trigger-to-action (trigger-to-action-alerts)", () => {
+  it("parses a trailing 'then run <recipe>' / 'then <recipe>'", () => {
+    expect(parseAlertCommand("watch jobs: new remote react roles then run summarize-jobs")).toEqual({ name: "jobs", task: "new remote react roles", feed: true, then: "summarize-jobs" });
+    expect(parseAlertCommand("watch btc: bitcoin price below 50000 then buy-alert")).toEqual({ name: "btc", task: "bitcoin price", condition: { op: "below", operand: 50000 }, then: "buy-alert" });
+    expect(parseAlertCommand("watch hn: top story then run digest-it")).toEqual({ name: "hn", task: "top story", then: "digest-it" });
+  });
+  it("no 'then' clause -> no then field", () => {
+    expect(parseAlertCommand("watch btc: price of bitcoin")).toEqual({ name: "btc", task: "price of bitcoin", threshold: undefined });
+  });
+  it("store persists + updates the then field", () => {
+    const s = new AlertStore({ file: tmpFile() });
+    s.add(1, { name: "jobs", task: "roles", feed: true, then: "sum" }, NOW);
+    expect(s.get(1, "jobs")!.then).toBe("sum");
+    s.add(1, { name: "jobs", task: "roles", feed: true }, NOW); // re-state without then -> cleared
+    expect(s.get(1, "jobs")!.then).toBeUndefined();
+  });
+});

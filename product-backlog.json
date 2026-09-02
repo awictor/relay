@@ -950,7 +950,7 @@
       "title": "watch -> then run a recipe (active watch-and-do)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Alerts only ping; the non-gated slice of Instinct continuous-acting is: when a watch fires, auto-run a follow-up READ recipe and send its result.",
       "how": "Add a \"then <recipe>\" field to an alert; alert-runner runs the recipe on fire + sends its output. Stays read-only."
     },
@@ -1268,6 +1268,10 @@
     {
       "id": "city-to-tz-inference",
       "note": "A bare city now sets the right reminder timezone without the user typing UTC-5 — closes the wrong-hour reminder bug at its root. inferTzFromLocation maps ~150 common cities / US state abbrevs / countries to a standard (non-DST) offset; parseSetLocation + parseCityReply infer tz from the city when no explicit UTC given (explicit still wins, unknown city -> no guess). 907 tests green."
+    },
+    {
+      "id": "trigger-to-action-alerts",
+      "note": "A watch can now DO, not just notify: add \"then run <recipe>\" and when the alert fires Relay runs that saved recipe (current task resolved at fire time) and appends its result to the ping. Alert.then + parse of the trailing then-clause (stripped before trigger parsing) + withThen helper at all 3 notify sites (predicate/threshold/feed) + runThen dep wired to the recipe store; stays read-only. Confirm + /alerts surface it. Gone/failed recipe leaves the base alert intact. 914 tests green."
     }
   ],
   "audits": [

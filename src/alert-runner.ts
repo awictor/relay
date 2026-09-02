@@ -29,6 +29,11 @@ export interface AlertRunnerDeps {
   recordSeen?: (chatId: number, name: string, keys: string[]) => void;
   // Per-user profile context (product-loop) so a watched "weather near me" uses the saved location.
   contextFor?: (chatId: number) => string;
+  // Trigger-to-action (trigger-to-action-alerts): when an alert with a `then` recipe fires, run that
+  // recipe and return its result text to append to the notification (or null if the recipe is gone /
+  // failed — the base alert still sends). Resolves the recipe's CURRENT task by name at fire time.
+  // Optional; absent -> `then` is ignored (plain notify).
+  runThen?: (chatId: number, recipeName: string) => Promise<string | null>;
 }
 
 /**
@@ -55,6 +60,17 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   }
 
   const firstRun = alert.lastValue === undefined;
+
+  // Trigger-to-action (trigger-to-action-alerts): when this alert fires AND has a `then` recipe, run it
+  // and append its result to the notification. Failures/absence just leave the base message unchanged
+  // (the alert still notifies). Called at each notify site below.
+  const withThen = async (message: string): Promise<string> => {
+    if (!alert.then || !deps.runThen) return message;
+    try {
+      const out = (await deps.runThen(alert.chatId, alert.then))?.trim();
+      return out ? `${message}\n\n▶ ${alert.then}:\n${out}` : message;
+    } catch { return message; }
+  };
 
   // Feed-watch (new-item-feed-watch): the task returns a LIST; notify only about entries we haven't
   // seen before. First run (seen undefined) seeds the whole list SILENTLY so setup doesn't dump every
@@ -85,7 +101,7 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     const shown = fresh.slice(0, 10);
     const more = fresh.length > shown.length ? `\n…and ${fresh.length - shown.length} more` : "";
     const header = fresh.length === 1 ? `🔔 ${alert.name}: 1 new` : `🔔 ${alert.name}: ${fresh.length} new`;
-    const message = `${header}\n${shown.map((s) => `• ${s}`).join("\n")}${more}`;
+    const message = await withThen(`${header}\n${shown.map((s) => `• ${s}`).join("\n")}${more}`);
     // Defer the seen-set advance to the caller's post-send commit (failed send -> re-report next check).
     return { notify: true, message, value, commit: () => deps.recordSeen?.(alert.chatId, alert.name, [...freshByKey.keys()]) };
   }
@@ -104,7 +120,7 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     if (nowHolds === true && prevHolds !== true) {
       // Notify: DEFER the baseline advance to the caller's post-send commit, so a failed send leaves
       // prevHolds unchanged + the edge re-fires next check instead of being eaten.
-      return { notify: true, message: `🔔 ${alert.name}:\n${value}`, value, commit: advance(value) };
+      return { notify: true, message: await withThen(`🔔 ${alert.name}:\n${value}`), value, commit: advance(value) };
     }
     // Silent: safe to advance the baseline now (no send to gate on).
     deps.setLast(alert.chatId, alert.name, value);
@@ -148,5 +164,5 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // Notify: DEFER the baseline advance to the caller's post-send commit (a failed send leaves the old
   // baseline so the change re-fires next check). First-run baseline seeds the same way — if that very
   // first notify fails to send, we re-seed + notify next check rather than silently starting watched.
-  return { notify: true, message: `${header}:\n${value}${delta}`, value, commit: advance(value) };
+  return { notify: true, message: await withThen(`${header}:\n${value}${delta}`), value, commit: advance(value) };
 }

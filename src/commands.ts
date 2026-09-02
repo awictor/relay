@@ -40,6 +40,8 @@ Watch for changes: "watch btc: price of bitcoin when it changes by 1000" — I o
 
 Watch for NEW items in a list: "watch jobs: remote react roles for new listings" or "watch deals: new deals on OLED TVs" — I ping you only when a NEW entry shows up (not on every check). Great for job boards, listings, restocks, releases.
 
+Watch, then DO: add "then run <recipe>" to any watch — "watch jobs: new remote roles for new listings then run summarize-jobs" — and when it fires I'll also run that saved recipe and include its result.
+
 Set your location: "/setlocation Austin, TX" (or just "I'm in London") so "weather" and "near me" work without repeating the city. Add "(metric)" or "(imperial)" for units, and "UTC-5" so daily reminders fire at YOUR local time. /profile shows what's stored; "/profile clear" forgets it.
 
 Remember things about you: "remember I'm vegetarian", "remember my wife's birthday is June 3" — I'll factor them into every answer. Ask "what do you know about me" to see them; "forget that I'm vegetarian" or "forget everything you know" to clear.

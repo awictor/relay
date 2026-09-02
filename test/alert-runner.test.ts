@@ -241,3 +241,40 @@ describe("checkAlert — feed-watch (new-item-feed-watch)", () => {
     expect(r.message).toBeNull();
   });
 });
+
+describe("checkAlert — trigger-to-action (trigger-to-action-alerts)", () => {
+  it("appends the then-recipe result to a firing predicate alert", async () => {
+    const { d } = deps("BTC is $48,000", {
+      runThen: async (_c: number, name: string) => `ran ${name}: bought the dip`,
+    });
+    // below 50000, first crossing (no prior lastValue) -> notify + run `then`.
+    const r = await checkAlert(alert({ condition: { op: "below", operand: 50000 }, then: "buy-alert" }), d);
+    expect(r.notify).toBe(true);
+    expect(r.message).toMatch(/BTC is \$48,000/);
+    expect(r.message).toMatch(/▶ buy-alert:\nran buy-alert: bought the dip/);
+  });
+
+  it("a firing alert with NO then recipe is unchanged (plain notify)", async () => {
+    const { d } = deps("BTC is $48,000", { runThen: async () => "should not appear" });
+    const r = await checkAlert(alert({ condition: { op: "below", operand: 50000 } }), d); // no `then`
+    expect(r.message).not.toMatch(/should not appear/);
+  });
+
+  it("a gone/failed then recipe leaves the base alert intact (still notifies)", async () => {
+    const { d } = deps("BTC is $48,000", { runThen: async () => null }); // recipe deleted
+    const r = await checkAlert(alert({ condition: { op: "below", operand: 50000 }, then: "gone" }), d);
+    expect(r.notify).toBe(true);
+    expect(r.message).toMatch(/BTC is \$48,000/);
+    expect(r.message).not.toMatch(/▶/); // no appended block
+  });
+
+  it("appends to a feed alert's new-item notification too", async () => {
+    const { d } = deps("• Job NEW", {
+      runThen: async () => "summary: 1 new senior role",
+    });
+    const r = await checkAlert(alert({ feed: true, seen: [normKey("Job OLD")], then: "sum" }), d);
+    expect(r.notify).toBe(true);
+    expect(r.message).toMatch(/Job NEW/);
+    expect(r.message).toMatch(/▶ sum:\nsummary: 1 new senior role/);
+  });
+});

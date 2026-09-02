@@ -18,6 +18,11 @@ export interface Alert {
   // whole list). A feed alert has neither threshold nor condition.
   feed?: boolean;
   seen?: string[];
+  // Trigger-to-action (trigger-to-action-alerts): when this alert fires, ALSO run the saved recipe
+  // named here and append its result to the notification — watch-and-DO, not just watch-and-notify
+  // ("when new jobs appear, run my summarize-jobs recipe"). The recipe stays a normal read-only task
+  // (no login/pay). Undefined = plain notify. Resolved at fire time so editing the recipe changes it.
+  then?: string;
   created: number;
 }
 
@@ -38,6 +43,7 @@ export interface ParsedAlert {
   threshold?: number;
   condition?: AlertCondition;
   feed?: boolean; // notify on a NEW list item, not on a value change
+  then?: string;  // run this saved recipe when the alert fires (trigger-to-action-alerts)
 }
 
 /** Split an agent reply into candidate list items. A feed reply is usually a bulleted/numbered list
@@ -112,6 +118,13 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
   let task = m[2]!.trim();
   let threshold: number | undefined;
   let condition: AlertCondition | undefined;
+  let then: string | undefined;
+
+  // Trigger-to-action (trigger-to-action-alerts): a trailing "then run <recipe>" / "then <recipe>"
+  // means run that saved recipe on fire + append its result. Stripped FIRST (it's the outermost
+  // clause) so the price/stock/feed parsing below still sees a clean task tail.
+  const thenClause = task.match(/\s+then\s+(?:run\s+)?(?:recipe\s+)?([a-z0-9][\w -]{0,58})\s*$/i);
+  if (thenClause) { then = normalizeName(thenClause[1]!); task = task.slice(0, thenClause.index).trim(); }
 
   // Feed-watch: a trailing "for new items/listings/jobs/posts" or a leading "new " in the task
   // ("watch jobs: new remote react roles") means notify on a NEW list entry, not a value change.
@@ -133,8 +146,11 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
   else if (th) { threshold = parseFloat(th[1]!); task = task.slice(0, th.index).trim(); feed = false; }
 
   if (!name || !task) return null;
-  if (feed) return { name, task, feed: true };
-  return threshold !== undefined ? { name, task, threshold } : condition ? { name, task, condition } : { name, task };
+  const base = feed ? { name, task, feed: true }
+    : threshold !== undefined ? { name, task, threshold }
+    : condition ? { name, task, condition }
+    : { name, task };
+  return then ? { ...base, then } : base;
 }
 
 /**
@@ -295,12 +311,12 @@ export class AlertStore {
     const existing = this.items.find((x) => x.chatId === chatId && x.name === name);
     if (!existing && this.items.filter((x) => x.chatId === chatId).length >= this.maxPerChat) return null;
     if (existing) {
-      existing.task = a.task; existing.threshold = a.threshold; existing.condition = a.condition;
+      existing.task = a.task; existing.threshold = a.threshold; existing.condition = a.condition; existing.then = a.then;
       // Switching an existing alert to/from a feed watch resets its baseline so the new mode seeds fresh.
       if (!!existing.feed !== !!a.feed) { existing.feed = a.feed; existing.seen = undefined; existing.lastValue = undefined; }
       this.persist(); return existing;
     }
-    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, feed: a.feed, created: now };
+    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, feed: a.feed, then: a.then, created: now };
     this.items.push(rec);
     this.persist();
     return rec;
