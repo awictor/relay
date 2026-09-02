@@ -75,18 +75,23 @@ export class NotesStore {
 
   list(chatId: number): Note[] { return this.items.find((c) => c.chatId === chatId)?.notes ?? []; }
 
-  /** Add a fact. De-dupes an exact (case-insensitive) repeat. Drops the oldest when over the cap.
-   * Returns the stored note. */
-  add(chatId: number, text: string, now: number): Note {
+  /** Add a fact. De-dupes an exact (case-insensitive) repeat. When at the cap, drops the OLDEST to make
+   * room and returns its text in `evicted` so the caller can warn the user (a silent drop of the
+   * earliest fact — often the most important — reads as "you forgot" — notes-cap-silent-evict). `dup`
+   * marks an exact repeat (nothing stored). */
+  add(chatId: number, text: string, now: number): { note: Note; evicted: string[]; dup: boolean } {
     const c = this.forChat(chatId);
     const norm = text.trim().toLowerCase();
     const existing = c.notes.find((n) => n.text.trim().toLowerCase() === norm);
-    if (existing) return existing; // already known — don't duplicate
+    if (existing) return { note: existing, evicted: [], dup: true }; // already known — don't duplicate
     const note: Note = { text: text.trim(), created: now };
     c.notes.push(note);
-    if (c.notes.length > MAX_NOTES_PER_CHAT) c.notes.splice(0, c.notes.length - MAX_NOTES_PER_CHAT);
+    let evicted: string[] = [];
+    if (c.notes.length > MAX_NOTES_PER_CHAT) {
+      evicted = c.notes.splice(0, c.notes.length - MAX_NOTES_PER_CHAT).map((n) => n.text);
+    }
     this.persist();
-    return note;
+    return { note, evicted, dup: false };
   }
 
   /** Score how well a stored fact matches a forget `term`, higher = better; 0 = no match.

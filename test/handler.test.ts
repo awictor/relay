@@ -789,7 +789,7 @@ describe("long-term memory (remember-facts-store)", () => {
     const notes = new NotesStore({ file: join(mkdtempSync(join(tmpdir(), "relay-h-notes-")), "n.json") });
     let ctxSeen: string | undefined;
     const h = harness({
-      rememberFact: (chatId, text) => { const f = parseRemember(text); if (!f) return null; notes.add(chatId, f, 0); return f; },
+      rememberFact: (chatId, text) => { const f = parseRemember(text); if (!f) return null; const r = notes.add(chatId, f, 0); return { fact: f, evicted: r.evicted }; },
       forgetFact: (chatId, text) => {
         const p = parseForgetFact(text);
         if (!p) return null;

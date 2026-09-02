@@ -191,7 +191,7 @@ const handle = createHandler({
   profileView: (chatId) => { const l = profiles.contextLine(chatId); return l ? l.charAt(0).toUpperCase() + l.slice(1) : null; },
   profileClear: (chatId) => profiles.clear(chatId),
   // Long-term memory (remember-facts-store): parse+store "remember X", forget matching facts, list them.
-  rememberFact: (chatId, text) => { const f = parseRemember(text); if (!f) return null; notes.add(chatId, f, Date.now()); return f; },
+  rememberFact: (chatId, text) => { const f = parseRemember(text); if (!f) return null; const r = notes.add(chatId, f, Date.now()); return { fact: f, evicted: r.evicted }; },
   forgetFact: (chatId, text) => {
     const p = parseForgetFact(text);
     if (!p) return null;

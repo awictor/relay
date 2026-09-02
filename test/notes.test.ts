@@ -110,6 +110,24 @@ describe("NotesStore", () => {
     expect(list[0]!.text).toBe("fact 5");   // oldest 5 dropped
     expect(list[29]!.text).toBe("fact 34");
   });
+  it("reports what was evicted at the cap so the caller can warn (notes-cap-silent-evict)", () => {
+    const s = new NotesStore({ file: tmp() });
+    for (let i = 0; i < 30; i++) s.add(1, `fact ${i}`, NOW + i); // fill to the cap
+    const r = s.add(1, "the new fact", NOW + 100);
+    expect(r.evicted).toEqual(["fact 0"]); // oldest aged out, and it's named
+    expect(r.dup).toBe(false);
+    // A normal add below the cap evicts nothing.
+    s.clear(1);
+    expect(s.add(1, "solo", NOW).evicted).toEqual([]);
+  });
+  it("marks an exact repeat as dup (nothing stored, nothing evicted)", () => {
+    const s = new NotesStore({ file: tmp() });
+    s.add(1, "I'm vegetarian", NOW);
+    const r = s.add(1, "I'M VEGETARIAN", NOW + 1);
+    expect(r.dup).toBe(true);
+    expect(r.evicted).toEqual([]);
+    expect(s.list(1)).toHaveLength(1);
+  });
   it("persists across reloads", () => {
     const f = tmp();
     const a = new NotesStore({ file: f });

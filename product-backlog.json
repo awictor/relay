@@ -869,7 +869,7 @@
       "title": "remembered-fact cap silently drops the oldest at 30",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The 31st \"remember X\" silently evicts the earliest fact (often the most important) with no warning; store presents as permanent.",
       "how": "On eviction, tell the user what aged out (or refuse + ask them to forget one first, mirroring recipe/alert caps)."
     },
@@ -1181,6 +1181,10 @@
     {
       "id": "notes-forget-substring-collateral",
       "note": "forget-fact now matches whole words, not raw substrings — \"forget that I drink tea\" no longer silently deletes \"my niece Teagan birthday\". matchScore tiers (exact=3 / all-words=2 / some-words=1) delete only the BEST tier; forget returns the removed facts text; the confirm now LISTS exactly what was forgotten so a mismatch is visible + correctable. 866 tests green."
+    },
+    {
+      "id": "notes-cap-silent-evict",
+      "note": "At the 30-fact memory cap, adding a new fact used to silently drop the oldest (often the most important). add() now returns the evicted fact text + a dup flag; the remember confirm warns and NAMES what aged out (\"I was at my memory limit, so I let go of: ...\"). 868 tests green."
     }
   ],
   "audits": [

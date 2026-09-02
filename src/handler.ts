@@ -53,7 +53,7 @@ export interface HandlerDeps {
   // count, or a "cleared all" total); notesList returns the remembered facts for a "what do you know
   // about me" recall. profileContext already carries facts into the agent via the wired contextLine.
   // All optional so older wiring/tests are unaffected.
-  rememberFact?: (chatId: number, text: string) => string | null;
+  rememberFact?: (chatId: number, text: string) => { fact: string; evicted: string[] } | null;
   forgetFact?: (chatId: number, text: string) => { removed: number; all: boolean; forgotten: string[] } | null;
   notesList?: (chatId: number) => string[];
   // Auto-suggest saving a repeated ask as a recipe (product-loop). When true, a reply to a task that
@@ -357,8 +357,16 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       }
     }
     if (deps.rememberFact) {
-      const fact = deps.rememberFact(msg.chatId, msg.text);
-      if (fact) { await deps.sendMessage(msg.chatId, `Got it — I'll remember that ${fact}.`); return; }
+      const r = deps.rememberFact(msg.chatId, msg.text);
+      if (r) {
+        // Warn when the memory was full and the oldest fact aged out, naming it — a silent drop of the
+        // earliest thing they told me reads as "you forgot" (notes-cap-silent-evict).
+        const dropped = r.evicted.length
+          ? ` (I was at my memory limit, so I let go of: ${r.evicted.map((e) => `"${e}"`).join(", ")} — tell me again if that still matters.)`
+          : "";
+        await deps.sendMessage(msg.chatId, `Got it — I'll remember that ${r.fact}.${dropped}`);
+        return;
+      }
     }
 
     // /schedules: list this chat's pending scheduled tasks. No agent run.
