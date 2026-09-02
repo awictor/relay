@@ -160,6 +160,14 @@ const handle = createHandler({
         return llm.describeImage!(file.bytes, file.mimeType, prompt);
       }
     : undefined,
+  // Inbound voice note (product-loop): download + transcribe to text (the handler then runs it).
+  transcribeVoice: llm.transcribeAudio
+    ? async (fileId) => {
+        const file = await downloadFile(fileId);
+        if (!file) return "";
+        return llm.transcribeAudio!(file.bytes, file.mimeType);
+      }
+    : undefined,
   scheduleAdd: (chatId, text, now) => {
     const p = parseSchedule(text, now);
     if (!p) return { ok: false, reason: "unparsed" };

@@ -177,6 +177,34 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/can't read images/i);
   });
 
+  it("a voice note is transcribed then RUN as a task (product-loop)", async () => {
+    let ranTask = "";
+    const { handle, sent } = harness({
+      transcribeVoice: async () => "what's the weather in Paris",
+      runAgentFn: async (t) => { ranTask = t; return { reply: "20C in Paris", steps: 1, tools: [] }; },
+    });
+    await handle({ chatId: 5, from: "u", text: "", messageId: 1, voiceFileId: "V1" } as InboundMessage);
+    expect(ranTask).toBe("what's the weather in Paris");            // transcript run as the task
+    expect(sent.map((s) => s.text)).toEqual(['🎤 "what\'s the weather in Paris"', "20C in Paris"]); // echo + answer
+  });
+
+  it("a voice note with no transcribeVoice dep gets a clear note", async () => {
+    const { handle, sent } = harness();
+    await handle({ chatId: 5, from: "u", text: "", messageId: 1, voiceFileId: "V1" } as InboundMessage);
+    expect(sent[0]!.text).toMatch(/can't do voice/i);
+  });
+
+  it("an unintelligible voice note asks the user to retry, no agent", async () => {
+    let agentCalled = false;
+    const { handle, sent } = harness({
+      transcribeVoice: async () => "   ",
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle({ chatId: 5, from: "u", text: "", messageId: 1, voiceFileId: "V1" } as InboundMessage);
+    expect(agentCalled).toBe(false);
+    expect(sent[0]!.text).toMatch(/couldn't make out/i);
+  });
+
   it("a location message stores it and does NOT run the agent (product-loop)", async () => {
     let agentCalled = false;
     const { handle, sent } = harness({

@@ -19,6 +19,8 @@ export interface InboundMessage {
   messageId: number;
   photoFileId?: string; // set when the message is a photo (product-loop): Telegram file_id of the
                         // largest size; `text` carries the caption (may be empty). Handler downloads it.
+  voiceFileId?: string; // set when the message is a voice note (product-loop): file_id of the audio.
+                        // Handler downloads + transcribes it, then runs the transcript as a task.
 }
 
 export function hasToken(): boolean {
@@ -57,7 +59,9 @@ export async function downloadFile(fileId: string): Promise<{ bytes: Uint8Array;
     if (!dl.ok) return null;
     const bytes = new Uint8Array(await dl.arrayBuffer());
     const ext = path.split(".").pop()?.toLowerCase();
-    const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+    const MIME: Record<string, string> = { png: "image/png", webp: "image/webp", jpg: "image/jpeg", jpeg: "image/jpeg",
+      oga: "audio/ogg", ogg: "audio/ogg", mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav" };
+    const mimeType = (ext && MIME[ext]) || "image/jpeg"; // photos are the common case + have no reliable ext
     return { bytes, mimeType };
   } catch {
     return null;
@@ -127,6 +131,7 @@ interface TgUpdate {
     text?: string;
     caption?: string;                                  // photo/media caption
     photo?: Array<{ file_id: string; width?: number; height?: number }>; // size variants, ascending
+    voice?: { file_id: string; duration?: number; mime_type?: string };  // voice note
     from?: { username?: string; first_name?: string };
   };
 }
@@ -153,6 +158,9 @@ export function parseUpdates(updates: TgUpdate[], offset: number): { messages: I
     if (m.photo && m.photo.length) {
       const largest = m.photo[m.photo.length - 1]!;
       messages.push({ chatId: m.chat.id, text: (m.caption ?? "").trim(), from, messageId: m.message_id, photoFileId: largest.file_id });
+    } else if (m.voice?.file_id) {
+      // Voice note: transcribed + run by the handler (product-loop). No text of its own.
+      messages.push({ chatId: m.chat.id, text: "", from, messageId: m.message_id, voiceFileId: m.voice.file_id });
     } else if (m.text) {
       messages.push({ chatId: m.chat.id, text: m.text, from, messageId: m.message_id });
     }

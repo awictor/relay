@@ -52,6 +52,9 @@ export interface LLMClient {
   // Optional multimodal: describe/answer about an image (product-loop). Given raw bytes + mime +
   // the user's question (caption), return a text answer. Absent = the provider has no vision path.
   describeImage?(image: Uint8Array, mimeType: string, prompt: string): Promise<string>;
+  // Optional audio transcription (product-loop): given voice-note bytes + mime, return the spoken
+  // text. Absent = the provider has no audio path (voice notes get a "can't do voice" note).
+  transcribeAudio?(audio: Uint8Array, mimeType: string): Promise<string>;
 }
 
 // ---- Gemini (free tier) ----------------------------------------------------
@@ -181,17 +184,11 @@ export class GeminiClient implements LLMClient {
     return { text };
   }
 
-  /** Vision: answer `prompt` about an image via Gemini's inlineData part (multimodal, free tier).
-   * Fails over across GEMINI_MODELS on quota like complete(). Throws on total failure. */
-  async describeImage(image: Uint8Array, mimeType: string, prompt: string): Promise<string> {
+  /** Shared multimodal call: POST the given parts (text + inlineData), fail over across
+   * GEMINI_MODELS on quota like complete(), return the concatenated text. Throws on total failure. */
+  private async inlineCall(parts: unknown[], failLabel: string): Promise<string> {
     if (!this.apiKey) throw new Error("GEMINI_API_KEY not set");
-    const b64 = Buffer.from(image).toString("base64");
-    const body = {
-      contents: [{ role: "user", parts: [
-        { text: prompt || "Describe this image and answer any question in it." },
-        { inlineData: { mimeType: mimeType || "image/jpeg", data: b64 } },
-      ] }],
-    };
+    const body = { contents: [{ role: "user", parts }] };
     const TRANSIENT = new Set([500, 502, 503, 504, 408]);
     let r!: Response; let lastErr = "";
     outer: for (const model of GEMINI_MODELS) {
@@ -209,10 +206,26 @@ export class GeminiClient implements LLMClient {
         lastErr = `${model} ${r.status}`; r.body?.cancel?.(); continue outer;
       }
     }
-    if (!r.ok) throw new Error(`Gemini vision failed (${lastErr})`);
+    if (!r.ok) throw new Error(`Gemini ${failLabel} failed (${lastErr})`);
     const j = (await r.json()) as { candidates?: { content?: { parts?: GeminiPart[] } }[] };
-    const parts = j.candidates?.[0]?.content?.parts ?? [];
-    return parts.map((p) => p.text).filter(Boolean).join("").trim() || "I couldn't read that image.";
+    return (j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text).filter(Boolean).join("").trim();
+  }
+
+  /** Vision: answer `prompt` about an image via Gemini's inlineData part (multimodal, free tier). */
+  async describeImage(image: Uint8Array, mimeType: string, prompt: string): Promise<string> {
+    const out = await this.inlineCall([
+      { text: prompt || "Describe this image and answer any question in it." },
+      { inlineData: { mimeType: mimeType || "image/jpeg", data: Buffer.from(image).toString("base64") } },
+    ], "vision");
+    return out || "I couldn't read that image.";
+  }
+
+  /** Transcribe a voice note to text via Gemini audio (multimodal, free tier). Returns "" if silent. */
+  async transcribeAudio(audio: Uint8Array, mimeType: string): Promise<string> {
+    return this.inlineCall([
+      { text: "Transcribe this voice message to plain text. Output ONLY the transcript, nothing else." },
+      { inlineData: { mimeType: mimeType || "audio/ogg", data: Buffer.from(audio).toString("base64") } },
+    ], "transcription");
   }
 }
 

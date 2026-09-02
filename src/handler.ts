@@ -39,6 +39,9 @@ export interface HandlerDeps {
   // Inbound photo (product-loop): when a message carries photoFileId, describeImage answers about it
   // (caption = the question). Optional; absent -> a photo message gets a "can't read images yet" note.
   describeImage?: (fileId: string, caption: string) => Promise<string>;
+  // Inbound voice note (product-loop): transcribe the audio to text; the handler then runs the
+  // transcript as a normal task. Optional; absent -> a voice note gets a "can't do voice" note.
+  transcribeVoice?: (fileId: string) => Promise<string>;
   // Scheduled/proactive tasks (m4 sched-3). All optional so older wiring stays valid; when
   // absent, a "remind me" message just falls through to the normal agent.
   scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number } | { ok: false; reason: "unparsed" | "capped" };
@@ -98,7 +101,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   const log = deps.log ?? console.log;
 
   return async function handle(msg: InboundMessage): Promise<void> {
-    log(`[in] ${msg.from}: ${msg.photoFileId ? "[photo] " : ""}${deps.redactText(msg.text).slice(0, 120)}`);
+    log(`[in] ${msg.from}: ${msg.photoFileId ? "[photo] " : ""}${msg.voiceFileId ? "[voice] " : ""}${deps.redactText(msg.text).slice(0, 120)}`);
 
     // Inbound photo (product-loop): answer about the image (caption = question, or a default). This is
     // a vision call, not the browser agent — handled before the empty-text guard so a captionless
@@ -115,6 +118,25 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         await deps.sendMessage(msg.chatId, friendlyError(e instanceof Error ? e.message : String(e)));
       }
       return;
+    }
+
+    // Inbound voice note (product-loop): transcribe to text, then treat it exactly like a typed task
+    // (falls through to command routing + the agent below). Before the empty-text guard since a voice
+    // message has no text of its own.
+    if (msg.voiceFileId) {
+      if (!deps.transcribeVoice) { await deps.sendMessage(msg.chatId, "I can't do voice yet — text me the task for now."); return; }
+      let transcript = "";
+      try {
+        await deps.sendTyping(msg.chatId);
+        transcript = (await deps.transcribeVoice(msg.voiceFileId)).trim();
+      } catch (e) {
+        await deps.sendMessage(msg.chatId, friendlyError(e instanceof Error ? e.message : String(e)));
+        return;
+      }
+      if (!transcript) { await deps.sendMessage(msg.chatId, "I couldn't make out that voice note — try again or text me."); return; }
+      // Echo what we heard (so a mis-transcription is visible), then run it as a normal message.
+      await deps.sendMessage(msg.chatId, `🎤 "${transcript}"`);
+      msg = { ...msg, text: transcript };
     }
 
     // DEV-0124: a sticker / blank inbound arrives with empty text. It matches no command and would

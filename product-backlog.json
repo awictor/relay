@@ -122,7 +122,7 @@
       "title": "Accept inbound voice notes (transcribe + run)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Voice message = zero reply (dropped like non-photo media); voice-texting is a top interaction + Instinct's headline. Unanimous A+C.",
       "how": "parseUpdates emits voice file_id; downloadFile bytes; Gemini audio transcription (free multimodal) -> run as a normal task. Mirror the photo path."
     },
@@ -175,6 +175,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 13: built empty-slot-arg (audit B, S). '/run track' on a 'price of {item}' recipe substituted empty -> ran a broken task + confident nonsense. Added hasSlots(task); index recipeResolve returns {name,missingArg:true} when a slotted recipe is run with no arg; handler asks 'track needs a value - try /run track <value>' instead of running. +3 tests (hasSlots true/false, handler missingArg-asks-no-agent). 636 pass, tsc clean. call-tested false (pure+handler wiring, unit-tested). Remaining: voice-notes, inbound-document-pdf."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 14: built voice-notes (audit A+C unanimous, Instinct parity). InboundMessage.voiceFileId; parseUpdates maps voice messages; downloadFile mime map gained audio types (oga/ogg/mp3/m4a/wav). LLMClient.transcribeAudio + GeminiClient impl (refactored describeImage+transcribeAudio onto a shared inlineCall for the model-failover boilerplate). Handler voice branch: transcribe -> echo '🎤 \"...\"' -> RUN transcript as a normal task (falls through to command routing+agent); no-dep -> 'cant do voice' note; empty transcript -> 'couldnt make out' retry. index wires transcribeVoice = download+llm.transcribeAudio. +tests: parseUpdates voice, handler (transcribe-run + no-dep + unintelligible), GeminiClient.transcribeAudio inlineData shape. 641 pass, tsc clean. call-tested false (no real audio fixture; shares the live-PROVEN inlineCall path with photo-vision). Remaining: inbound-document-pdf -> then audit refills."
     }
   ],
   "audits": [

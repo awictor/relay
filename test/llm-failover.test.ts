@@ -123,4 +123,16 @@ describe("GeminiClient response parse (DEV-0040)", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "quota" } }), { status: 429 })));
     await expect(new GeminiClient("k").describeImage(new Uint8Array([1]), "image/jpeg", "x")).rejects.toThrow(/vision failed/i);
   });
+
+  it("transcribeAudio sends an audio inlineData part and returns the transcript (product-loop)", async () => {
+    let sentBody: any = null;
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      sentBody = JSON.parse(String(init.body));
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "what's the weather in Paris" }] } }] }), { status: 200 });
+    }));
+    const t = await new GeminiClient("k").transcribeAudio(new Uint8Array([1, 2]), "audio/ogg");
+    expect(t).toBe("what's the weather in Paris");
+    const parts0 = sentBody.contents[0].parts;
+    expect(parts0[1].inlineData.mimeType).toBe("audio/ogg");
+  });
 });
