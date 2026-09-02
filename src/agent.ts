@@ -181,6 +181,18 @@ export function truncateForModel(text: string, max = 6000): string {
   return `${s.slice(0, max)}\n\n[…truncated ${dropped} more characters — this is only the first ${max}. If the answer isn't above, say the page was long and you saw only the top, or fetch a more specific URL/section.]`;
 }
 
+// Format a scrape/read page result for the model, OR — when the page came back nearly empty (a login
+// wall, a JS-only shell that didn't render, or a block) — return an explicit marker so the agent
+// retries (screenshot / different source / search) or says so honestly instead of answering from
+// nothing (empty-read-escalation). Threshold on non-whitespace chars. Exported for tests.
+export function formatPageForModel(title: string, url: string, content: string): string {
+  const nonWs = String(content ?? "").replace(/\s+/g, "").length;
+  if (nonWs < 200) {
+    return `[The page at ${url} came back nearly empty (${nonWs} chars) — it likely needs a login, is JavaScript-only, or blocked me. Don't answer from this; try a screenshot, a different source, or web_search, and tell the user if you can't read it.]`;
+  }
+  return `TITLE: ${title || url}\n\n${truncateForModel(content)}`;
+}
+
 // Default fetchJson: a plain guarded GET. SSRF is checked by the caller; here we cap
 // size, require a JSON content-type, and never forward credentials/cookies.
 async function defaultFetchJson(url: string): Promise<{ status: number; contentType: string; text: string }> {
@@ -305,7 +317,7 @@ export async function runAgent(
         if (!safe.safe) { push("scrape", `ERROR: refused (${safe.reason}).`); continue; }
         try {
           const r = await backend.scrape(url);
-          push("scrape", `TITLE: ${r.title || r.url}\n\n${truncateForModel(r.content)}`);
+          push("scrape", formatPageForModel(r.title, r.url, r.content));
         } catch (e) {
           push("scrape", `ERROR fetching ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -493,7 +505,7 @@ export async function runAgent(
         if (!sessionId) { push("read", "ERROR: no page open. Call browse first."); continue; }
         try {
           const r = await backend.readCurrent(sessionId);
-          push("read", `TITLE: ${r.title || r.url}\n\n${truncateForModel(r.content)}`);
+          push("read", formatPageForModel(r.title, r.url, r.content));
         } catch (e) {
           push("read", `ERROR: ${e instanceof Error ? e.message : String(e)}`);
         }

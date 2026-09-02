@@ -752,7 +752,7 @@
       "title": "Detect a near-empty scrape/read and tell the agent it failed",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Only extract has an all-null fallback; scrape/readCurrent/browse have NO empty-content check, so a login wall / JS-only shell / blocked page returns ~0 chars + the agent answers from nothing (hallucinated / weak) with no signal the fetch failed (audit 20 A#4).",
       "how": "In the scrape/read tool results, if the returned text is <~200 non-ws chars, return a marker ('[page came back nearly empty — it may need a login, be JS-only, or have blocked me; try a screenshot / a different source]') so the model retries or says so honestly instead of inventing."
     },
@@ -823,6 +823,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 79: built empty-read-escalation (audit 20 A#4, high/S). scrape/readCurrent had no empty-content check (only extract had an all-null fallback), so a login wall / JS-only shell / blocked page returned ~0 chars + the agent answered from nothing (hallucinated / weak) with no signal. New formatPageForModel(title,url,content): if non-whitespace content <200 chars, returns '[The page at <url> came back nearly empty (<n> chars) — likely needs a login, is JS-only, or blocked me. Don't answer from this; try a screenshot / different source / web_search, tell the user if you can't read it.]'; else the normal TITLE + truncateForModel body. Both the scrape + read tool branches use it. +5 tests (formatPageForModel empty/normal; agent near-empty-scrape flags-not-answers; bumped 2 short mock contents that now would trip the threshold). 808 pass, tsc clean. call-tested false (pure formatter + tool wiring, unit-tested). Remaining: cookie-consent-dismiss, failed-watch-receipts."
     },
     {
       "event": "PRODUCT-LOOP iter 78: built inject-current-datetime (audit 20 A#1, high/S). SYSTEM_PROMPT + context never told the model the current date/time, so 'news today', 'open right now', 'days until X', 'latest'/'this week' reasoned from the training cutoff -> confidently stale/vague. New buildNowLine(nowMs, offsetMin) renders 'Right now it is <Weekday, Mon D, YYYY, HH:MM (UTC±off, the user's timezone)>. Use this for anything time-relative...'; runAgent injects it as a system line when AgentDeps.nowMs is set (absent = back-compat, no line). Handler passes nowMs=deps.now() + tzOffsetMin from a new chatTzOffsetMin dep (index wires profiles.offsetMin ?? global). +8 tests (buildNowLine zone/negative/half-hour; runAgent injects/omits). 805 pass, tsc clean. LIVE-VERIFIED: 'what's today's date?' -> 'Wednesday, September 2, 2026' from the injected now, 0 tools (no wasteful browse). call-tested TRUE. Backlog DRY -> ran audit next. NOTE: proactive runners (schedule/digest/alert) don't pass nowMs yet — seed if audit flags."

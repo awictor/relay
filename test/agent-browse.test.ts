@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runAgent, type BrowserBackend } from "../src/agent.js";
+import { runAgent, formatPageForModel, type BrowserBackend } from "../src/agent.js";
 import type { LLMClient, LLMMessage, LLMResult, ToolSpec } from "../src/llm.js";
 
 class MockLLM implements LLMClient {
@@ -14,17 +14,31 @@ class MockLLM implements LLMClient {
 function mockBackend(overrides: Partial<BrowserBackend> = {}): { backend: BrowserBackend; log: string[] } {
   const log: string[] = [];
   const backend: BrowserBackend = {
-    scrape: async (url) => { log.push(`scrape:${url}`); return { title: "S", content: "scraped", url }; },
+    scrape: async (url) => { log.push(`scrape:${url}`); return { title: "S", content: "scraped page body ".repeat(20), url }; },
     createSession: async () => { log.push("createSession"); return { id: "sess-1" }; },
     navigate: async (id, url) => { log.push(`navigate:${url}`); return { url, title: "Nav" }; },
     click: async (id, sel) => { log.push(`click:${sel}`); },
     type: async (id, sel, text) => { log.push(`type:${sel}=${text}`); },
-    readCurrent: async (id) => { log.push("read"); return { title: "R", content: "page after actions", url: "https://x" }; },
+    readCurrent: async (id) => { log.push("read"); return { title: "R", content: "page after actions ".repeat(20), url: "https://x" }; },
     releaseSession: async (id) => { log.push(`release:${id}`); },
     ...overrides,
   };
   return { backend, log };
 }
+
+describe("formatPageForModel (empty-read-escalation)", () => {
+  it("flags a near-empty page instead of passing it through", () => {
+    const out = formatPageForModel("", "https://x.com/wall", "Log in to continue");
+    expect(out).toMatch(/came back nearly empty/i);
+    expect(out).toMatch(/login|JavaScript|blocked/i);
+  });
+  it("passes through a normal-length page", () => {
+    const body = "Real article text here. ".repeat(20);
+    const out = formatPageForModel("Story", "https://x.com/a", body);
+    expect(out).toMatch(/^TITLE: Story/);
+    expect(out).toContain("Real article text");
+  });
+});
 
 describe("runAgent current-datetime injection (inject-current-datetime)", () => {
   it("injects a 'Right now it is ...' system message when nowMs is provided", async () => {

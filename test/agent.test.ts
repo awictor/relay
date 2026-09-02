@@ -31,13 +31,24 @@ describe("runAgent", () => {
       { toolCall: { name: "scrape", args: { url: "https://news.ycombinator.com" } } },
       { toolCall: { name: "reply", args: { text: "Top story: Foo (123 pts)" } } },
     ]);
-    const scrapeFn = async (url: string) => ({ title: "Hacker News", content: "Foo — 123 points", url });
+    const scrapeFn = async (url: string) => ({ title: "Hacker News", content: "Foo — 123 points. " + "more story text ".repeat(20), url });
     const { reply, steps } = await runAgent("top HN story?", { llm, scrapeFn });
     expect(reply).toBe("Top story: Foo (123 pts)");
     expect(steps).toBe(2);
     // The scrape result must have been fed back to the LLM on the 2nd call.
     const secondCallMsgs = llm.calls[1]!;
     expect(secondCallMsgs.some((m) => m.role === "tool" && m.content.includes("Foo"))).toBe(true);
+  });
+
+  it("a near-empty scraped page is flagged to the model, not answered from (empty-read-escalation)", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "scrape", args: { url: "https://paywall.example.com/x" } } },
+      { toolCall: { name: "reply", args: { text: "That page needs a login." } } },
+    ]);
+    const scrapeFn = async (url: string) => ({ title: "", content: "Please sign in", url }); // ~13 chars
+    await runAgent("summarize this", { llm, scrapeFn });
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/came back nearly empty/i);
   });
 
   it("blocks an SSRF scrape target and reports the error to the model", async () => {
