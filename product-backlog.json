@@ -932,7 +932,7 @@
       "title": "no paywall/login-wall detection when summarizing an article",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Pasting an NYT/WSJ/Medium link + \"summarize\" returns the paywall stub summarized as if the article, or a generic error.",
       "how": "Detect paywall/metered markers in the scraped page (or a near-empty body on a known-paywalled host) + a friendlyError \"paywalled\" category that offers the free bits/another source."
     },
@@ -1276,6 +1276,10 @@
     {
       "id": "watch-time-series",
       "note": "Numeric watches now accumulate a time series: each check with an extractable value appends {t,v} (capped 400, oldest-drop). \"how has btc moved this week\" / \"btc trend\" answers from stored points — first->last + delta + %, high/low, span — NO agent/LLM/re-fetch. Alert.series + recordPoint/seriesOf on the store; parseTrendRequest + summarizeSeries (pure); recordPoint wired in the runner (numeric non-feed checks); watchTrend handler branch before answer-recall. 923 tests green."
+    },
+    {
+      "id": "paywall-detection",
+      "note": "A paywalled article link (NYT/WSJ/Medium etc.) that renders a subscribe/register STUB (short body, not the empty-shell case) is now flagged to the agent instead of summarized as if it were the article — the marker tells it to say the page is paywalled + offer a free source (web_search the headline). formatPageForModel gained a looksPaywalled check gated on a short body (<1500 non-ws) so a long article mentioning subscribe in a footer still passes through. 927 tests green."
     }
   ],
   "audits": [

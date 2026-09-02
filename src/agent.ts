@@ -204,7 +204,22 @@ export function formatPageForModel(title: string, url: string, content: string):
   if (nonWs < 200) {
     return `[The page at ${url} came back nearly empty (${nonWs} chars) — it likely needs a login, is JavaScript-only, or blocked me. Don't answer from this; try a screenshot, a different source, or web_search, and tell the user if you can't read it.]`;
   }
+  // Paywall / metered-content wall (paywall-detection): the page rendered SOME text (so it's not the
+  // empty-shell case) but it's a subscribe/register stub, not the article. Summarizing that stub would
+  // pass off "subscribe to continue" as the content — mark it so the agent says it's paywalled + offers
+  // a free source instead. Only when the article body is short (a real long article that merely mentions
+  // "subscribe" in a footer is fine).
+  if (nonWs < 1500 && looksPaywalled(content)) {
+    return `[The page at ${url} looks paywalled / subscriber-only — I can see a subscribe/register prompt but not the full article. Don't summarize this stub as the article; tell the user it's behind a paywall and offer to find a free source or the gist from elsewhere (web_search the headline).]`;
+  }
   return `TITLE: ${title || url}\n\n${truncateForModel(content)}`;
+}
+
+// Paywall / metered-access language. Matches the common subscribe-wall stubs (NYT/WSJ/Economist/
+// Medium/Bloomberg/FT etc.). Exported for tests.
+const PAYWALL_RE = /\b(subscribe to (?:continue|read)|subscribers? only|create (?:a\s+)?(?:free\s+)?account to (?:continue|read)|already a subscriber|to continue reading|this (?:article|content|story) is (?:for subscribers|reserved)|register to (?:continue|read)|sign in to (?:continue|read)|become a member to|unlock this (?:article|story)|start your (?:free )?(?:trial|subscription)|metered|paywall)\b/i;
+export function looksPaywalled(content: string): boolean {
+  return PAYWALL_RE.test(String(content ?? ""));
 }
 
 // Default fetchJson: a plain guarded GET. SSRF is checked by the caller; here we cap

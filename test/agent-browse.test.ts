@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runAgent, formatPageForModel, type BrowserBackend } from "../src/agent.js";
+import { runAgent, formatPageForModel, looksPaywalled, type BrowserBackend } from "../src/agent.js";
 import type { LLMClient, LLMMessage, LLMResult, ToolSpec } from "../src/llm.js";
 
 class MockLLM implements LLMClient {
@@ -37,6 +37,28 @@ describe("formatPageForModel (empty-read-escalation)", () => {
     const out = formatPageForModel("Story", "https://x.com/a", body);
     expect(out).toMatch(/^TITLE: Story/);
     expect(out).toContain("Real article text");
+  });
+  it("flags a short paywall stub instead of summarizing it (paywall-detection)", () => {
+    const stub = "The Big Story headline that teases the article. " + "You've read your last free article this month. ".repeat(5) + " To continue reading, subscribe to continue. Already a subscriber? Sign in.";
+    const out = formatPageForModel("The Big Story", "https://nyt.com/a", stub);
+    expect(out).toMatch(/paywalled|subscriber-only/i);
+    expect(out).toMatch(/free source|web_search/i);
+  });
+  it("does NOT flag a long article that merely mentions 'subscribe' in a footer", () => {
+    const body = "Real article body. ".repeat(120) + " Subscribe to our newsletter."; // >1500 non-ws
+    const out = formatPageForModel("Story", "https://x.com/a", body);
+    expect(out).toMatch(/^TITLE: Story/); // passed through, not flagged
+  });
+});
+
+describe("looksPaywalled (paywall-detection)", () => {
+  it("true for common subscribe/register wall language", () => {
+    for (const t of ["Subscribe to continue reading", "This article is for subscribers", "Create a free account to continue", "Become a member to unlock this story", "Start your free trial"]) {
+      expect(looksPaywalled(t), t).toBe(true);
+    }
+  });
+  it("false for ordinary article text", () => {
+    expect(looksPaywalled("The company reported earnings today and shares rose.")).toBe(false);
   });
 });
 
