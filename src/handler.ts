@@ -48,7 +48,9 @@ export interface HandlerDeps {
   // "save <name>: <task>" message (null if it isn't one); recipeResolve returns a saved task by
   // name (null if unknown); recipeList/recipeForget manage them.
   recipeSave?: (chatId: number, text: string) => { ok: true; name: string } | { ok: false; reason: "unparsed" | "capped" };
-  recipeResolve?: (chatId: number, text: string) => { name: string; task: string } | null; // parses a run command + looks up
+  // parses a run command + looks up. { missingArg } = a slotted recipe was run with no value, so the
+  // handler asks for it instead of running a broken (empty-slot) task (product-loop).
+  recipeResolve?: (chatId: number, text: string) => { name: string; task: string } | { name: string; missingArg: true } | null;
   recipeList?: (chatId: number) => Array<{ name: string; task: string; schedule?: string }>;
   recipeForget?: (chatId: number, name: string) => boolean;
   // Schedule a saved recipe to run on a cadence (m7 recipe-3): "schedule <name> every morning".
@@ -302,6 +304,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         return;
       }
       const hit = deps.recipeResolve?.(msg.chatId, msg.text);
+      if (hit && "missingArg" in hit) { await deps.sendMessage(msg.chatId, `"${hit.name}" needs a value — try "/run ${hit.name} <value>".`); return; }
       if (hit) { msg = { ...msg, text: hit.task }; } // run the saved task via the agent path below
       else if (/^\/run\b/i.test(msg.text)) { await deps.sendMessage(msg.chatId, "No recipe or digest by that name — see /recipes or /digests."); return; }
       // natural "run ..." with no match: fall through to the agent as a normal message.

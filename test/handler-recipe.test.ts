@@ -40,6 +40,16 @@ describe("handler — recipe routing", () => {
     expect(agentTexts).toHaveLength(0);
   });
 
+  it("a slotted recipe run with no value asks for it, no agent (product-loop)", async () => {
+    const { handle, sent, agentTexts } = harness({
+      recipeResolve: (_c, _text) => ({ name: "track", missingArg: true as const }),
+    });
+    await handle(msg("/run track"));
+    expect(sent[0]).toMatch(/needs a value/i);
+    expect(sent[0]).toMatch(/\/run track <value>/);
+    expect(agentTexts).toHaveLength(0);
+  });
+
   it("capped save warns, no agent", async () => {
     const { handle, sent, agentTexts } = harness();
     await handle(msg("save cap: something"));

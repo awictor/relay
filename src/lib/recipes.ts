@@ -72,6 +72,12 @@ export function applySlots(task: string, args: string): string {
   return task.replace(/\{[a-z0-9_]+\}/gi, a);
 }
 
+/** True if the task has at least one {slot}. Used to detect a slotted recipe run with no argument
+ * (which would substitute empty + run a broken task) so the caller can ask for the value instead. */
+export function hasSlots(task: string): boolean {
+  return /\{[a-z0-9_]+\}/i.test(task);
+}
+
 function normalizeName(s: string): string {
   return s.trim().replace(/^["']|["']$/g, "").replace(/\s+/g, " ").toLowerCase().slice(0, 60);
 }

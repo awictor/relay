@@ -23,7 +23,7 @@ import { friendlyError } from "./lib/failure.js";
 import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
 import { ScheduleStore, parseSchedule } from "./lib/schedule.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
-import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots } from "./lib/recipes.js";
+import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots } from "./lib/recipes.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand } from "./lib/alerts.js";
@@ -188,7 +188,10 @@ const handle = createHandler({
     const parsed = parseRunWithArgs(text);
     if (!parsed) return null;
     const rec = recipes.get(chatId, parsed.name);
-    return rec ? { name: rec.name, task: applySlots(rec.task, parsed.args) } : null;
+    if (!rec) return null;
+    // A slotted recipe run with no value would substitute empty + run a broken task — ask instead.
+    if (hasSlots(rec.task) && !parsed.args.trim()) return { name: rec.name, missingArg: true };
+    return { name: rec.name, task: applySlots(rec.task, parsed.args) };
   },
   recipeList: (chatId) => recipes.list(chatId).map((r) => ({ name: r.name, task: r.task, schedule: r.schedule })),
   recipeForget: (chatId, name) => recipes.remove(chatId, name),

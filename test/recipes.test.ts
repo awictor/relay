@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, applySlots, RecipeStore } from "../src/lib/recipes.js";
+import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, applySlots, hasSlots, RecipeStore } from "../src/lib/recipes.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -32,6 +32,15 @@ describe("applySlots", () => {
   });
   it("no slot -> unchanged (stray args ignored)", () => {
     expect(applySlots("check bitcoin price", "sneakers")).toBe("check bitcoin price");
+  });
+});
+
+describe("hasSlots", () => {
+  it("true when the task has a {slot}", () => {
+    expect(hasSlots("track price of {item}")).toBe(true);
+  });
+  it("false for a plain task", () => {
+    expect(hasSlots("check bitcoin price")).toBe(false);
   });
 });
 

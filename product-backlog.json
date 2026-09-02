@@ -113,7 +113,7 @@
       "title": "Reject empty-arg on a slotted recipe",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'/run track' on 'price of {item}' substitutes empty -> runs a broken task + confident nonsense.",
       "how": "If a recipe task has {slots} but args is empty, reply asking for the value instead of running. applySlots/handler run-path."
     },
@@ -172,6 +172,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 12: built extractone-truncation (audit B, high/S). extractOne fed the extractor LLM r.content.slice(0,8000) + structured.slice(0,8000) with NO marker, so extract/compare/price+stock alerts silently missed a value below the cut on a long page. Swapped both to truncateForModel(...,8000) so the extractor sees [truncated N more...] and hedges/re-targets. +2 tests (long page marked, short page unmarked). 633 pass, tsc clean. call-tested false (existing truncateForModel applied to a tested path). Remaining: empty-slot-arg, voice-notes, inbound-document-pdf."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 13: built empty-slot-arg (audit B, S). '/run track' on a 'price of {item}' recipe substituted empty -> ran a broken task + confident nonsense. Added hasSlots(task); index recipeResolve returns {name,missingArg:true} when a slotted recipe is run with no arg; handler asks 'track needs a value - try /run track <value>' instead of running. +3 tests (hasSlots true/false, handler missingArg-asks-no-agent). 636 pass, tsc clean. call-tested false (pure+handler wiring, unit-tested). Remaining: voice-notes, inbound-document-pdf."
     }
   ],
   "audits": [
