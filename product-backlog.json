@@ -284,7 +284,7 @@
       "title": "Answer calc/convert/known-fact instantly, no browser round-trip",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'20% tip on $47', '100 USD in EUR', 'oz in a cup', 'capital of France' trigger a slow web_search/scrape (or risk the 'never invent data' refusal), adding 10-30s to the exact throwaway questions people first test the bot with (audit 7 A#5).",
       "how": "Let the agent answer directly (reply without a tool) for arithmetic/unit-conversion/common-knowledge that needs no live data; a SYSTEM_PROMPT carve-out to the 'never invent data' rule for deterministic math/facts. Keep web_search for anything time-sensitive or uncertain."
     }
@@ -337,6 +337,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 32: built instant-calc-convert (audit 7 A#5, medium/S). '20% tip on $47', 'oz in a cup', 'capital of France' triggered a slow web_search/scrape (or risked the 'never invent data' refusal), adding 10-30s to the throwaway questions people first test the bot with. Added a SYSTEM_PROMPT carve-out: answer DIRECTLY (reply, no tool) for deterministic math/tips/percentages, unit conversions, date math, stable common knowledge; tools ONLY for time-sensitive/moving data (live prices, exchange rates, news, weather), verify-not-guess when unsure. +1 prompt-guard test (answer-directly + arithmetic + still-steers-live-to-tools). 685 pass, tsc clean. LIVE-VERIFIED: '20% tip on $47'->$9.40, 'oz in a cup'->8, 'capital of France'->Paris, all 1 step / 0 tools. call-tested TRUE. Backlog DRY -> ran 8th audit (same iteration)."
     },
     {
       "event": "PRODUCT-LOOP iter 31: built telegram-command-menu (audit 7 A#4, high/S). No setMyCommands call existed, so Telegram's native '/' autocomplete was empty + the 12 commands were a bare wall of names in /start -> a new user couldn't discover/type /run, /alerts, /setlocation. Added BOT_COMMANDS (13 commands + <=256-char descriptions) + registerCommands() (best-effort setMyCommands, no-op without token, logs+false on failure); index main() calls it on startup for the telegram channel only. +3 tests (valid shapes, core commands present, no dupes). 684 pass, tsc clean. LIVE-VERIFIED: real setMyCommands returned true, getMyCommands read back all 13 commands. call-tested TRUE. Remaining: instant-calc-convert -> then backlog dry -> audit refills."

@@ -23,4 +23,12 @@ describe("SYSTEM_PROMPT ↔ TOOLS sync (DEV-0074)", () => {
     expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/underspecified/);
     expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/one (short )?question|ask at most once/);
   });
+
+  it("carries the answer-directly carve-out for deterministic math/facts (instant-calc-convert)", () => {
+    // Guard the "don't browse for arithmetic/conversions/known facts" behavior against prompt edits.
+    expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/answer directly/);
+    expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/arithmetic|conversion|deterministic/);
+    // must still steer live/moving data (prices, rates) to tools
+    expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/time-sensitive|live|current/);
+  });
 });
