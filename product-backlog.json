@@ -589,17 +589,17 @@
       "id": "confirm-to-act",
       "title": "Confirm-to-act: one committing click via a text 'yes'",
       "impact": "high",
-      "effort": "M",
-      "status": "todo",
+      "effort": "L",
+      "status": "deferred",
       "why": "safety.ts flat-refuses EVERY committing action + the prompt says 'tell the user instead', so Relay is structurally read-only — it can't finish the errands (submit/reserve/order) that beat Instinct, even for a trusting user (audit 16 C#1).",
-      "how": "On a DANGEROUS_ACTION click, instead of refusing, reply 'This will <action> on <site> — reply YES to do it' + hold a per-chat pending single action across one turn; a 'yes' next turn resumes just that click. Plain-text confirm, single action, no keyboards. Careful safety review — keep the refusal default for anything without an explicit confirm."
+      "how": "DEFERRED (owner decision, not autonomously loop-safe): this makes the bot perform real irreversible/outward actions (submit/pay/order) — it needs a cross-turn persisted browser session (anvil sessions are per-turn today), a durable pending-action store, and an explicit product+safety sign-off on relaxing the DANGEROUS_ACTION refusal default. The loop should NOT ship autonomous committing actions without that review. Revisit when the owner opts in + session-persistence lands (see 'persistent named browser sessions')."
     },
     {
       "id": "content-aware-cta",
       "title": "Make the post-answer follow-up offer answer-specific",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The post-answer tip + save-nudge fire on shape not meaning (templated), so they're easy to ignore + don't convert. A price answer should offer 'watch it under $X?', a how-to 'save as PDF?' (audit 16 C#2).",
       "how": "A heuristic on the reply text + which tools ran picks ONE relevant CTA (price/number -> watch; list -> save recipe; page -> PDF/screenshot). Replace the generic recurring tip when a specific one applies; keep terse."
     }
@@ -652,6 +652,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 65: built content-aware-cta (audit 16 C#2, medium/S). The one-time first-answer tip was templated ('every morning ...') regardless of the answer, so it was easy to ignore + didn't convert. New recurringCta(userText, reply, tools) picks the CTA by content: a price/number answer -> 'watch it: ... below <price>'; a fetched page (scrape/extract/browse/search/pdf ran) -> 'every morning ... / save that as'; else the plain daily. Handler's first-tip path calls it with the reply + tools used. +4 tests (price->watch, fetched->digest/save, no-tool->plain, marker-prefixed). 768 pass, tsc clean. call-tested false (pure heuristic + wiring, unit-tested). TRIAGE NOTE: confirm-to-act was the top todo but DEFERRED (status:deferred) — it drives real irreversible/outward committing actions (submit/pay/order), needs cross-turn session persistence Relay lacks + an explicit owner safety sign-off to relax the DANGEROUS_ACTION refusal; not autonomously loop-safe to ship. Built the next actionable (content-aware-cta) instead. Backlog DRY -> ran 17th audit (same iteration)."
     },
     {
       "event": "PRODUCT-LOOP iter 64: built scheduled-recipe-slot-refire (audit 16 B#2, high/S, gap opened by iter-61 recipe-schedule-stable-marker). recipeSchedule guards hasSlots at schedule time + runDigest per-member, but the runner's recipe:<name> fire path (resolves current task by name) had no hasSlots re-check — editing a scheduled recipe to add a {slot} made it fire the literal 'track {coin}' every morning as garbage unprompted. Runner now hasSlots(resolved) -> skip firing + no send (recurring schedule stays so it self-heals if the slot is later removed); imported hasSlots. +1 test (edited-to-slot recipe skips, daily stays). 764 pass, tsc clean. call-tested false (runner guard, unit-tested). Remaining: confirm-to-act, content-aware-cta."

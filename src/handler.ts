@@ -10,7 +10,7 @@ import { formatReply } from "./lib/format-reply.js";
 import { formatTurnLog } from "./lib/turn-log.js";
 import { friendlyError } from "./lib/failure.js";
 import { splitScheduleCommand } from "./lib/schedule.js";
-import { repeatedTaskNudge } from "./lib/task-suggest.js";
+import { repeatedTaskNudge, recurringCta } from "./lib/task-suggest.js";
 import { formatUtcOffset } from "./lib/profile.js";
 import { parseSaveThatAs } from "./lib/recipes.js";
 
@@ -600,7 +600,9 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         // time per chat and never stacks with the save-nudge.
         else if (history.length === 0 && !tippedChats.has(msg.chatId)) {
           tippedChats.add(msg.chatId);
-          out += `\n\n💡 Tip: I can keep this coming — say "every morning ${msg.text.trim()}" for a daily text, or "watch ..." to be pinged when something changes.`;
+          // Answer-specific tip (content-aware-cta): a price answer offers a watch, a fetched page a
+          // digest, else the plain daily — a relevant CTA converts better than a templated one.
+          out += recurringCta(msg.text, reply, tools);
         }
       }
       // If the agent produced a binary (screenshot image or PDF), send it first with the reply as

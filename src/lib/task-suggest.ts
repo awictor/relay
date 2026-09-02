@@ -51,6 +51,26 @@ export function repeatedTaskNudge(current: string, history: LLMMessage[]): strin
 }
 
 /**
+ * A ONE-LINE, answer-specific "make this recurring / keep it" tip for a first clean reply (content-
+ * aware-cta). Picks the most relevant nudge from the reply content + which tools ran, instead of a
+ * generic "every morning" line: a price/number answer -> offer a threshold watch; a page/list the
+ * agent fetched -> offer a daily digest of it; otherwise the plain daily. `tools` is the tool names
+ * used this turn. Returns a string starting with the 💡 marker.
+ */
+export function recurringCta(userText: string, reply: string, tools: string[] = []): string {
+  const t = userText.trim();
+  const hasPrice = /[$€£]\s?\d|(\bprice\b|\bcost\b|\bworth\b|\bstock\b|\bin stock\b)/i.test(userText + " " + reply);
+  const fetched = tools.some((x) => /scrape|extract|browse|search|fetch_json|screenshot|pdf/.test(x));
+  if (hasPrice) {
+    return `\n\n💡 Tip: I can watch this for you — say "watch it: ${t} below <price>" and I'll ping you when it crosses.`;
+  }
+  if (fetched) {
+    return `\n\n💡 Tip: want this on a schedule? Say "every morning ${t}" for a daily text, or "save that as <name>" to re-run it anytime.`;
+  }
+  return `\n\n💡 Tip: I can keep this coming — say "every morning ${t}" for a daily text, or "watch ..." to be pinged when something changes.`;
+}
+
+/**
  * Match a free-text inbound message against saved recipes so a user can REUSE one without recalling
  * the exact /run name (recipe-auto-recall). Returns the best recipe {name} whose task strongly
  * overlaps the message, or null. Conservative — high threshold (0.7) + >=2 salient tokens — so a

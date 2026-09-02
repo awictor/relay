@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { repeatedTaskNudge, matchRecipe, SAVE_NUDGE_MARKER } from "../src/lib/task-suggest.js";
+import { repeatedTaskNudge, matchRecipe, recurringCta, SAVE_NUDGE_MARKER } from "../src/lib/task-suggest.js";
 import type { LLMMessage } from "../src/llm.js";
 
 const turn = (role: "user" | "assistant", content: string): LLMMessage => ({ role, content } as LLMMessage);
@@ -50,5 +50,22 @@ describe("matchRecipe (recipe-auto-recall)", () => {
   });
   it("returns null for an empty recipe set", () => {
     expect(matchRecipe("check bitcoin price", [])).toBeNull();
+  });
+});
+
+describe("recurringCta (content-aware-cta)", () => {
+  it("offers a WATCH for a price/number answer", () => {
+    expect(recurringCta("price of bitcoin", "Bitcoin is $67,000 right now.", ["web_search", "scrape"])).toMatch(/watch it:/i);
+  });
+  it("offers a digest/save for a fetched page with no price", () => {
+    const c = recurringCta("top hacker news story", "The top story is X.", ["scrape"]);
+    expect(c).toMatch(/every morning|save that as/i);
+    expect(c).not.toMatch(/watch it:/i);
+  });
+  it("falls back to the plain daily tip for a no-tool answer", () => {
+    expect(recurringCta("motivate me", "You got this!", [])).toMatch(/keep this coming/i);
+  });
+  it("always starts with the tip marker", () => {
+    expect(recurringCta("x y z", "z", []).trim().startsWith("💡")).toBe(true);
   });
 });
