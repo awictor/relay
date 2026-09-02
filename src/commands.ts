@@ -16,7 +16,7 @@ Or schedule me: "remind me to stretch in 20 min", "every morning text me the wea
 
 Save a recipe: "save btc: check the price of bitcoin", then /run btc anytime.
 
-Commands: /help  /start  /reset  /status  /sites  /setlocation  /schedules  /cancel  /recipes  /run  /forget  /digests  /alerts`;
+Commands: /help  /start  /reset  /status  /sites  /setlocation  /profile  /schedules  /cancel  /recipes  /run  /forget  /digests  /alerts`;
 
 const HELP = `Relay — what I can do:
 • Read a page: send a link, or name a site + what you want. ("top HN story", "weather in Paris")
@@ -36,7 +36,7 @@ Bundle into a briefing: "define digest morning: weather, hn, btc" then /run morn
 
 Watch for changes: "watch btc: price of bitcoin when it changes by 1000" — I only ping you when it moves. Or set a target: "watch btc: bitcoin below 50000", "watch eth: ethereum above 4000", "watch ps5: the PS5 back in stock" — I ping once when it crosses. /alerts lists them, /forget-alert <name> stops one. Retune one anytime: "change btc to below 45000" or "make ps5 fire under 200".
 
-Set your location: "/setlocation Austin, TX" (or just "I'm in London") so "weather" and "near me" work without repeating the city. Add "(metric)" or "(imperial)" for units, and "UTC-5" so daily reminders fire at YOUR local time.
+Set your location: "/setlocation Austin, TX" (or just "I'm in London") so "weather" and "near me" work without repeating the city. Add "(metric)" or "(imperial)" for units, and "UTC-5" so daily reminders fire at YOUR local time. /profile shows what's stored; "/profile clear" forgets it.
 
 Sites I'm signed in for: /sites lists the hosts you've authorized me for (via cookies you configure) — I only read public pages otherwise.
 

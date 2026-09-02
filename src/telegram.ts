@@ -45,6 +45,7 @@ export const BOT_COMMANDS: Array<{ command: string; description: string }> = [
   { command: "alerts", description: "List your watch-and-notify alerts" },
   { command: "forget", description: "Delete a saved recipe: /forget <name>" },
   { command: "setlocation", description: "Set your city + timezone for weather + reminders" },
+  { command: "profile", description: "Show or clear your saved location/units/timezone" },
   { command: "sites", description: "Sites I'm signed in for (via your cookies)" },
   { command: "reset", description: "Clear our conversation history" },
   { command: "status", description: "Relay's health + uptime" },

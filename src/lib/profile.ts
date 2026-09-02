@@ -91,6 +91,15 @@ export class ProfileStore {
   /** The chat's tz offset (min east of UTC) if set, else undefined so callers fall back to global. */
   offsetMin(chatId: number): number | undefined { return this.get(chatId)?.tzOffsetMin; }
 
+  /** Forget a chat's stored profile (location/units/tz). Returns true if there was one to clear. */
+  clear(chatId: number): boolean {
+    const before = this.items.length;
+    this.items = this.items.filter((p) => p.chatId !== chatId);
+    const cleared = this.items.length < before;
+    if (cleared) this.persist();
+    return cleared;
+  }
+
   /** A one-line context string for the agent, or "" if nothing set. */
   contextLine(chatId: number): string {
     const p = this.get(chatId);

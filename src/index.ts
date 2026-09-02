@@ -150,6 +150,9 @@ const handle = createHandler({
     return { location: rec.location!, units: rec.units, tzOffsetMin: rec.tzOffsetMin };
   },
   profileContext: (chatId) => profiles.contextLine(chatId),
+  // /profile view + clear (product-loop): echo the stored profile so a wrong city/tz is visible.
+  profileView: (chatId) => { const l = profiles.contextLine(chatId); return l ? l.charAt(0).toUpperCase() + l.slice(1) : null; },
+  profileClear: (chatId) => profiles.clear(chatId),
   // Inbound photo (product-loop): download the Telegram file, ask the LLM to answer about it. Needs
   // a multimodal LLM (Gemini); absent describeImage -> handler tells the user images aren't supported.
   describeImage: llm.describeImage

@@ -246,6 +246,33 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/Paris/);
   });
 
+  it("/profile shows the stored profile, no agent (profile-view-reset)", async () => {
+    let agentCalled = false;
+    const { handle, sent } = harness({
+      profileView: () => "Home location is Paris; timezone is UTC+1",
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("/profile", 5));
+    expect(agentCalled).toBe(false);
+    expect(sent[0]!.text).toMatch(/Paris/);
+    expect(sent[0]!.text).toMatch(/UTC\+1/);
+  });
+
+  it("/profile with nothing saved hints how to set it", async () => {
+    const { handle, sent } = harness({ profileView: () => null });
+    await handle(msg("/profile", 5));
+    expect(sent[0]!.text).toMatch(/No profile saved/i);
+    expect(sent[0]!.text).toMatch(/setlocation/i);
+  });
+
+  it("/profile clear forgets it, no agent", async () => {
+    let cleared = 0;
+    const { handle, sent } = harness({ profileClear: () => { cleared++; return true; } });
+    await handle(msg("/profile clear", 5));
+    expect(cleared).toBe(1);
+    expect(sent[0]!.text).toMatch(/[Cc]leared/);
+  });
+
   it("passes the profile context into the agent run", async () => {
     let gotContext: string | undefined;
     const { handle } = harness({

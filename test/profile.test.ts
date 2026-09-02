@@ -83,4 +83,13 @@ describe("ProfileStore", () => {
   it("contextLine is empty for an unknown chat", () => {
     expect(new ProfileStore({ file: tmp() }).contextLine(99)).toBe("");
   });
+  it("clear() forgets a chat's profile + reports whether there was one (profile-view-reset)", () => {
+    const f = tmp();
+    const s = new ProfileStore({ file: f });
+    s.set(1, { location: "Paris", tzOffsetMin: 60 });
+    expect(s.clear(1)).toBe(true);
+    expect(s.get(1)).toBeUndefined();
+    expect(s.clear(1)).toBe(false); // nothing left
+    expect(new ProfileStore({ file: f }).get(1)).toBeUndefined(); // persisted
+  });
 });

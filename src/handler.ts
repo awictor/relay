@@ -36,6 +36,10 @@ export interface HandlerDeps {
   // All optional so older wiring/tests are unaffected.
   setLocation?: (chatId: number, text: string) => { location: string; units?: string; tzOffsetMin?: number } | null;
   profileContext?: (chatId: number) => string;
+  // /profile (product-loop): echo the stored location/units/tz so a typo'd "UTC-5" or wrong city is
+  // visible, not silently wrong on every weather/reminder. profileClear forgets it. Both optional.
+  profileView?: (chatId: number) => string | null; // human-readable summary, or null if nothing set
+  profileClear?: (chatId: number) => boolean;       // true if there was a profile to clear
   // Inbound photo (product-loop): when a message carries photoFileId, describeImage answers about it
   // (caption = the question). Optional; absent -> a photo message gets a "can't read images yet" note.
   describeImage?: (fileId: string, caption: string) => Promise<string>;
@@ -195,6 +199,23 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // /sites: which hosts the cookie jar authorizes the agent for (names only). No agent run.
     if (first === "/sites" && deps.sitesLine) {
       await deps.sendMessage(msg.chatId, deps.sitesLine());
+      return;
+    }
+
+    // /profile: show or clear the stored location/units/tz so a wrong value is visible + fixable.
+    //   "/profile"        -> echo what's stored (or a hint to set it)
+    //   "/profile clear"  -> forget it
+    if (first === "/profile" && (deps.profileView || deps.profileClear)) {
+      const rest = msg.text.trim().split(/\s+/).slice(1).join(" ").toLowerCase();
+      if (/^(clear|reset|forget)$/.test(rest) && deps.profileClear) {
+        const had = deps.profileClear(msg.chatId);
+        await deps.sendMessage(msg.chatId, had ? "Cleared your saved location/units/timezone." : "Nothing saved to clear.");
+        return;
+      }
+      const view = deps.profileView?.(msg.chatId) ?? null;
+      await deps.sendMessage(msg.chatId, view
+        ? `Your profile:\n${view}\n\nChange it with /setlocation, or "/profile clear" to forget it.`
+        : `No profile saved yet. Set one with "/setlocation Austin, TX" (add "UTC-5" for reminder timing, "(metric)" for units).`);
       return;
     }
 

@@ -320,7 +320,7 @@
       "title": "View / clear your saved profile over text",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "After /setlocation a user can't see or correct what was stored; a typo'd 'UTC-5' or wrong city is invisible + silently wrong on every weather/near-me/daily reminder (audit 8 A#2).",
       "how": "Add a /profile (or 'what's my location') read that echoes stored location/units/tz, and a clear/forget path. Handler branch + ProfileStore already has get; add a clear."
     }
@@ -373,6 +373,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 36: built profile-view-reset (audit 8 A#2, medium/S). After /setlocation a user couldn't see or correct what was stored, so a typo'd 'UTC-5' or wrong city was invisible + silently wrong on every weather/near-me/daily reminder. Added ProfileStore.clear(); handler /profile branch echoes the stored location/units/tz (capitalized contextLine) with a hint, '/profile clear' forgets it, empty -> how-to-set hint. index wires profileView + profileClear; commands.ts Commands line + HELP + BOT_COMMANDS menu gain /profile; discoverability harness stubbed. +4 tests (store.clear had/persisted, handler show/empty/clear). 695 pass, tsc clean. call-tested false (handler+store wiring, unit-tested). Backlog DRY -> ran 9th audit (same iteration)."
     },
     {
       "event": "PRODUCT-LOOP iter 35: built alert-edit-check-now (audit 8 B#4, medium/S). The define path runs alertRunNow to catch an already-satisfied predicate, but alertEdit just updated + returned; 'change btc to below 55000' when BTC is already below confirmed 'Updated...' then never pinged (edge-triggered vs the preserved lastValue = no edge) -> user waits for a fire that may never come. Now: updateTrigger clears lastValue (new trigger evaluates fresh), and the handler runs alertRunNow after a successful edit + relays the message if it fires, guarded so a flaky check can't break the confirmation. Updated the updateTrigger test (lastValue now reset) + 2 handler tests (post-edit check relays when holds; throwing check safe). 691 pass, tsc clean. call-tested false (handler+store wiring over the live-proven checkAlert path). Remaining: profile-view-reset -> then backlog dry -> audit refills."
