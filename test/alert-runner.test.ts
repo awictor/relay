@@ -278,3 +278,22 @@ describe("checkAlert — trigger-to-action (trigger-to-action-alerts)", () => {
     expect(r.message).toMatch(/▶ sum:\nsummary: 1 new senior role/);
   });
 });
+
+describe("checkAlert — time series (watch-time-series)", () => {
+  it("records a numeric point on a check with an extractable value", async () => {
+    const points: Array<{ name: string; v: number; t: number }> = [];
+    const { d } = deps("BTC is $65,000", {
+      recordPoint: (_c: number, name: string, v: number, t: number) => points.push({ name, v, t }),
+      now: () => 12345,
+    });
+    await checkAlert(alert({ threshold: 1000, lastValue: "$64,000" }), d);
+    expect(points).toEqual([{ name: "btc", v: 65000, t: 12345 }]);
+  });
+  it("does NOT record a point for a non-numeric or feed value", async () => {
+    const points: unknown[] = [];
+    const rp = (_c: number, n: string, v: number, t: number) => points.push({ n, v, t });
+    await checkAlert(alert({ lastValue: "sunny" }), deps("cloudy", { recordPoint: rp }).d); // prose
+    await checkAlert(alert({ feed: true, seen: [] }), deps("• item", { recordPoint: rp }).d); // feed
+    expect(points).toEqual([]);
+  });
+});

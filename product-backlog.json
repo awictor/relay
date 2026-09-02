@@ -959,7 +959,7 @@
       "title": "watches keep only lastValue — no trend/history",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "\"how has X moved this week\" impossible; alerts forget the past.",
       "how": "Append value+timestamp per check to a capped series; answer trend/min-max/since-date from stored data, no LLM."
     }
@@ -1272,6 +1272,10 @@
     {
       "id": "trigger-to-action-alerts",
       "note": "A watch can now DO, not just notify: add \"then run <recipe>\" and when the alert fires Relay runs that saved recipe (current task resolved at fire time) and appends its result to the ping. Alert.then + parse of the trailing then-clause (stripped before trigger parsing) + withThen helper at all 3 notify sites (predicate/threshold/feed) + runThen dep wired to the recipe store; stays read-only. Confirm + /alerts surface it. Gone/failed recipe leaves the base alert intact. 914 tests green."
+    },
+    {
+      "id": "watch-time-series",
+      "note": "Numeric watches now accumulate a time series: each check with an extractable value appends {t,v} (capped 400, oldest-drop). \"how has btc moved this week\" / \"btc trend\" answers from stored points — first->last + delta + %, high/low, span — NO agent/LLM/re-fetch. Alert.series + recordPoint/seriesOf on the store; parseTrendRequest + summarizeSeries (pure); recordPoint wired in the runner (numeric non-feed checks); watchTrend handler branch before answer-recall. 923 tests green."
     }
   ],
   "audits": [

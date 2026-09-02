@@ -27,6 +27,10 @@ export interface AlertRunnerDeps {
   // Feed-watch (new-item-feed-watch): merge newly-reported item keys into the alert's seen-set. Called
   // by the caller's commit() only after a successful send (so a failed send re-reports next check).
   recordSeen?: (chatId: number, name: string, keys: string[]) => void;
+  // Time series (watch-time-series): record a numeric data point for this alert on every check that
+  // yields an extractable value, so "how has X moved this week" can be answered from stored data.
+  // Optional; absent -> no series accumulated.
+  recordPoint?: (chatId: number, name: string, v: number, t: number) => void;
   // Per-user profile context (product-loop) so a watched "weather near me" uses the saved location.
   contextFor?: (chatId: number) => string;
   // Trigger-to-action (trigger-to-action-alerts): when an alert with a `then` recipe fires, run that
@@ -34,6 +38,8 @@ export interface AlertRunnerDeps {
   // failed — the base alert still sends). Resolves the recipe's CURRENT task by name at fire time.
   // Optional; absent -> `then` is ignored (plain notify).
   runThen?: (chatId: number, recipeName: string) => Promise<string | null>;
+  // Current epoch ms for stamping time-series points (watch-time-series). Optional; default Date.now.
+  now?: () => number;
 }
 
 /**
@@ -60,6 +66,14 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   }
 
   const firstRun = alert.lastValue === undefined;
+
+  // Time series (watch-time-series): record a numeric point on every successful check with an
+  // extractable value (feed watches have no scalar). Independent of whether we notify — the series is
+  // for "how has X moved", not the alert trigger. Deferred nothing: safe to record now (a check happened).
+  if (!alert.feed && deps.recordPoint) {
+    const num = extractValue(value);
+    if (num !== null) deps.recordPoint(alert.chatId, alert.name, num, (deps.now ?? Date.now)());
+  }
 
   // Trigger-to-action (trigger-to-action-alerts): when this alert fires AND has a `then` recipe, run it
   // and append its result to the notification. Failures/absence just leave the base message unchanged

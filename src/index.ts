@@ -28,7 +28,7 @@ import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots
 import { matchRecipe } from "./lib/task-suggest.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
-import { AlertStore, parseAlertCommand, parseAlertEdit } from "./lib/alerts.js";
+import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summarizeSeries } from "./lib/alerts.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { AnswerLog, recallKeywords } from "./lib/answer-log.js";
@@ -116,6 +116,8 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
     llm, runAgent, formatReply,
     setLast: (c, n, v) => alerts.setLast(c, n, v),
     recordSeen: (c, n, keys) => alerts.recordSeen(c, n, keys),
+    recordPoint: (c, n, v, t) => alerts.recordPoint(c, n, v, t),
+    now: () => Date.now(),
     contextFor: (c) => profiles.contextLine(c),
     // Trigger-to-action (trigger-to-action-alerts): run the named recipe's CURRENT task on fire.
     runThen: async (c, recipeName) => {
@@ -217,6 +219,15 @@ const handle = createHandler({
   // Answer history (answer-history-recall): search past answers by keyword; log a fresh clean answer.
   recallAnswers: (chatId, text) => answerLog.search(chatId, recallKeywords(text), 3),
   logAnswer: (chatId, task, reply) => answerLog.record(chatId, task, reply, Date.now()),
+  // Watch time series (watch-time-series): "how has <watch> moved this week" answered from stored points.
+  watchTrend: (chatId, text) => {
+    const req = parseTrendRequest(text, Date.now());
+    if (!req) return null;
+    const a = alerts.get(chatId, req.name);
+    if (!a) return null; // not a watch by that name — let it fall through to the agent
+    const summary = summarizeSeries(alerts.seriesOf(chatId, req.name), Date.now(), req.sinceMs);
+    return summary ? `📈 ${a.name}: ${summary}` : `I haven't logged enough checks of "${a.name}" yet to show a trend — give it a few more.`;
+  },
   // First-run location capture (first-location-capture): does this chat have a home location yet, and
   // save a bare "which city?" reply (+re-stamp recurring reminders if a tz came with it).
   hasLocation: (chatId) => !!profiles.get(chatId)?.location,

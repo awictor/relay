@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseAlertCommand, parseAlertEdit, changed, normalizeForCompare, firstNumber, extractValue, conditionHolds, extractListItems, feedItemKey, AlertStore } from "../src/lib/alerts.js";
+import { parseAlertCommand, parseAlertEdit, changed, normalizeForCompare, firstNumber, extractValue, conditionHolds, extractListItems, feedItemKey, parseTrendRequest, summarizeSeries, AlertStore } from "../src/lib/alerts.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -254,5 +254,45 @@ describe("trigger-to-action (trigger-to-action-alerts)", () => {
     expect(s.get(1, "jobs")!.then).toBe("sum");
     s.add(1, { name: "jobs", task: "roles", feed: true }, NOW); // re-state without then -> cleared
     expect(s.get(1, "jobs")!.then).toBeUndefined();
+  });
+});
+
+describe("watch time series (watch-time-series)", () => {
+  const NOW2 = 1_700_000_000_000;
+  const DAY = 86_400_000;
+  it("parseTrendRequest extracts name + lookback window", () => {
+    expect(parseTrendRequest("how has btc moved this week", NOW2)).toEqual({ name: "btc", sinceMs: NOW2 - 7 * DAY });
+    expect(parseTrendRequest("btc trend", NOW2)).toEqual({ name: "btc" });
+    expect(parseTrendRequest("history of eth", NOW2)).toEqual({ name: "eth" });
+    expect(parseTrendRequest("how is gold doing today", NOW2)).toEqual({ name: "gold", sinceMs: NOW2 - DAY });
+    expect(parseTrendRequest("show me the aqi trend", NOW2)).toEqual({ name: "aqi" });
+  });
+  it("parseTrendRequest null for a non-trend message", () => {
+    expect(parseTrendRequest("weather in Paris", NOW2)).toBeNull();
+    expect(parseTrendRequest("what's the price of btc", NOW2)).toBeNull();
+  });
+  it("summarizeSeries renders first→last, delta, min/max; null under 2 points", () => {
+    const pts = [{ t: NOW2 - 2 * DAY, v: 100 }, { t: NOW2 - DAY, v: 90 }, { t: NOW2, v: 120 }];
+    const s = summarizeSeries(pts, NOW2)!;
+    expect(s).toMatch(/100 → 120/);
+    expect(s).toMatch(/↑20/);
+    expect(s).toMatch(/Low 90, high 120/);
+    expect(summarizeSeries([{ t: NOW2, v: 1 }], NOW2)).toBeNull();
+  });
+  it("summarizeSeries respects the sinceMs window", () => {
+    const pts = [{ t: NOW2 - 10 * DAY, v: 500 }, { t: NOW2 - DAY, v: 100 }, { t: NOW2, v: 110 }];
+    const s = summarizeSeries(pts, NOW2, NOW2 - 7 * DAY)!; // drops the 10-day-old 500
+    expect(s).toMatch(/100 → 110/);
+    expect(s).not.toMatch(/500/);
+  });
+  it("store records points, caps, and only for a found alert", () => {
+    const s = new AlertStore({ file: tmpFile() });
+    s.add(1, { name: "btc", task: "price" }, NOW);
+    for (let i = 0; i < 410; i++) s.recordPoint(1, "btc", i, NOW + i);
+    const series = s.seriesOf(1, "btc");
+    expect(series).toHaveLength(400);          // capped
+    expect(series[0]!.v).toBe(10);              // oldest 10 dropped
+    s.recordPoint(1, "nope", 5, NOW);           // unknown alert -> no throw, no store
+    expect(s.seriesOf(1, "nope")).toEqual([]);
   });
 });

@@ -1046,3 +1046,25 @@ describe("answer recall shows staleness (audit fix)", () => {
     expect(sent[0]!.text).toMatch(/ask me to check again/i);
   });
 });
+
+describe("watch trend recall (watch-time-series)", () => {
+  it("answers a trend ask from watchTrend, no agent run", async () => {
+    let agentCalls = 0;
+    const { handle, sent } = harness({
+      watchTrend: (_c, t) => (/btc/i.test(t) ? "📈 btc: 100 → 120 ↑20 over 5 checks." : null),
+      runAgentFn: async () => { agentCalls++; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("how has btc moved this week", 5));
+    expect(agentCalls).toBe(0);
+    expect(sent[0]!.text).toMatch(/📈 btc: 100 → 120/);
+  });
+  it("a non-trend / unknown-watch message falls through to the agent", async () => {
+    let ran = "";
+    const { handle } = harness({
+      watchTrend: () => null, // not a trend ask / no such watch
+      runAgentFn: async (t) => { ran = t; return { reply: "ok", steps: 1, tools: [] }; },
+    });
+    await handle(msg("weather in Paris", 5));
+    expect(ran).toBe("weather in Paris");
+  });
+});

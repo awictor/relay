@@ -64,6 +64,10 @@ export interface HandlerDeps {
   // with no agent run. Optional; absent -> no answer history.
   recallAnswers?: (chatId: number, text: string) => Array<{ task: string; reply: string; at: number }>;
   logAnswer?: (chatId: number, task: string, reply: string) => void;
+  // Watch time series (watch-time-series): answer "how has <watch> moved this week" from the alert's
+  // recorded points, no agent run. Returns a one-line trend summary, or null when there's no such
+  // watch / not enough data. Optional; absent -> a trend ask falls through to the agent.
+  watchTrend?: (chatId: number, text: string) => string | null;
   // Long-term memory (remember-facts-store): rememberFact parses + stores a "remember X" message
   // (returns the stored fact, or null if it isn't one); forgetFact deletes matching facts (returns a
   // count, or a "cleared all" total); notesList returns the remembered facts for a "what do you know
@@ -390,6 +394,14 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       pendingLocation.set(msg.chatId, msg.text);
       await deps.sendMessage(msg.chatId, "What city are you in? I'll save it so I don't have to ask again (add \"UTC-5\" and I'll get your reminder times right too).");
       return;
+    }
+
+    // Watch time series (watch-time-series): "how has btc moved this week" / "btc trend" — answer from
+    // the watch's recorded points, no agent run. Falls through when there's no such watch / not enough
+    // data (watchTrend returns null) so a genuine fresh question still runs.
+    if (deps.watchTrend) {
+      const trend = deps.watchTrend(msg.chatId, msg.text);
+      if (trend) { await deps.sendMessage(msg.chatId, trend); return; }
     }
 
     // Answer history (answer-history-recall): "what was that sushi place you found?" / "resend the

@@ -23,8 +23,16 @@ export interface Alert {
   // ("when new jobs appear, run my summarize-jobs recipe"). The recipe stays a normal read-only task
   // (no login/pay). Undefined = plain notify. Resolved at fire time so editing the recipe changes it.
   then?: string;
+  // Time series (watch-time-series): each check with an extractable numeric value appends {t,v} here,
+  // so a user can ask "how has X moved this week" / min-max / trend — answered from stored data, no LLM.
+  // Capped; oldest-first drop. Only numeric watches accumulate a series (a prose watch has no value).
+  series?: Array<{ t: number; v: number }>;
   created: number;
 }
+
+// Cap the per-alert time series so a long-lived watch can't grow unbounded. ~1 point/check; at a daily
+// cadence this is ~1 year, at hourly ~2 weeks — enough for "this week/month" trend answers.
+const MAX_SERIES_POINTS = 400;
 
 // Cap the per-alert seen-set so a long-lived feed watch can't grow its stored keys without bound.
 // Oldest keys drop first; a dropped item re-notifying once months later is acceptable.
@@ -283,6 +291,46 @@ export function changed(prev: string, next: string, threshold?: number): boolean
   return normalizeForCompare(a) !== normalizeForCompare(b);
 }
 
+/** Parse a "how has <name> moved / trend / history" ask into the alert name + an optional lookback
+ * window (ms), or null if it isn't one (watch-time-series). Handles "how has btc moved this week",
+ * "btc trend", "history of btc", "btc over the last month". Window words: today/week/month; absent =
+ * all recorded points. Name is normalized to match the alert store. */
+export function parseTrendRequest(text: string, now: number): { name: string; sinceMs?: number } | null {
+  const t = text.trim();
+  const DAY = 86_400_000;
+  const windowMs = /\btoday\b/i.test(t) ? DAY
+    : /\bthis week\b|\bpast week\b|\blast (?:7 days|week)\b/i.test(t) ? 7 * DAY
+    : /\bthis month\b|\bpast month\b|\blast (?:30 days|month)\b/i.test(t) ? 30 * DAY
+    : undefined;
+  const m =
+    t.match(/^\s*how\s+(?:has|have|did|is)\s+(.+?)\s+(?:been\s+)?(?:moved?|moving|changed?|trend(?:ed|ing)?|doing|done|performed?)\b/i)
+    || t.match(/^\s*(?:show|what'?s|whats|give)\s+(?:me\s+|us\s+)?(?:the\s+)?(.+?)\s+(?:trend|history|chart|over time)\b/i)
+    || t.match(/^\s*(?:trend|history|chart)\s+(?:of|for)\s+(.+?)\s*$/i)
+    || t.match(/^\s*(.+?)\s+(?:trend|history|over the (?:last|past)\s+\w+)\s*$/i);
+  if (!m) return null;
+  let name = m[1]!.trim().replace(/\b(this week|this month|today|over time|so far|lately|recently)\b/gi, "").trim();
+  name = name.replace(/^["']|["']$/g, "").replace(/\s+/g, " ").toLowerCase().slice(0, 60);
+  if (!name) return null;
+  return windowMs !== undefined ? { name, sinceMs: now - windowMs } : { name };
+}
+
+/** Summarize a numeric time series into a one-line human trend (watch-time-series): first→last with
+ * delta + direction, min, max, and the sample count/span. `sinceMs` filters to points at/after it.
+ * Returns null when there aren't at least 2 points in range (nothing to trend). Pure; for tests. */
+export function summarizeSeries(points: Array<{ t: number; v: number }>, now: number, sinceMs?: number): string | null {
+  const pts = (sinceMs !== undefined ? points.filter((p) => p.t >= sinceMs) : points).slice().sort((a, b) => a.t - b.t);
+  if (pts.length < 2) return null;
+  const first = pts[0]!, last = pts[pts.length - 1]!;
+  const vals = pts.map((p) => p.v);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const d = last.v - first.v;
+  const arrow = d > 0 ? "↑" : d < 0 ? "↓" : "→";
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+  const pct = first.v !== 0 ? ` (${d >= 0 ? "+" : ""}${((d / Math.abs(first.v)) * 100).toFixed(1)}%)` : "";
+  const spanDays = Math.max(1, Math.round((last.t - first.t) / 86_400_000));
+  return `${fmt(first.v)} → ${fmt(last.v)} ${arrow}${fmt(Math.abs(d))}${pct} over ${pts.length} checks (~${spanDays}d). Low ${fmt(min)}, high ${fmt(max)}.`;
+}
+
 export interface AlertStoreOptions { file: string; maxPerChat?: number; }
 
 export class AlertStore {
@@ -351,6 +399,23 @@ export class AlertStore {
   setLast(chatId: number, name: string, value: string): void {
     const a = this.get(chatId, name);
     if (a) { a.lastValue = value; this.persist(); }
+  }
+
+  /** Time series (watch-time-series): append a numeric point {t,v} to the alert's series (capped,
+   * oldest-first drop). No-op if the alert isn't found. Called after a check whose value parsed to a
+   * number, so "how has X moved" can be answered from stored data. */
+  recordPoint(chatId: number, name: string, v: number, t: number): void {
+    const a = this.get(chatId, name);
+    if (!a || !Number.isFinite(v)) return;
+    const series = a.series ?? [];
+    series.push({ t, v });
+    a.series = series.length > MAX_SERIES_POINTS ? series.slice(series.length - MAX_SERIES_POINTS) : series;
+    this.persist();
+  }
+
+  /** The recorded series for an alert (empty if none). */
+  seriesOf(chatId: number, name: string): Array<{ t: number; v: number }> {
+    return this.get(chatId, name)?.series ?? [];
   }
 
   /** Feed-watch (new-item-feed-watch): merge freshly-seen item keys into the alert's seen-set, capping
