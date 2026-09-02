@@ -134,6 +134,51 @@
       "status": "done",
       "why": "Forwarding a PDF/statement + 'summarize this' is dropped; asymmetric (bot sends PDFs, can't receive). A+C.",
       "how": "parseUpdates emits document file_id; downloadFile; Gemini reads PDF bytes (multimodal) -> answer. Mirror photo path."
+    },
+    {
+      "id": "scheduled-slot-guard",
+      "title": "Refuse scheduling a slotted recipe",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "recipeSchedule stored rec.task raw, so 'schedule track every morning' on 'price of {item}' fired literal {item} daily = confident nonsense.",
+      "how": "hasSlots check in recipeSchedule -> reason 'needsarg'; handler explains it can't run on a schedule with a fixed value."
+    },
+    {
+      "id": "tz-from-location",
+      "title": "Derive per-user timezone from location profile",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "Profile stores a city but daily schedules use one global RELAY_TZ_OFFSET_MIN, so an Austin user's 'every morning 9am' fires at 9am UTC = 3-4am. A+B.",
+      "how": "Add optional tzOffsetMin to Profile; scheduler/nextDailyMs uses the chat's offset when set (fall back to global). Best-effort derive from location via a static city->offset map or a set-timezone command; at minimum let user set it."
+    },
+    {
+      "id": "alert-check-on-define",
+      "title": "Run an alert check immediately on define",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "'watch btc below 50000' first checks at the default 09:00 cadence -> up to ~24h silence even if already true; user thinks it's broken.",
+      "how": "After alertDefine, run checkAlert once now (baseline + notify if the predicate already holds), like the inbound /run alert path."
+    },
+    {
+      "id": "extractvalue-percentage-guard",
+      "title": "Stop extractValue tracking a % / rating over the price",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "extractValue prefers the first decimal, so 'BTC up 2.5% at 68000' tracks 2.5 -> 'below 50000' always fires, 'above 70000' never. Breaks predicate alerts.",
+      "how": "Prefer a currency-tagged or largest-magnitude number over a %/small decimal; ignore numbers immediately followed by % when a bigger bare number exists."
+    },
+    {
+      "id": "memory-on-error",
+      "title": "Persist the user turn on the agent-error path",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "On runAgent throw the handler sends friendlyError but never memorySet, so a follow-up ('why did that fail? try again') has zero context.",
+      "how": "In the handler catch, record the user message (+ a brief note the attempt failed) to memory so the next turn is coherent."
     }
   ],
   "history": [
@@ -181,6 +226,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 15: built inbound-document-pdf (audit A+C). InboundMessage.documentFileId+documentMime; parseUpdates maps document messages (caption as question); downloadFile MIME map gained pdf/txt. Handler document branch (mirrors photo: rate-limited, before empty-text guard, friendlyError) -> describeDocument. index wires describeDocument = download + llm.describeImage (Gemini reads PDFs via the same inlineData path; default prompt summarizes + flags totals/dates/actions). +tests: parseUpdates document, handler (answered-not-agent + no-dep). 644 pass, tsc clean. LIVE-VERIFIED: real Gemini read a 1-page PDF invoice -> extracted '88 dollars'. call-tested TRUE. Backlog DRY -> audit refills next iteration."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
     }
   ],
   "audits": [
@@ -192,6 +240,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 4 (post-15-features). A: tz-from-location(city->no tz), clarifying-Q, login-refusal-guidance, prompt-location-first-run, echo-fire-time. B: scheduled-slot-literal(built), extractValue-tracks-%, alert-check-on-define, over-cap-once-reminder-dropped, memory-on-error. C: human-in-loop-commit(when->then depth), trigger-chains, visual/any-content-watch, relay-to-group, conversational-edit-of-automations. Seeded: tz-from-location, alert-check-on-define, extractvalue-percentage-guard, memory-on-error."
     }
   ]
 }

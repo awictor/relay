@@ -67,6 +67,15 @@ describe("handler — schedule routing", () => {
     expect(calls()).toBe(0);
   });
 
+  it("scheduling a slotted recipe is refused with a clear reason, no agent (product-loop)", async () => {
+    const { handle, sent, calls } = harness({
+      recipeSchedule: () => ({ ok: false, reason: "needsarg" }),
+    });
+    await handle(msg("schedule track every morning"));
+    expect(sent[0]).toMatch(/fill-in value|\{\.\.\.\}|can't run on a schedule/i);
+    expect(calls()).toBe(0);
+  });
+
   it("/schedules lists pending tasks, no agent", async () => {
     const { handle, sent, calls } = harness();
     await handle(msg("/schedules"));

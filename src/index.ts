@@ -217,6 +217,9 @@ const handle = createHandler({
   recipeSchedule: (chatId, name, whenClause, now) => {
     const rec = recipes.get(chatId, name);
     if (!rec) return { ok: false, reason: "unknown" };
+    // A slotted recipe has no per-fire value on a schedule, so it would emit the literal "{slot}"
+    // and return nonsense every day (product-loop) — refuse with a clear reason.
+    if (hasSlots(rec.task)) return { ok: false, reason: "needsarg" };
     const p = parseScheduleFor(whenClause, rec.task, now);
     if (!p) return { ok: false, reason: "unparsed" };
     const s = schedules.add(chatId, p, now);

@@ -62,7 +62,7 @@ export interface HandlerDeps {
   // Schedule a saved recipe to run on a cadence (m7 recipe-3): "schedule <name> every morning".
   // Resolves the recipe's task + registers it with the scheduler. Optional.
   recipeSchedule?: (chatId: number, name: string, whenClause: string, now: number) =>
-    { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" };
+    { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" | "needsarg" };
   // Digests (m9 digest-3): bundle recipes into one briefing. All optional.
   digestDefine?: (chatId: number, text: string) => { ok: true; name: string; members: number } | { ok: false; reason: "unparsed" | "capped" };
   digestList?: (chatId: number) => Array<{ name: string; members: string[]; schedule?: string }>;
@@ -319,7 +319,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         const r = isDig ? deps.digestSchedule!(msg.chatId, name, split.clause, deps.now())
                         : deps.recipeSchedule?.(msg.chatId, name, split.clause, deps.now());
         if (r?.ok) { await deps.sendMessage(msg.chatId, `Scheduled "${name}" to run ${r.kind === "daily" ? "daily" : "once"}. Manage with /schedules.`); return; }
-        const why = r?.reason === "unknown" ? "No recipe or digest by that name." : r?.reason === "capped" ? "You've hit the scheduled-task limit — /cancel one first." : "I couldn't parse that time. Try \"schedule <name> every morning\".";
+        const why = r?.reason === "unknown" ? "No recipe or digest by that name." : r?.reason === "capped" ? "You've hit the scheduled-task limit — /cancel one first." : r?.reason === "needsarg" ? `"${name}" has a fill-in value ({...}), so it can't run on a schedule with a fixed value. Save a version without the {slot} to schedule it.` : "I couldn't parse that time. Try \"schedule <name> every morning\".";
         await deps.sendMessage(msg.chatId, why); return;
       }
     }
