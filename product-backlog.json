@@ -860,7 +860,7 @@
       "title": "forget-fact substring match silently deletes unrelated facts",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "\"forget that I drink tea\" also removes \"my niece Teagan birthday...\" — includes() with no word boundary; user told only a count, never which facts vanished. Irreversible.",
       "how": "Word-boundary/token match; when >1 match, list them and confirm before deleting, or delete the best single match and echo what was removed."
     },
@@ -1177,6 +1177,10 @@
     {
       "id": "reminder-only-common-verb",
       "note": "Narrowed FETCH_CUE_RE so personal to-dos that happen to contain a common verb/question word (find/get/when/where/top/tell/show/who/why) are no longer misrouted to a 30s browse at fire time. Bare verbs + question words removed; kept explicit lookup/data phrases (check the/look up/search for/weather/the price/the score/summarize/whats the...). \"remind me to find my keys / water the plants / top up my card\" now correctly echo. 864 tests green."
+    },
+    {
+      "id": "notes-forget-substring-collateral",
+      "note": "forget-fact now matches whole words, not raw substrings — \"forget that I drink tea\" no longer silently deletes \"my niece Teagan birthday\". matchScore tiers (exact=3 / all-words=2 / some-words=1) delete only the BEST tier; forget returns the removed facts text; the confirm now LISTS exactly what was forgotten so a mismatch is visible + correctable. 866 tests green."
     }
   ],
   "audits": [

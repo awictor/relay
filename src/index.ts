@@ -195,8 +195,9 @@ const handle = createHandler({
   forgetFact: (chatId, text) => {
     const p = parseForgetFact(text);
     if (!p) return null;
-    if ("all" in p) return { removed: notes.clear(chatId), all: true };
-    return { removed: notes.forget(chatId, p.term), all: false };
+    if ("all" in p) return { removed: notes.clear(chatId), all: true, forgotten: [] };
+    const forgotten = notes.forget(chatId, p.term);
+    return { removed: forgotten.length, all: false, forgotten };
   },
   notesList: (chatId) => notes.list(chatId).map((n) => n.text),
   suggestSaves: true, // offer to save a repeated ask as a recipe (product-loop retention nudge)

@@ -89,16 +89,37 @@ export class NotesStore {
     return note;
   }
 
-  /** Delete facts matching `term` (case-insensitive substring). Returns how many were removed. */
-  forget(chatId: number, term: string): number {
+  /** Score how well a stored fact matches a forget `term`, higher = better; 0 = no match.
+   * WORD-BOUNDARY based so "tea" doesn't hit "Teagan" (notes-forget-substring-collateral). Scoring:
+   *   3 = exact (normalized) equality; 2 = the fact contains ALL of the term's words as whole words;
+   *   1 = the fact shares SOME of the term's words (>=1) as whole words. Word = alphanumeric run. */
+  private matchScore(factText: string, term: string): number {
+    const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+    const fact = norm(factText);
+    const t = norm(term);
+    if (!t) return 0;
+    if (fact === t) return 3;
+    const factWords = new Set(fact.split(" "));
+    const termWords = t.split(" ").filter(Boolean);
+    const hits = termWords.filter((w) => factWords.has(w)).length;
+    if (hits === 0) return 0;
+    return hits === termWords.length ? 2 : 1;
+  }
+
+  /** Delete facts matching `term` by WHOLE-WORD relevance (not raw substring — "tea" won't delete
+   * "Teagan's birthday"). Removes only the BEST tier of matches: an exact/all-words match deletes just
+   * those; if none, a partial (some-words) match deletes those. Returns the removed facts' text so the
+   * caller can show the user exactly what was forgotten (notes-forget-substring-collateral). */
+  forget(chatId: number, term: string): string[] {
     const c = this.items.find((x) => x.chatId === chatId);
-    if (!c) return 0;
-    const needle = term.trim().toLowerCase();
-    if (!needle) return 0;
-    const before = c.notes.length;
-    c.notes = c.notes.filter((n) => !n.text.toLowerCase().includes(needle));
-    const removed = before - c.notes.length;
-    if (removed) this.persist();
+    if (!c) return [];
+    const scored = c.notes.map((n) => ({ n, score: this.matchScore(n.text, term) })).filter((x) => x.score > 0);
+    if (!scored.length) return [];
+    const best = Math.max(...scored.map((x) => x.score));
+    const doomed = new Set(scored.filter((x) => x.score === best).map((x) => x.n));
+    const removed = c.notes.filter((n) => doomed.has(n)).map((n) => n.text);
+    c.notes = c.notes.filter((n) => !doomed.has(n));
+    if (removed.length) this.persist();
     return removed;
   }
 

@@ -793,7 +793,9 @@ describe("long-term memory (remember-facts-store)", () => {
       forgetFact: (chatId, text) => {
         const p = parseForgetFact(text);
         if (!p) return null;
-        return "all" in p ? { removed: notes.clear(chatId), all: true } : { removed: notes.forget(chatId, p.term), all: false };
+        if ("all" in p) return { removed: notes.clear(chatId), all: true, forgotten: [] };
+        const forgotten = notes.forget(chatId, p.term);
+        return { removed: forgotten.length, all: false, forgotten };
       },
       notesList: (chatId) => notes.list(chatId).map((n) => n.text),
       profileContext: (chatId) => notes.contextLine(chatId),

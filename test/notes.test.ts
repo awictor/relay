@@ -71,13 +71,30 @@ describe("NotesStore", () => {
     s.add(1, "i'm VEGETARIAN", NOW + 1);
     expect(s.list(1)).toHaveLength(1);
   });
-  it("forgets by substring, returns the count", () => {
+  it("forgets by whole-word match, returns the removed facts' text", () => {
     const s = new NotesStore({ file: tmp() });
     s.add(1, "I'm vegetarian", NOW);
     s.add(1, "I park in section G", NOW + 1);
-    expect(s.forget(1, "vegetarian")).toBe(1);
+    expect(s.forget(1, "vegetarian")).toEqual(["I'm vegetarian"]);
     expect(s.list(1).map((n) => n.text)).toEqual(["I park in section G"]);
-    expect(s.forget(1, "nomatch")).toBe(0);
+    expect(s.forget(1, "nomatch")).toEqual([]);
+  });
+  it("does NOT delete an unrelated fact via a substring collision (notes-forget-substring-collateral)", () => {
+    const s = new NotesStore({ file: tmp() });
+    s.add(1, "I drink tea", NOW);
+    s.add(1, "my niece Teagan's birthday is June 3", NOW + 1);
+    // "tea" is a whole word only in the first fact — "Teagan" must survive.
+    expect(s.forget(1, "I drink tea")).toEqual(["I drink tea"]);
+    expect(s.list(1).map((n) => n.text)).toEqual(["my niece Teagan's birthday is June 3"]);
+  });
+  it("prefers the exact/all-words match tier over partial matches", () => {
+    const s = new NotesStore({ file: tmp() });
+    s.add(1, "I like oat milk", NOW);
+    s.add(1, "I like almond milk", NOW + 1);
+    s.add(1, "I'm allergic to soy milk", NOW + 2);
+    // "oat milk" — both words hit only the first fact (score 2); the others share just "milk" (score 1).
+    expect(s.forget(1, "oat milk")).toEqual(["I like oat milk"]);
+    expect(s.list(1)).toHaveLength(2);
   });
   it("clears all facts for a chat", () => {
     const s = new NotesStore({ file: tmp() });

@@ -54,7 +54,7 @@ export interface HandlerDeps {
   // about me" recall. profileContext already carries facts into the agent via the wired contextLine.
   // All optional so older wiring/tests are unaffected.
   rememberFact?: (chatId: number, text: string) => string | null;
-  forgetFact?: (chatId: number, text: string) => { removed: number; all: boolean } | null;
+  forgetFact?: (chatId: number, text: string) => { removed: number; all: boolean; forgotten: string[] } | null;
   notesList?: (chatId: number) => string[];
   // Auto-suggest saving a repeated ask as a recipe (product-loop). When true, a reply to a task that
   // closely matches an earlier one this chat asked gets a one-line "want me to save this?" nudge.
@@ -347,9 +347,12 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     if (deps.forgetFact) {
       const r = deps.forgetFact(msg.chatId, msg.text);
       if (r) {
+        // Name exactly what was deleted so a mismatched forget is visible + correctable (a whole-word
+        // match can still catch more than intended — showing it beats silent collateral loss).
+        const named = r.forgotten.length ? `:\n${r.forgotten.map((f) => `• ${f}`).join("\n")}` : ".";
         await deps.sendMessage(msg.chatId, r.all
           ? (r.removed ? `Done — cleared all ${r.removed} thing${r.removed === 1 ? "" : "s"} I remembered about you.` : "I didn't have anything saved to forget.")
-          : (r.removed ? `Forgot ${r.removed} thing${r.removed === 1 ? "" : "s"}.` : "I couldn't find anything matching that to forget — try \"what do you know about me\"."));
+          : (r.removed ? `Forgot ${r.removed} thing${r.removed === 1 ? "" : "s"}${named}` : "I couldn't find anything matching that to forget — try \"what do you know about me\"."));
         return;
       }
     }
