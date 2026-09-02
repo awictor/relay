@@ -38,11 +38,27 @@ describe("parseSchedule — relative", () => {
     expect(parseSchedule("remind me to take my meds in 3 hours", NOW)!.reminderOnly).toBe(true);
     expect(parseSchedule("remind me to call mom at 5pm", NOW)!.reminderOnly).toBe(true);
     expect(parseSchedule("remind me to stretch every 2 hours", NOW)!.reminderOnly).toBe(true);
-    // Info-fetch reminders stay on the agent path (a fetch cue present).
+    // Info-fetch reminders stay on the agent path (an explicit lookup cue present).
     expect(parseSchedule("remind me to check the weather at 8am", NOW)!.reminderOnly).toBeUndefined();
-    expect(parseSchedule("remind me to get me the top HN story in 1 hour", NOW)!.reminderOnly).toBeUndefined();
+    expect(parseSchedule("remind me to look up the score in 1 hour", NOW)!.reminderOnly).toBeUndefined();
     // A non-reminder schedule ("in 2 hours check the news") is never reminder-only.
     expect(parseSchedule("in 2 hours check the news", NOW)!.reminderOnly).toBeUndefined();
+  });
+
+  // reminder-only-common-verb: personal to-dos that HAPPEN to contain a common verb/question word
+  // (find/get/when/where/top/tell/show) must NOT be misrouted to a 30s browse — they echo.
+  it("keeps personal to-dos with a common verb/question word as reminderOnly (reminder-only-common-verb)", () => {
+    for (const t of [
+      "remind me to find my keys in 20 min",
+      "remind me to get the mail at 5pm",
+      "remind me to top up my transit card tomorrow at 9am",
+      "remind me to water the plants every morning",
+      "remind me to show my badge at the door in 2 hours",
+      "remind me to call the dentist at 9am",
+      "remind me to tell mom about dinner at 6pm",
+    ]) {
+      expect(parseSchedule(t, NOW)!.reminderOnly, t).toBe(true);
+    }
   });
 });
 

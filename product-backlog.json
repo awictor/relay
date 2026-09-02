@@ -851,7 +851,7 @@
       "title": "personal reminders with a common verb run the agent",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "\"remind me to find my keys / get the mail / call mom when I get home\" matches FETCH_CUE_RE (find|get|when|where|check...) so it is misclassified as an agent task and runs a confused 30s browse at fire time.",
       "how": "Tighten FETCH_CUE_RE: require an object/site cue, or drop the over-broad verbs (find/get/when/where) that dominate personal to-dos; keep price/weather/news/search cues."
     },
@@ -1173,6 +1173,10 @@
     {
       "id": "video-transcript-summary",
       "note": "Added a transcript tool: a YouTube link + \"summarize this\" now fetches the video caption track (key-less: watch page -> ytInitialPlayerResponse captionTracks -> timedtext XML/JSON3 -> plain text) instead of scraping the empty JS shell. New src/lib/youtube.ts (parseYouTubeId, extractCaptionTrackUrl, parseTranscriptXml, fetchYouTubeTranscript) + backend.videoTranscript + agent tool/dispatch/prompt + help line. Graceful null when captions disabled. 860 tests green."
+    },
+    {
+      "id": "reminder-only-common-verb",
+      "note": "Narrowed FETCH_CUE_RE so personal to-dos that happen to contain a common verb/question word (find/get/when/where/top/tell/show/who/why) are no longer misrouted to a 30s browse at fire time. Bare verbs + question words removed; kept explicit lookup/data phrases (check the/look up/search for/weather/the price/the score/summarize/whats the...). \"remind me to find my keys / water the plants / top up my card\" now correctly echo. 864 tests green."
     }
   ],
   "audits": [

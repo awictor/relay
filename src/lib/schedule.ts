@@ -49,7 +49,11 @@ function stripReminderPrefix(s: string): string {
 // Info-fetch cues: if a reminder's task contains one, the user wants the AGENT to look something up at
 // fire time ("remind me to check the weather at 8"), so it's NOT reminder-only. Absent = a pure personal
 // to-do ("take my meds", "call mom") that should just echo the note back, not run a 30s browser errand.
-const FETCH_CUE_RE = /\b(check|what'?s?|whats|how'?s?|when|where|who|why|price|cost|weather|forecast|temp|temperature|news|headline|headlines|latest|top|score|scores|status|standings|stock|stocks|rate|rates|look\s?up|search|find|fetch|get\s+me|tell\s+me|show\s+me|summar\w+|update\s+me|any\s+new)\b/i;
+// DELIBERATELY NARROW: bare question words (when/where/who/why) and generic verbs (find/get/top/tell/
+// show) were removed — they dominate PERSONAL to-dos ("call mom when I get home", "find my keys", "top
+// up my card", "tell dad happy birthday") and wrongly routed them to a confused browse
+// (reminder-only-common-verb). Kept: explicit lookup/data words + "what's/how's the ..." question forms.
+const FETCH_CUE_RE = /\b(check on|check the|look\s?up|search (?:for |the |online)|google|weather|forecast|temperature|the news|headlines?|the price|the cost|the score|scores|the status|standings|stock price|exchange rate|summar\w+|any new|what'?s (?:the|my|happening)|how'?s the)\b/i;
 
 // A reminder is "reminder-only" (echo the stored text, don't run the agent) when it CAME from a reminder
 // phrase AND its task has no info-fetch cue. Keeps "remind me to check BTC" on the agent path while
