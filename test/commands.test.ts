@@ -73,6 +73,8 @@ describe("handleCommand", () => {
   });
   it("does NOT hijack a real read errand naming a site + a task", () => {
     expect(handleCommand("read the top story on Hacker News and summarize it")).toBeNull(); // long, real task
+    expect(handleCommand("can you read Reuters")).toBeNull();   // 'read' is a real errand, not a support probe
+    expect(handleCommand("can you browse Amazon")).toBeNull();  // 'browse' too
   });
 
   it("does NOT hijack a real errand that looks meta-ish", () => {

@@ -344,7 +344,10 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // reminder like "set a reminder every day" is NOT excluded, but "watch daily: btc" is.
     const t0 = msg.text.trim();
     const isDefineShape = /^\s*(?:watch|alert(?:\s+me)?|save(?:\s+recipe)?|(?:define\s+)?digest)\s+[^:]+:\s*\S/i.test(t0);
-    const isAlertEditShape = /^\s*(?:change|update|edit|set|make)\s+.+\s(?:below|under|above|over|hits?|reaches?|in\s+stock|by)\b/i.test(t0);
+    // Require a NUMBER after the operator (matching parseAlertEdit's real grammar) or "in stock" — else
+    // a plain reminder like "set a reminder to hand over the keys tomorrow at 9am" tripped on the bare
+    // word "over"/"by" and got excluded from the scheduler + silently ran once (audit 19 B#1).
+    const isAlertEditShape = /^\s*(?:change|update|edit|set|make)\s+.+\s(?:(?:below|under|above|over|hits?|reaches?|by)\s+\$?\d|in\s+stock\b)/i.test(t0);
     // "save that/this/it/the last one as <name>" owns a later branch too; its <name> can be a cadence
     // word ("save that as daily") which the NL matcher would otherwise turn into a junk daily schedule
     // running the literal "save that as" every morning + never create the recipe (audit-found).

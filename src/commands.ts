@@ -90,7 +90,9 @@ const PROBE_RE = /^(?:can|could|will|would|do)\s+(?:you|u)\s+(?:please\s+)?(?:bo
 // honest reply: reads public pages on most sites, can't log into your accounts unless you set up
 // cookies (/sites). Matches the shape, not a specific site list, so any site name works.
 const SITE = `I can read public pages on most sites and pull data from them. I can't log into your accounts on my own — but you can authorize specific sites by configuring cookies (see /sites), and then I'll act signed-in for those. Want me to try reading a page? Just send the link or name the site + what you want.`;
-const SITE_RE = /^(?:can|could|do|does|will|would)\s+(?:you|u|this|relay|it)\s+(?:please\s+)?(?:work with|use|access|read|browse|go on|handle|support|work on)\s+[\w][\w'. -]*\??$/i;
+// Only "does it SUPPORT <site>" verbs — NOT read/access/browse, which are the actions Relay actually
+// performs ("can you read Reuters" is a real read errand, not a support question) (audit 19 B#4).
+const SITE_RE = /^(?:can|could|do|does|will|would)\s+(?:you|u|this|relay|it)\s+(?:please\s+)?(?:work with|work on|support|handle|use)\s+[\w][\w'. -]*\??$/i;
 
 /** Returns a canned reply for /start, /help, a bare greeting/capability question, a meta/trust
  * question, or a can't-do capability probe; else null. */

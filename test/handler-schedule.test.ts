@@ -148,6 +148,13 @@ describe("handler — schedule routing", () => {
     expect(added).toHaveLength(0); // the cadence-word name did NOT get scheduled
   });
 
+  it("'set a reminder ... over/by ...' (no number) still schedules — not mistaken for an alert-edit (audit 19)", async () => {
+    const added: string[] = [];
+    const { handle } = harness({ scheduleAdd: (_c, t) => { added.push(t); return { ok: true, kind: "once", task: t, whenMs: 0 }; } });
+    await handle(msg("set a reminder to hand over the keys tomorrow at 9am"));
+    expect(added).toHaveLength(1); // "over" without a number is NOT an alert-edit -> reaches scheduler
+  });
+
   it("'/remind me ... in 10 min' (stray slash) still reaches scheduleAdd (command-intent-recovery)", async () => {
     const added: Array<{ text: string }> = [];
     const { handle } = harness({ scheduleAdd: (_c, text) => { added.push({ text }); return { ok: true, kind: "once", task: "stretch", whenMs: 0 }; } });
