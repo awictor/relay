@@ -101,6 +101,23 @@ describe("handler — schedule routing", () => {
     }
   });
 
+  it("absolute clock-time phrasings REACH scheduleAdd (at 6pm / at 14:30 / tomorrow at 9am)", async () => {
+    for (const text of ["text me the headlines at 6pm", "send the weather tomorrow at 9am", "at 14:30 ping me the news"]) {
+      const added: string[] = [];
+      const { handle } = harness({ scheduleAdd: (_c, t) => { added.push(t); return { ok: true, kind: "once", task: t, whenMs: 0 }; } });
+      await handle(msg(text));
+      expect(added, `"${text}" should reach scheduleAdd`).toHaveLength(1);
+    }
+  });
+
+  it("a bare 'at 5' (no am/pm, no colon) does NOT trigger the scheduler", async () => {
+    const added: string[] = [];
+    const { handle, calls } = harness({ scheduleAdd: (_c, t) => { added.push(t); return { ok: true, kind: "once", task: t, whenMs: 0 }; } });
+    await handle(msg("look at 5 tabs and summarize them"));
+    expect(added).toHaveLength(0); // not cued -> goes to the agent
+    expect(calls()).toBe(1);
+  });
+
   it("a plain reminder that merely starts with 'set' still schedules (guard not too broad)", async () => {
     const added: Array<{ text: string }> = [];
     const { handle } = harness({ scheduleAdd: (_c, text) => { added.push({ text }); return { ok: true, kind: "once", task: "call mom", whenMs: 0 }; } });

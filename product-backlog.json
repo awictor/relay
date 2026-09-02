@@ -395,6 +395,42 @@
       "status": "done",
       "why": "A first errand is usually a factual lookup; the reply is a bare claim with no link to verify, so a new user can't trust it — the biggest driver of whether they send a 2nd message (audit 10 A#1).",
       "how": "SYSTEM_PROMPT nudge: when the answer came from a fetched page/search, end reply with a short 'source: <url>' (one link, the primary one). Don't fabricate a link; omit for calc/known-fact."
+    },
+    {
+      "id": "schedule-gate-clock-time",
+      "title": "Schedule cue-gate omits bare clock-time (at 6pm / tomorrow at 9am) shapes",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "The scheduleCue regex still omitted the at/at24/tomorrow shapes parseSchedule accepts, so 'text me the headlines at 6pm', 'send the weather tomorrow at 9am', 'at 14:30 ping me' never reached the parser + ran once — same invariant break as the recurring gate (audit 11 B#1, A too).",
+      "how": "Add 'tomorrow', 'at <N>am/pm', 'at HH:MM' to the cue; keep a bare 'at 5' uncued (parser rejects it anyway). Gate tests + a bare-'at 5' false-positive guard."
+    },
+    {
+      "id": "halfhour-tz-rounding",
+      "title": "Half-hour tz offsets shown wrong (UTC+5:30 -> 'UTC+6')",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "profile.contextLine + the setLocation tz confirm do Math.round(offset/60), so UTC+5:30 (India) displays 'UTC+6', UTC-3:30 shows 'UTC-3'. Offset is STORED right (fires correctly) but the confirmation meant to catch a wrong tz is itself wrong + the LLM gets a wrong zone (audit 11 B#3).",
+      "how": "Format the offset as H:MM (sign + abs hours + ':' + 2-digit minutes when non-zero), e.g. UTC+5:30 / UTC-3:30 / UTC-5. Shared formatter used by contextLine + the handler confirm; +tests."
+    },
+    {
+      "id": "reminder-intent-clarify",
+      "title": "Reminder intent with an unparseable time should ask, not run now",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "'remind me to call mom at 3' (no am/pm), 'remind me tonight', 'remind me in an hour' fail parseSchedule + fall through to an immediate agent run (which has no reminder tool) — the user's literal reminder is silently never scheduled (audit 11 A#1).",
+      "how": "When the message has a reminder cue ('remind me'/'remind') but parseSchedule returns null, reply asking for the missing detail ('AM or PM?' / 'when exactly?') instead of running it as a task. Also broaden parsing where cheap ('in an hour' -> 60m, bare 'at 3' + reminder context -> ask am/pm)."
+    },
+    {
+      "id": "no-tz-clock-warning",
+      "title": "Warn when an absolute clock-time schedule is set with no timezone",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "A new user with no profile has tzOffsetMin=0 (UTC), so their first 'remind me at 8am' fires in the middle of their night; the confirm echoes a time but doesn't flag it's UTC (audit 11 A#2).",
+      "how": "When scheduleAdd creates a clock-time (daily/weekly/at) schedule + the chat has no saved offset, append 'heads up: no timezone set, fires at Xam UTC — set yours with /setlocation ... UTC-5'. Needs a hasOffset signal from the profile into scheduleAdd."
     }
   ],
   "history": [
@@ -445,6 +481,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 45: backlog dry after iter 44 -> ran 11th audit (3 lenses), seeded 4, built schedule-gate-clock-time (audit 11 B#1, high/S — a SECOND instance of the gate-vs-parser invariant break, this time the absolute clock-time shapes). scheduleCue still omitted parseSchedule's at/at24/tomorrow branches, so 'text me the headlines at 6pm', 'send the weather tomorrow at 9am', 'at 14:30 ping me' never reached the parser + ran once. Added 'tomorrow', 'at <N>am/pm', 'at HH:MM' to the cue; a bare 'at 5' stays uncued (parser rejects it too). +2 tests (3 clock-time phrasings reach scheduleAdd; bare 'at 5' does not). 728 pass, tsc clean. call-tested false (routing regex). LESSON (repeat): the cue-gate and parser must be kept in lockstep — a parser test passing doesn't prove the handler routes the message to it. Seeded also: halfhour-tz-rounding(S bug), reminder-intent-clarify(M), no-tz-clock-warning(S)."
     },
     {
       "event": "PRODUCT-LOOP iter 44: built cite-source-link (audit 10 A#1, medium/S). A factual lookup came back as a bare claim with no link to verify — the biggest driver of whether a new user sends a 2nd message. SYSTEM_PROMPT rule: when the answer came from a fetched page (scrape/extract/browse/search), end reply with 'Source: <url>' (the single primary URL, exactly as fetched, never invented); skip for direct calc/conversion/known-fact + when no page was fetched. +1 prompt-guard test. 726 pass, tsc clean. LIVE-VERIFIED: 'top story on hacker news' -> web_search+scrape, reply ended 'Source: https://news.ycombinator.com...'; '15% tip on $80' -> 0 tools, no source. call-tested TRUE. Backlog DRY -> ran 11th audit (same iteration)."
@@ -540,6 +579,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 11 (post-44-features). A/new-user: reminder-intent-unparseable-runs-now, no-tz-clock-warning, pasted-link-no-instruction default, offer-to-save-inline-location. B/reliability: schedule-gate-omits-clock-time (at 6pm/tomorrow, built — same invariant break as recurring gate), memory-clobber-concurrent, half-hour-tz-rounding-display (UTC+5:30->UTC+6), alert-notify-lost-when-send-fails-baseline-consumed. C/power: anvil form primitives (select/check/press/scroll — under the booking bet), wait-for-ready/retry-until-selector, decision/pick-best tool, auto-paginate lists. Seeded top 4: schedule-gate-clock-time(S bug, built), halfhour-tz-rounding(S bug), reminder-intent-clarify(M), no-tz-clock-warning(S). Deferred: memory-clobber(M), alert-notify-send-fail(M), + power primitives (anvil select/wait/paginate/pick-best — bigger, sequenced later)."
     },
     {
       "note": "Audit 10 (post-40-features). A/new-user: cite-source-link, detect bot-walls/captcha + honest fallback, honest out-of-scope reply, reschedule/snooze a reminder, confirm-resolved-fire-time. B/reliability: schedule-gate-blocks-weekly/interval (iter-39 REGRESSION, built), tomorrow-at-time-off-by-a-day (double +DAY), weekly/interval-mislabeled-once (built w/ gate), memory-clobber-concurrent, extractValue-non-currency. C/power: proactive failed-watch receipts, attachment retrieval (real files), cookie session-expiry nudge, auto-proof screenshot on alerts, multi-jar logins. Seeded top 4: schedule-gate-recurring(S, built — my regression), tomorrow-off-by-a-day(S bug), schedule-confirm-fire-time(S), cite-source-link(S). Deferred: memory-clobber(M), extractValue-non-currency(M), captcha-detect(M), + power bets."

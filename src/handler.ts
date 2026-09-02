@@ -276,7 +276,11 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // Cue set MUST cover every shape parseSchedule accepts, or a valid schedule never reaches it and
     // silently runs once. Includes weekly/interval (every <weekday>, every N min/hours, weekday/weekend)
     // added with recurring-schedules — omitting them made that whole feature unreachable from chat.
-    const scheduleCue = /\b(remind me|every day|every morning|every evening|every night|daily|weekdays?|weekends?)\b|\bevery\s+(mon|tue|wed|thu|fri|sat|sun)|\bevery\s+\d+\s*(min|hour|hr)|\bin \d+\s*(min|hour|day)/i;
+    // Also cover the absolute clock-time shapes parseSchedule's at/at24 branches accept — a bare
+    // "at 6pm" / "at 14:30" / any "tomorrow ..." — else "text me the headlines at 6pm" / "tomorrow at
+    // 9am send X" never reach the parser and silently run once (same invariant break as the recurring
+    // gate). A bare "at 5" (no am/pm, no colon) is still NOT cued — parseSchedule rejects it too.
+    const scheduleCue = /\b(remind me|every day|every morning|every evening|every night|daily|weekdays?|weekends?|tomorrow)\b|\bevery\s+(mon|tue|wed|thu|fri|sat|sun)|\bevery\s+\d+\s*(min|hour|hr)|\bin \d+\s*(min|hour|day)|\bat\s+\d{1,2}\s*(am|pm)\b|\bat\s+([01]?\d|2[0-3]):[0-5]\d\b/i;
     if (!isExplicitCommand && deps.scheduleAdd && scheduleCue.test(msg.text)) {
       const r = deps.scheduleAdd(msg.chatId, msg.text, deps.now());
       if (r.ok) {
