@@ -30,6 +30,45 @@ export function hasToken(): boolean {
   return TOKEN.length > 0;
 }
 
+// The bot's slash commands + one-line descriptions, registered with Telegram so the native "/"
+// menu shows them with autocomplete + a hint (setMyCommands). Without this the menu is empty and a
+// new user can't discover or correctly type /run, /alerts, /setlocation in the first 10 minutes.
+// Descriptions are <=256 chars (Telegram limit); names are lowercase, no leading slash.
+export const BOT_COMMANDS: Array<{ command: string; description: string }> = [
+  { command: "start", description: "What Relay can do + examples" },
+  { command: "help", description: "Full list of capabilities" },
+  { command: "schedules", description: "List your reminders + scheduled tasks" },
+  { command: "cancel", description: "Cancel a schedule: /cancel <id> or /cancel all" },
+  { command: "recipes", description: "List saved recipes (/run <name> to use one)" },
+  { command: "run", description: "Run a saved recipe or digest: /run <name>" },
+  { command: "digests", description: "List your briefings (bundled recipes)" },
+  { command: "alerts", description: "List your watch-and-notify alerts" },
+  { command: "forget", description: "Delete a saved recipe: /forget <name>" },
+  { command: "setlocation", description: "Set your city + timezone for weather + reminders" },
+  { command: "sites", description: "Sites I'm signed in for (via your cookies)" },
+  { command: "reset", description: "Clear our conversation history" },
+  { command: "status", description: "Relay's health + uptime" },
+];
+
+/** Register the slash-command menu with Telegram (setMyCommands). Best-effort: logs on failure and
+ * never throws, so a transient API hiccup at boot can't crash the worker. No-op without a token. */
+export async function registerCommands(commands = BOT_COMMANDS): Promise<boolean> {
+  if (!TOKEN) return false;
+  try {
+    const r = await fetch(`${API}/setMyCommands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commands }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) { console.error("telegram setMyCommands failed:", r.status, (await r.text().catch(() => "")).slice(0, 200)); return false; }
+    return true;
+  } catch (e) {
+    console.error("telegram setMyCommands error:", e instanceof Error ? e.message : String(e));
+    return false;
+  }
+}
+
 // Telegram hard-caps a message at 4096 chars. The old code did text.slice(0,4096), so a long
 // digest/answer was cut mid-sentence with NO marker and the user read a partial result as complete.
 export const TELEGRAM_MAX = 4096;

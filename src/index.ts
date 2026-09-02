@@ -3,7 +3,7 @@
 // if keys/anvil are missing so it never hangs silently.
 
 import { selectChannel, type Channel } from "./channel.js";
-import { downloadFile } from "./telegram.js";
+import { downloadFile, registerCommands } from "./telegram.js";
 import { anvilLive } from "./anvil.js";
 import { GeminiClient, ClaudeClient, resolveProvider } from "./llm.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
@@ -303,6 +303,10 @@ async function main() {
   const modelKeyVar = LLM_PROVIDER === "claude" ? "ANTHROPIC_API_KEY" : "GEMINI_API_KEY";
   if (!process.env[modelKeyVar]) console.warn(`WARNING: ${modelKeyVar} not set — the agent (LLM_PROVIDER=${LLM_PROVIDER}) can't run until it's provided.`);
   else console.log(`agent brain: ${LLM_PROVIDER}`);
+
+  // Register the Telegram "/" command menu so the native picker shows our commands + descriptions
+  // (product-loop). Best-effort + telegram-only (no-op without a token / on the console channel).
+  if (channel.name === "telegram") void registerCommands().then((ok) => { if (ok) console.log("telegram command menu registered"); });
 
   scheduleRunner.start();              // fire proactive/scheduled tasks (no-op if RELAY_SCHED_TICK_MS=0)
   metricsHeartbeat.start();            // periodic metrics flush (no-op if RELAY_METRICS_HEARTBEAT_MS=0)

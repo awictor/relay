@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseUpdates, dispatchBatch, splitMessage } from "../src/telegram.js";
+import { parseUpdates, dispatchBatch, splitMessage, BOT_COMMANDS } from "../src/telegram.js";
 import type { InboundMessage } from "../src/telegram.js";
 
 // Minimal Telegram update fixtures (only the fields parseUpdates reads).
@@ -112,6 +112,28 @@ describe("splitMessage (telegram-long-message-split — no silent truncation)", 
     const parts = splitMessage(`${first}\n${"w".repeat(90)}`, 100);
     expect(parts[0]).toBe(first);
     expect(parts[1]).toBe("w".repeat(90));
+  });
+});
+
+describe("BOT_COMMANDS (setMyCommands menu — telegram-command-menu)", () => {
+  it("uses valid Telegram command shapes (lowercase, no slash, description <=256)", () => {
+    expect(BOT_COMMANDS.length).toBeGreaterThanOrEqual(10);
+    for (const c of BOT_COMMANDS) {
+      expect(c.command).toMatch(/^[a-z0-9_]{1,32}$/); // Telegram: 1-32 chars, lowercase/digits/_
+      expect(c.command.startsWith("/")).toBe(false);
+      expect(c.description.length).toBeGreaterThan(0);
+      expect(c.description.length).toBeLessThanOrEqual(256);
+    }
+  });
+  it("registers the core user-facing commands", () => {
+    const names = new Set(BOT_COMMANDS.map((c) => c.command));
+    for (const n of ["start", "help", "schedules", "run", "alerts", "setlocation", "reset"]) {
+      expect(names, `menu missing /${n}`).toContain(n);
+    }
+  });
+  it("has no duplicate command names", () => {
+    const names = BOT_COMMANDS.map((c) => c.command);
+    expect(new Set(names).size).toBe(names.length);
   });
 });
 

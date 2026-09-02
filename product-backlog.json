@@ -275,7 +275,7 @@
       "title": "Register the Telegram slash-command menu (setMyCommands)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "No setMyCommands call exists, so Telegram's native '/' autocomplete is empty; the 12 commands are a bare wall of names in /start with no descriptions -> a new user can't discover or correctly type /run, /alerts, /setlocation in the first 10 min (audit 7 A#4).",
       "how": "On startup call the Bot API setMyCommands with each command + a one-line description (reuse the Commands: list). One HTTP call in telegram.ts, invoked from index main(). Keep it best-effort (log on failure)."
     },
@@ -337,6 +337,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 31: built telegram-command-menu (audit 7 A#4, high/S). No setMyCommands call existed, so Telegram's native '/' autocomplete was empty + the 12 commands were a bare wall of names in /start -> a new user couldn't discover/type /run, /alerts, /setlocation. Added BOT_COMMANDS (13 commands + <=256-char descriptions) + registerCommands() (best-effort setMyCommands, no-op without token, logs+false on failure); index main() calls it on startup for the telegram channel only. +3 tests (valid shapes, core commands present, no dupes). 684 pass, tsc clean. LIVE-VERIFIED: real setMyCommands returned true, getMyCommands read back all 13 commands. call-tested TRUE. Remaining: instant-calc-convert -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 30: built once-reminder-cap-drop (audit 7 B#2, high/M, real bug). The schedule-runner over-cap path safeComplete()'d a DUE 'once' reminder with no send + no failureNotice, so 'remind me to take my meds at 3pm' arriving during a busy proactive hour was deleted forever with only a log line — a black hole on the highest-trust promise. Now an over-cap 'once' is DEFERRED (not completed): left due so a later tick, once the rolling-hour cap frees a slot, delivers it. A daily over-cap occurrence is still dropped (it advances + must not storm). Updated the old drop-pinning test + added deferred-delivered-later + daily-still-drops tests. 681 pass, tsc clean. call-tested false (runner logic w/ mock clock). Remaining: telegram-command-menu, instant-calc-convert."
