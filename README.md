@@ -40,6 +40,8 @@ written up in **[THESIS.md](THESIS.md)**.
 ## What you can text it
 
 **Fetch & read**
+- **Ask anything**: an open question with no link — "who won the game", "cheapest flight to Lisbon",
+  "best sushi near me" — Relay runs a real web search (no URL needed) and reads the top results.
 - **Read**: send a link, or name a site + what you want — "top HN story", "weather in Paris".
 - **Extract** structured data: "extract the price and title from `<link>`" → clean JSON, not prose.
 - **Compare** across pages: "compare the price of X across these links" → one row per link.

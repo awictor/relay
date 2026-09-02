@@ -241,6 +241,81 @@ export async function discoverLinks(url: string, limit = 30): Promise<string[]> 
   }
 }
 
+export interface SearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+/** Unwrap a Bing `/ck/a?...&u=a1<base64url>` redirect to the real target URL. Returns the input
+ * unchanged if it isn't a wrapped link. Exported for tests. */
+export function unwrapBingUrl(href: string): string {
+  try {
+    const u = new URL(href);
+    if (!/(^|\.)bing\.com$/i.test(u.hostname) || !u.pathname.startsWith("/ck/")) return href;
+    const raw = u.searchParams.get("u") || "";
+    const b64 = raw.startsWith("a1") ? raw.slice(2) : raw; // Bing prefixes the base64url with "a1"
+    if (!b64) return href;
+    const norm = b64.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64.length + 3) % 4);
+    const decoded = Buffer.from(norm, "base64").toString("utf8");
+    return /^https?:/.test(decoded) ? decoded : href;
+  } catch {
+    return href;
+  }
+}
+
+/**
+ * General web search (no URL needed). Drives anvil to Bing's HTML results (no API key, free, and —
+ * unlike DuckDuckGo's html/lite endpoints — it doesn't CAPTCHA a real headless Chrome) and parses
+ * the organic result rows into {title,url,snippet}. Bing wraps result links in a /ck/a redirect;
+ * unwrapBingUrl() recovers the real https target so callers get a clean URL to scrape/extract next.
+ * Creates a session, navigates, evaluates, releases.
+ */
+export async function webSearch(query: string, limit = 6): Promise<SearchResult[]> {
+  const q = String(query).trim().slice(0, 300);
+  if (!q) return [];
+  const url = `https://www.bing.com/search?q=${encodeURIComponent(q)}`;
+  const check = isUrlSafe(url);
+  if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
+  const cap = Math.max(1, Math.min(20, limit));
+  const session = await createSession();
+  try {
+    await navigate(session.id, url, "domcontentloaded");
+    await new Promise((r) => setTimeout(r, 700));
+    // Bing: organic results are <li class="b_algo"> with an <h2><a> title+href and a .b_caption p snippet.
+    const script = `(() => {
+      const out = [];
+      for (const el of Array.from(document.querySelectorAll('li.b_algo')).slice(0, ${cap * 2})) {
+        const a = el.querySelector('h2 a');
+        if (!a) continue;
+        const href = a.getAttribute('href') || '';
+        if (!/^https?:/.test(href)) continue;
+        const sn = el.querySelector('.b_caption p') || el.querySelector('p');
+        out.push({ title: (a.textContent||'').trim(), url: href, snippet: (sn?sn.textContent:'').trim() });
+      }
+      return out;
+    })()`;
+    const r = await action(session.id, "/v1/actions/evaluate", { script });
+    const rows = Array.isArray(r) ? r : [];
+    const seen = new Set<string>();
+    const out: SearchResult[] = [];
+    for (const row of rows) {
+      const real = unwrapBingUrl(String((row as { url?: unknown }).url ?? ""));
+      if (!real || seen.has(real) || !isUrlSafe(real).safe) continue;
+      seen.add(real);
+      out.push({
+        title: String((row as { title?: unknown }).title ?? "").slice(0, 200),
+        url: real,
+        snippet: String((row as { snippet?: unknown }).snippet ?? "").slice(0, 300),
+      });
+      if (out.length >= cap) break;
+    }
+    return out;
+  } finally {
+    await releaseSession(session.id);
+  }
+}
+
 /**
  * Extract structured data blocks a text scrape misses: the page's JSON-LD
  * (<script type="application/ld+json">) plus key <meta> tags (og:*, twitter:*,

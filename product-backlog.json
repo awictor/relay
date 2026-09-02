@@ -1,0 +1,59 @@
+{
+  "items": [
+    {
+      "id": "web-search",
+      "title": "Add web_search tool (no URL needed)",
+      "impact": "high",
+      "effort": "M",
+      "status": "done",
+      "why": "Open questions (all 3 audit lenses top gap) silently failed - every tool needed a URL.",
+      "how": "anvil.webSearch via Bing HTML + unwrapBingUrl; agent web_search tool; system prompt use-first."
+    },
+    {
+      "id": "progress-ping",
+      "title": "Stream progress on long errands",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Handler goes silent 30-60s during multi-step browse; new user thinks bot is dead and gives up.",
+      "how": "Send an interim working-on-it message when the agent takes >1 browse step or after N seconds."
+    },
+    {
+      "id": "alert-value-compare",
+      "title": "Alerts compare extracted value not raw LLM prose",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "watch-alerts false-ping on wording drift or miss real moves (firstNumber grabs wrong number).",
+      "how": "Extract a normalized value (number/text) to compare, not the free-text reply; fix firstNumber."
+    },
+    {
+      "id": "atomic-store-writes",
+      "title": "Atomic store writes (temp+rename)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Non-atomic writeFileSync + load-empty-on-parse-error = a crash mid-write silently wipes saved reminders/recipes/alerts.",
+      "how": "Write tmp then rename; on load parse-error back up the corrupt file instead of starting empty."
+    },
+    {
+      "id": "tz-daily-schedules",
+      "title": "Fire daily schedules in the user timezone",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "nextDailyMs uses server-local setHours; on a UTC VM every-morning-9am fires at 9am UTC = middle of night.",
+      "how": "Capture a per-chat TZ/offset and compute next-daily in it; default RELAY_TZ."
+    }
+  ],
+  "history": [
+    {
+      "event": "PRODUCT-LOOP iter 1: bootstrapped backlog via 3-agent parallel audit; web_search TOP in all 3 lenses -> built it. anvil.webSearch (Bing HTML + unwrapBingUrl; DDG html+lite CAPTCHA a headless Chrome, Bing does not), agent web_search tool + system-prompt use-first, optional BrowserBackend.webSearch. +8 tests. 574 pass, tsc clean. LIVE-VERIFIED: real Bing results unwrapped to clean https (wikipedia/britannica) 5/5. Seeded 4 more high-impact todos."
+    }
+  ],
+  "audits": [
+    {
+      "note": "Bootstrap audit (3 lenses). A/new-user: web_search (TOP, unanimous), progress-ping, default-location/tz, read-only-expectation, clarifying-Q. B/reliability: alert-value-compare, atomic-store-writes, once-reminder-retry, tz-daily, truncation-hedge. C/power: web_search, voice-notes, multimodal-photo/pdf, confirmed-action-flow, parameterized-recipes. Seeded top 5."
+    }
+  ]
+}

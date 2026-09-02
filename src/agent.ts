@@ -90,6 +90,18 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "web_search",
+    description: "Search the web for a plain-language query and get back the top results (title, url, snippet) — NO url needed. Use this FIRST whenever the user asks an open question and hasn't named a site or link (\"who won the game\", \"cheapest flight to X\", \"best sushi near me\", \"what is Y\"). Then scrape/extract the most relevant result URL for details.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Plain-language search query" },
+        limit: { type: "number", description: "Max results (default 6, max 20)" },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "screenshot",
     description: "Capture a web page as an IMAGE and send it to the user. Use when the user wants to SEE a page (\"show me\", \"screenshot\", \"what does X look like\") rather than read its text. After calling this, still call reply with a short caption.",
     parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to capture" } }, required: ["url"] },
@@ -117,7 +129,8 @@ Tools:
 - "fetch_json" (url): hit a JSON HTTP API directly, no browser — fastest for public data APIs (weather, prices, sports). Use when you know a JSON endpoint; use scrape/browse for HTML pages.
 - "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
 - "compare" (urls, fields): fetch several pages and extract the same fields from each; returns a JSON array. Use when the user wants to compare data points across multiple links.
-- "search" (url): open a search/listing page and get candidate result links back. Use when the user knows WHAT they want but not the exact URLs — build the site's search URL, call search, then extract/compare across the returned links.
+- "web_search" (query): plain-language web search, NO url needed — use this FIRST for any open question where the user hasn't named a site or link ("who won...", "cheapest...", "best... near me", "what is..."). Returns top {title,url,snippet}; then scrape/extract the most relevant url.
+- "search" (url): open a specific search/listing page and get candidate result links back. Use when you already know the site — build its search URL, call search, then extract/compare across the returned links.
 - "screenshot" (url): capture a page as an IMAGE and send it. Use when the user wants to SEE a page ("show me", "screenshot", "what does X look like"), not read its text. Then call reply with a short caption.
 - "pdf" (url): render a page to a PDF and send it as a document. Use when the user wants to SAVE or KEEP a page ("save as PDF", "send me a PDF of X"). Then call reply with a short caption.
 - "reply" (text): finish.
@@ -139,6 +152,8 @@ export interface BrowserBackend {
   readCurrent(sessionId: string): Promise<{ title: string; content: string; url: string }>;
   releaseSession(sessionId: string): Promise<void>;
   discoverLinks(url: string, limit?: number): Promise<string[]>;
+  // General web search (no URL). Optional: when absent, the web_search tool reports it's unavailable.
+  webSearch?(query: string, limit?: number): Promise<Array<{ title: string; url: string; snippet: string }>>;
   fetchJson(url: string): Promise<{ status: number; contentType: string; text: string }>;
   // Optional: JSON-LD + meta tags a text scrape misses (SPAs/product pages). When
   // absent, extract just uses the text pass.
@@ -176,6 +191,7 @@ const defaultBackend: BrowserBackend = {
   readCurrent: (id) => anvil.readCurrent(id),
   releaseSession: (id) => anvil.releaseSession(id),
   discoverLinks: (url, limit) => anvil.discoverLinks(url, limit),
+  webSearch: (query, limit) => anvil.webSearch(query, limit),
   fetchJson: (url) => defaultFetchJson(url),
   extractStructured: (url) => anvil.extractStructured(url),
   screenshot: (url) => anvil.screenshot(url),
@@ -306,6 +322,22 @@ export async function runAgent(
           push(call.name, `Done: ${call.name} ${selector}. Call read to see the updated page.`);
         } catch (e) {
           push(call.name, `ERROR: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "web_search") {
+        const query = String(call.args.query ?? "").trim();
+        if (!query) { push("web_search", "ERROR: no query given."); continue; }
+        if (!backend.webSearch) { push("web_search", "ERROR: web search isn't available."); continue; }
+        try {
+          const limit = Math.max(1, Math.min(20, Number(call.args.limit) || 6));
+          const results = await backend.webSearch(query, limit);
+          if (!results.length) { push("web_search", `No results for "${query}".`); continue; }
+          const lines = results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`);
+          push("web_search", `RESULTS for "${query}":\n${lines.join("\n")}\nScrape/extract the most relevant url for details.`);
+        } catch (e) {
+          push("web_search", `ERROR searching: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }
