@@ -31,4 +31,9 @@ describe("SYSTEM_PROMPT ↔ TOOLS sync (DEV-0074)", () => {
     // must still steer live/moving data (prices, rates) to tools
     expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/time-sensitive|live|current/);
   });
+
+  it("carries the cite-source guidance for fetched answers (cite-source-link)", () => {
+    expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/cite your source|source: <url>/);
+    expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/never invent or guess a link/);
+  });
 });
