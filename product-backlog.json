@@ -503,6 +503,42 @@
       "status": "done",
       "why": "New users' opening messages are often meta/trust questions ('is this free?', 'are you real?', 'do you store my messages?'), which fall through the greeting/capability regexes into a browser turn or an unpredictable answer — trust is the gate to a first real errand (audit 13 A#3).",
       "how": "A small matcher (like the greeting one) returning fixed honest replies (free to run; it's an AI; keeps a short rolling history locally, logged-out by default; open source). Pure + unit-tested."
+    },
+    {
+      "id": "save-that-cadence-hijack",
+      "title": "'save that as daily' hijacked by the schedule matcher (fresh regression)",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "The NL schedule matcher runs before the save-that-as branch + isExplicitCommand only excluded the colon define shape, so 'save that as daily/weekday/weekends' matched the cadence word -> stored a junk daily schedule running literal 'save that as' every morning + never created the recipe (audit 14 B#1, a fresh bug from iter-52 save-that-as).",
+      "how": "Add isSaveThatShape (parseSaveThatAs !== null) to the isExplicitCommand guard so a save-that-as message skips the scheduler + reaches its branch. Test 'save that as daily' isn't scheduled."
+    },
+    {
+      "id": "meta-free-false-fire",
+      "title": "Meta matcher false-fires on 'are you free right now' (fresh regression)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "META_RE had a bare '(is it|are you) free' alt + greedy tail, so 'are you free right now' / 'are you free to help with X' returned the trust blurb + dropped the real ask (audit 14 B#5, fresh from iter-56).",
+      "how": "Require a trust context for 'free' ('is this/it free', '... free to use'); a bare 'are you free ...' falls through to the agent. Tests for the availability asks."
+    },
+    {
+      "id": "orphaned-schedule-on-forget",
+      "title": "Scheduled digest/recipe keeps firing after /forget",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "digestForget/recipeForget remove the store entry but NOT the ScheduleStore 'digest:<name>'/recipe schedule row, so the runner keeps firing daily — a digest sends '(digest is empty or was removed)' every morning forever + the user can't stop it the obvious way (they deleted it) (audit 14 B#3).",
+      "how": "On forget-digest/forget-recipe, also cancel any schedule whose task targets that name (digest:<name>, or a recipe-derived task). Wire in index forget paths; scan schedules.list + remove matches. Test forget cancels the schedule."
+    },
+    {
+      "id": "post-answer-recurring-offer",
+      "title": "Offer to make a good one-shot answer recurring",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The automation loop (query -> saved -> scheduled/watched) is the retention engine, but auto-suggest-save only nudges on a REPEAT + only offers a recipe (on-demand), never a recurring schedule/alert — a first satisfied answer teaches the user nothing about proactive value (audit 14 A#4 + C#1).",
+      "how": "On a first clean text reply per chat, append one line: 'Tip: I can text this to you every morning or watch it for changes — just say \"every morning <this>\" or \"watch ...\".' Gate to fire once per chat (a flag in memory/profile). Keep it terse."
     }
   ],
   "history": [
@@ -553,6 +589,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 57: backlog dry after iter 56 -> ran 14th audit (3 lenses), which caught TWO fresh regressions in my own recent code; built both (both high-value S). (1) save-that-cadence-hijack (audit 14 B#1, iter-52 bug): the NL schedule matcher ran before the save-that-as branch + isExplicitCommand only excluded the colon define shape, so 'save that as daily/weekday/weekends' matched the cadence word -> junk daily schedule running literal 'save that as' every morning + no recipe created. Added isSaveThatShape (parseSaveThatAs!==null) to the guard so it skips the scheduler. (2) meta-free-false-fire (audit 14 B#5, iter-56 bug): META_RE's bare '(is it|are you) free' + greedy tail swallowed 'are you free right now' -> trust blurb instead of the real ask. Tightened 'free' to a trust context ('is this/it free', '... free to use'). +2 tests ('save that as daily' not scheduled; 'are you free right now' not meta). 753 pass, tsc clean. call-tested false (routing/matcher, unit-tested). LESSON: each new matcher/branch must be checked against the EARLIER routing gates it sits behind — both bugs were ordering/greedy-regex interactions with code from 1-5 iters prior. Seeded also: orphaned-schedule-on-forget(M), post-answer-recurring-offer(S)."
     },
     {
       "event": "PRODUCT-LOOP iter 56: built meta-trust-canned-answers (audit 13 A#3, medium/S). New users' common openers ('is this free?', 'are you a bot?', 'do you save my messages?', 'who made you?', 'is my data safe?') fell through the greeting/capability regexes into a browser turn (slow / invented answer); trust is the gate to a first real errand. Added a META reply (free; an AI bot driving a real browser; only a short rolling server-side memory, nothing shared/sold; not logged into your accounts, won't pay/buy/irreversible) + META_RE matched whole-message + <=8 words so a real errand ('is this article free to read: <url>') still reaches the agent. handleCommand returns it. +2 tests (5 meta questions answered; 2 lookalike errands not hijacked). 752 pass, tsc clean. call-tested false (pure string match, unit-tested). Backlog DRY -> ran 14th audit (same iteration)."
@@ -684,6 +723,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 14 (post-56-features). A/new-user: answer-from-search-snippets (skip the always-scrape), acknowledge social filler (thanks/ok), world-clock time-in-city, first-success 'you can save/schedule this' tip. B/reliability: save-that-as-daily-hijacked-by-scheduler (FRESH iter-52 bug, built), extractValue-non-currency, orphaned-schedule-after-forget-digest, DST-drift, meta-matcher-false-fires-on-'are you free' (FRESH iter-56 bug, built). C/power: post-answer make-it-recurring offer (S, top), 'watch/alert/schedule that' by reference, multi-slot recipe args (applySlots collapses all slots — latent bug), per-item snooze/pause. Built both fresh regressions this run; seeded orphaned-schedule-on-forget(M bug), post-answer-recurring-offer(S). Deferred: extractValue-non-currency(M), DST(M), multi-slot-args(S), watch-that-by-reference(S), snooze(S)."
     },
     {
       "note": "Audit 13 (post-52-features). A/new-user: proactive first-value demo on /start, multi-item list rendering (cite-one-source over-compresses lists), meta/trust canned answers, retry-differently on rejection, reply-in-user-language. B/reliability: alert-delta-line-never-renders-in-prod (iter-51 REGRESSION found by audit — mutated lastValue read for pv; built), memory-clobber-concurrent, extractValue-non-currency, alert-edge-lost-on-send-fail, DST-drift. C/power: proactive failed-watch/expired-session receipts (S, subsumes cookie-nudge), persistent named browser sessions, post-answer make-it-recurring offer, value receipt. Seeded top 4: alert-delta-mutation-bug(S, built), memory-clobber-lock(M bug), alert-notify-send-fail(M bug), meta-trust-canned-answers(S). Deferred: extractValue-non-currency(M), DST(M), + power bets (failed-watch-receipts strong S next). KEY LESSON: 'call-tested false' on a store-mutation-dependent path let a prod bug ship green — mocks that don't mirror real mutation semantics hide it; now live-verify against the real store or make the mock mutate."

@@ -304,7 +304,11 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     const t0 = msg.text.trim();
     const isDefineShape = /^\s*(?:watch|alert(?:\s+me)?|save(?:\s+recipe)?|(?:define\s+)?digest)\s+[^:]+:\s*\S/i.test(t0);
     const isAlertEditShape = /^\s*(?:change|update|edit|set|make)\s+.+\s(?:below|under|above|over|hits?|reaches?|in\s+stock|by)\b/i.test(t0);
-    const isExplicitCommand = first?.startsWith("/") || /^(?:run|schedule)\b/i.test(t0) || isDefineShape || isAlertEditShape;
+    // "save that/this/it/the last one as <name>" owns a later branch too; its <name> can be a cadence
+    // word ("save that as daily") which the NL matcher would otherwise turn into a junk daily schedule
+    // running the literal "save that as" every morning + never create the recipe (audit-found).
+    const isSaveThatShape = parseSaveThatAs(t0) !== null;
+    const isExplicitCommand = first?.startsWith("/") || /^(?:run|schedule)\b/i.test(t0) || isDefineShape || isAlertEditShape || isSaveThatShape;
     // Cue set MUST cover every shape parseSchedule accepts, or a valid schedule never reaches it and
     // silently runs once. Includes weekly/interval (every <weekday>, every N min/hours, weekday/weekend)
     // added with recurring-schedules — omitting them made that whole feature unreachable from chat.

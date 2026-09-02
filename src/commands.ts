@@ -64,7 +64,9 @@ const META = `A few honest answers:
 Text me a task to try it — or /help for what I can do.`;
 // Whole-message trust/meta questions only (short + anchored) so "is this article free to read" (a
 // real errand) still reaches the agent.
-const META_RE = /^(?:(?:are|r)\s+(?:you|u)\s+(?:a\s+)?(?:real|human|person|bot|ai|robot)|is\s+this\s+(?:free|safe|a\s+(?:bot|scam|person))|(?:is\s+it|are\s+you)\s+free|do\s+(?:you|u)\s+(?:save|store|keep|sell|share|record)\s+(?:my\s+)?(?:messages?|data|chats?|info)|who\s+(?:made|built|created|owns)\s+(?:you|this)|are\s+(?:you|u)\s+safe|is\s+my\s+data\s+safe)[\s\w']*\??$/i;
+// "free" only in a trust context ("is this free", "is it free to use", "are you free to use") — NOT
+// a bare "are you free (right now)" which is a real availability ask, not a privacy/cost question.
+const META_RE = /^(?:(?:are|r)\s+(?:you|u)\s+(?:a\s+)?(?:real|human|person|bot|ai|robot)|is\s+(?:this|it)\s+free|(?:is\s+it|are\s+you)\s+free\s+to\s+use|is\s+this\s+(?:safe|a\s+(?:bot|scam|person))|do\s+(?:you|u)\s+(?:save|store|keep|sell|share|record)\s+(?:my\s+)?(?:messages?|data|chats?|info)|who\s+(?:made|built|created|owns)\s+(?:you|this)|are\s+(?:you|u)\s+safe|is\s+my\s+data\s+safe)[\s\w']*\??$/i;
 
 /** Returns a canned reply for /start, /help, a bare greeting/capability question, or a meta/trust
  * question; else null. */

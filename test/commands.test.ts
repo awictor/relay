@@ -48,6 +48,8 @@ describe("handleCommand", () => {
   it("does NOT hijack a real errand that looks meta-ish", () => {
     expect(handleCommand("is this article free to read: example.com/x")).toBeNull(); // real errand + long
     expect(handleCommand("do you save documents to a folder on that site")).toBeNull();
+    expect(handleCommand("are you free right now")).toBeNull(); // availability ask, not a cost/trust question
+    expect(handleCommand("are you free to grab me a coffee")).toBeNull();
   });
 
   // DEV-0043/0044: /help must advertise EVERY user-facing capability, or a shipped tool is hidden

@@ -141,6 +141,13 @@ describe("handler — schedule routing", () => {
     }
   });
 
+  it("'save that as daily' is NOT hijacked into a junk schedule (reaches the save-that-as branch)", async () => {
+    const added: string[] = [];
+    const { handle } = harness({ scheduleAdd: (_c, t) => { added.push(t); return { ok: true, kind: "daily", task: t, whenMs: 0 }; } });
+    await handle(msg("save that as daily"));
+    expect(added).toHaveLength(0); // the cadence-word name did NOT get scheduled
+  });
+
   it("a bare 'at 5' (no am/pm, no colon) does NOT trigger the scheduler", async () => {
     const added: string[] = [];
     const { handle, calls } = harness({ scheduleAdd: (_c, t) => { added.push(t); return { ok: true, kind: "once", task: t, whenMs: 0 }; } });
