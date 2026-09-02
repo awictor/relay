@@ -104,7 +104,7 @@
       "title": "Mark truncation in extractOne (extract/compare/alerts)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "extract/compare/alerts read content.slice(0,8000) with no marker -> a value below the cut is silently missed + reported as fact.",
       "how": "Apply truncateForModel (already exists) to the content passed to extractFieldsResult in extractOne."
     },
@@ -169,6 +169,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 11: backlog dry -> 3rd audit. Built proactive-profile-context (audit B#1, a real bug): schedule/digest/alert runners dropped the profile location the inbound path injects, so scheduled 'weather' etc were silently wrong. Added contextFor(chatId) dep to all 3 runners -> runAgent({llm,context}); index wires profiles.contextLine. +1 test (scheduled task gets the chat's context). 631 pass, tsc clean. call-tested false (wiring, unit-tested). Seeded 4: extractOne-truncation(S), empty-slot-arg(S), voice-notes(M), inbound-document-pdf(M)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 12: built extractone-truncation (audit B, high/S). extractOne fed the extractor LLM r.content.slice(0,8000) + structured.slice(0,8000) with NO marker, so extract/compare/price+stock alerts silently missed a value below the cut on a long page. Swapped both to truncateForModel(...,8000) so the extractor sees [truncated N more...] and hedges/re-targets. +2 tests (long page marked, short page unmarked). 633 pass, tsc clean. call-tested false (existing truncateForModel applied to a tested path). Remaining: empty-slot-arg, voice-notes, inbound-document-pdf."
     }
   ],
   "audits": [

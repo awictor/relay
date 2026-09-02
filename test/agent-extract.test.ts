@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { runAgent, extractFields } from "../src/agent.js";
+import { runAgent, extractFields, extractOne } from "../src/agent.js";
 import type { LLMClient, LLMMessage, LLMResult, ToolSpec } from "../src/llm.js";
+import type { BrowserBackend } from "../src/agent.js";
 
 // Scripted mock LLM (same shape as agent.test.ts) — records what it saw.
 class MockLLM implements LLMClient {
@@ -81,5 +82,28 @@ describe("runAgent — extract tool", () => {
     await runAgent("extract stuff", { llm, scrapeFn });
     const toolMsg = llm.calls[1]!.find((m) => m.role === "tool" && m.name === "extract");
     expect(toolMsg?.content).toMatch(/no fields/i);
+  });
+});
+
+describe("extractOne truncation marker (product-loop)", () => {
+  it("marks a >8000-char page so the extractor knows content was cut", async () => {
+    let sawInput = "";
+    const llm = new MockLLM([{ text: '{"price":"$5"}' }]);
+    // wrap complete to capture the page text handed to the extractor
+    const orig = llm.complete.bind(llm);
+    llm.complete = async (messages, tools) => { sawInput = messages.map((m) => m.content).join("\n"); return orig(messages, tools); };
+    const backend = { scrape: async () => ({ title: "T", content: "a".repeat(10_000), url: "u" }) } as unknown as BrowserBackend;
+    await extractOne(llm, backend, "https://x.com/p", ["price"]);
+    expect(sawInput).toMatch(/truncated \d+ more characters/);
+  });
+
+  it("does NOT mark a short page", async () => {
+    let sawInput = "";
+    const llm = new MockLLM([{ text: '{"price":"$5"}' }]);
+    const orig = llm.complete.bind(llm);
+    llm.complete = async (messages, tools) => { sawInput = messages.map((m) => m.content).join("\n"); return orig(messages, tools); };
+    const backend = { scrape: async () => ({ title: "T", content: "short page", url: "u" }) } as unknown as BrowserBackend;
+    await extractOne(llm, backend, "https://x.com/p", ["price"]);
+    expect(sawInput).not.toMatch(/truncated/);
   });
 });

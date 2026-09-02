@@ -503,11 +503,13 @@ export async function extractOne(
   fields: string[]
 ): Promise<{ json: string; title: string }> {
   const r = await backend.scrape(url);
-  let { json, allNull } = await extractFieldsResult(llm, r.content.slice(0, 8000), fields);
+  // Mark the cut (product-loop) so the extractor LLM knows the page was longer than 8000 chars —
+  // otherwise a price/rating below the slice is silently missed and returned as if complete.
+  let { json, allNull } = await extractFieldsResult(llm, truncateForModel(r.content, 8000), fields);
   if (allNull && backend.extractStructured) {
     const structured = await backend.extractStructured(url).catch(() => "");
     if (structured.trim()) {
-      const retry = await extractFieldsResult(llm, structured.slice(0, 8000), fields);
+      const retry = await extractFieldsResult(llm, truncateForModel(structured, 8000), fields);
       if (!retry.allNull) json = retry.json;
     }
   }
