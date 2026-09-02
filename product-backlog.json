@@ -896,7 +896,7 @@
       "title": "no recall of past answers Relay gave",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "\"what was that sushi place you found me last week / resend Tuesday report\" — lastResultStore holds only the single last answer; no searchable archive.",
       "how": "Capped per-chat JSON result-log (safe-store), searchable by keyword/date; a recall intent serves from it."
     }
@@ -1193,6 +1193,10 @@
     {
       "id": "async-background-errands",
       "note": "A large \"get back to me\" errand (dispatch phrasing, or a scale cue + length) is now ACKed instantly (\"on it — I will text you when done\") and run DETACHED off the per-chat chain with a raised step budget (BACKGROUND_MAX_STEPS=20, agent maxSteps clamped to 30 ceiling), delivered unprompted + cached for more/link. Failures still notify (no black hole). isBackgroundErrand/stripDispatchPhrasing in lib/background.ts; enableBackgroundErrands dep (RELAY_BACKGROUND_ERRANDS, on by default). Instinct dispatch-and-ping parity, read-only. 888 tests green."
+    },
+    {
+      "id": "answer-history-recall",
+      "note": "Added a searchable per-chat log of PAST answers Relay gave (AnswerLog, capped 100, oldest-drop). \"what was that sushi place you found?\" / \"resend the flights\" now searches by keyword + replies from the log, no agent re-run. Clean synchronous + background answers are logged (degraded/binaries skipped). isAnswerRecall/recallKeywords in lib/answer-log.js; recallAnswers/logAnswer deps; RELAY_ANSWERS_FILE. Distinct from notes recall (answers GIVEN vs facts stored). 898 tests green."
     }
   ],
   "audits": [

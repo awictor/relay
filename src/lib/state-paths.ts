@@ -18,6 +18,7 @@ export interface StatePaths {
   metrics: string;
   profile: string;
   notes: string;
+  answers: string;
 }
 
 /** Resolve all durable-state file paths from env (with the data/ defaults). */
@@ -31,6 +32,7 @@ export function statePaths(env: NodeJS.ProcessEnv = process.env): StatePaths {
     metrics: env.RELAY_METRICS_FILE ?? "data/relay-metrics.json",
     profile: env.RELAY_PROFILE_FILE ?? "data/relay-profile.json",
     notes: env.RELAY_NOTES_FILE ?? "data/relay-notes.json",
+    answers: env.RELAY_ANSWERS_FILE ?? "data/relay-answers.json",
   };
 }
 

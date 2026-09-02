@@ -31,6 +31,7 @@ import { runDigest } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand, parseAlertEdit } from "./lib/alerts.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
+import { AnswerLog, recallKeywords } from "./lib/answer-log.js";
 import { checkAlert } from "./alert-runner.js";
 import { parseScheduleFor } from "./lib/schedule.js";
 
@@ -98,6 +99,7 @@ const digests = new DigestStore({ file: paths.digests });
 const alerts = new AlertStore({ file: paths.alerts });
 const profiles = new ProfileStore({ file: paths.profile });
 const notes = new NotesStore({ file: paths.notes });
+const answerLog = new AnswerLog({ file: paths.answers });
 // Run a digest -> composed briefing text (member recipes -> one message). Shared by /run + schedule.
 const digestRunText = (chatId: number, name: string): Promise<string | null> => {
   const d = digests.get(chatId, name);
@@ -200,6 +202,9 @@ const handle = createHandler({
     return { removed: forgotten.length, all: false, forgotten };
   },
   notesList: (chatId) => notes.list(chatId).map((n) => n.text),
+  // Answer history (answer-history-recall): search past answers by keyword; log a fresh clean answer.
+  recallAnswers: (chatId, text) => answerLog.search(chatId, recallKeywords(text), 3),
+  logAnswer: (chatId, task, reply) => answerLog.record(chatId, task, reply, Date.now()),
   // First-run location capture (first-location-capture): does this chat have a home location yet, and
   // save a bare "which city?" reply (+re-stamp recurring reminders if a tz came with it).
   hasLocation: (chatId) => !!profiles.get(chatId)?.location,

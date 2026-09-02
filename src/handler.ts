@@ -16,6 +16,7 @@ import { formatUtcOffset } from "./lib/profile.js";
 import { isRecallRequest } from "./lib/notes.js";
 import { needsLocationContext } from "./lib/profile.js";
 import { isBackgroundErrand, stripDispatchPhrasing, BACKGROUND_MAX_STEPS } from "./lib/background.js";
+import { isAnswerRecall } from "./lib/answer-log.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat } from "./lib/recipes.js";
 
 export interface HandlerDeps {
@@ -57,6 +58,12 @@ export interface HandlerDeps {
   // once, then re-runs the original errand — instead of the agent asking the city every time. Optional.
   hasLocation?: (chatId: number) => boolean;
   captureLocation?: (chatId: number, text: string) => { location: string; tzOffsetMin?: number } | null;
+  // Answer history (answer-history-recall): recallAnswers searches this chat's PAST answers by keyword
+  // ("what was that sushi place you found", "resend the flights") and returns the matches (task + reply
+  // + when); logAnswer records a fresh answer. When both are wired, a recall ask is served from the log
+  // with no agent run. Optional; absent -> no answer history.
+  recallAnswers?: (chatId: number, text: string) => Array<{ task: string; reply: string; at: number }>;
+  logAnswer?: (chatId: number, task: string, reply: string) => void;
   // Long-term memory (remember-facts-store): rememberFact parses + stores a "remember X" message
   // (returns the stored fact, or null if it isn't one); forgetFact deletes matching facts (returns a
   // count, or a "cleared all" total); notesList returns the remembered facts for a "what do you know
@@ -376,6 +383,21 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         && !pendingLocation.has(msg.chatId) && needsLocationContext(msg.text)) {
       pendingLocation.set(msg.chatId, msg.text);
       await deps.sendMessage(msg.chatId, "What city are you in? I'll save it so I don't have to ask again (add \"UTC-5\" and I'll get your reminder times right too).");
+      return;
+    }
+
+    // Answer history (answer-history-recall): "what was that sushi place you found?" / "resend the
+    // flights" — search PAST answers Relay gave (not facts the user stored) + reply from the log, no
+    // agent re-run. Checked before the notes-recall (distinct: "you found" vs "know about me") and the
+    // agent. Falls through when nothing matches so a genuine fresh task still runs.
+    if (deps.recallAnswers && isAnswerRecall(msg.text)) {
+      const hits = deps.recallAnswers(msg.chatId, msg.text);
+      if (hits.length) {
+        const body = hits.map((h) => `• You asked "${h.task}" — I said:\n${h.reply}`).join("\n\n");
+        await deps.sendMessage(msg.chatId, body);
+        return;
+      }
+      await deps.sendMessage(msg.chatId, "I don't have a past answer matching that. Ask me fresh and I'll look it up.");
       return;
     }
 
@@ -792,6 +814,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
           const parts = formatReplyParts(r.reply);
           const out = r.degraded ? `⚠️ Here's what I got (I couldn't fully finish):\n\n${parts.shown}` : `✅ Done with "${errand}":\n\n${parts.shown}`;
           lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, parts.shown) });
+          if (!r.degraded) deps.logAnswer?.(msg.chatId, errand, parts.shown); // recall a background result later too
           await deps.sendMessage(msg.chatId, out);
           deps.recordTurn({ steps: r.steps, tools: r.tools, elapsedMs: deps.now() - startedAt, ok: !r.degraded, degraded: r.degraded });
         } catch (e) {
@@ -873,6 +896,9 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
 
       const next: LLMMessage[] = [...history, { role: "user", content: msg.text }, { role: "assistant", content: out }];
       deps.memorySet(msg.chatId, next);
+      // Log a CLEAN answer to the searchable history (answer-history-recall) so "what was that X you
+      // found" works later. Skip degraded (partial) replies + binaries (no text answer to recall).
+      if (!degraded && !photo && !doc) deps.logAnswer?.(msg.chatId, msg.text, body);
       const elapsedMs = deps.now() - startedAt;
       log(formatTurnLog({ chatId: msg.chatId, steps, tools, elapsedMs, replyChars: out.length, ok: !degraded }));
       deps.recordTurn({ steps, tools, elapsedMs, ok: !degraded, degraded });

@@ -935,3 +935,44 @@ describe("background errands (async-background-errands)", () => {
     expect(sent[0]!.text).toBe("sunny"); // no "on it" ack — ran inline
   });
 });
+
+describe("answer history recall (answer-history-recall)", () => {
+  it("logs a clean answer, then serves a recall from the log without running the agent", async () => {
+    const { AnswerLog, recallKeywords } = await import("../src/lib/answer-log.js");
+    const log = new AnswerLog({ file: join(mkdtempSync(join(tmpdir(), "relay-h-ans-")), "a.json") });
+    let agentCalls = 0;
+    const { handle, sent } = harness({
+      recallAnswers: (c, t) => log.search(c, recallKeywords(t), 3),
+      logAnswer: (c, task, reply) => log.record(c, task, reply, 0),
+      runAgentFn: async () => { agentCalls++; return { reply: "Try Sushi Zen on Main St.", steps: 1, tools: [] }; },
+    });
+    await handle(msg("best sushi near me", 5));   // logged
+    expect(agentCalls).toBe(1);
+    await handle(msg("what was that sushi place you found?", 5)); // recall — no agent
+    expect(agentCalls).toBe(1);
+    expect(sent[1]!.text).toMatch(/Sushi Zen/);
+  });
+
+  it("a recall with no matching past answer says so, no agent", async () => {
+    let agentCalls = 0;
+    const { handle, sent } = harness({
+      recallAnswers: () => [],
+      logAnswer: () => {},
+      runAgentFn: async () => { agentCalls++; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("what did you find about the flights", 5));
+    expect(agentCalls).toBe(0);
+    expect(sent[0]!.text).toMatch(/don't have a past answer/i);
+  });
+
+  it("a fresh (non-recall) task still runs the agent", async () => {
+    let ran = "";
+    const { handle } = harness({
+      recallAnswers: () => [],
+      logAnswer: () => {},
+      runAgentFn: async (t) => { ran = t; return { reply: "sunny", steps: 1, tools: [] }; },
+    });
+    await handle(msg("weather in Paris", 5));
+    expect(ran).toBe("weather in Paris");
+  });
+});
