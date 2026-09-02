@@ -39,7 +39,7 @@ export interface HandlerDeps {
   // Per-user profile (product-loop). setLocation parses + stores a "set my location" message (null
   // if it isn't one); profileContext returns the agent context line for a chat (""/absent = none).
   // All optional so older wiring/tests are unaffected.
-  setLocation?: (chatId: number, text: string) => { location: string; units?: string; tzOffsetMin?: number } | null;
+  setLocation?: (chatId: number, text: string) => { location: string; units?: string; tzOffsetMin?: number; restamped?: number } | null;
   profileContext?: (chatId: number) => string;
   // The chat's tz offset (minutes east of UTC) for the agent's current-datetime line + reasoning
   // (inject-current-datetime). Optional; absent -> UTC (0).
@@ -323,7 +323,12 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         const tz = typeof set.tzOffsetMin === "number"
           ? ` I'll fire daily reminders at your local time (${formatUtcOffset(set.tzOffsetMin)}).`
           : "";
-        await deps.sendMessage(msg.chatId, `Got it — I'll use ${set.location}${u} for "weather", "near me", and the like.${tz}`);
+        // If existing recurring reminders were re-stamped to the new tz, say so — otherwise a user who
+        // set their tz to FIX a wrong-hour daily wouldn't know it's now corrected (tz-restamp-on-setlocation).
+        const fixed = set.restamped && set.restamped > 0
+          ? ` Fixed the timing of ${set.restamped} existing recurring reminder${set.restamped === 1 ? "" : "s"}.`
+          : "";
+        await deps.sendMessage(msg.chatId, `Got it — I'll use ${set.location}${u} for "weather", "near me", and the like.${tz}${fixed}`);
         return;
       }
     }

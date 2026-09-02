@@ -177,7 +177,10 @@ const handle = createHandler({
     const p = parseSetLocation(text);
     if (!p) return null;
     const rec = profiles.set(chatId, p);
-    return { location: rec.location!, units: rec.units, tzOffsetMin: rec.tzOffsetMin };
+    // Re-stamp recurring reminders to the new tz so a daily/weekly created before the user set their
+    // timezone stops firing at the wrong hour (tz-restamp-on-setlocation). Only when a tz was given.
+    const restamped = rec.tzOffsetMin !== undefined ? schedules.restampTz(chatId, rec.tzOffsetMin, Date.now()) : 0;
+    return { location: rec.location!, units: rec.units, tzOffsetMin: rec.tzOffsetMin, restamped };
   },
   // Agent context = profile (location/units/tz) + remembered facts (remember-facts-store), so every
   // answer is filtered through both without the user re-stating them.

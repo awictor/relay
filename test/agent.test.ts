@@ -51,6 +51,53 @@ describe("runAgent", () => {
     expect(toolMsg!.content).toMatch(/came back nearly empty/i);
   });
 
+  it("transcript tool feeds a YouTube transcript to the model (video-transcript-summary)", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "transcript", args: { url: "https://youtu.be/dQw4w9WgXcQ" } } },
+      { toolCall: { name: "reply", args: { text: "The video explains X." } } },
+    ]);
+    let seenUrl = "";
+    const backend = {
+      scrape: async (url: string) => ({ title: "", content: "", url }),
+      createSession: async () => ({ id: "s" }),
+      navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {},
+      readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {},
+      discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+      videoTranscript: async (url: string) => { seenUrl = url; return { videoId: "dQw4w9WgXcQ", text: "captions: the video explains X in detail " + "word ".repeat(20) }; },
+    };
+    const { reply, steps } = await runAgent("summarize this video https://youtu.be/dQw4w9WgXcQ", { llm, backend });
+    expect(reply).toBe("The video explains X.");
+    expect(steps).toBe(2);
+    expect(seenUrl).toBe("https://youtu.be/dQw4w9WgXcQ");
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/TRANSCRIPT of .*the video explains X/s);
+  });
+
+  it("transcript tool reports gracefully when captions are unavailable", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "transcript", args: { url: "https://youtu.be/dQw4w9WgXcQ" } } },
+      { toolCall: { name: "reply", args: { text: "I couldn't read that video's transcript." } } },
+    ]);
+    const backend = {
+      scrape: async (url: string) => ({ title: "", content: "", url }),
+      createSession: async () => ({ id: "s" }),
+      navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {},
+      readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {},
+      discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+      videoTranscript: async () => null, // no captions
+    };
+    const { reply } = await runAgent("summarize https://youtu.be/dQw4w9WgXcQ", { llm, backend });
+    expect(reply).toMatch(/couldn't read that video/i);
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/No transcript available/i);
+  });
+
   it("blocks an SSRF scrape target and reports the error to the model", async () => {
     const llm = new MockLLM([
       { toolCall: { name: "scrape", args: { url: "http://169.254.169.254/latest/meta-data" } } },

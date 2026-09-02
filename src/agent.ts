@@ -11,6 +11,7 @@ import * as anvil from "./anvil.js";
 import { isUrlSafe } from "./lib/url-validator.js";
 import { intEnv } from "./lib/env.js";
 import { isDangerousAction } from "./safety.js";
+import { fetchYouTubeTranscript } from "./lib/youtube.js";
 import type { LLMClient, LLMMessage, ToolSpec, ToolCall } from "./llm.js";
 
 /** Resolve RELAY_MAX_STEPS to a valid positive integer, else the default 8. An unclamped
@@ -102,6 +103,11 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "transcript",
+    description: "Fetch the spoken transcript (captions) of a YouTube video by URL. Use this — NOT scrape — whenever the user gives a YouTube link (youtube.com/watch, youtu.be, /shorts) and wants it summarized, quoted, or answered from (\"summarize this video\", \"what does this video say about X\", \"tldr\"). Returns the plain transcript text; then summarize/answer from it. If captions are unavailable it says so.",
+    parameters: { type: "object", properties: { url: { type: "string", description: "A YouTube video URL (watch/youtu.be/shorts)" } }, required: ["url"] },
+  },
+  {
     name: "screenshot",
     description: "Capture a web page as an IMAGE and send it to the user. Use when the user wants to SEE a page (\"show me\", \"screenshot\", \"what does X look like\") rather than read its text. After calling this, still call reply with a short caption.",
     parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to capture" } }, required: ["url"] },
@@ -133,6 +139,7 @@ Tools:
 - "search" (url): open a specific search/listing page and get candidate result links back. Use when you already know the site — build its search URL, call search, then extract/compare across the returned links.
 - "screenshot" (url): capture a page as an IMAGE and send it. Use when the user wants to SEE a page ("show me", "screenshot", "what does X look like"), not read its text. Then call reply with a short caption.
 - "pdf" (url): render a page to a PDF and send it as a document. Use when the user wants to SAVE or KEEP a page ("save as PDF", "send me a PDF of X"). Then call reply with a short caption.
+- "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "reply" (text): finish.
 
 Rules:
@@ -166,9 +173,16 @@ export interface BrowserBackend {
   screenshot?(url: string): Promise<Uint8Array>;
   // Optional: render a URL to PDF bytes (DEV-0032). Absent -> pdf tool reports unavailable.
   pdf?(url: string): Promise<Uint8Array>;
+  // Optional: fetch a YouTube video's caption transcript as plain text (video-transcript-summary).
+  // Absent -> the transcript tool reports it's unavailable. Returns null when the video has no
+  // captions / isn't a YouTube URL.
+  videoTranscript?(url: string): Promise<{ videoId: string; text: string } | null>;
 }
 
 const FETCH_JSON_MAX_BYTES = 200_000;
+// A watch page is ~1MB of HTML; the caption track is far smaller. Cap generously so the
+// ytInitialPlayerResponse captionTracks blob (usually within the first few hundred KB) is captured.
+const TRANSCRIPT_MAX_BYTES = 2_000_000;
 
 /** Cap text handed to the model, but APPEND A VISIBLE MARKER when we cut — otherwise the agent
  * summarizes the top slice and states it as the whole truth, so a price/score/answer further down is
@@ -208,8 +222,22 @@ async function defaultFetchJson(url: string): Promise<{ status: number; contentT
   return { status: res.status, contentType, text };
 }
 
+// Plain guarded GET returning the body text (for the transcript fetch — YouTube watch page + caption
+// track). Size-capped, no credentials. SSRF is checked by the caller before this runs.
+async function defaultFetchText(url: string): Promise<string> {
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { accept: "text/html,application/xml,*/*", "accept-language": "en" },
+    redirect: "follow",
+    signal: AbortSignal.timeout(10000),
+  });
+  const buf = await res.arrayBuffer();
+  return new TextDecoder().decode(buf.slice(0, TRANSCRIPT_MAX_BYTES));
+}
+
 const defaultBackend: BrowserBackend = {
   scrape: (url) => anvil.scrape(url, { format: "text" }),
+  videoTranscript: (url) => fetchYouTubeTranscript(url, defaultFetchText),
   createSession: () => anvil.createSession().then((s) => ({ id: s.id })),
   navigate: (id, url) => anvil.navigate(id, url),
   click: (id, sel) => anvil.click(id, sel),
@@ -320,6 +348,21 @@ export async function runAgent(
           push("scrape", formatPageForModel(r.title, r.url, r.content));
         } catch (e) {
           push("scrape", `ERROR fetching ${url}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "transcript") {
+        const url = String(call.args.url ?? "");
+        const safe = isUrlSafe(url);
+        if (!safe.safe) { push("transcript", `ERROR: refused (${safe.reason}).`); continue; }
+        if (!backend.videoTranscript) { push("transcript", "ERROR: video transcripts aren't available."); continue; }
+        try {
+          const r = await backend.videoTranscript(url);
+          if (!r) { push("transcript", `No transcript available for ${url} (captions may be disabled, or it isn't a YouTube video). Tell the user you can't read this video's transcript.`); continue; }
+          push("transcript", `TRANSCRIPT of ${url}:\n${truncateForModel(r.text)}\n\nSummarize/answer from this; it's what was said in the video.`);
+        } catch (e) {
+          push("transcript", `ERROR fetching transcript for ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

@@ -25,6 +25,7 @@ const HELP = `Relay — what I can do:
 • Find then fetch: "find newest listings for <thing>" → I open the search page, grab the results, and read them.
 • See a page: "screenshot the top of Hacker News" → I send you an image of it.
 • Save a page: "save this as a PDF: <link>" → I send you a PDF document.
+• Summarize a video: send a YouTube link + "tldr this" → I read its transcript and sum it up.
 
 Limits: I won't log in as you, pay, buy, or do anything destructive. If a task needs that, I'll say so.
 

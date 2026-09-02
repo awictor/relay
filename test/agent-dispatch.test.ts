@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "click", "compare", "extract", "fetch_json", "pdf", "read", "reply", "scrape", "screenshot", "search", "type", "web_search"].sort()
+      ["browse", "click", "compare", "extract", "fetch_json", "pdf", "read", "reply", "scrape", "screenshot", "search", "transcript", "type", "web_search"].sort()
     );
   });
 

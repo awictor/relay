@@ -237,6 +237,44 @@ function tmpFile() { const d = mkdtempSync(join(tmpdir(), "relay-sched-")); dirs
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
+describe("ScheduleStore.restampTz (tz-restamp-on-setlocation)", () => {
+  it("re-stamps daily/weekly to the new tz + recomputes dueMs; skips interval/once; returns the count", async () => {
+    const { nextDailyMs } = await import("../src/lib/schedule.js");
+    const s = new ScheduleStore({ file: tmpFile() });
+    // Created with the default (UTC=0) offset because no tz was set yet.
+    const daily = s.add(1, { kind: "daily", task: "meds", dueMs: NOW, hourMin: "08:00", offsetMin: 0 }, NOW)!;
+    const weekly = s.add(1, { kind: "weekly", task: "report", dueMs: NOW, hourMin: "09:00", offsetMin: 0, weekdays: [1] }, NOW)!;
+    const interval = s.add(1, { kind: "interval", task: "poll", dueMs: NOW + 5 * MIN, intervalMs: 2 * 60 * MIN }, NOW)!;
+    const once = s.add(1, { kind: "once", task: "call", dueMs: NOW + 60 * MIN, offsetMin: 0 }, NOW)!;
+
+    const moved = s.restampTz(1, -300, NOW); // user sets UTC-5
+    expect(moved).toBe(2); // daily + weekly only
+
+    const d = s.list(1).find((x) => x.id === daily.id)!;
+    expect(d.offsetMin).toBe(-300);
+    expect(d.dueMs).toBe(nextDailyMs(NOW, 8, 0, -300)); // 8am at UTC-5, not UTC
+    const w = s.list(1).find((x) => x.id === weekly.id)!;
+    expect(w.offsetMin).toBe(-300);
+    // interval + once untouched.
+    expect(s.list(1).find((x) => x.id === interval.id)!.offsetMin).toBeUndefined();
+    expect(s.list(1).find((x) => x.id === once.id)!.dueMs).toBe(NOW + 60 * MIN);
+  });
+
+  it("is a no-op (returns 0) when the offset already matches", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "daily", task: "x", dueMs: NOW, hourMin: "08:00", offsetMin: -300 }, NOW);
+    expect(s.restampTz(1, -300, NOW)).toBe(0);
+  });
+
+  it("only touches the given chat's schedules", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "daily", task: "a", dueMs: NOW, hourMin: "08:00", offsetMin: 0 }, NOW);
+    s.add(2, { kind: "daily", task: "b", dueMs: NOW, hourMin: "08:00", offsetMin: 0 }, NOW);
+    expect(s.restampTz(1, 60, NOW)).toBe(1);
+    expect(s.list(2)[0]!.offsetMin).toBe(0); // chat 2 untouched
+  });
+});
+
 describe("ScheduleStore", () => {
   it("add/list/dueNow/complete for a once task", () => {
     const s = new ScheduleStore({ file: tmpFile() });

@@ -833,9 +833,72 @@
       "title": "YouTube/video links cannot be summarized",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Pasting a YouTube link + \"summarize this\" hits a JS shell, formatPageForModel <200-char guard fires, agent says the page was empty.",
       "how": "Add a transcript-fetch path (video id -> timedtext/transcript endpoint -> summarize) as a tool."
+    },
+    {
+      "id": "tz-restamp-on-setlocation",
+      "title": "setting tz doesn't fix already-created recurring reminders",
+      "impact": "high",
+      "effort": "M",
+      "status": "done",
+      "why": "A daily created before a tz was set is stamped offsetMin:0; the ?? tzOffsetMin() fallback never fires (0 not nullish), so setting UTC-5 to FIX a wrong-hour reminder does nothing — it fires at the wrong hour forever. The product tells the user to do the one thing that will not help.",
+      "how": "ScheduleStore.restampTz(chatId,offsetMin,now) recomputes daily/weekly dueMs+offset; wired into setLocation; confirm names how many were fixed."
+    },
+    {
+      "id": "reminder-only-common-verb",
+      "title": "personal reminders with a common verb run the agent",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "\"remind me to find my keys / get the mail / call mom when I get home\" matches FETCH_CUE_RE (find|get|when|where|check...) so it is misclassified as an agent task and runs a confused 30s browse at fire time.",
+      "how": "Tighten FETCH_CUE_RE: require an object/site cue, or drop the over-broad verbs (find/get/when/where) that dominate personal to-dos; keep price/weather/news/search cues."
+    },
+    {
+      "id": "notes-forget-substring-collateral",
+      "title": "forget-fact substring match silently deletes unrelated facts",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "\"forget that I drink tea\" also removes \"my niece Teagan birthday...\" — includes() with no word boundary; user told only a count, never which facts vanished. Irreversible.",
+      "how": "Word-boundary/token match; when >1 match, list them and confirm before deleting, or delete the best single match and echo what was removed."
+    },
+    {
+      "id": "notes-cap-silent-evict",
+      "title": "remembered-fact cap silently drops the oldest at 30",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "The 31st \"remember X\" silently evicts the earliest fact (often the most important) with no warning; store presents as permanent.",
+      "how": "On eviction, tell the user what aged out (or refuse + ask them to forget one first, mirroring recipe/alert caps)."
+    },
+    {
+      "id": "first-location-capture",
+      "title": "no first-run location/tz capture on a location errand",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "\"weather\"/\"near me\" with no profile asks the city every time until the user finds /setlocation buried in ~14 commands; also leaves tz unset (feeds the wrong-hour reminder bug).",
+      "how": "On the first location-dependent ask with an empty profile, offer to save the city (+infer/ask tz once)."
+    },
+    {
+      "id": "async-background-errands",
+      "title": "long errands block + time out instead of running in background",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "A big open task (\"find the 5 cheapest Lisbon flights and get back to me\") hits the ~8-step cap synchronously and times out; Instinct core promise is dispatch-and-ping.",
+      "how": "Queue flagged long tasks, ack \"on it — I will text you\", run with a raised step budget, deliver via the proactive-send path."
+    },
+    {
+      "id": "answer-history-recall",
+      "title": "no recall of past answers Relay gave",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "\"what was that sushi place you found me last week / resend Tuesday report\" — lastResultStore holds only the single last answer; no searchable archive.",
+      "how": "Capped per-chat JSON result-log (safe-store), searchable by keyword/date; a recall intent serves from it."
     }
   ],
   "history": [
@@ -1106,6 +1169,10 @@
     {
       "id": "in-stock-cta-scoping",
       "note": "Scoped the in_stock check so a cross-sell/recommended product Buy button no longer false-confirms a back-in-stock watch. Split into OUT_OF_STOCK (wins), IN_STOCK_STRONG (explicit availability, enough alone), and weak CTA (add to cart/buy now) which now confirms ONLY when no cross-sell framing (you may also like / recommended / similar items / sponsored) is present, else holds (null). No more rush-buy pings while the item is still sold out. 845 tests green."
+    },
+    {
+      "id": "video-transcript-summary",
+      "note": "Added a transcript tool: a YouTube link + \"summarize this\" now fetches the video caption track (key-less: watch page -> ytInitialPlayerResponse captionTracks -> timedtext XML/JSON3 -> plain text) instead of scraping the empty JS shell. New src/lib/youtube.ts (parseYouTubeId, extractCaptionTrackUrl, parseTranscriptXml, fetchYouTubeTranscript) + backend.videoTranscript + agent tool/dispatch/prompt + help line. Graceful null when captions disabled. 860 tests green."
     }
   ],
   "audits": [
@@ -1171,6 +1238,9 @@
     },
     {
       "note": "Backlog dry -> 3-agent audit. A(new-user): reminder-only path, video transcript, remember-facts store, directions. B(reliability): extractValue magnitude bug (BUILT), in_stock CTA scoping, proactive clobbers drilldown cache, at-least-once dup delivery, unthresholded watch spam. C(power): confirm-to-act, new-item feed watch, long-term memory, inbound attachments, chained workflows. Seeded top user-impact picks; built extractValue magnitude fix (broken headline path, effort S) this iteration."
+    },
+    {
+      "note": "Backlog dry after video-transcript-summary -> 3-agent audit. A(new-user): tz-blind first reminder, undiscoverable photo/voice/PDF intake, no first-run location capture, weak maps/places, no by-ref undo. B(reliability): tz-set does NOT fix existing reminders (BUILT), reminder-only common-verb misclassify, forget-fact substring collateral delete, feed dedupe key collision, silent 30-fact eviction. C(power): async background errands, answer-history recall, watch trend/time-series, conditional recipe chaining, self-authored report doc. Built tz-restamp (worse-than-bug: product told user to do the useless fix). Seeded top user-impact picks."
     }
   ]
 }
