@@ -287,6 +287,42 @@
       "status": "done",
       "why": "'20% tip on $47', '100 USD in EUR', 'oz in a cup', 'capital of France' trigger a slow web_search/scrape (or risk the 'never invent data' refusal), adding 10-30s to the exact throwaway questions people first test the bot with (audit 7 A#5).",
       "how": "Let the agent answer directly (reply without a tool) for arithmetic/unit-conversion/common-knowledge that needs no live data; a SYSTEM_PROMPT carve-out to the 'never invent data' rule for deterministic math/facts. Keep web_search for anything time-sensitive or uncertain."
+    },
+    {
+      "id": "greedy-location-setter",
+      "title": "\"I'm in X\" location-setter hijacks normal messages + reminders",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "parseSetLocation's `i'm in (.+)` matches ANY conversational 'I'm in ...' and runs before schedule-parse + the agent, so 'I'm in a meeting, remind me in 10 min' is swallowed: reminder never scheduled, no answer, and 'a meeting, remind me...' saved as home location -> corrupts every future weather/near-me (audit 8 B#1).",
+      "how": "Tighten the 'i'm in' branch: only treat it as a location-set when the tail looks like a place (short, no comma-clause with a verb, no scheduling words like remind/in N min/every). Prefer the explicit '/setlocation' + 'set my location to' forms; make bare 'I'm in X' require X to be a plausible place (1-4 words, no trailing task clause). Add tests for the false-positives."
+    },
+    {
+      "id": "threshold-alert-numberless-guard",
+      "title": "Threshold change-alert shouldn't fire/poison baseline on a numberless check",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "checkAlert guards the indeterminate case only for PREDICATE alerts; the threshold/plain-change path has no equivalent, so a transient numberless reply ('price unavailable') makes changed() fall back to text-diff, false-pings '🔔 changed', and stores the non-numeric string as baseline -> the 'by N' threshold is silently bypassed across the gap (audit 8 B#2).",
+      "how": "In checkAlert's non-predicate path, if the alert has a numeric threshold and extractValue(newValue) is null, skip notify + skip setLast (keep last good baseline), mirroring the predicate-refire-guard + the degraded guard."
+    },
+    {
+      "id": "alert-edit-check-now",
+      "title": "Run a check after editing an alert into an already-true predicate",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The define path runs alertRunNow to catch an already-satisfied predicate, but alertEdit just updates + returns; 'change btc to below 55000' when BTC is already below confirms 'Updated...' then never pings (no edge vs the preserved lastValue) -> user waits for a fire that may never come (audit 8 B#4).",
+      "how": "After a successful alertEdit, run alertRunNow(chatId, name) like the define path and relay the message if it fires. Reset the baseline so the edited predicate edge-triggers correctly."
+    },
+    {
+      "id": "profile-view-reset",
+      "title": "View / clear your saved profile over text",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "After /setlocation a user can't see or correct what was stored; a typo'd 'UTC-5' or wrong city is invisible + silently wrong on every weather/near-me/daily reminder (audit 8 A#2).",
+      "how": "Add a /profile (or 'what's my location') read that echoes stored location/units/tz, and a clear/forget path. Handler branch + ProfileStore already has get; add a clear."
     }
   ],
   "history": [
@@ -337,6 +373,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 33: backlog dry after iter 32 -> ran 8th audit (3 lenses), seeded 4, built greedy-location-setter (audit 8 B#1, high/S, real bug). parseSetLocation's `i'm in (.+)` matched ANY conversational 'I'm in ...' and ran before schedule-parse + the agent, so 'I'm in a meeting, remind me in 10 min' was swallowed: reminder never scheduled, no answer, and 'a meeting, remind me...' saved as home location -> corrupts every future weather/near-me. Split the parse: explicit forms (/setlocation, 'set my location to', 'my location is') stay permissive; the bare 'I'm in X'/'I am in X' form now requires the tail to look like a place (no task/scheduling keywords, no 'in N'/'at N', <=5 words) or it returns null and falls through to scheduling/agent. +2 tests (4 conversational false-positives return null; bare place + explicit-comma-place still accepted). 687 pass, tsc clean. call-tested false (pure parser, unit-tested). Remaining: threshold-alert-numberless-guard, alert-edit-check-now, profile-view-reset."
     },
     {
       "event": "PRODUCT-LOOP iter 32: built instant-calc-convert (audit 7 A#5, medium/S). '20% tip on $47', 'oz in a cup', 'capital of France' triggered a slow web_search/scrape (or risked the 'never invent data' refusal), adding 10-30s to the throwaway questions people first test the bot with. Added a SYSTEM_PROMPT carve-out: answer DIRECTLY (reply, no tool) for deterministic math/tips/percentages, unit conversions, date math, stable common knowledge; tools ONLY for time-sensitive/moving data (live prices, exchange rates, news, weather), verify-not-guess when unsure. +1 prompt-guard test (answer-directly + arithmetic + still-steers-live-to-tools). 685 pass, tsc clean. LIVE-VERIFIED: '20% tip on $47'->$9.40, 'oz in a cup'->8, 'capital of France'->Paris, all 1 step / 0 tools. call-tested TRUE. Backlog DRY -> ran 8th audit (same iteration)."
@@ -396,6 +435,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 8 (post-32-features). A/new-user: compound multi-errand messages, /profile view+reset, freeform personal-facts memory, cancel in-flight task, advertise photo/voice/PDF in onboarding. B/reliability: greedy 'I'm in X' location-setter hijacks reminders+corrupts profile (high/S, top), threshold-alert-numberless-fires+poisons-baseline (predicate guarded, threshold path not), memory-clobber-concurrent, alert-edit-into-already-true-stays-silent, once-reminder-dropped-on-transient-fire-failure. C/power: auto-learned long-term memory vault, cookie session-expiry re-auth nudge, batched recipe fan-out over a list, CSV/xlsx export attachment, language-aware read/translate. Seeded top 4: greedy-location-setter(S bug), threshold-alert-numberless-guard(S bug), alert-edit-check-now(S), profile-view-reset(S). Deferred: memory-clobber(M lock), once-reminder-transient-fail-retry(M), + power bets (auto-memory, batched fan-out, csv-export, translate)."
     },
     {
       "note": "Audit 7 (post-28-features). A/new-user: NL-alerts ('tell me when X' != watch<name>: syntax), first-run location/tz capture prompt, summarize-beyond-6000-chars (chunked read), setMyCommands menu, instant calc/convert/fact. B/reliability: dangerous-guard-matches-TYPED-text (search 'this book' refused — 3rd audit flagging it), once-reminder-dropped-at-hourly-cap, memory-clobber-concurrent-same-chat, extractValue-wrong-for-non-currency(temp/AQI), DST-drift(L). C/power: forward-to-act ingestion, deep-research multi-source cited, conversational follow-up on proactive pings, voice-note replies(TTS), quiet-hours/DND batched. Seeded top 4 by impact/effort: dangerous-guard-typed-text(S bug, chronic), once-reminder-cap-drop(M bug), telegram-command-menu(S), instant-calc-convert(S). Deferred: memory-clobber(M, needs per-chat lock), extractValue-non-currency(M), DST(L), summarize-chunking(M), NL-alerts(M), + all C power bets."

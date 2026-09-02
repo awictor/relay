@@ -27,9 +27,26 @@ export function parseUtcOffset(s: string): number | null {
  * A trailing "(metric)"/"(imperial)" or "in metric/imperial" sets units; a "UTC±N" clause sets tz. */
 export function parseSetLocation(text: string): { location: string; units?: "metric" | "imperial"; tzOffsetMin?: number } | null {
   const t = text.trim();
-  const m = t.match(/^\s*(?:\/setlocation|set\s+(?:my\s+)?location(?:\s+to)?|my\s+location\s+is|i(?:'m| am)\s+in)\s+(.+)$/i);
+  // Explicit forms (/setlocation, "set my location to", "my location is") are unambiguous. The bare
+  // "I'm in X" / "I am in X" form is captured separately because it also matches ordinary chat
+  // ("I'm in a meeting, remind me in 10 min") — for THAT form we require the tail to look like a
+  // place, so a normal message isn't hijacked (reminder dropped + profile corrupted).
+  const explicit = t.match(/^\s*(?:\/setlocation|set\s+(?:my\s+)?location(?:\s+to)?|my\s+location\s+is)\s+(.+)$/i);
+  const bare = explicit ? null : t.match(/^\s*i(?:'m| am)\s+in\s+(.+)$/i);
+  const m = explicit ?? bare;
   if (!m) return null;
   let loc = m[1]!.trim();
+  // Guard the bare "I'm in X" form: reject if the tail carries a task/scheduling clause or reads like
+  // a sentence rather than a place. A real place is short and has no comma-separated follow-on verb.
+  if (bare) {
+    const tail = loc.toLowerCase();
+    // A place is short and free of task/scheduling words. Keep a comma OK ("Austin, TX") but reject a
+    // sentence ("a meeting, remind me in 10 min" -> caught by the keyword + length checks).
+    const looksLikeTask = /\b(remind|reminder|remember|schedule|every|tomorrow|today|tonight|later|meeting|call|please|when|need|want|going|about|min|mins|minute|hour|hours)\b/.test(tail)
+      || /\bin\s+\d/.test(tail) || /\bat\s+\d/.test(tail)  // "...in 10", "...at 3pm"
+      || loc.split(/\s+/).length > 5;                      // a place is a few words, not a sentence
+    if (looksLikeTask) return null; // not a location-set — let it fall through to scheduling/agent
+  }
   let units: "metric" | "imperial" | undefined;
   let tzOffsetMin: number | undefined;
   // A UTC offset can appear anywhere in the tail; pull it out first (it's unambiguous).

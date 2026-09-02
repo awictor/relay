@@ -26,6 +26,19 @@ describe("parseSetLocation", () => {
     expect(parseSetLocation("I'm in Berlin UTC+1 (metric)")).toEqual({ location: "Berlin", units: "metric", tzOffsetMin: 60 });
     expect(parseSetLocation("set my location to Mumbai GMT+5:30")).toEqual({ location: "Mumbai", tzOffsetMin: 330 });
   });
+  it("does NOT hijack a conversational 'I'm in ...' that carries a task (greedy-location-setter)", () => {
+    expect(parseSetLocation("I'm in a meeting, remind me in 10 min")).toBeNull();
+    expect(parseSetLocation("I'm in the middle of something, call me later")).toBeNull();
+    expect(parseSetLocation("I am in a rush today")).toBeNull();
+    expect(parseSetLocation("I'm in line at the store and need the weather")).toBeNull();
+  });
+  it("still accepts a bare 'I'm in <place>' and explicit forms", () => {
+    expect(parseSetLocation("I'm in Paris")).toEqual({ location: "Paris" });
+    expect(parseSetLocation("I'm in New York City")).toEqual({ location: "New York City" });
+    expect(parseSetLocation("I'm in Tokyo in metric")).toEqual({ location: "Tokyo", units: "metric" });
+    // explicit forms stay permissive (a comma place is fine there)
+    expect(parseSetLocation("set my location to Austin, TX")).toEqual({ location: "Austin, TX" });
+  });
   it("returns null for a non-location message", () => {
     expect(parseSetLocation("what's the weather")).toBeNull();
     expect(parseSetLocation("/setlocation")).toBeNull(); // no place
