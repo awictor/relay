@@ -119,7 +119,7 @@ const QUIET_END = intEnv(process.env.RELAY_QUIET_END, { fallback: 0, min: 0 }) %
 const SCHED_TICK_MS = intEnv(process.env.RELAY_SCHED_TICK_MS, { fallback: 30_000, allowZeroDisable: true }); // 0 disables
 // Shared last-result cache (proactive-ping-drilldown-cache): the handler stores answers here + the
 // runner records proactive sends, so "more"/"send the link" works after an unprompted ping too.
-const lastResultStore = new Map<number, { full: string; sent: number; proactive?: boolean }>();
+const lastResultStore = new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
 const scheduleRunner = makeScheduleRunner({
   store: schedules, llm, runAgent, send: sendMessage, formatReply, contextFor: (c) => profiles.contextLine(c),
   now: () => Date.now(), periodMs: SCHED_TICK_MS,
@@ -129,7 +129,11 @@ const scheduleRunner = makeScheduleRunner({
   digestRun: (chatId, name) => digestRunText(chatId, name), // scheduled digests (m9)
   alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
   recipeResolveTask: (chatId, name) => { const r = recipes.get(chatId, name); return r ? r.task : null; }, // scheduled recipes: resolve current task at fire time
-  recordSend: (chatId, text) => lastResultStore.set(chatId, { full: text, sent: text.length, proactive: true }), // proactive ping -> drilldown + follow-up context
+  // Proactive ping -> its OWN slot (drilldown + follow-up context), preserving the inbound answer's
+  // pageable state so a ping mid-conversation can't eat the answer's unshown tail (proactive-clobbers-
+  // drilldown-cache). The ping is sent whole (untrimmed), so its paging offset starts at full length
+  // ("more" after a ping only pages a still-unshown ANSWER tail); links/context still read the ping.
+  recordSend: (chatId, text) => { const e = lastResultStore.get(chatId); lastResultStore.set(chatId, { full: e?.full ?? "", sent: e?.sent ?? 0, ping: { full: text, sent: text.length } }); },
   // Quiet hours (quiet-hours): defer a proactive send that lands in the window to its end, in the
   // chat's tz. Off unless RELAY_QUIET_START/END set (default start===end 0 = no window).
   quietUntil: (chatId, now) => quietUntilMs(now, QUIET_START, QUIET_END, profiles.offsetMin(chatId) ?? tzOffsetMin()),

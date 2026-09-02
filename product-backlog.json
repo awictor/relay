@@ -797,7 +797,7 @@
       "title": "proactive ping overwrites inbound more/link paging cache",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "User asks a question, a scheduled digest fires, then \"more\" says \"that is the whole answer\" and the dropped tail is unrecoverable.",
       "how": "recordSend (index.ts ~132) sets sent=text.length, clobbering the handler-seeded paging offset. Namespace proactive vs inbound last-result, or do not overwrite an inbound entry that still has unsent tail."
     },
@@ -1090,6 +1090,10 @@
     {
       "id": "reminder-only-no-agent",
       "note": "Pure personal to-dos (\"remind me to take my meds\") now echo the stored note at fire time instead of running a 20-40s browser-agent errand that appended a confused browse/refusal. isReminderOnly = reminder-prefix present AND no info-fetch cue; \"remind me to check the weather\" still runs the agent. reminderOnly flag threads ParsedSchedule->Schedule->fireOne. Recipes never set it. 814 tests green."
+    },
+    {
+      "id": "proactive-clobbers-drilldown-cache",
+      "note": "Split the shared last-result cache into a pageable ANSWER slot (full/sent) and a separate PING slot. A proactive digest/alert firing between an answer and a \"more\" no longer clobbers the answer paging offset (was set sent=text.length), so \"more\" recovers the dropped tail instead of saying \"that is the whole answer\". Links + follow-up context read the newer ping; more pages answer then ping. 815 tests green."
     }
   ],
   "audits": [

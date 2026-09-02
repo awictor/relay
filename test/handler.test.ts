@@ -452,9 +452,27 @@ describe("createHandler", () => {
     expect(sent[1]!.text).toMatch(/line 30/); // the dropped tail
   });
 
+  it("a proactive ping between the answer and 'more' does NOT eat the answer tail (proactive-clobbers-drilldown-cache)", async () => {
+    const long = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n");
+    const store = new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
+    const { handle, sent } = harness({
+      lastResultStore: store,
+      runAgentFn: async () => ({ reply: long, steps: 1, tools: [] }),
+    });
+    await handle(msg("give me the list", 4));
+    expect(sent[0]!.text).toMatch(/…$/); // trimmed; tail cached in the answer slot
+    // A scheduled digest/alert fires (runner's recordSend shape) — writes the ping slot, must NOT
+    // touch the answer's sent offset.
+    const e = store.get(4)!;
+    store.set(4, { full: e.full, sent: e.sent, ping: { full: "🔔 digest: here's your morning brief", sent: "🔔 digest: here's your morning brief".length } });
+    await handle(msg("more", 4));
+    expect(sent[1]!.text).toMatch(/line 30/); // answer tail STILL recoverable, not "nothing more to show"
+    expect(sent[1]!.text).not.toMatch(/nothing more to show/i);
+  });
+
   it("'send the link' works on a proactive ping via the shared last-result store (proactive-ping-drilldown-cache)", async () => {
-    const store = new Map<number, { full: string; sent: number }>();
-    store.set(8, { full: "🔔 btc changed: see https://x.com/p", sent: 999 }); // as if a runner ping cached it
+    const store = new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
+    store.set(8, { full: "", sent: 0, ping: { full: "🔔 btc changed: see https://x.com/p", sent: 999 } }); // as if a runner ping cached it
     let agentCalls = 0;
     const { handle, sent } = harness({
       lastResultStore: store,
@@ -535,8 +553,8 @@ describe("createHandler", () => {
   });
 
   it("a short follow-up to a proactive ping gets that ping as agent context (proactive-followup-context)", async () => {
-    const store = new Map<number, { full: string; sent: number; proactive?: boolean }>();
-    store.set(4, { full: "🔔 btc changed: now $67,000 (was $65,000)", sent: 999, proactive: true });
+    const store = new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
+    store.set(4, { full: "", sent: 0, ping: { full: "🔔 btc changed: now $67,000 (was $65,000)", sent: 999 } });
     let gotCtx: string | undefined;
     const { handle } = harness({
       lastResultStore: store,
@@ -547,8 +565,8 @@ describe("createHandler", () => {
   });
 
   it("a follow-up to a NORMAL (inbound) answer does NOT get proactive-ping context", async () => {
-    const store = new Map<number, { full: string; sent: number; proactive?: boolean }>();
-    store.set(4, { full: "an earlier answer", sent: 999, proactive: false });
+    const store = new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
+    store.set(4, { full: "an earlier answer", sent: 999 }); // inbound answer, no ping
     let gotCtx: string | undefined;
     const { handle } = harness({
       lastResultStore: store,
