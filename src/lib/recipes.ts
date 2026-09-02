@@ -46,6 +46,28 @@ export function parseSaveThatAs(text: string): string | null {
   return name || null;
 }
 
+/** "watch that [below N / above N / in stock / by N]" -> the trailing alert clause (or "" for a bare
+ * "watch that"), or null if it isn't a watch-that. The caller supplies the task from the prior turn +
+ * builds the alert. Zero-retype on-ramp from a one-off answer to a standing watch (watch-that-by-ref). */
+export function parseWatchThat(text: string): { clause: string } | null {
+  const m = text.trim().match(/^\s*(?:watch|alert\s+me\s+(?:on|about|if|when)?)\s+(?:that|this|it)\b\s*(.*)$/i);
+  if (!m) return null;
+  return { clause: m[1]!.trim() };
+}
+
+/** "schedule that <when>" / "every morning that" -> the timing clause, or null. Caller supplies the
+ * task from the prior turn. Complements save-that-as for recurring schedules (watch-that-by-ref). */
+export function parseScheduleThat(text: string): { clause: string } | null {
+  const t = text.trim();
+  // "schedule that every morning" / "schedule this at 9am"
+  let m = t.match(/^\s*schedule\s+(?:that|this|it)\b\s+(.+)$/i);
+  if (m) return { clause: m[1]!.trim() };
+  // "do that every morning" / "run that daily" — verb + that + a cadence clause
+  m = t.match(/^\s*(?:do|run|send)\s+(?:that|this|it)\b\s+((?:every|daily|each|weekdays?|weekends?|at\b).+)$/i);
+  if (m) return { clause: m[1]!.trim() };
+  return null;
+}
+
 /** Recognize a run command: "/run [recipe] <name>" or "run [recipe] <name>". The optional
  * "recipe" keyword (DEV-0130: explicit recipe intent so a same-named digest can't shadow it) is
  * stripped from BOTH the slash and natural forms. Returns the name or null. */

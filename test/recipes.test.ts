@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, parseSaveThatAs, applySlots, hasSlots, RecipeStore } from "../src/lib/recipes.js";
+import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, parseSaveThatAs, parseWatchThat, parseScheduleThat, applySlots, hasSlots, RecipeStore } from "../src/lib/recipes.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -34,6 +34,22 @@ describe("parseSaveThatAs (save-that-as)", () => {
     expect(parseSaveThatAs("save btc: check the price")).toBeNull(); // that's parseRecipeCommand's job
     expect(parseSaveThatAs("what's the weather")).toBeNull();
     expect(parseSaveThatAs("save that")).toBeNull(); // no name
+  });
+});
+
+describe("parseWatchThat / parseScheduleThat (watch-schedule-that-by-ref)", () => {
+  it("parseWatchThat captures the alert clause (or empty for a bare watch that)", () => {
+    expect(parseWatchThat("watch that")).toEqual({ clause: "" });
+    expect(parseWatchThat("watch that below 50000")).toEqual({ clause: "below 50000" });
+    expect(parseWatchThat("alert me if that back in stock")).toEqual({ clause: "back in stock" });
+    expect(parseWatchThat("watch btc: price")).toBeNull(); // a real define, not watch-that
+    expect(parseWatchThat("what's the weather")).toBeNull();
+  });
+  it("parseScheduleThat captures the timing clause", () => {
+    expect(parseScheduleThat("schedule that every morning")).toEqual({ clause: "every morning" });
+    expect(parseScheduleThat("do that every day at 8am")).toEqual({ clause: "every day at 8am" });
+    expect(parseScheduleThat("schedule morning every day")).toBeNull(); // named recipe, not "that"
+    expect(parseScheduleThat("do that thing")).toBeNull(); // no cadence clause
   });
 });
 

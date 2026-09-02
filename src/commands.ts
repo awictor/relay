@@ -42,7 +42,7 @@ Sites I'm signed in for: /sites lists the hosts you've authorized me for (via co
 
 Start over anytime: /reset clears our conversation history.
 
-After an answer: "more" shows the rest if I trimmed it, and "send the link" gives you the source URLs.
+After an answer: "more" shows the rest if I trimmed it, "send the link" gives you the source URLs, and "watch that" / "schedule that every morning" turns it into a standing alert or daily check.
 
 Just text me the task in plain English.`;
 

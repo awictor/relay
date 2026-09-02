@@ -476,6 +476,39 @@ describe("createHandler", () => {
     expect(sent[1]!.text).toMatch(/https:\/\/example\.com\/story/);
   });
 
+  it("'watch that' turns the last task into an alert (watch-schedule-that-by-ref)", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    mem.set(6, [{ role: "user", content: "price of bitcoin" }, { role: "assistant", content: "$65k" }]);
+    const defined: string[] = [];
+    const { handle, sent } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      alertDefine: (_c, text) => { defined.push(text); return { ok: true, name: "price-of" }; },
+      alertRunNow: async () => ({ message: null, commit: () => {} }),
+    });
+    await handle(msg("watch that below 50000", 6));
+    expect(defined[0]).toMatch(/watch .*: price of bitcoin below 50000/);
+    expect(sent[0]!.text).toMatch(/Watching/);
+  });
+
+  it("'schedule that every morning' schedules the last task", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    mem.set(6, [{ role: "user", content: "top HN story" }, { role: "assistant", content: "Story X" }]);
+    const added: string[] = [];
+    const { handle, sent } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      scheduleAdd: (_c, text) => { added.push(text); return { ok: true, kind: "daily", task: "top HN story", whenMs: 0 }; },
+    });
+    await handle(msg("schedule that every morning", 6));
+    expect(added[0]).toBe("top HN story every morning");
+    expect(sent[0]!.text).toMatch(/on that schedule/);
+  });
+
+  it("'watch that' with nothing recent says so", async () => {
+    const { handle, sent } = harness({ memoryGet: () => [], alertDefine: () => ({ ok: true, name: "x" }) });
+    await handle(msg("watch that", 6));
+    expect(sent[0]!.text).toMatch(/Nothing recent to watch/i);
+  });
+
   it("passes the profile context into the agent run", async () => {
     let gotContext: string | undefined;
     const { handle } = harness({

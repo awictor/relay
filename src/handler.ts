@@ -13,7 +13,7 @@ import { friendlyError } from "./lib/failure.js";
 import { splitScheduleCommand } from "./lib/schedule.js";
 import { repeatedTaskNudge, recurringCta } from "./lib/task-suggest.js";
 import { formatUtcOffset } from "./lib/profile.js";
-import { parseSaveThatAs } from "./lib/recipes.js";
+import { parseSaveThatAs, parseWatchThat, parseScheduleThat } from "./lib/recipes.js";
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -496,7 +496,8 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     }
 
     // "schedule <name> <when>" -> run a saved digest OR recipe on a cadence (digest first). No agent run.
-    if ((deps.recipeSchedule || deps.digestSchedule) && /^\s*schedule\s+\S+/i.test(msg.text)) {
+    // Skip "schedule that/this/it ..." — that's the by-reference form handled below (watch-schedule-that).
+    if ((deps.recipeSchedule || deps.digestSchedule) && /^\s*schedule\s+\S+/i.test(msg.text) && !/^\s*schedule\s+(?:that|this|it)\b/i.test(msg.text)) {
       // Split name<->time via the pure helper: it keeps the LONGEST name that still leaves a
       // clean time clause, so a name whose interior has a time word ("check in") isn't truncated
       // (DEV-0129). Falls back to null when no split yields a parseable clause.
@@ -529,6 +530,39 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         if (r.ok) { await deps.sendMessage(msg.chatId, `Saved recipe "${r.name}" from your last task. Run it anytime with /run ${r.name}.`); return; }
         await deps.sendMessage(msg.chatId, "You've hit the recipe limit — /forget one first.");
         return;
+      }
+    }
+
+    // "watch that [below N]" / "schedule that every morning" -> turn the task the user JUST ran into a
+    // standing alert/schedule with zero retype (watch-schedule-that-by-ref), extending "save that as".
+    {
+      const watchThat = parseWatchThat(msg.text);
+      const scheduleThat = parseScheduleThat(msg.text);
+      if (watchThat || scheduleThat) {
+        const hist = deps.memoryGet(msg.chatId);
+        const prior = [...hist].reverse().find((m) => m.role === "user" && typeof m.content === "string"
+          && !/^\s*(save|\/|run\b|watch\b|alert\b|change\b|remind|every\b|schedule\b|digest\b|do that\b|more\b|link)/i.test(m.content as string)
+          && !/^\[(photo|document)\]/.test(m.content as string));
+        if (!prior) { await deps.sendMessage(msg.chatId, `Nothing recent to ${watchThat ? "watch" : "schedule"} — run a task first, then say "${watchThat ? "watch that" : "schedule that every morning"}".`); return; }
+        const task = (prior.content as string).trim();
+        if (watchThat && deps.alertDefine) {
+          // Derive a short name from the task; build the standard "watch <name>: <task> <clause>".
+          const name = task.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\s+/).filter(Boolean).slice(0, 2).join("-") || "watch";
+          const r = deps.alertDefine(msg.chatId, `watch ${name}: ${task}${watchThat.clause ? " " + watchThat.clause : ""}`, deps.now());
+          if (r.ok) {
+            await deps.sendMessage(msg.chatId, `Watching "${r.name}" — I'll message you when it changes. See /alerts.`);
+            if (deps.alertRunNow && deps.checkRateLimit(msg.chatId).allowed) { try { const c = await deps.alertRunNow(msg.chatId, r.name); if (c.message) { await deps.sendMessage(msg.chatId, c.message); c.commit(); } else c.commit(); } catch { /* flaky first check */ } }
+            return;
+          }
+          await deps.sendMessage(msg.chatId, r.reason === "capped" ? "You've hit the alert limit — /forget-alert one first." : "I couldn't set that watch — try \"watch <name>: <task>\".");
+          return;
+        }
+        if (scheduleThat && deps.scheduleAdd) {
+          const r = deps.scheduleAdd(msg.chatId, `${task} ${scheduleThat.clause}`, deps.now());
+          if (r.ok) { const when = r.whenText ? ` Next: ${r.whenText}.` : ""; await deps.sendMessage(msg.chatId, `Got it — I'll do that on that schedule: "${r.task}".${when} Manage with /schedules.`); return; }
+          await deps.sendMessage(msg.chatId, r.reason === "capped" ? "You've hit the schedule limit — /cancel one first." : "I couldn't read that timing — try \"schedule that every morning\" or \"...at 9am\".");
+          return;
+        }
       }
     }
 

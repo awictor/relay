@@ -707,7 +707,7 @@
       "title": "'watch that' / 'schedule that every morning' by reference",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'save that as <name>' captures the last task as a recipe, but there's no zero-retype on-ramp to the OTHER automations — 'watch that' (change-alert) / 'schedule that every morning' (recurring) — the highest-leverage retention move (one-off -> standing automation) at peak intent (audit 19 C#1).",
       "how": "Parse 'watch that [below N / in stock]' + 'schedule that <when>' referencing the last real USER task from memory (like save-that-as); create the alert/schedule via the existing stores. Handler branch + a lastTask lookup. Reject if no prior task."
     },
@@ -778,6 +778,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 74: built watch-schedule-that-by-ref (audit 19 C#1, high/S). 'save that as <name>' captured the last task as a recipe, but there was no zero-retype on-ramp to the OTHER automations — the top retention move (one-off -> standing automation at peak intent). New parseWatchThat ('watch that [below N / in stock / by N]') + parseScheduleThat ('schedule that <when>' / 'do that every morning') in recipes.ts; handler resolves the most recent REAL user task from memory (skips command/media turns), then: watch-that -> alertDefine('watch <derived-name>: <task> <clause>') + immediate rate-gated check; schedule-that -> scheduleAdd('<task> <clause>') w/ next-fire echo. Guarded the 'schedule <name>' branch to skip 'schedule that/this/it'. HELP updated. +9 tests (parseWatchThat/parseScheduleThat forms + nulls; handler watch-that->alert, schedule-that->scheduleAdd, nothing-recent). 793 pass, tsc clean. call-tested false (parser + handler-memory wiring, unit-tested). Remaining: proactive-followup-context, quiet-hours."
     },
     {
       "event": "PRODUCT-LOOP iter 73: backlog dry after iter 72 -> ran 19th audit (3 lenses), which caught TWO real matcher-over-catch bugs; built both. (1) alert-edit-shape-overbroad (audit 19 B#1, high/S): isAlertEditShape matched 'set|make|change ... <below|over|by|...>' with NO number required, so 'set a reminder to hand over the keys tomorrow at 9am' tripped on bare 'over' -> excluded from the NL scheduler -> ran once, reminder never set (silent promise loss). Fixed: require a number after the operator (or 'in stock'), matching parseAlertEdit's grammar. (2) site-probe-read-verb (audit 19 B#4, medium/S, FRESH iter-72): SITE_RE listed read/access/browse as support-probe verbs, so 'can you read Reuters' returned boilerplate not the read. Fixed: keep only work-with/support/handle/use. +2 tests ('set...over the keys' schedules; 'can you read/browse <site>' -> null). 788 pass, tsc clean. call-tested false. LESSON (recurring, now 4x): a new whole-message matcher must require its FULL grammar (numbers/operands), not a bare trigger word, or it swallows the happy path. Seeded also: watch-schedule-that-by-ref(S), proactive-followup-context(S), quiet-hours(S)."
