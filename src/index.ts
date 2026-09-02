@@ -398,6 +398,9 @@ const handle = createHandler({
   now: () => Date.now(),
   // Interim "still working" ping if an errand outlasts this (product-loop). 0 disables. Default 6s.
   progressDelayMs: Number(process.env.RELAY_PROGRESS_DELAY_MS ?? 6000),
+  // Background errands (async-background-errands): ACK + run detached a large "get back to me" task.
+  // On by default; set RELAY_BACKGROUND_ERRANDS=0 to force every task synchronous.
+  enableBackgroundErrands: process.env.RELAY_BACKGROUND_ERRANDS !== "0",
 });
 
 async function main() {

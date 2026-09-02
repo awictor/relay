@@ -267,7 +267,15 @@ export interface AgentDeps {
   // Optional; absent -> no datetime line. Both together let the agent render + reason in the user's zone.
   nowMs?: number;
   tzOffsetMin?: number;
+  // Background errands (async-background-errands): a raised per-run step budget for a long,
+  // dispatch-and-ping task ("find the 5 cheapest flights and get back to me") that a normal ~8-step
+  // synchronous run would truncate. Optional; absent/<=0 -> the RELAY_MAX_STEPS default. Clamped to a
+  // ceiling in runAgent so a runaway task can't loop forever.
+  maxSteps?: number;
 }
+
+// Hard ceiling on a single run's steps regardless of override — a runaway agent can't loop forever.
+const MAX_STEPS_CEILING = 30;
 
 const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -315,10 +323,13 @@ export async function runAgent(
 
   try {
     let finalReply: string | null = null;
-    let usedSteps = MAX_STEPS;
+    // Per-run step budget: a background errand can raise it (async-background-errands), clamped to a
+    // ceiling so it can't loop forever; a normal run uses the RELAY_MAX_STEPS default.
+    const stepLimit = deps.maxSteps && deps.maxSteps > 0 ? Math.min(deps.maxSteps, MAX_STEPS_CEILING) : MAX_STEPS;
+    let usedSteps = stepLimit;
     let degraded = false; // true when the reply is a soft-failure fallback, not a real answer (DEV-0176)
 
-    for (let step = 1; step <= MAX_STEPS; step++) {
+    for (let step = 1; step <= stepLimit; step++) {
       const res = await deps.llm.complete(messages, TOOLS);
 
       if (!res.toolCall) {
@@ -566,7 +577,7 @@ export async function runAgent(
       [...messages, { role: "user", content: "Step budget reached. Reply now with your best answer using what you have." }],
       []
     );
-    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: MAX_STEPS, tools: toolsUsed, photo, doc, degraded: true };
+    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: stepLimit, tools: toolsUsed, photo, doc, degraded: true };
   } finally {
     if (sessionId) await backend.releaseSession(sessionId).catch(() => {});
   }

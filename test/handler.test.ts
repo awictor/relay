@@ -882,3 +882,56 @@ describe("first-run location capture (first-location-capture)", () => {
     expect(agentRan()).toBe("weather"); // straight to the agent
   });
 });
+
+describe("background errands (async-background-errands)", () => {
+  it("ACKs immediately then delivers the result unprompted, off the chain", async () => {
+    let resolveRun: ((r: { reply: string; steps: number; tools: string[] }) => void) | null = null;
+    const { handle, sent } = harness({
+      enableBackgroundErrands: true,
+      runAgentFn: (_t) => new Promise((res) => { resolveRun = res; }),
+    });
+    await handle(msg("find the 5 cheapest flights to Lisbon and get back to me", 5));
+    // handle() resolves BEFORE the agent finishes (detached) — the ack is already sent.
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.text).toMatch(/on it/i);
+    // Now let the detached run finish + flush microtasks.
+    resolveRun!({ reply: "Found 5 flights: ...", steps: 12, tools: ["web_search"] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sent).toHaveLength(2);
+    expect(sent[1]!.text).toMatch(/Done with/i);
+    expect(sent[1]!.text).toMatch(/Found 5 flights/);
+  });
+
+  it("passes a raised step budget to the agent for the errand", async () => {
+    let seenMax: number | undefined;
+    const { handle } = harness({
+      enableBackgroundErrands: true,
+      runAgentFn: async (_t, d) => { seenMax = (d as { maxSteps?: number }).maxSteps; return { reply: "ok", steps: 1, tools: [] }; },
+    });
+    await handle(msg("compare the 10 best laptops and report back", 5));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(seenMax).toBeGreaterThan(8);
+  });
+
+  it("a failed background errand still tells the user (no silent black hole)", async () => {
+    const { handle, sent } = harness({
+      enableBackgroundErrands: true,
+      runAgentFn: async () => { throw new Error("anvil down"); },
+    });
+    await handle(msg("research the best CRMs and get back to me", 5));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sent[0]!.text).toMatch(/on it/i);
+    expect(sent[1]!.text).toMatch(/failed/i);
+  });
+
+  it("a quick task stays synchronous when the flag is on", async () => {
+    let ran = false;
+    const { handle, sent } = harness({
+      enableBackgroundErrands: true,
+      runAgentFn: async () => { ran = true; return { reply: "sunny", steps: 1, tools: [] }; },
+    });
+    await handle(msg("weather", 5));
+    expect(ran).toBe(true);
+    expect(sent[0]!.text).toBe("sunny"); // no "on it" ack — ran inline
+  });
+});

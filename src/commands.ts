@@ -26,6 +26,7 @@ const HELP = `Relay — what I can do:
 • See a page: "screenshot the top of Hacker News" → I send you an image of it.
 • Save a page: "save this as a PDF: <link>" → I send you a PDF document.
 • Summarize a video: send a YouTube link + "tldr this" → I read its transcript and sum it up.
+• Big errands: "find the 5 cheapest flights to Lisbon and get back to me" → I work on it in the background and text you when it's done.
 
 Limits: I won't log in as you, pay, buy, or do anything destructive. If a task needs that, I'll say so.
 

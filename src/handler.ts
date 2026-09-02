@@ -15,6 +15,7 @@ import { repeatedTaskNudge, recurringCta } from "./lib/task-suggest.js";
 import { formatUtcOffset } from "./lib/profile.js";
 import { isRecallRequest } from "./lib/notes.js";
 import { needsLocationContext } from "./lib/profile.js";
+import { isBackgroundErrand, stripDispatchPhrasing, BACKGROUND_MAX_STEPS } from "./lib/background.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat } from "./lib/recipes.js";
 
 export interface HandlerDeps {
@@ -149,6 +150,11 @@ export interface HandlerDeps {
   clearTimer?: (h: unknown) => void;
   // Optional override so tests don't hit the real agent loop.
   runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; degraded?: boolean }>;
+  // Background errands (async-background-errands): when true, a large "get back to me" task is ACKed
+  // immediately and run DETACHED (off the per-chat chain) with a raised step budget, then delivered
+  // unprompted — instead of blocking the reply and truncating at the normal step cap. Absent/false ->
+  // every task runs synchronously as before.
+  enableBackgroundErrands?: boolean;
   log?: (line: string) => void;
 }
 
@@ -767,6 +773,33 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
 
     if (!deps.hasModelKey()) {
       await deps.sendMessage(msg.chatId, "I'm not fully configured yet (missing model key). Try again soon.");
+      return;
+    }
+
+    // Background errand (async-background-errands): a large "get back to me" task — ACK now and run it
+    // DETACHED with a raised step budget, delivering the result unprompted. This returns immediately so
+    // the per-chat chain isn't blocked for minutes (the user can keep texting). Guarded by the dep flag.
+    if (deps.enableBackgroundErrands && isBackgroundErrand(msg.text)) {
+      const errand = stripDispatchPhrasing(msg.text) || msg.text;
+      await deps.sendMessage(msg.chatId, "On it — this one's bigger, so I'll work on it and text you when it's done. Keep texting me anything else meanwhile.");
+      const bgHistory = deps.memoryGet(msg.chatId);
+      const startedAt = deps.now();
+      // Detached: NOT awaited + NOT on chainByChat, so other messages interleave. Errors are caught +
+      // reported so a failed background run still tells the user (never a silent black hole).
+      void (async () => {
+        try {
+          const r = await runIt(errand, { llm: deps.llm, context: deps.profileContext?.(msg.chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, maxSteps: BACKGROUND_MAX_STEPS }, bgHistory);
+          const parts = formatReplyParts(r.reply);
+          const out = r.degraded ? `⚠️ Here's what I got (I couldn't fully finish):\n\n${parts.shown}` : `✅ Done with "${errand}":\n\n${parts.shown}`;
+          lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, parts.shown) });
+          await deps.sendMessage(msg.chatId, out);
+          deps.recordTurn({ steps: r.steps, tools: r.tools, elapsedMs: deps.now() - startedAt, ok: !r.degraded, degraded: r.degraded });
+        } catch (e) {
+          const friendly = friendlyError(e instanceof Error ? e.message : String(e));
+          deps.recordTurn({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: false });
+          await deps.sendMessage(msg.chatId, `That background errand ("${errand}") failed: ${friendly}`).catch(() => {});
+        }
+      })();
       return;
     }
 

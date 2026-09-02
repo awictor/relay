@@ -887,7 +887,7 @@
       "title": "long errands block + time out instead of running in background",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A big open task (\"find the 5 cheapest Lisbon flights and get back to me\") hits the ~8-step cap synchronously and times out; Instinct core promise is dispatch-and-ping.",
       "how": "Queue flagged long tasks, ack \"on it — I will text you\", run with a raised step budget, deliver via the proactive-send path."
     },
@@ -1189,6 +1189,10 @@
     {
       "id": "first-location-capture",
       "note": "First location-dependent errand (weather/near me/directions) with no saved city now asks once, stashes the errand, saves the reply (+infers tz and re-stamps recurring reminders), then re-runs the errand — instead of the agent asking the city every time and leaving tz unset. needsLocationContext + parseCityReply in profile.ts; pendingLocation map + hasLocation/captureLocation deps; a non-city reply bails out cleanly. 876 tests green."
+    },
+    {
+      "id": "async-background-errands",
+      "note": "A large \"get back to me\" errand (dispatch phrasing, or a scale cue + length) is now ACKed instantly (\"on it — I will text you when done\") and run DETACHED off the per-chat chain with a raised step budget (BACKGROUND_MAX_STEPS=20, agent maxSteps clamped to 30 ceiling), delivered unprompted + cached for more/link. Failures still notify (no black hole). isBackgroundErrand/stripDispatchPhrasing in lib/background.ts; enableBackgroundErrands dep (RELAY_BACKGROUND_ERRANDS, on by default). Instinct dispatch-and-ping parity, read-only. 888 tests green."
     }
   ],
   "audits": [

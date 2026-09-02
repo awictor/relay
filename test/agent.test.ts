@@ -146,6 +146,30 @@ describe("runAgent", () => {
     expect(steps).toBe(8); // RELAY_MAX_STEPS default
   });
 
+  it("maxSteps raises the per-run step budget for a background errand (async-background-errands)", async () => {
+    let inLoopCalls = 0;
+    const llm: LLMClient = {
+      async complete(_m, tools) {
+        if (tools.length === 0) return { text: "done" };
+        inLoopCalls++;
+        return { toolCall: { name: "scrape", args: { url: "https://x.com" } } };
+      },
+    };
+    const scrapeFn = async (url: string) => ({ title: "t", content: "c", url });
+    const { steps } = await runAgent("big errand", { llm, scrapeFn, maxSteps: 20 });
+    expect(steps).toBe(20);        // ran the raised budget, not the default 8
+    expect(inLoopCalls).toBe(20);  // exactly the raised number of in-loop steps before the forced final
+  });
+
+  it("maxSteps is clamped to the ceiling so a runaway can't loop forever", async () => {
+    const llm: LLMClient = {
+      async complete(_m, tools) { return tools.length === 0 ? { text: "done" } : { toolCall: { name: "scrape", args: { url: "https://x.com" } } }; },
+    };
+    const scrapeFn = async (url: string) => ({ title: "t", content: "c", url });
+    const { steps } = await runAgent("runaway", { llm, scrapeFn, maxSteps: 9999 });
+    expect(steps).toBe(30); // MAX_STEPS_CEILING
+  });
+
   it("MAX_STEPS exhausted with an empty forced answer -> the 'ran out of steps' fallback", async () => {
     const llm: LLMClient = {
       async complete(_m, tools) {
