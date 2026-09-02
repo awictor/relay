@@ -31,9 +31,10 @@ export interface ScheduleRunnerDeps {
   // Digests (m9 digest-3): a scheduled digest stores the task "digest:<name>"; when it fires,
   // run the digest to a composed message instead of the agent. Optional.
   digestRun?: (chatId: number, name: string) => Promise<string | null>;
-  // Alerts (m10 alert-3): a scheduled alert stores "alert:<name>"; on fire, check it and get
-  // back the notify message ONLY if it changed (null = silent, don't send). Optional.
-  alertCheck?: (chatId: number, name: string) => Promise<string | null>;
+  // Alerts (m10 alert-3): a scheduled alert stores "alert:<name>"; on fire, check it and get back
+  // the notify message ONLY if it changed (null = silent) + a commit() to advance the baseline, which
+  // MUST be called only AFTER a successful send so a failed send re-fires next check. Optional.
+  alertCheck?: (chatId: number, name: string) => Promise<{ message: string | null; commit: () => void }>;
   // m14 degrade-4: what to tell the user when a scheduled fire FAILS. Default (absent) is silent
   // (the historical contract — a failed run is a logged miss, not a message, so a misfiring daily
   // can't storm). When provided, the runner sends its return value on failure; return null to stay
@@ -85,12 +86,18 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     const alertMatch = s.task.match(/^alert:(.+)$/);
     let res: { reply: string; steps?: number; tools?: string[]; degraded?: boolean };
     let sendText: string | null;
+    // For an alert: advance the baseline ONLY after the send below succeeds (a failed send would
+    // otherwise eat the crossing forever). Held here, called right after deps.send.
+    let alertCommit: (() => void) | null = null;
     if (alertMatch && deps.alertCheck) {
       // Alert: only sends when the watched value changed (null = silent). Always completes
       // (a daily alert reschedules) so it keeps watching.
-      sendText = await deps.alertCheck(s.chatId, alertMatch[1]!.trim());
+      const checked = await deps.alertCheck(s.chatId, alertMatch[1]!.trim());
+      sendText = checked.message;
+      alertCommit = checked.commit;
       res = { reply: sendText ?? "" };
       if (sendText === null) {
+        checked.commit(); // silent path: baseline already advanced inside checkAlert; noop here
         deps.store.complete(s.id, deps.now());
         log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, alert: alertMatch[1], ok: true, sent: false })}`);
         deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
@@ -112,6 +119,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       sendText = `${label}: ${s.task}\n\n${prefix}${body}`;
     }
     await deps.send(s.chatId, sendText!); // non-null here (alert-silent path returned early)
+    alertCommit?.(); // send succeeded -> NOW advance the alert baseline (a throw above skips this)
     noteSend(s.chatId, deps.now());
     deps.store.complete(s.id, deps.now());
     // Observability (m8): structured proactive-run line + Metrics record (same as inbound).

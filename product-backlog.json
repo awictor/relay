@@ -491,7 +491,7 @@
       "title": "Alert change-edge lost forever when the notify send fails",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "checkAlert advances lastValue (setLast) BEFORE schedule-runner sends; a transient Telegram send throw is caught but the baseline already ratcheted, so the crossing is never delivered + the next check sees no change -> a 'below 50k'/'back in stock' edge is silently eaten (audit 13 B#4).",
       "how": "Only advance the baseline AFTER a successful send: have checkAlert return the new value + let the runner call setLast post-send, or roll back lastValue on send failure. Test: send throws -> baseline unchanged -> next check re-fires."
     },
@@ -553,6 +553,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 55: built alert-notify-send-fail (audit 13 B#4, high/M, real bug). checkAlert advanced the baseline (setLast) BEFORE the runner/handler sent, so a transient Telegram send throw ate the crossing forever (baseline ratcheted -> next check sees no change -> a 'below 50k'/'back in stock' edge never delivered). Two-phase now: checkAlert returns a commit() thunk (baseline advance) instead of calling setLast on the notify paths; the silent/unchanged paths commit inline (noop-safe). Callers run commit() ONLY after a successful send — schedule-runner's fireOne holds alertCommit + calls it right after deps.send (a send throw skips it); handler define/edit call c.commit() after sendMessage. alertCheck (index) + alertRunNow (handler) now return {message,commit}. +2 tests (deferred-until-commit; first-run-deferred) + updated 3 checkAlert + 4 handler-alert mocks. 750 pass, tsc clean. LIVE-VERIFIED vs real AlertStore: send-fail leaves baseline $52,000 -> next check re-fires -> commit advances to $48,000. call-tested TRUE. Remaining: meta-trust-canned-answers -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 54: built memory-clobber-lock (audit 13 B#2, high/M, real bug). The turn does memoryGet -> runAgent -> memorySet with no per-chat serialization; dispatchBatch runs up to 4 concurrent + one getUpdates batch can carry two messages from the SAME chat, so both read the same base history + the later memorySet drops the earlier turn (bot 'forgets' a turn a follow-up needed). createHandler now wraps the body (renamed handleOne) in a per-chat promise chain: same-chat handles run strictly in order, other chats stay fully concurrent; each link is caught so a failure can't wedge the queue; the map entry is pruned when its tail settles (no unbounded growth). +1 test (two overlapping same-chat handles both persist in order — the 2nd waits for the 1st instead of reading a stale snapshot). 749 pass, tsc clean. call-tested false (concurrency logic, unit-tested w/ a gated agent). Remaining: alert-notify-send-fail, meta-trust-canned-answers."

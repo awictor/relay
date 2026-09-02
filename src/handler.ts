@@ -92,7 +92,7 @@ export interface HandlerDeps {
   // Run one check immediately on define (product-loop): baseline + notify if the predicate already
   // holds, instead of ~24h of silence until the first scheduled cadence check. Returns the notify
   // message or null (silent). Optional; absent -> define just schedules as before.
-  alertRunNow?: (chatId: number, name: string) => Promise<string | null>;
+  alertRunNow?: (chatId: number, name: string) => Promise<{ message: string | null; commit: () => void }>;
   // Conversationally retune an existing alert's trigger (product-loop): "change btc to below 45000".
   // Returns {ok:true,name,summary} on success, or a reason. Optional; absent -> edit falls through.
   alertEdit?: (chatId: number, text: string) =>
@@ -392,7 +392,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         // Rate-gate the immediate check: it's a full LLM+anvil run, so skip it when the chat is over
         // its limit (the scheduled cadence still covers it) rather than letting spam open sessions.
         if (deps.alertRunNow && deps.checkRateLimit(msg.chatId).allowed) {
-          try { const msgNow = await deps.alertRunNow(msg.chatId, r.name); if (msgNow) await deps.sendMessage(msg.chatId, msgNow); }
+          try { const c = await deps.alertRunNow(msg.chatId, r.name); if (c.message) { await deps.sendMessage(msg.chatId, c.message); c.commit(); } else c.commit(); }
           catch { /* a flaky post-edit check must not break the update confirmation */ }
         }
         return;
@@ -411,8 +411,8 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         // Rate-gate this full LLM+anvil check so spamming define can't open unbounded sessions.
         if (deps.alertRunNow && deps.checkRateLimit(msg.chatId).allowed) {
           try {
-            const msgNow = await deps.alertRunNow(msg.chatId, r.name);
-            if (msgNow) await deps.sendMessage(msg.chatId, msgNow);
+            const c = await deps.alertRunNow(msg.chatId, r.name);
+            if (c.message) { await deps.sendMessage(msg.chatId, c.message); c.commit(); } else c.commit();
           } catch { /* a flaky first check must not break the define confirmation */ }
         }
         return;

@@ -25,6 +25,8 @@ describe("checkAlert", () => {
     const r = await checkAlert(alert(), d); // no lastValue
     expect(r.notify).toBe(true);
     expect(r.message).toMatch(/btc \(watching\)/);
+    expect(lastSet).toEqual([]);        // baseline advance is DEFERRED to commit (post-send)
+    r.commit();
     expect(lastSet).toEqual([{ name: "btc", value: "$65,000" }]);
   });
 
@@ -57,7 +59,9 @@ describe("checkAlert", () => {
     const s2 = deps("$66,200");
     const c2 = await checkAlert(alert({ lastValue: "$65,000", threshold: 1000 }), s2.d); // still vs 65000
     expect(c2.notify).toBe(true);  // +1200 >= 1000
-    expect(s2.lastSet).toEqual([{ name: "btc", value: "$66,200" }]); // advances only now
+    expect(s2.lastSet).toEqual([]);          // deferred to commit (post-send)
+    c2.commit();
+    expect(s2.lastSet).toEqual([{ name: "btc", value: "$66,200" }]); // advances only after send
   });
 
   it("a numeric-threshold watch stays silent + keeps baseline on a numberless reply (threshold-alert-numberless-guard)", async () => {
@@ -77,7 +81,19 @@ describe("checkAlert", () => {
     const { d, lastSet } = deps("Price unavailable");
     const r = await checkAlert(alert({ threshold: 1000 }), d); // no lastValue
     expect(r.notify).toBe(true); // first run notifies (baseline)
+    r.commit();
     expect(lastSet).toEqual([{ name: "btc", value: "Price unavailable" }]);
+  });
+
+  it("a notify's baseline advance is DEFERRED until commit (alert-notify-send-fail)", async () => {
+    // A change fires but the baseline must NOT advance until the caller commits post-send — so a
+    // failed send leaves the old baseline + the crossing re-fires next check instead of being eaten.
+    const { d, lastSet } = deps("$67,000");
+    const r = await checkAlert(alert({ lastValue: "$65,000", threshold: 1000 }), d);
+    expect(r.notify).toBe(true);
+    expect(lastSet).toEqual([]);   // NOT advanced yet — a send failure here would re-fire next check
+    r.commit();                    // caller commits only after a successful send
+    expect(lastSet).toEqual([{ name: "btc", value: "$67,000" }]);
   });
 
   it("changed value -> notify with a 'changed' message", async () => {

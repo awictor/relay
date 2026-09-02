@@ -101,12 +101,14 @@ const digestRunText = (chatId: number, name: string): Promise<string | null> => 
   if (!d) return Promise.resolve(null);
   return runDigest(d, { llm, resolveRecipe: (c, n) => { const r = recipes.get(c, n); return r ? { task: r.task } : null; }, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c) });
 };
-// Check an alert -> the notify message ONLY if changed (null = silent). Shared by the runner.
-const alertCheck = async (chatId: number, name: string): Promise<string | null> => {
+// Check an alert -> { message (null = silent), commit }. The caller MUST call commit() AFTER a
+// successful send so a failed send leaves the baseline un-advanced + the crossing re-fires next
+// check (alert-notify-send-fail). Silent path already committed inside checkAlert (commit is a noop).
+const alertCheck = async (chatId: number, name: string): Promise<{ message: string | null; commit: () => void }> => {
   const a = alerts.get(chatId, name);
-  if (!a) return null;
+  if (!a) return { message: null, commit: () => {} };
   const r = await checkAlert(a, { llm, runAgent, formatReply, setLast: (c, n, v) => alerts.setLast(c, n, v), contextFor: (c) => profiles.contextLine(c) });
-  return r.notify ? r.message : null;
+  return { message: r.notify ? r.message : null, commit: r.commit };
 };
 const ALERT_CADENCE = process.env.RELAY_ALERT_CADENCE ?? "every day at 09:00"; // default alert check cadence
 const SCHED_TICK_MS = intEnv(process.env.RELAY_SCHED_TICK_MS, { fallback: 30_000, allowZeroDisable: true }); // 0 disables

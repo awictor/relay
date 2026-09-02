@@ -11,6 +11,12 @@ export interface AlertRunResult {
   notify: boolean;   // did the value change (or first run)?
   message: string | null; // the text to send when notify (null when unchanged)
   value: string;     // the new observed value (always recorded)
+  // Persist the baseline advance THIS check decided on. The caller MUST call it — but only AFTER a
+  // successful send when notify is true (call it immediately on the silent path). Deferring the
+  // commit past the send means a transient send failure leaves the baseline un-advanced, so the
+  // crossing re-fires next check instead of being silently eaten (alert-notify-send-fail). A no-op
+  // when this check shouldn't advance the baseline (indeterminate reply / unchanged threshold).
+  commit: () => void;
 }
 
 export interface AlertRunnerDeps {
@@ -31,15 +37,18 @@ export interface AlertRunnerDeps {
  * check doesn't spam; the value is left as-is.
  */
 export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<AlertRunResult> {
+  const noop = () => {};
+  // The baseline advance for this value, run only by the caller (after a successful send on notify).
+  const advance = (v: string) => () => deps.setLast(alert.chatId, alert.name, v);
   let value: string;
   try {
     const res = await deps.runAgent(alert.task, { llm: deps.llm, context: deps.contextFor?.(alert.chatId) || undefined }, []);
     // A degraded (soft-failure) reply is NOT a real value — comparing it to lastValue would read as a
     // change and spam the user with the failure text. Skip notify, keep lastValue (DEV-0176).
-    if (res.degraded) return { notify: false, message: null, value: alert.lastValue ?? "" };
+    if (res.degraded) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
     value = deps.formatReply(res.reply).trim();
   } catch {
-    return { notify: false, message: null, value: alert.lastValue ?? "" };
+    return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
   }
 
   const firstRun = alert.lastValue === undefined;
@@ -53,13 +62,16 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     // value): DON'T store it as lastValue. Storing it made the next real check see prevHolds=null
     // and re-fire the edge ("🔔 below 50k") even though the value never left the below state. Keep
     // the last GOOD value as the baseline and stay silent this tick (mirrors the degraded guard).
-    if (nowHolds === null) return { notify: false, message: null, value: alert.lastValue ?? value };
+    if (nowHolds === null) return { notify: false, message: null, value: alert.lastValue ?? value, commit: noop };
     const prevHolds = firstRun || alert.lastValue === undefined ? null : conditionHolds(alert.condition, alert.lastValue);
-    deps.setLast(alert.chatId, alert.name, value);
     if (nowHolds === true && prevHolds !== true) {
-      return { notify: true, message: `🔔 ${alert.name}:\n${value}`, value };
+      // Notify: DEFER the baseline advance to the caller's post-send commit, so a failed send leaves
+      // prevHolds unchanged + the edge re-fires next check instead of being eaten.
+      return { notify: true, message: `🔔 ${alert.name}:\n${value}`, value, commit: advance(value) };
     }
-    return { notify: false, message: null, value };
+    // Silent: safe to advance the baseline now (no send to gate on).
+    deps.setLast(alert.chatId, alert.name, value);
+    return { notify: false, message: null, value, commit: noop };
   }
 
   // Numeric-threshold watch ("... by 1000") + a transient reply with NO comparable number ("price
@@ -69,22 +81,18 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // silent this tick (mirrors the predicate-refire guard above + the degraded guard). First run with
   // no number still seeds (nothing to protect yet).
   if (!firstRun && alert.threshold !== undefined && extractValue(value) === null) {
-    return { notify: false, message: null, value: alert.lastValue ?? value };
+    return { notify: false, message: null, value: alert.lastValue ?? value, commit: noop };
   }
 
   const didChange = firstRun ? true : changed(alert.lastValue!, value, alert.threshold);
-  // Capture the prior baseline STRING before setLast — setLast mutates alert.lastValue in place (the
-  // store hands back the same object), so reading alert.lastValue after it would see the NEW value and
-  // the delta line below would compute pv===nv (never renders). This is why the delta must snapshot now.
+  // Capture the prior baseline STRING before any advance — setLast mutates alert.lastValue in place
+  // (the store hands back the same object), so reading it after would see the NEW value and the delta
+  // below would compute pv===nv (never renders). Snapshot now.
   const prevValue = alert.lastValue;
 
-  // Advance the stored baseline ONLY when we notify (or on first run). Refreshing lastValue on every
-  // check ratcheted the baseline to the newest value, so a "by 1000" watch never saw a cumulative
-  // move made in sub-threshold steps (65000 -> 66200 via three <1000 checks fired nothing). Keeping
-  // the last-NOTIFIED value as the baseline measures drift against the last value the user saw.
-  if (firstRun || didChange) deps.setLast(alert.chatId, alert.name, value);
-
-  if (!didChange) return { notify: false, message: null, value };
+  // Unchanged: nothing to send, so advance the baseline now (keeps the last-notified value; refreshing
+  // on every check would ratchet it and hide cumulative sub-threshold drift).
+  if (!didChange) { return { notify: false, message: null, value, commit: noop }; }
   const header = firstRun ? `🔔 ${alert.name} (watching)` : `🔔 ${alert.name} changed`;
   // Show the move, not just the new value: on a real change where BOTH the prior baseline and the new
   // value are numeric, append "was <prev> → now <new> (±<delta>, up/down)" so the ping is a
@@ -100,5 +108,8 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
       delta = `\n(was ${prevValue.trim()} → now ${value.trim()}; ${arrow}${num})`;
     }
   }
-  return { notify: true, message: `${header}:\n${value}${delta}`, value };
+  // Notify: DEFER the baseline advance to the caller's post-send commit (a failed send leaves the old
+  // baseline so the change re-fires next check). First-run baseline seeds the same way — if that very
+  // first notify fails to send, we re-seed + notify next check rather than silently starting watched.
+  return { notify: true, message: `${header}:\n${value}${delta}`, value, commit: advance(value) };
 }

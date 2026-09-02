@@ -70,7 +70,7 @@ describe("handler — alert routing", () => {
   });
 
   it("runs one check on define and relays it when the predicate already holds (product-loop)", async () => {
-    const { handle, sent } = harness({ alertRunNow: async () => "🔔 btc:\n$48,000 (below 50000)" });
+    const { handle, sent } = harness({ alertRunNow: async () => ({ message: "🔔 btc:\n$48,000 (below 50000)", commit: () => {} }) });
     await handle(msg("watch btc: price of bitcoin below 50000"));
     expect(sent[0]).toMatch(/Watching "btc"/); // confirmation first
     expect(sent[1]).toMatch(/48,000/);          // immediate check second
@@ -80,7 +80,7 @@ describe("handler — alert routing", () => {
     let ran = 0;
     const { handle, sent } = harness({
       checkRateLimit: () => ({ allowed: false, retryAfterSec: 30 }),
-      alertRunNow: async () => { ran++; return "🔔 btc: $48,000"; },
+      alertRunNow: async () => { ran++; return { message: "🔔 btc: $48,000", commit: () => {} }; },
     });
     await handle(msg("watch btc: price of bitcoin below 50000"));
     expect(sent[0]).toMatch(/Watching "btc"/); // define still confirmed
@@ -88,7 +88,7 @@ describe("handler — alert routing", () => {
   });
 
   it("silent immediate check sends only the confirmation", async () => {
-    const { handle, sent } = harness({ alertRunNow: async () => null });
+    const { handle, sent } = harness({ alertRunNow: async () => ({ message: null, commit: () => {} }) });
     await handle(msg("watch btc: price of bitcoin below 50000"));
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatch(/Watching "btc"/);
@@ -116,7 +116,7 @@ describe("handler — alert routing", () => {
     const ran: string[] = [];
     const { handle, sent } = harness({
       alertEdit: () => ({ ok: true, name: "btc", summary: "now alerts below 55000" }),
-      alertRunNow: async (_c, name) => { ran.push(name); return "🔔 btc:\n$50,000 (below 55000)"; },
+      alertRunNow: async (_c, name) => { ran.push(name); return { message: "🔔 btc:\n$50,000 (below 55000)", commit: () => {} }; },
     });
     await handle(msg("change btc to below 55000"));
     expect(sent[0]).toMatch(/Updated "btc"/);   // confirmation first
