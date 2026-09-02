@@ -22,7 +22,7 @@ import { friendlyError } from "./lib/failure.js";
 import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
 import { ScheduleStore, parseSchedule } from "./lib/schedule.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
-import { RecipeStore, parseRecipeCommand, parseRunCommand } from "./lib/recipes.js";
+import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots } from "./lib/recipes.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand } from "./lib/alerts.js";
@@ -173,10 +173,11 @@ const handle = createHandler({
     return { ok: true, name: rec.name };
   },
   recipeResolve: (chatId, text) => {
-    const name = parseRunCommand(text);
-    if (!name) return null;
-    const rec = recipes.get(chatId, name);
-    return rec ? { name: rec.name, task: rec.task } : null;
+    // Parse name + args so a recipe with {slots} runs with the user's values (product-loop).
+    const parsed = parseRunWithArgs(text);
+    if (!parsed) return null;
+    const rec = recipes.get(chatId, parsed.name);
+    return rec ? { name: rec.name, task: applySlots(rec.task, parsed.args) } : null;
   },
   recipeList: (chatId) => recipes.list(chatId).map((r) => ({ name: r.name, task: r.task, schedule: r.schedule })),
   recipeForget: (chatId, name) => recipes.remove(chatId, name),

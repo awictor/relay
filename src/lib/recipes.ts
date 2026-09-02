@@ -48,6 +48,30 @@ export function parseRunCommand(text: string): string | null {
   return null;
 }
 
+/** Parse a run command into { name, args } so a recipe can take values (product-loop). The FIRST
+ * token after /run (or "run") is the recipe name; the rest is the argument string.
+ *   "/run track sneakers"     -> { name: "track", args: "sneakers" }
+ *   "run recipe morning"      -> { name: "morning", args: "" }
+ * name is normalized like the store key. null if it isn't a run command. */
+export function parseRunWithArgs(text: string): { name: string; args: string } | null {
+  const t = text.trim();
+  const m = t.match(/^(?:\/run|run)\s+(?:recipe\s+)?(\S+)\s*(.*)$/i);
+  if (!m) return null;
+  const name = normalizeName(m[1]!);
+  if (!name) return null;
+  return { name, args: m[2]!.trim() };
+}
+
+/** Substitute {slots} in a recipe task with the user's args. If the task has named slots, ALL of
+ * them get the (single) arg string — recipes are simple, usually one slot ("track price of {item}").
+ * Multiple distinct slot names each get the full arg string. A task with no {slot} is returned
+ * unchanged (so a plain recipe run with stray args just ignores them). Exported for tests. */
+export function applySlots(task: string, args: string): string {
+  const a = args.trim();
+  if (!/\{[a-z0-9_]+\}/i.test(task)) return task; // no slots — nothing to fill
+  return task.replace(/\{[a-z0-9_]+\}/gi, a);
+}
+
 function normalizeName(s: string): string {
   return s.trim().replace(/^["']|["']$/g, "").replace(/\s+/g, " ").toLowerCase().slice(0, 60);
 }

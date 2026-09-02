@@ -68,7 +68,7 @@
       "title": "Parameterized recipes with slots",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Recipes store a fixed task string; a user must re-teach per item. Slots turn one taught recipe into a reusable tool.",
       "how": "Parse {slot} in recipe task; /run <name> <value> substitutes. recipes.ts parser change + handler run-path."
     },
@@ -112,6 +112,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 7: built user-profile-location (audit A+C unanimous, high/S). New src/lib/profile.ts (ProfileStore, atomic+corrupt-safe, per-chat location+units) + parseSetLocation (/setlocation X, 'set my location to X', \"I'm in X\", optional (metric)/(imperial) or 'in metric'). Handler: setLocation branch stores it (no agent run) + profileContext feeds a system line to runAgent (new AgentDeps.context). state-paths gained profile; index wires ProfileStore; commands.ts lists /setlocation + HELP. +tests: profile (parse+store+merge+persist), 2 handler (store-no-agent, context-reaches-agent), commands harness stub. 607 pass, tsc clean. LIVE-VERIFIED: bare 'weather' with context 'Reykjavik, metric' -> agent replied Reykjavik 10C/5 m/s. call-tested TRUE. Remaining: parameterized-recipes, absolute-threshold-alerts, inbound-photo-vision."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 8: built parameterized-recipes (audit C, high/S). recipes.ts: parseRunWithArgs (first token=name, rest=args) + applySlots ({slot} in the task filled with the arg string; every slot gets it; no-slot=unchanged). index recipeResolve now uses them so '/run track sneakers' runs a saved 'price of {item}' recipe with item=sneakers. HELP documents the {slot} form. parseRunCommand kept (back-compat). +6 tests (parseRunWithArgs name/args/none/null, applySlots fill/multi/no-slot). 613 pass, tsc clean. call-tested false (pure parse+substitute; dispatch wired, covered by existing recipe-run tests). Remaining: absolute-threshold-alerts, inbound-photo-vision."
     }
   ],
   "audits": [

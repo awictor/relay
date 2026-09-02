@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseRecipeCommand, parseRunCommand, RecipeStore } from "../src/lib/recipes.js";
+import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, applySlots, RecipeStore } from "../src/lib/recipes.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -8,6 +8,32 @@ const NOW = 1_700_000_000_000;
 const dirs: string[] = [];
 function tmpFile() { const d = mkdtempSync(join(tmpdir(), "relay-recipe-")); dirs.push(d); return join(d, "r.json"); }
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
+
+describe("parseRunWithArgs (parameterized recipes)", () => {
+  it("splits name from args", () => {
+    expect(parseRunWithArgs("/run track sneakers")).toEqual({ name: "track", args: "sneakers" });
+    expect(parseRunWithArgs("run track blue running shoes")).toEqual({ name: "track", args: "blue running shoes" });
+  });
+  it("no args -> empty args string", () => {
+    expect(parseRunWithArgs("/run morning")).toEqual({ name: "morning", args: "" });
+    expect(parseRunWithArgs("run recipe morning")).toEqual({ name: "morning", args: "" });
+  });
+  it("null for a non-run message", () => {
+    expect(parseRunWithArgs("what's the weather")).toBeNull();
+  });
+});
+
+describe("applySlots", () => {
+  it("fills a named slot with the arg string", () => {
+    expect(applySlots("check the price of {item}", "sneakers")).toBe("check the price of sneakers");
+  });
+  it("fills every slot with the arg (recipes are simple)", () => {
+    expect(applySlots("compare {item} on site A vs {item} on site B", "gpu")).toBe("compare gpu on site A vs gpu on site B");
+  });
+  it("no slot -> unchanged (stray args ignored)", () => {
+    expect(applySlots("check bitcoin price", "sneakers")).toBe("check bitcoin price");
+  });
+});
 
 describe("parseRecipeCommand", () => {
   it("parses 'save <name>: <task>'", () => {
