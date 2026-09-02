@@ -230,7 +230,7 @@
       "title": "Split long replies instead of silently truncating at 4096",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "telegram.ts sendMessage does text.slice(0,4096) with no marker, so a long digest/answer is cut mid-sentence and the user reads a partial result believing it's complete (audit 6 B#4).",
       "how": "Chunk a >4096-char message on paragraph/line boundaries into sequential sends (Telegram max 4096), or at minimum append a visible '…(continued)'/'[truncated]' marker. Prefer real multi-message send."
     },
@@ -301,6 +301,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 26: built telegram-long-message-split (audit 6 B#4, high/S, real bug). sendMessage did text.slice(0,4096) -> a long digest/answer was cut mid-sentence with NO marker + read as complete. New splitMessage() chunks on natural boundaries (paragraph > line > space, past-50% guard, hard-cut only for one oversized token) into <=max pieces; sendMessage sends them sequentially with an '(i/n)' counter (8-char headroom reserved). Single-message case unchanged (no counter). splitMessage pure + exported. +4 tests (fits-unchanged, paragraph-split-nothing-dropped, oversized-token-preserves-all-chars, prefers-line-break). 672 pass, tsc clean. call-tested false (pure splitter, unit-tested; real send path unchanged mechanics). Remaining: nonnumeric-alert-drift, clarify-once-ambiguous."
     },
     {
       "event": "PRODUCT-LOOP iter 25: backlog dry after iter 24 -> ran 6th audit (3 lenses), seeded 4, built digest-slot-guard (audit 6 B#3, high/S, real bug). runDigest handed rec.task straight to runAgent with no hasSlots check (unlike /run + schedule which guard it), so a digest member like 'track price of {item}' ran the literal broken task + silently poisoned the composed briefing the user reads as authoritative. Now hasSlots(rec.task) -> skip with '• <name>: (skipped — needs a value; can't run in a digest)'; the broken task never reaches the agent or output. +1 test (slotted skipped + never run, non-slotted still runs, no {item} leak). 668 pass, tsc clean. call-tested false (pure runner guard, unit-tested). Seeded also: telegram-long-message-split(S), nonnumeric-alert-drift(M), clarify-once-ambiguous(S)."

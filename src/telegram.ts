@@ -30,21 +30,55 @@ export function hasToken(): boolean {
   return TOKEN.length > 0;
 }
 
-/** Send a text reply to a chat. Best-effort; logs on failure. */
+// Telegram hard-caps a message at 4096 chars. The old code did text.slice(0,4096), so a long
+// digest/answer was cut mid-sentence with NO marker and the user read a partial result as complete.
+export const TELEGRAM_MAX = 4096;
+
+/**
+ * Split text into <=max-char chunks for sequential sends, preferring natural boundaries so a chunk
+ * doesn't break mid-sentence: paragraph (\n\n) > line (\n) > space, falling back to a hard cut only
+ * when a single token exceeds max. Returns [text] unchanged when it already fits. Pure + exported
+ * for testing. A trailing " (1/3)"-style counter is added by the sender, not here.
+ */
+export function splitMessage(text: string, max: number = TELEGRAM_MAX): string[] {
+  if (text.length <= max) return [text];
+  const chunks: string[] = [];
+  let rest = text;
+  while (rest.length > max) {
+    const window = rest.slice(0, max);
+    // Prefer the last paragraph break, then line break, then space — but only if it's not too early
+    // (avoid a tiny chunk when a break sits near the start). Otherwise hard-cut at max.
+    let cut = -1;
+    for (const sep of ["\n\n", "\n", " "]) {
+      const i = window.lastIndexOf(sep);
+      if (i >= max * 0.5) { cut = i + (sep === " " ? 1 : sep.length); break; }
+    }
+    if (cut <= 0) cut = max; // no good boundary (one long token) -> hard cut
+    chunks.push(rest.slice(0, cut).replace(/\s+$/, ""));
+    rest = rest.slice(cut).replace(/^\s+/, "");
+  }
+  if (rest.length) chunks.push(rest);
+  return chunks;
+}
+
+/** Send a text reply to a chat. Best-effort; logs on failure. A message over Telegram's 4096-char
+ * cap is split into sequential sends (with an "(i/n)" counter) instead of being silently truncated. */
 export async function sendMessage(chatId: number, text: string): Promise<void> {
   if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
-  // Telegram hard-caps messages at 4096 chars.
-  const body = text.slice(0, 4096);
-  try {
-    const r = await fetch(`${API}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text: body }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!r.ok) console.error("telegram sendMessage failed:", r.status, (await r.text().catch(() => "")).slice(0, 200));
-  } catch (e) {
-    console.error("telegram sendMessage error:", e instanceof Error ? e.message : String(e));
+  const parts = splitMessage(text, TELEGRAM_MAX - 8); // headroom for the " (i/n)" counter
+  for (let i = 0; i < parts.length; i++) {
+    const body = parts.length > 1 ? `${parts[i]} (${i + 1}/${parts.length})` : parts[i]!;
+    try {
+      const r = await fetch(`${API}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: body }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!r.ok) console.error("telegram sendMessage failed:", r.status, (await r.text().catch(() => "")).slice(0, 200));
+    } catch (e) {
+      console.error("telegram sendMessage error:", e instanceof Error ? e.message : String(e));
+    }
   }
 }
 

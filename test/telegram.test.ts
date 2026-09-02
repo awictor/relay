@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseUpdates, dispatchBatch } from "../src/telegram.js";
+import { parseUpdates, dispatchBatch, splitMessage } from "../src/telegram.js";
 import type { InboundMessage } from "../src/telegram.js";
 
 // Minimal Telegram update fixtures (only the fields parseUpdates reads).
@@ -81,6 +81,37 @@ describe("parseUpdates — inbound delivery contract", () => {
     // offset already 50; a batch of older update_ids must not rewind it.
     const { nextOffset } = parseUpdates([textMsg(10, 1, "old")], 50);
     expect(nextOffset).toBe(50);
+  });
+});
+
+describe("splitMessage (telegram-long-message-split — no silent truncation)", () => {
+  it("returns the text unchanged when it fits", () => {
+    expect(splitMessage("short", 100)).toEqual(["short"]);
+    expect(splitMessage("x".repeat(100), 100)).toEqual(["x".repeat(100)]);
+  });
+
+  it("splits on a paragraph boundary, no chunk over max, nothing dropped", () => {
+    const para = "A".repeat(60), para2 = "B".repeat(60);
+    const parts = splitMessage(`${para}\n\n${para2}`, 100);
+    expect(parts).toHaveLength(2);
+    expect(parts[0]).toBe(para);
+    expect(parts[1]).toBe(para2);
+    parts.forEach((p) => expect(p.length).toBeLessThanOrEqual(100));
+  });
+
+  it("hard-cuts a single oversized token but preserves every character across chunks", () => {
+    const blob = "z".repeat(250);
+    const parts = splitMessage(blob, 100);
+    expect(parts.length).toBe(3);
+    parts.forEach((p) => expect(p.length).toBeLessThanOrEqual(100));
+    expect(parts.join("")).toBe(blob); // no data lost (this token has no spaces to trim)
+  });
+
+  it("prefers a line break over a mid-word cut when it's past the halfway point", () => {
+    const first = "first line ".repeat(6).trim(); // ~65 chars, past 50% of 100
+    const parts = splitMessage(`${first}\n${"w".repeat(90)}`, 100);
+    expect(parts[0]).toBe(first);
+    expect(parts[1]).toBe("w".repeat(90));
   });
 });
 
