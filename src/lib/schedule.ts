@@ -147,11 +147,23 @@ function to24h(h: number, ampm?: string): number {
   return pm ? h + 12 : h;
 }
 
-// Next occurrence of hh:mm at/after now (today if still ahead, else tomorrow). Uses local time.
-function nextDailyMs(now: number, hh: number, mm: number): number {
-  const d = new Date(now);
-  d.setHours(hh, mm, 0, 0);
-  let t = d.getTime();
+// Timezone offset (minutes EAST of UTC) the user's "9am" is measured in. Default 0 = UTC. Set
+// RELAY_TZ_OFFSET_MIN (e.g. -300 for US-Eastern EST, 60 for CET) so a daily fires at the user's
+// wall-clock hour, not the deploy host's — on a UTC VM the old server-local setHours() made
+// "every morning 9am" arrive at 9am UTC (middle of the night). Read at call time so it's tunable.
+export function tzOffsetMin(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number(env.RELAY_TZ_OFFSET_MIN);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Next occurrence of hh:mm (in the user's timezone) at/after now, as an epoch-ms instant. Computes
+// purely from UTC + the offset so it's independent of the SERVER's local zone (the bug this fixes).
+export function nextDailyMs(now: number, hh: number, mm: number, offsetMin = tzOffsetMin()): number {
+  // Shift into the user's zone, snap to today's hh:mm there, shift back to a UTC instant.
+  const userNow = now + offsetMin * 60_000;
+  const d = new Date(userNow);
+  const atUser = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hh, mm, 0, 0);
+  let t = atUser - offsetMin * 60_000; // back to real UTC instant
   if (t <= now) t += DAY;
   return t;
 }

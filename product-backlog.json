@@ -41,7 +41,7 @@
       "title": "Fire daily schedules in the user timezone",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "nextDailyMs uses server-local setHours; on a UTC VM every-morning-9am fires at 9am UTC = middle of night.",
       "how": "Capture a per-chat TZ/offset and compute next-daily in it; default RELAY_TZ."
     }
@@ -58,6 +58,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 4: built atomic-store-writes (audit B, highest-severity data-loss). New src/lib/safe-store.ts: atomicWriteJson (mkdir+write .tmp+rename = atomic, reader sees old-or-new never torn; cleans .tmp on failed rename; never throws) + readJsonSafe (missing->null; CORRUPT->move to .corrupt then null, instead of silently wiping). Applied to all 5 stores (schedule/recipes/digests/alerts/memory) — replaced their bare writeFileSync + catch-set-empty. So a crash mid-write or one corrupt byte no longer vanishes every saved reminder/recipe/alert; corrupt data is preserved for recovery. +8 safe-store tests (round-trip, mkdir, no-tmp-leak, no-throw-unwritable, corrupt-backup, torn-tmp-not-live); all 5 stores existing tests still green (behavior-preserving). 592 pass, tsc clean. call-tested false (fs-level, unit-tested incl crash-sim). Remaining: tz-daily-schedules (last todo -> audit refills next)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 5: built tz-daily-schedules (audit B). nextDailyMs was server-local setHours -> on a UTC VM 'every morning 9am' fired at 9am UTC (middle of night). Rewrote it to compute purely from UTC + a tz offset (tzOffsetMin from RELAY_TZ_OFFSET_MIN, minutes east of UTC, default 0=UTC, back-compat); exported nextDailyMs+tzOffsetMin. Updated 3 schedule tests to assert host-independently (getUTCHours) + added a tz-offset test (UTC/US-Eastern/CET wall-clock + tomorrow-rollover). Added RELAY_TZ_OFFSET_MIN to .env.example. 594 pass, tsc clean. call-tested false (pure time math, unit-tested). Backlog now DRY -> running 3-agent audit to refill (same iteration)."
     }
   ],
   "audits": [

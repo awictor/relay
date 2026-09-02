@@ -40,16 +40,16 @@ describe("parseSchedule — 24-hour clock (DEV-0189)", () => {
     expect(a).not.toBeNull();
     expect(a.kind).toBe("once");
     expect(a.task).toBe("call the vet");
-    // due is the next 14:30 local at/after NOW
+    // due is the next 14:30 in the configured zone (default UTC) — assert host-independently.
     const d = new Date(a.dueMs);
-    expect(d.getHours()).toBe(14);
-    expect(d.getMinutes()).toBe(30);
+    expect(d.getUTCHours()).toBe(14);
+    expect(d.getUTCMinutes()).toBe(30);
   });
   it("'tomorrow at 09:00' forces the next day", () => {
     const s = parseSchedule("tomorrow at 09:00 send the report", NOW)!;
     expect(s.kind).toBe("once");
     expect(s.task).toBe("send the report");
-    expect(new Date(s.dueMs).getHours()).toBe(9);
+    expect(new Date(s.dueMs).getUTCHours()).toBe(9);
   });
   it("a bare 'at 5' (no colon, no am/pm) still does NOT match (no stray-integer schedule)", () => {
     expect(parseSchedule("look at 5 tabs", NOW)).toBeNull();
@@ -57,8 +57,8 @@ describe("parseSchedule — 24-hour clock (DEV-0189)", () => {
   it("am/pm times still route through the existing branch (no regression)", () => {
     const s = parseSchedule("remind me at 2:30pm to stretch", NOW)!;
     expect(s.kind).toBe("once");
-    expect(new Date(s.dueMs).getHours()).toBe(14);
-    expect(new Date(s.dueMs).getMinutes()).toBe(30);
+    expect(new Date(s.dueMs).getUTCHours()).toBe(14);
+    expect(new Date(s.dueMs).getUTCMinutes()).toBe(30);
   });
 });
 
@@ -121,6 +121,27 @@ describe("parseSchedule — daily", () => {
     expect(s.kind).toBe("daily");
     expect(s.hourMin).toBe("20:00");
     expect(s.task).toMatch(/summarize my emails/);
+  });
+});
+
+describe("nextDailyMs — timezone offset (tz-daily fix)", () => {
+  it("fires at the wall-clock hour in the user's zone, not the server's", async () => {
+    const { nextDailyMs } = await import("../src/lib/schedule.js");
+    const now = Date.UTC(2026, 0, 1, 0, 0, 0); // midnight UTC
+    // UTC user: next 9am is 9:00 UTC the same day.
+    expect(new Date(nextDailyMs(now, 9, 0, 0)).getUTCHours()).toBe(9);
+    // US-Eastern (UTC-5, offset -300): their 9am local == 14:00 UTC.
+    expect(new Date(nextDailyMs(now, 9, 0, -300)).getUTCHours()).toBe(14);
+    // CET (UTC+1, offset +60): their 9am local == 08:00 UTC.
+    expect(new Date(nextDailyMs(now, 9, 0, 60)).getUTCHours()).toBe(8);
+  });
+  it("rolls to tomorrow when the time already passed today (in-zone)", async () => {
+    const { nextDailyMs } = await import("../src/lib/schedule.js");
+    const now = Date.UTC(2026, 0, 1, 10, 0, 0); // 10:00 UTC
+    const t = nextDailyMs(now, 9, 0, 0); // 9am UTC already passed -> tomorrow
+    expect(t).toBeGreaterThan(now);
+    expect(new Date(t).getUTCDate()).toBe(2);
+    expect(new Date(t).getUTCHours()).toBe(9);
   });
 });
 
