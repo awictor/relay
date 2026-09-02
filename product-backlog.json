@@ -467,6 +467,42 @@
       "status": "done",
       "why": "Starting a recipe forces retyping the whole task after a colon; after a good one-off the natural move is 'save that as morning-btc' referencing the prior turn. recipes.ts has a half-built UNWIRED 'save this as X' hook; auto-suggest-save still makes them retype (audit 12 C#2).",
       "how": "Parse 'save (that|this) as <name>' -> take the last USER task turn from memory as the recipe task; wire the existing recipes hook. Reject if the prior turn was itself a command/empty."
+    },
+    {
+      "id": "alert-delta-mutation-bug",
+      "title": "alert-delta 'was X -> now Y' line never renders in production (mutated lastValue)",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "REGRESSION in iter-51: setLast mutates alert.lastValue in place (store hands back the same object), so the delta block read the NEW value for pv -> pv===nv -> the was->now line NEVER rendered in prod. Offline tests passed only because the mock setLast didn't mutate (audit 13 B#1).",
+      "how": "Snapshot prevValue = alert.lastValue BEFORE setLast; compute the delta from that. Add a regression test whose mock setLast MUTATES the alert (real-store semantics) so a future recurrence fails."
+    },
+    {
+      "id": "memory-clobber-lock",
+      "title": "Concurrent same-chat messages clobber memory (no per-chat lock)",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "handler does memoryGet -> runAgent -> memorySet with no per-chat serialization; dispatchBatch runs up to 4 concurrent, so two quick messages from one chat both read the same base history + the later write drops the earlier turn -> the bot 'forgets' a turn a follow-up needed (audit 13 B#2, flagged repeatedly).",
+      "how": "Serialize the read-modify-write per chatId (a per-chat promise chain / async mutex around the memoryGet..memorySet span, or make memorySet append-merge). Keep other chats concurrent. Test two overlapping same-chat handles both persist."
+    },
+    {
+      "id": "alert-notify-send-fail",
+      "title": "Alert change-edge lost forever when the notify send fails",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "checkAlert advances lastValue (setLast) BEFORE schedule-runner sends; a transient Telegram send throw is caught but the baseline already ratcheted, so the crossing is never delivered + the next check sees no change -> a 'below 50k'/'back in stock' edge is silently eaten (audit 13 B#4).",
+      "how": "Only advance the baseline AFTER a successful send: have checkAlert return the new value + let the runner call setLast post-send, or roll back lastValue on send failure. Test: send throws -> baseline unchanged -> next check re-fires."
+    },
+    {
+      "id": "meta-trust-canned-answers",
+      "title": "Instant honest answers to 'is this free / do you save my messages / are you a bot'",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "New users' opening messages are often meta/trust questions ('is this free?', 'are you real?', 'do you store my messages?'), which fall through the greeting/capability regexes into a browser turn or an unpredictable answer — trust is the gate to a first real errand (audit 13 A#3).",
+      "how": "A small matcher (like the greeting one) returning fixed honest replies (free to run; it's an AI; keeps a short rolling history locally, logged-out by default; open source). Pure + unit-tested."
     }
   ],
   "history": [
@@ -517,6 +553,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 53: backlog dry after iter 52 -> ran 13th audit (3 lenses), seeded 4, built alert-delta-mutation-bug (audit 13 B#1, high/S — a REGRESSION in my OWN iter-51 alert-delta code). setLast mutates alert.lastValue in place (the store returns the same object), so the delta block read the NEW value for pv -> pv===nv -> the 'was X → now Y' line NEVER rendered in production; the iter-51 offline tests passed only because the mock setLast didn't mutate. Fixed: snapshot prevValue = alert.lastValue BEFORE setLast; delta computes from that. +1 regression test whose mock setLast MUTATES the alert (real-store semantics). LIVE-VERIFIED against the real AlertStore: '🔔 btc changed:\\n$67,000\\n(was $65,000 → now $67,000; ↑2000)'. call-tested TRUE. 748 pass, tsc clean. KEY LESSON logged in audits[]: a mock that doesn't mirror real mutation hid a prod bug behind green tests — live-verify store-mutation paths. Seeded also: memory-clobber-lock(M), alert-notify-send-fail(M), meta-trust-canned-answers(S)."
     },
     {
       "event": "PRODUCT-LOOP iter 52: built save-that-as (audit 12 C#2, medium/S). Starting a recipe forced retyping the whole task after a colon; after a good one-off the natural move is 'save that as morning-btc' referencing the prior turn. New parseSaveThatAs ('save that/this/it/the last one as <name>'); handler resolves the most recent REAL user task from memory (skips command-shaped + [photo]/[document] turns), calls new recipeSaveNamed dep (index -> recipes.add) with the prior task; 'Saved recipe X from your last task'. Nothing to save -> 'run a task first' (no junk saved). HELP updated. +8 tests (parseSaveThatAs 4 forms + 3 non-forms, handler capture + nothing-to-save). 747 pass, tsc clean. call-tested false (parser + handler-memory wiring, unit-tested). Backlog DRY -> ran 13th audit (same iteration)."
@@ -636,6 +675,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 13 (post-52-features). A/new-user: proactive first-value demo on /start, multi-item list rendering (cite-one-source over-compresses lists), meta/trust canned answers, retry-differently on rejection, reply-in-user-language. B/reliability: alert-delta-line-never-renders-in-prod (iter-51 REGRESSION found by audit — mutated lastValue read for pv; built), memory-clobber-concurrent, extractValue-non-currency, alert-edge-lost-on-send-fail, DST-drift. C/power: proactive failed-watch/expired-session receipts (S, subsumes cookie-nudge), persistent named browser sessions, post-answer make-it-recurring offer, value receipt. Seeded top 4: alert-delta-mutation-bug(S, built), memory-clobber-lock(M bug), alert-notify-send-fail(M bug), meta-trust-canned-answers(S). Deferred: extractValue-non-currency(M), DST(M), + power bets (failed-watch-receipts strong S next). KEY LESSON: 'call-tested false' on a store-mutation-dependent path let a prod bug ship green — mocks that don't mirror real mutation semantics hide it; now live-verify against the real store or make the mock mutate."
     },
     {
       "note": "Audit 12 (post-48-features). A/new-user: derive-tz-from-city (geocode already done for weather), quiet-hours/DND, cancel/undo-by-reference (not numeric id), ranked options for best/cheapest/vs, auto-fallback-to-search on blocked/empty page. B/reliability: media-answer-not-persisted-to-memory (built), inline-cmd-bypasses-rate-limit (digest/alert DoS+cost), memory-clobber-concurrent, alert-edge-consumed-before-send (send-fail loses it), extractValue-non-currency. C/power: delta-in-alert-ping (was->now ±Δ), 'save that as <name>' (unwired hook exists), quiet-hours (small deferred), watch-a-search. Seeded top 4: media-answer-memory(S bug, built), inline-cmd-rate-limit(M bug), alert-delta-in-ping(S), save-that-as(S). Deferred: memory-clobber(M), alert-edge-send-fail(S/M — overlaps rate-limit area), extractValue-non-currency(M), derive-tz-from-city(M), quiet-hours(M), watch-a-search(M)."

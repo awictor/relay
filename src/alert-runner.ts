@@ -73,6 +73,10 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   }
 
   const didChange = firstRun ? true : changed(alert.lastValue!, value, alert.threshold);
+  // Capture the prior baseline STRING before setLast — setLast mutates alert.lastValue in place (the
+  // store hands back the same object), so reading alert.lastValue after it would see the NEW value and
+  // the delta line below would compute pv===nv (never renders). This is why the delta must snapshot now.
+  const prevValue = alert.lastValue;
 
   // Advance the stored baseline ONLY when we notify (or on first run). Refreshing lastValue on every
   // check ratcheted the baseline to the newest value, so a "by 1000" watch never saw a cumulative
@@ -86,14 +90,14 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // value are numeric, append "was <prev> → now <new> (±<delta>, up/down)" so the ping is a
   // self-contained answer the user doesn't have to go check. Non-numeric (or first-run) stays plain.
   let delta = "";
-  if (!firstRun) {
-    const pv = extractValue(alert.lastValue!), nv = extractValue(value);
+  if (!firstRun && prevValue !== undefined) {
+    const pv = extractValue(prevValue), nv = extractValue(value);
     if (pv !== null && nv !== null && nv !== pv) {
       const d = nv - pv;
       const arrow = d > 0 ? "↑" : "↓";
       const mag = Math.abs(d);
       const num = Number.isInteger(pv) && Number.isInteger(nv) ? String(mag) : mag.toFixed(2);
-      delta = `\n(was ${alert.lastValue!.trim()} → now ${value.trim()}; ${arrow}${num})`;
+      delta = `\n(was ${prevValue.trim()} → now ${value.trim()}; ${arrow}${num})`;
     }
   }
   return { notify: true, message: `${header}:\n${value}${delta}`, value };

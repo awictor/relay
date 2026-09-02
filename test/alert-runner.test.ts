@@ -99,6 +99,17 @@ describe("checkAlert", () => {
     const r = await checkAlert(alert({ lastValue: "$67,000", threshold: 1000 }), deps("$65,000").d);
     expect(r.message).toMatch(/↓2000/);
   });
+  it("delta still renders when setLast MUTATES the alert in place (real-store semantics — regression)", async () => {
+    // The production store's setLast writes a.lastValue = value on the SAME object checkAlert holds.
+    // If the delta read alert.lastValue AFTER setLast it would see the new value (pv===nv, no delta).
+    // This mock mirrors that mutation to prove the fix snapshots prevValue before setLast.
+    const a = alert({ lastValue: "$65,000", threshold: 1000 });
+    const r = await checkAlert(a, deps("$67,000", {
+      setLast: (_c: number, _n: string, value: string) => { a.lastValue = value; },
+    }).d);
+    expect(r.message).toMatch(/was \$65,000 → now \$67,000/);
+    expect(r.message).toMatch(/↑2000/);
+  });
   it("a non-numeric change stays plain (no delta line)", async () => {
     const r = await checkAlert(alert({ lastValue: "sunny" }), deps("rainy").d);
     expect(r.message).not.toMatch(/was |→|↑|↓/);
