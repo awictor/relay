@@ -63,6 +63,18 @@ describe("makeScheduleRunner.tick", () => {
     expect(sent[0]!.text).not.toMatch(/recipe:btc/);
   });
 
+  it("a scheduled recipe edited to add a {slot} skips firing (no literal-slot garbage) (scheduled-recipe-slot-refire)", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent, ran } = harness(clock, {
+      recipeResolveTask: () => "track price of {coin}", // recipe edited to add a slot after scheduling
+    });
+    store.add(1, { kind: "daily", task: "recipe:btc", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    expect(ran).toEqual([]);        // did NOT run the literal-slot task
+    expect(sent).toHaveLength(0);   // nothing pushed
+    expect(store.list(1)).toHaveLength(1); // daily stays (self-heals if the slot is removed)
+  });
+
   it("a scheduled recipe deleted after scheduling stops firing (no send), completes", async () => {
     const clock = { t: NOW };
     const { store, runner, sent, ran } = harness(clock, {

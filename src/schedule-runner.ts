@@ -6,6 +6,7 @@
 
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Schedule, ScheduleStore } from "./lib/schedule.js";
+import { hasSlots } from "./lib/recipes.js";
 
 export interface ScheduleRunnerDeps {
   store: ScheduleStore;
@@ -124,6 +125,15 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
           // Recipe was deleted after scheduling — stop firing (drop once / advance daily), no send.
           deps.store.complete(s.id, deps.now());
           log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, recipe: recipeMatch[1], ok: true, sent: false, gone: true })}`);
+          deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
+          return;
+        }
+        // A recipe EDITED to add a {slot} after it was scheduled would fire the literal "{slot}" (the
+        // schedule-time hasSlots guard can't catch a later edit). Skip firing rather than push garbage
+        // unprompted; the recurring schedule stays so it self-heals if the slot is removed later.
+        if (hasSlots(resolved)) {
+          deps.store.complete(s.id, deps.now());
+          log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, recipe: recipeMatch[1], ok: true, sent: false, slotted: true })}`);
           deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
           return;
         }

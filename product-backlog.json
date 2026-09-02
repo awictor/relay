@@ -581,7 +581,7 @@
       "title": "A scheduled recipe edited to add a {slot} fires literal {slot} daily",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "recipeSchedule guards hasSlots at schedule time + runDigest guards per-member, but the scheduled-recipe FIRE path (runner resolves recipe:<name> -> current task) has no hasSlots re-check. Editing a scheduled recipe to add a {slot} makes it run 'track {coin}' literally every morning -> garbage unprompted (audit 16 B#2, gap opened by recipe-schedule-stable-marker).",
       "how": "In schedule-runner's recipe:<name> branch, if the resolved task hasSlots -> skip firing + log/notify once (mirror digest-slot-guard); don't run the broken task. Needs hasSlots available to the runner (dep or import)."
     },
@@ -652,6 +652,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 64: built scheduled-recipe-slot-refire (audit 16 B#2, high/S, gap opened by iter-61 recipe-schedule-stable-marker). recipeSchedule guards hasSlots at schedule time + runDigest per-member, but the runner's recipe:<name> fire path (resolves current task by name) had no hasSlots re-check — editing a scheduled recipe to add a {slot} made it fire the literal 'track {coin}' every morning as garbage unprompted. Runner now hasSlots(resolved) -> skip firing + no send (recurring schedule stays so it self-heals if the slot is later removed); imported hasSlots. +1 test (edited-to-slot recipe skips, daily stays). 764 pass, tsc clean. call-tested false (runner guard, unit-tested). Remaining: confirm-to-act, content-aware-cta."
     },
     {
       "event": "PRODUCT-LOOP iter 63: backlog dry after iter 62 -> ran 16th audit (3 lenses), which caught a FRESH bug in my iter-62 recall code; built it. recipe-auto-recall-escape (audit 16 B#1+B#3, high/S): the recall branch returned early on a match with no marker, so any free-text phrase matching a saved recipe re-offered FOREVER + 'ignore and I'll do it fresh' was a lie (the only escape was rewording) — an inescapable loop on the core reactive path; matchRecipe threshold was also 0.6 vs the documented 0.7. Fix: per-chat recallOffered map -> re-sending the same phrase after an offer falls through to a FRESH agent run (offer once); message now says 'send it again and I'll do it fresh'; threshold aligned to 0.7. +1 handler test (same phrase twice -> fresh run) + updated matchRecipe test to exact-token matches. 763 pass, tsc clean. call-tested false (routing logic). LESSON: a new reactive branch that returns early needs an escape/marker (like the save-nudge) — audit every early-return for a loop. Seeded also: scheduled-recipe-slot-refire(S bug), confirm-to-act(M), content-aware-cta(S)."
