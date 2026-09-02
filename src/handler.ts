@@ -10,6 +10,7 @@ import { formatReply } from "./lib/format-reply.js";
 import { formatTurnLog } from "./lib/turn-log.js";
 import { friendlyError } from "./lib/failure.js";
 import { splitScheduleCommand } from "./lib/schedule.js";
+import { repeatedTaskNudge } from "./lib/task-suggest.js";
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -40,6 +41,9 @@ export interface HandlerDeps {
   // visible, not silently wrong on every weather/reminder. profileClear forgets it. Both optional.
   profileView?: (chatId: number) => string | null; // human-readable summary, or null if nothing set
   profileClear?: (chatId: number) => boolean;       // true if there was a profile to clear
+  // Auto-suggest saving a repeated ask as a recipe (product-loop). When true, a reply to a task that
+  // closely matches an earlier one this chat asked gets a one-line "want me to save this?" nudge.
+  suggestSaves?: boolean;
   // Inbound photo (product-loop): when a message carries photoFileId, describeImage answers about it
   // (caption = the question). Optional; absent -> a photo message gets a "can't read images yet" note.
   describeImage?: (fileId: string, caption: string) => Promise<string>;
@@ -467,7 +471,14 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       // partial, and count the turn as NOT-ok so the success metric isn't inflated by soft failures
       // (DEV-0178 — handler is the 3rd consumer of the degraded flag, after alert-runner + digest-runner).
       const body = formatReply(reply);
-      const out = degraded ? `⚠️ Partial answer — I ran low on steps. Try narrowing the request.\n\n${body}` : body;
+      let out = degraded ? `⚠️ Partial answer — I ran low on steps. Try narrowing the request.\n\n${body}` : body;
+      // Retention nudge (product-loop): if this task repeats one the user already asked, offer to save
+      // it as a recipe. Only on a clean text reply (not degraded / not a binary), so it never clutters
+      // a partial answer or a screenshot/PDF caption. Appended AFTER the body so the answer leads.
+      if (deps.suggestSaves && !degraded && !photo && !doc) {
+        const nudge = repeatedTaskNudge(msg.text, history);
+        if (nudge) out += nudge;
+      }
       // If the agent produced a binary (screenshot image or PDF), send it first with the reply as
       // caption, then the text if the caption overflowed. Falls back to text-only when nothing was
       // produced or the sender isn't wired.

@@ -356,7 +356,7 @@
       "title": "Offer to save a repeated ask as a recipe/alert",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Recipes/alerts exist but users must know the 'save X:' syntax; most never do, so the retention flywheel never starts. Detecting a repeated ask + proposing the save+schedule converts casual use into the sticky proactive loop (audit 9 C#1).",
       "how": "On an inbound task that closely matches a recent one (per-chat memory), append a one-line 'want me to save this as a recipe / check it every morning?' nudge to the reply. Light similarity check; no new infra (reuse memory-store + recipes)."
     }
@@ -409,6 +409,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 40: built auto-suggest-save (audit 9 C#1, medium/S). Recipes/alerts existed but users had to know the 'save X:' syntax; most never did, so the retention flywheel never started. New src/lib/task-suggest.ts repeatedTaskNudge(current, history): tokenizes (lowercase, punctuation-strip, stopword-drop), and when the current task has Jaccard overlap >=0.6 with an earlier USER turn this chat asked, returns a one-line '💾 want me to save it? save <name>: ... / every morning ...' nudge. Conservative: needs >=2 salient tokens (skips 'hi'/'thanks'), and won't stack (suppressed if the last assistant turn already carried the 💾 marker). Handler appends it to a clean text reply (not degraded/photo/doc, answer leads) gated by new suggestSaves dep; index sets suggestSaves:true. +7 tests (5 lib: match/unique/trivial/no-stack/drift, 2 handler: nudge-on-repeat, off-by-default). 715 pass, tsc clean. call-tested false (pure similarity + handler wiring, unit-tested). Backlog DRY -> ran 10th audit (same iteration)."
     },
     {
       "event": "PRODUCT-LOOP iter 39: built recurring-schedules (audit 9 A#2, high/M). schedule.ts parsed only once + daily, so 'every Monday', 'every weekday at 8', 'every 2 hours' silently fell through to a one-off agent run that did nothing. Added ScheduleKind 'weekly' + 'interval'; parseSchedule now matches an interval clause ('every N min/hours' -> intervalMs) + a weekly clause ('every monday', 'every mon and thu', 'every weekday', 'weekends', optional 'at HH:MM' -> weekdays[]), guarded so a bare weekday in a task ('email bob the monday report') isn't scheduled. New nextWeeklyMs (next matching weekday at hh:mm in the user's zone); complete() advances weekly (next weekday) + interval (forward by whole intervals past now, no backlog burst). Schedule/ParsedSchedule gained weekdays+intervalMs; add() carries them; runner label 'once'->Reminder else Recurring; once-retry gate + failureNotice already key off kind==='once' so recurring stays silent+advances. HELP + confirm message updated. +10 tests (5 parse forms + bare-weekday-null, interval+weekly complete-advance, 2 label updates). 708 pass, tsc clean. call-tested false (pure parse+store+runner, unit-tested incl weekday math). Remaining: auto-suggest-save -> then backlog dry -> audit refills."

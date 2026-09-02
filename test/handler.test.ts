@@ -273,6 +273,40 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/[Cc]leared/);
   });
 
+  it("appends a save-nudge when a task repeats a prior one (auto-suggest-save)", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    mem.set(9, [{ role: "user", content: "check the price of bitcoin" }, { role: "assistant", content: "$65k" }]);
+    const sent: string[] = [];
+    const handle = createHandler({
+      llm: {} as never,
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      memoryClear: () => false,
+      sendMessage: async (_id, text) => { sent.push(text); },
+      sendTyping: async () => {},
+      handleCommand: () => null,
+      checkRateLimit: () => ({ allowed: true }),
+      redactText: (t) => t, hasModelKey: () => true, recordTurn: () => {}, now: () => 0,
+      suggestSaves: true,
+      runAgentFn: async () => ({ reply: "It's $66k now.", steps: 1, tools: [] }),
+      log: () => {},
+    });
+    await handle(msg("check the price of bitcoin", 9));
+    expect(sent[0]).toMatch(/66k/);           // the answer leads
+    expect(sent[0]).toMatch(/want me to save it/i); // ...then the nudge
+  });
+
+  it("no save-nudge when suggestSaves is off (default)", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    mem.set(9, [{ role: "user", content: "check the price of bitcoin" }, { role: "assistant", content: "$65k" }]);
+    const { handle, sent } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      runAgentFn: async () => ({ reply: "It's $66k now.", steps: 1, tools: [] }),
+    });
+    await handle(msg("check the price of bitcoin", 9));
+    expect(sent[0]!.text).not.toMatch(/want me to save/i);
+  });
+
   it("passes the profile context into the agent run", async () => {
     let gotContext: string | undefined;
     const { handle } = harness({
