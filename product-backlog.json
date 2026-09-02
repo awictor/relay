@@ -527,7 +527,7 @@
       "title": "Scheduled digest/recipe keeps firing after /forget",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "digestForget/recipeForget remove the store entry but NOT the ScheduleStore 'digest:<name>'/recipe schedule row, so the runner keeps firing daily — a digest sends '(digest is empty or was removed)' every morning forever + the user can't stop it the obvious way (they deleted it) (audit 14 B#3).",
       "how": "On forget-digest/forget-recipe, also cancel any schedule whose task targets that name (digest:<name>, or a recipe-derived task). Wire in index forget paths; scan schedules.list + remove matches. Test forget cancels the schedule."
     },
@@ -589,6 +589,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 58: built orphaned-schedule-on-forget (audit 14 B#3, high/M, real bug). digestForget/recipeForget/alertForget removed the store entry but NOT the ScheduleStore row targeting it, so the runner kept firing — a forgotten scheduled digest sent '(digest is empty or was removed)' every morning forever + the user couldn't stop it the obvious way (they deleted it). New ScheduleStore.removeByTask(chatId, task) (chat-scoped exact-task match). index forget paths read the canonical stored item BEFORE removal + cancel the matching schedule: recipe -> its task string, digest -> 'digest:<name>', alert -> 'alert:<name>'. +1 store test (chat-scoped remove, no-match=0) . 754 pass, tsc clean. LIVE-VERIFIED vs real DigestStore+ScheduleStore: define+schedule digest -> 1 schedule; forget -> digest gone + schedule removed (0). call-tested TRUE. Remaining: post-answer-recurring-offer -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 57: backlog dry after iter 56 -> ran 14th audit (3 lenses), which caught TWO fresh regressions in my own recent code; built both (both high-value S). (1) save-that-cadence-hijack (audit 14 B#1, iter-52 bug): the NL schedule matcher ran before the save-that-as branch + isExplicitCommand only excluded the colon define shape, so 'save that as daily/weekday/weekends' matched the cadence word -> junk daily schedule running literal 'save that as' every morning + no recipe created. Added isSaveThatShape (parseSaveThatAs!==null) to the guard so it skips the scheduler. (2) meta-free-false-fire (audit 14 B#5, iter-56 bug): META_RE's bare '(is it|are you) free' + greedy tail swallowed 'are you free right now' -> trust blurb instead of the real ask. Tightened 'free' to a trust context ('is this/it free', '... free to use'). +2 tests ('save that as daily' not scheduled; 'are you free right now' not meta). 753 pass, tsc clean. call-tested false (routing/matcher, unit-tested). LESSON: each new matcher/branch must be checked against the EARLIER routing gates it sits behind — both bugs were ordering/greedy-regex interactions with code from 1-5 iters prior. Seeded also: orphaned-schedule-on-forget(M), post-answer-recurring-offer(S)."

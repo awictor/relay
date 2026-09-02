@@ -274,6 +274,17 @@ describe("ScheduleStore", () => {
     expect(new Date(after.dueMs).getUTCDay()).toBe(1); // next Monday
   });
 
+  it("removeByTask cancels the schedule(s) running a given task, chat-scoped (orphaned-schedule-on-forget)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "daily", task: "digest:morning", dueMs: NOW, hourMin: "09:00" }, NOW);
+    s.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW, hourMin: "09:00" }, NOW);
+    s.add(2, { kind: "daily", task: "digest:morning", dueMs: NOW, hourMin: "09:00" }, NOW); // other chat
+    expect(s.removeByTask(1, "digest:morning")).toBe(1);
+    expect(s.list(1).map((x) => x.task)).toEqual(["alert:btc"]); // only chat 1's digest gone
+    expect(s.list(2)).toHaveLength(1);                           // chat 2 untouched
+    expect(s.removeByTask(1, "digest:nope")).toBe(0);            // no match -> 0
+  });
+
   it("persists across a reload", () => {
     const file = tmpFile();
     const a = new ScheduleStore({ file });

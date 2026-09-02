@@ -305,6 +305,18 @@ export class ScheduleStore {
     return removed;
   }
 
+  /** Remove every schedule for a chat whose task exactly matches `task`. Returns how many were
+   * removed. Used to clean up orphaned schedules when a digest/recipe/alert is forgotten (a scheduled
+   * digest stores "digest:<name>", an alert "alert:<name>", a scheduled recipe the recipe's task) —
+   * otherwise the runner keeps firing "(digest is empty or was removed)" forever. */
+  removeByTask(chatId: number, task: string): number {
+    const before = this.items.length;
+    this.items = this.items.filter((s) => !(s.chatId === chatId && s.task === task));
+    const removed = before - this.items.length;
+    if (removed) this.persist();
+    return removed;
+  }
+
   /** Schedules due at/before now. */
   dueNow(now: number): Schedule[] {
     return this.items.filter((s) => s.dueMs <= now);

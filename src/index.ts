@@ -235,7 +235,14 @@ const handle = createHandler({
     return { name: rec.name, task: applySlots(rec.task, parsed.args) };
   },
   recipeList: (chatId) => recipes.list(chatId).map((r) => ({ name: r.name, task: r.task, schedule: r.schedule })),
-  recipeForget: (chatId, name) => recipes.remove(chatId, name),
+  recipeForget: (chatId, name) => {
+    // Cancel any schedule running this recipe's task too (a scheduled recipe stores the task string),
+    // else the runner keeps firing it after the recipe is gone (orphaned-schedule-on-forget).
+    const rec = recipes.get(chatId, name);
+    const removed = recipes.remove(chatId, name);
+    if (removed && rec) schedules.removeByTask(chatId, rec.task);
+    return removed;
+  },
   recipeSchedule: (chatId, name, whenClause, now) => {
     const rec = recipes.get(chatId, name);
     if (!rec) return { ok: false, reason: "unknown" };
@@ -256,7 +263,15 @@ const handle = createHandler({
     return { ok: true, name: rec.name, members: rec.members.length };
   },
   digestList: (chatId) => digests.list(chatId).map((d) => ({ name: d.name, members: d.members, schedule: d.schedule })),
-  digestForget: (chatId, name) => digests.remove(chatId, name),
+  digestForget: (chatId, name) => {
+    // Also cancel the scheduled "digest:<name>" marker so a removed digest stops firing "(digest is
+    // empty or was removed)" every morning (orphaned-schedule-on-forget). Use the canonical stored
+    // name before removal so the marker matches what digestSchedule wrote.
+    const d = digests.get(chatId, name);
+    const removed = digests.remove(chatId, name);
+    if (removed && d) schedules.removeByTask(chatId, `digest:${d.name}`);
+    return removed;
+  },
   isDigest: (chatId, name) => !!digests.get(chatId, name),
   digestRun: (chatId, name) => digestRunText(chatId, name),
   digestSchedule: (chatId, name, whenClause, now) => {
@@ -293,7 +308,14 @@ const handle = createHandler({
     return { ok: true, name: rec.name, summary: `now alerts ${summary}` };
   },
   alertList: (chatId) => alerts.list(chatId).map((a) => ({ name: a.name, task: a.task, lastValue: a.lastValue, threshold: a.threshold })),
-  alertForget: (chatId, name) => alerts.remove(chatId, name),
+  alertForget: (chatId, name) => {
+    // Also cancel the auto-scheduled "alert:<name>" check so a forgotten alert stops running on its
+    // cadence forever (orphaned-schedule-on-forget).
+    const a = alerts.get(chatId, name);
+    const removed = alerts.remove(chatId, name);
+    if (removed && a) schedules.removeByTask(chatId, `alert:${a.name}`);
+    return removed;
+  },
   sendMessage,
   sendPhoto,
   sendDocument,
