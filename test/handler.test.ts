@@ -1068,3 +1068,35 @@ describe("watch trend recall (watch-time-series)", () => {
     expect(ran).toBe("weather in Paris");
   });
 });
+
+describe("background errand persistence hooks (background-errand-persist)", () => {
+  it("records the errand on dispatch and clears it when the run settles", async () => {
+    const added: Array<{ chatId: number; text: string }> = [];
+    const done: string[] = [];
+    let resolveRun: ((r: { reply: string; steps: number; tools: string[] }) => void) | null = null;
+    const { handle } = harness({
+      enableBackgroundErrands: true,
+      bgErrandAdd: (chatId, text) => { added.push({ chatId, text }); return "bg1"; },
+      bgErrandDone: (id) => { done.push(id); },
+      runAgentFn: () => new Promise((res) => { resolveRun = res; }),
+    });
+    await handle(msg("find the 5 cheapest flights and get back to me", 5));
+    expect(added).toEqual([{ chatId: 5, text: "find the 5 cheapest flights and get back to me" }]);
+    expect(done).toEqual([]); // not settled yet
+    resolveRun!({ reply: "done", steps: 1, tools: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(done).toEqual(["bg1"]); // cleared after delivery
+  });
+  it("clears the errand even when the run fails", async () => {
+    const done: string[] = [];
+    const { handle } = harness({
+      enableBackgroundErrands: true,
+      bgErrandAdd: () => "bgX",
+      bgErrandDone: (id) => { done.push(id); },
+      runAgentFn: async () => { throw new Error("boom"); },
+    });
+    await handle(msg("research the best CRMs and get back to me", 5));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(done).toEqual(["bgX"]);
+  });
+});

@@ -941,7 +941,7 @@
       "title": "background errand lost on restart (spoken promise broken)",
       "impact": "high",
       "effort": "L",
-      "status": "todo",
+      "status": "done",
       "why": "\"On it — I will text you when done\" then a deploy/crash mid-run: the result never arrives, no error, no resume. In-memory only, unlike schedules/alerts.",
       "how": "Persist pending background errands to a JSON store; on startup re-dispatch (or notify) any that were in flight."
     },
@@ -1280,6 +1280,10 @@
     {
       "id": "paywall-detection",
       "note": "A paywalled article link (NYT/WSJ/Medium etc.) that renders a subscribe/register STUB (short body, not the empty-shell case) is now flagged to the agent instead of summarized as if it were the article — the marker tells it to say the page is paywalled + offer a free source (web_search the headline). formatPageForModel gained a looksPaywalled check gated on a short body (<1500 non-ws) so a long article mentioning subscribe in a footer still passes through. 927 tests green."
+    },
+    {
+      "id": "background-errand-persist",
+      "note": "Background errands now survive a restart. A dispatched errand is recorded in a persistent BackgroundStore (id+chatId+original text) + cleared when it settles; on startup the worker drains the store and, per planErrandReplay, RE-RUNS fresh errands (re-injects the original message) or sends an honest \"I was interrupted\" note for stale ones (>6h). No more silently-dropped \"I will text you when done\" promise. bgErrandAdd/Done handler deps; RELAY_BACKGROUND_FILE. 933 tests green."
     }
   ],
   "audits": [

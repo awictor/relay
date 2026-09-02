@@ -166,6 +166,11 @@ export interface HandlerDeps {
   // unprompted — instead of blocking the reply and truncating at the normal step cap. Absent/false ->
   // every task runs synchronously as before.
   enableBackgroundErrands?: boolean;
+  // Background-errand persistence (background-errand-persist): record a dispatched errand so a crash
+  // mid-run doesn't silently drop the promise; clear it when the run settles. Both optional; absent ->
+  // errands run detached but aren't crash-recoverable (previous behavior).
+  bgErrandAdd?: (chatId: number, text: string) => string; // returns an id
+  bgErrandDone?: (id: string) => void;
   log?: (line: string) => void;
 }
 
@@ -834,6 +839,9 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       const bgHistory = deps.memoryGet(msg.chatId);
       const startedAt = deps.now();
       bgInFlight.set(msg.chatId, (bgInFlight.get(msg.chatId) ?? 0) + 1);
+      // Persist the pending errand (background-errand-persist) so a crash mid-run can replay it. Store
+      // the ORIGINAL message so a replay re-runs exactly what the user asked. Cleared when it settles.
+      const errandId = deps.bgErrandAdd?.(msg.chatId, msg.text);
       // Detached: NOT awaited + NOT on chainByChat, so other messages interleave. Errors are caught +
       // reported so a failed background run still tells the user (never a silent black hole).
       void (async () => {
@@ -860,6 +868,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
           await deps.sendMessage(msg.chatId, `That background errand ("${errand}") failed: ${friendly}`).catch(() => {});
         } finally {
           bgInFlight.set(msg.chatId, Math.max(0, (bgInFlight.get(msg.chatId) ?? 1) - 1));
+          if (errandId) deps.bgErrandDone?.(errandId); // settled (delivered or failed) -> stop tracking
         }
       })();
       return;

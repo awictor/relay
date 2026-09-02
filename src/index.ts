@@ -3,7 +3,7 @@
 // if keys/anvil are missing so it never hangs silently.
 
 import { selectChannel, type Channel } from "./channel.js";
-import { downloadFile, registerCommands } from "./telegram.js";
+import { downloadFile, registerCommands, type InboundMessage } from "./telegram.js";
 import { anvilLive } from "./anvil.js";
 import { GeminiClient, ClaudeClient, resolveProvider } from "./llm.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
@@ -32,6 +32,7 @@ import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summa
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { AnswerLog, recallKeywords } from "./lib/answer-log.js";
+import { BackgroundStore, planErrandReplay } from "./lib/background-store.js";
 import { checkAlert } from "./alert-runner.js";
 import { parseScheduleFor } from "./lib/schedule.js";
 
@@ -100,6 +101,7 @@ const alerts = new AlertStore({ file: paths.alerts });
 const profiles = new ProfileStore({ file: paths.profile });
 const notes = new NotesStore({ file: paths.notes });
 const answerLog = new AnswerLog({ file: paths.answers });
+const backgroundStore = new BackgroundStore({ file: paths.background });
 // Run a digest -> composed briefing text (member recipes -> one message). Shared by /run + schedule.
 const digestRunText = (chatId: number, name: string): Promise<string | null> => {
   const d = digests.get(chatId, name);
@@ -429,6 +431,8 @@ const handle = createHandler({
   // Background errands (async-background-errands): ACK + run detached a large "get back to me" task.
   // On by default; set RELAY_BACKGROUND_ERRANDS=0 to force every task synchronous.
   enableBackgroundErrands: process.env.RELAY_BACKGROUND_ERRANDS !== "0",
+  bgErrandAdd: (chatId, text) => backgroundStore.add(chatId, text, Date.now()),
+  bgErrandDone: (id) => backgroundStore.remove(id),
 });
 
 async function main() {
@@ -455,6 +459,20 @@ async function main() {
 
   console.log(`Relay listening on ${channel.name}…`);
   const poller = channel.start(handle);
+
+  // Background-errand recovery (background-errand-persist): any errand still pending in the store was
+  // interrupted by the last stop/crash. Tell the user + re-run the fresh ones (stale ones just get an
+  // honest note). Drain first so a replay that itself crashes re-persists fresh entries. Best-effort.
+  const interrupted = backgroundStore.drain();
+  if (interrupted.length) {
+    console.log(`[background] recovering ${interrupted.length} interrupted errand(s)`);
+    for (const { errand, replay, notice } of planErrandReplay(interrupted, Date.now())) {
+      void sendMessage(errand.chatId, notice).catch(() => {});
+      // Re-inject the ORIGINAL message so the normal handler path re-dispatches it (re-persisting a
+      // fresh pending record), exactly as if the user had just sent it again.
+      if (replay) void handle({ chatId: errand.chatId, from: "relay", text: errand.text } as InboundMessage);
+    }
+  }
   // Clean stop on docker stop / pm2 restart / Ctrl-C: halt polling, exit 0. Memory is
   // already durable (MemoryStore persists synchronously each turn).
   installSignalHandlers(createShutdown({
