@@ -221,6 +221,27 @@ export interface AgentDeps {
   // system message so "weather" / "sushi near me" resolve without asking the city every time.
   // Optional + trimmed; absent = no change.
   context?: string;
+  // Current wall-clock for the agent (inject-current-datetime): so "news today", "open right now",
+  // "days until X", "latest"/"this week" reason from the real date, not the model's training cutoff.
+  // nowMs = epoch (default Date.now()); tzOffsetMin = the chat's minutes-east-of-UTC (default 0=UTC).
+  // Optional; absent -> no datetime line. Both together let the agent render + reason in the user's zone.
+  nowMs?: number;
+  tzOffsetMin?: number;
+}
+
+const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** A system line telling the model the current wall-clock in the user's zone (inject-current-datetime).
+ * Pure; exported for tests. offsetMin = minutes east of UTC. */
+export function buildNowLine(nowMs: number, offsetMin: number): string {
+  const d = new Date(nowMs + offsetMin * 60_000);
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  const sign = offsetMin < 0 ? "-" : "+";
+  const oh = Math.floor(Math.abs(offsetMin) / 60);
+  const om = Math.abs(offsetMin) % 60;
+  const tz = `UTC${sign}${oh}${om ? ":" + String(om).padStart(2, "0") : ""}`;
+  return `Right now it is ${DOW[d.getUTCDay()]}, ${MON[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}, ${hh}:${mm} (${tz}, the user's timezone). Use this for anything time-relative ("today", "now", "latest", "this week", "days until", "open now"); don't rely on your training date.`;
 }
 
 export async function runAgent(
@@ -237,8 +258,13 @@ export async function runAgent(
   let doc: Uint8Array | undefined; // last PDF rendered this turn, sent by the handler
 
   const ctx = deps.context?.trim();
+  // Current date/time in the user's zone, so "today"/"now"/"latest"/"days until X" reason from the
+  // real date rather than the model's training cutoff (inject-current-datetime). Rendered from nowMs
+  // when provided; a plain UTC-shifted ISO-ish stamp + a human day/date so the model can filter recency.
+  const nowLine = deps.nowMs !== undefined ? buildNowLine(deps.nowMs, deps.tzOffsetMin ?? 0) : null;
   const messages: LLMMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
+    ...(nowLine ? [{ role: "system" as const, content: nowLine }] : []),
     ...(ctx ? [{ role: "system" as const, content: `About this user: ${ctx}. Use this for location/units when they don't specify (e.g. "weather", "near me").` }] : []),
     ...history,
     { role: "user", content: userText },

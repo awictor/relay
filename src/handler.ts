@@ -40,6 +40,9 @@ export interface HandlerDeps {
   // All optional so older wiring/tests are unaffected.
   setLocation?: (chatId: number, text: string) => { location: string; units?: string; tzOffsetMin?: number } | null;
   profileContext?: (chatId: number) => string;
+  // The chat's tz offset (minutes east of UTC) for the agent's current-datetime line + reasoning
+  // (inject-current-datetime). Optional; absent -> UTC (0).
+  chatTzOffsetMin?: (chatId: number) => number | undefined;
   // /profile (product-loop): echo the stored location/units/tz so a typo'd "UTC-5" or wrong city is
   // visible, not silently wrong on every weather/reminder. profileClear forgets it. Both optional.
   profileView?: (chatId: number) => string | null; // human-readable summary, or null if nothing set
@@ -689,7 +692,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         ? `The user is replying to this message I just sent them: "${cachedPing.full.slice(0, 600)}". Answer their follow-up in that context.`
         : "";
       const context = [profileCtx, pingCtx].filter(Boolean).join(" ") || undefined;
-      const { reply, steps, tools, photo, doc, degraded } = await runIt(msg.text, { llm: deps.llm, context }, history);
+      const { reply, steps, tools, photo, doc, degraded } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0 }, history);
       clearProgress();
       // A degraded reply is a soft-failure fallback (agent ran out of steps / produced no answer,
       // DEV-0176), not a real answer. Prepend a one-line hint so a live-bot user knows the result is

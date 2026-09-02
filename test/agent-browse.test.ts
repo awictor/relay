@@ -26,6 +26,23 @@ function mockBackend(overrides: Partial<BrowserBackend> = {}): { backend: Browse
   return { backend, log };
 }
 
+describe("runAgent current-datetime injection (inject-current-datetime)", () => {
+  it("injects a 'Right now it is ...' system message when nowMs is provided", async () => {
+    const llm = new MockLLM([{ toolCall: { name: "reply", args: { text: "ok" } } }]);
+    const { backend } = mockBackend();
+    await runAgent("what's the news today", { llm, backend, nowMs: 1_700_000_000_000, tzOffsetMin: -300 });
+    const sys = llm.calls[0]!.filter((m) => m.role === "system").map((m) => m.content).join("\n");
+    expect(sys).toMatch(/Right now it is .*2023.*UTC-5/);
+  });
+  it("omits the datetime line when nowMs is absent (back-compat)", async () => {
+    const llm = new MockLLM([{ toolCall: { name: "reply", args: { text: "ok" } } }]);
+    const { backend } = mockBackend();
+    await runAgent("hi", { llm, backend });
+    const sys = llm.calls[0]!.filter((m) => m.role === "system").map((m) => m.content).join("\n");
+    expect(sys).not.toMatch(/Right now it is/);
+  });
+});
+
 describe("runAgent multi-step browse", () => {
   it("browse -> type -> read -> reply, releases the session", async () => {
     const llm = new MockLLM([

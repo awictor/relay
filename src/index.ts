@@ -167,6 +167,8 @@ const handle = createHandler({
     return { location: rec.location!, units: rec.units, tzOffsetMin: rec.tzOffsetMin };
   },
   profileContext: (chatId) => profiles.contextLine(chatId),
+  chatTzOffsetMin: (chatId) => profiles.offsetMin(chatId) ?? tzOffsetMin(), // for the agent's current-datetime line
+
   // /profile view + clear (product-loop): echo the stored profile so a wrong city/tz is visible.
   profileView: (chatId) => { const l = profiles.contextLine(chatId); return l ? l.charAt(0).toUpperCase() + l.slice(1) : null; },
   profileClear: (chatId) => profiles.clear(chatId),

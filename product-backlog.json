@@ -743,7 +743,7 @@
       "title": "Give the agent the current date/time + user tz",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "SYSTEM_PROMPT + context never tell the model what day/time it is, so 'news today', 'open right now', 'days until X', 'latest'/'this week' reason from the training-cutoff date -> confidently stale/vague answers on the exact time-sensitive asks it's told to use tools for (audit 20 A#1, top impact/effort).",
       "how": "Build a system line 'Right now it is <ISO datetime in the chat's tz>; the user's timezone is UTC<offset>.' from Date.now()+profile offset; inject alongside the profile context in runAgent. (Date.now allowed in prod code; tests inject a now.)"
     },
@@ -823,6 +823,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 78: built inject-current-datetime (audit 20 A#1, high/S). SYSTEM_PROMPT + context never told the model the current date/time, so 'news today', 'open right now', 'days until X', 'latest'/'this week' reasoned from the training cutoff -> confidently stale/vague. New buildNowLine(nowMs, offsetMin) renders 'Right now it is <Weekday, Mon D, YYYY, HH:MM (UTC±off, the user's timezone)>. Use this for anything time-relative...'; runAgent injects it as a system line when AgentDeps.nowMs is set (absent = back-compat, no line). Handler passes nowMs=deps.now() + tzOffsetMin from a new chatTzOffsetMin dep (index wires profiles.offsetMin ?? global). +8 tests (buildNowLine zone/negative/half-hour; runAgent injects/omits). 805 pass, tsc clean. LIVE-VERIFIED: 'what's today's date?' -> 'Wednesday, September 2, 2026' from the injected now, 0 tools (no wasteful browse). call-tested TRUE. Backlog DRY -> ran audit next. NOTE: proactive runners (schedule/digest/alert) don't pass nowMs yet — seed if audit flags."
     },
     {
       "event": "PRODUCT-LOOP iter 77: backlog dry after iter 76 -> ran 20th audit (3 lenses), which caught THREE fresh bugs in my iter-74 watch/schedule-that code; built all three (grouped as watch-schedule-that-followups, high/S). B#1: 'do/send that every morning' was hijacked by the NL scheduler because isExplicitCommand omitted the do/send by-ref verbs -> scheduled literal 'do that' daily; added isByRefShape (parseWatchThat||parseScheduleThat) to the guard. B#2: watch/schedule name derived from the first 2 words collided ('what's the price of bitcoin' -> 'whats-the', silently overwriting a prior alert by name in AlertStore); now drops stopwords to salient tokens ('bitcoin'). B#5: schedule-that by-ref dropped the no-tz UTC warning the primary path shows; now appends it. +2 tests (do-that schedules the prior task; watch-that salient name). 800 pass, tsc clean. call-tested false. LESSON (5th): a new by-ref verb set must go in BOTH its branch AND the isExplicitCommand gate. Seeded: inject-current-datetime(S), empty-read-escalation(S), cookie-consent-dismiss(M), failed-watch-receipts(S)."
