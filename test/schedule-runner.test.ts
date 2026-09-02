@@ -61,7 +61,7 @@ describe("makeScheduleRunner.tick", () => {
     expect(after[0]!.dueMs).toBeGreaterThan(NOW); // moved to next occurrence
   });
 
-  it("a failed agent run doesn't storm — the once-task is completed (dropped), not retried forever", async () => {
+  it("a failed once-reminder is DEFERRED (retried on later ticks), not dropped on the first failure (once-reminder-transient-retry)", async () => {
     const clock = { t: NOW };
     const errs: unknown[] = [];
     const { store, runner, sent } = harness(clock, {
@@ -70,10 +70,37 @@ describe("makeScheduleRunner.tick", () => {
     });
     store.add(1, { kind: "once", task: "x", dueMs: NOW - 1 }, NOW);
     const n = await runner.tick();
-    expect(n).toBe(0);                 // nothing successfully fired
+    expect(n).toBe(0);                     // nothing successfully fired
     expect(errs).toHaveLength(1);
-    expect(sent).toHaveLength(0);
-    expect(store.list(1)).toHaveLength(0); // dropped, won't retry every tick
+    expect(sent).toHaveLength(0);          // no give-up notice yet (transient)
+    expect(store.list(1)).toHaveLength(1); // STILL QUEUED — a transient hiccup didn't delete it
+    expect(store.list(1)[0]!.attempts).toBe(1);
+  });
+
+  it("a once-reminder that keeps failing is given up (notified + dropped) after the attempt cap", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock, {
+      runAgent: async () => { throw new Error("still down"); },
+      failureNotice: () => "⏰ I tried but the browser was down.",
+    });
+    store.add(1, { kind: "once", task: "meds", dueMs: NOW - 1 }, NOW);
+    // Default cap is 5 attempts. Tick until it gives up.
+    for (let i = 0; i < 4; i++) { await runner.tick(); expect(store.list(1)).toHaveLength(1); } // attempts 1..4: still deferred
+    await runner.tick(); // attempt 5: give up
+    expect(store.list(1)).toHaveLength(0);     // dropped after the cap
+    expect(sent).toHaveLength(1);              // told the user, once, after exhausting retries
+    expect(sent[0]!.text).toMatch(/tried/i);
+  });
+
+  it("a daily that fails still advances (not retried in place)", async () => {
+    const clock = { t: NOW };
+    const { store, runner } = harness(clock, { runAgent: async () => { throw new Error("boom"); } });
+    store.add(1, { kind: "daily", task: "d", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    const d = store.list(1)[0]!;
+    expect(d).toBeTruthy();
+    expect(d.dueMs).toBeGreaterThan(NOW);      // advanced, not left due
+    expect(d.attempts ?? 0).toBe(0);           // daily doesn't accumulate once-retry attempts
   });
 
   // m14 degrade-2: completing a schedule persists to disk. If complete() throws (unwritable
@@ -120,18 +147,18 @@ describe("makeScheduleRunner.tick", () => {
     const notice = (s: { kind: string; task: string }, raw: string) =>
       s.kind === "once" ? `couldn't run "${s.task}": ${raw}` : null;
 
-    it("a failed once-task sends the friendly failure notice", async () => {
+    it("a failed once-task sends the friendly failure notice after retries are exhausted", async () => {
       const clock = { t: NOW };
       const { store, runner, sent } = harness(clock, {
         runAgent: async () => { throw new Error("anvil ECONNREFUSED"); },
         failureNotice: notice,
       });
       store.add(7, { kind: "once", task: "check flight", dueMs: NOW - 1 }, NOW);
-      await runner.tick();
-      expect(sent).toHaveLength(1);
+      for (let i = 0; i < 5; i++) await runner.tick(); // default cap 5: retries 1-4 deferred, 5th gives up
+      expect(sent).toHaveLength(1);                     // notice only once, after exhausting retries
       expect(sent[0]!.chatId).toBe(7);
       expect(sent[0]!.text).toMatch(/couldn't run "check flight"/);
-      expect(store.list(7)).toHaveLength(0); // still completed (dropped), no storm
+      expect(store.list(7)).toHaveLength(0); // dropped after the cap, no storm
     });
 
     it("a failed daily-task stays silent (notice returns null) but still reschedules", async () => {

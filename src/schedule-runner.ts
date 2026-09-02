@@ -55,6 +55,9 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   const clearI = deps.clearInterval ?? ((h) => clearInterval(h as ReturnType<typeof setInterval>));
   const log = deps.log ?? (() => {});
   const HOUR = 3_600_000;
+  // A "once" reminder that keeps failing at fire time is retried on later ticks up to this many total
+  // attempts, then given up (notify + drop) so a permanently-broken task can't loop forever.
+  const MAX_FIRE_ATTEMPTS = Math.max(1, Number(process.env.RELAY_ONCE_MAX_ATTEMPTS) || 5);
   const cap = deps.maxPerChatPerHour ?? 0;
   const sendTimes = new Map<number, number[]>(); // chatId -> recent send epochs (rolling hour)
 
@@ -158,12 +161,24 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         catch (e) {
           deps.onError?.(e);
           const raw = e instanceof Error ? e.message : String(e);
-          log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, error: raw.slice(0, 120) })}`);
           deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: 0, ok: false });
-          // m14 degrade-4: optionally tell the user the run failed (default silent). A failed
-          // "once" reminder otherwise vanishes with no signal; index opts that case into a
-          // friendlyError line. Best-effort + subject to the same anti-spam cap; a send failure
-          // here must not stop us completing the schedule below.
+          // A "once" reminder that fails on a TRANSIENT hiccup (anvil/LLM down for a tick) must not
+          // be deleted forever — it's an explicit single promise. Retry it on later ticks up to a
+          // cap; only give up (notify + drop) after MAX_FIRE_ATTEMPTS so a permanently-broken task
+          // can't loop forever. A daily just advances (its next occurrence retries tomorrow).
+          if (s.kind === "once") {
+            const attempts = deps.store.recordFailure(s.id);
+            if (attempts < MAX_FIRE_ATTEMPTS) {
+              log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, deferred_retry: attempts, error: raw.slice(0, 120) })}`);
+              continue; // leave it due; a later tick retries
+            }
+            log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, gave_up_after: attempts, error: raw.slice(0, 120) })}`);
+          } else {
+            log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, error: raw.slice(0, 120) })}`);
+          }
+          // m14 degrade-4: tell the user the run failed (default silent). For a "once" this fires only
+          // after the retries are exhausted (above). Best-effort + subject to the anti-spam cap; a send
+          // failure here must not stop us completing the schedule below.
           if (deps.failureNotice && !overCap(s.chatId, deps.now())) {
             const notice = deps.failureNotice(s, raw);
             if (notice) {
@@ -171,8 +186,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
               catch (sendErr) { deps.onError?.(sendErr); }
             }
           }
-          // Don't leave a failed once-task to retry forever every tick — complete it so it
-          // drops (daily still advances). A failed run is reported by the miss, not a storm.
+          // Drop the once (retries exhausted) / advance the daily.
           safeComplete(s);
         }
       }

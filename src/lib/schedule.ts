@@ -16,6 +16,7 @@ export interface Schedule {
   dueMs: number;       // next fire time (epoch ms)
   hourMin?: string;    // "HH:MM" local, for daily reschedule
   offsetMin?: number;  // tz offset (min east of UTC) the hourMin is measured in, for daily reschedule
+  attempts?: number;   // failed fire attempts (once-reminder transient-retry); dropped after a cap
   created: number;
 }
 
@@ -233,6 +234,17 @@ export class ScheduleStore {
   /** Schedules due at/before now. */
   dueNow(now: number): Schedule[] {
     return this.items.filter((s) => s.dueMs <= now);
+  }
+
+  /** Record a failed fire attempt for a schedule; returns the new attempt count (0 if not found).
+   * Lets the runner defer a transiently-failing "once" reminder and drop it only after a cap, so a
+   * momentary anvil/LLM hiccup doesn't delete an explicit single-shot promise. */
+  recordFailure(id: string): number {
+    const s = this.items.find((x) => x.id === id);
+    if (!s) return 0;
+    s.attempts = (s.attempts ?? 0) + 1;
+    this.persist();
+    return s.attempts;
   }
 
   /** After firing: drop a "once", or advance a "daily" to its next occurrence. */

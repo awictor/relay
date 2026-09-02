@@ -338,7 +338,7 @@
       "title": "Re-queue a once-reminder that fails at fire time, not delete it",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "schedule-runner's fireOne catch always safeComplete()s a 'once' on ANY throw, so 'remind me to take my meds at 3pm' vanishes on a momentary anvil/LLM hiccup at 3pm — only the rate-cap path defers (audit 9 B#2, also 8 B).",
       "how": "On a fireOne failure for a 'once', don't complete — defer for a bounded number of retries (e.g. keep it due, track an attempt count, drop after N so a permanently-broken task doesn't loop forever). Daily still advances. Send the failure notice only after the retries exhaust."
     },
@@ -409,6 +409,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 38: built once-reminder-transient-retry (audit 9 B#2, high/M, real bug). schedule-runner's fireOne catch always safeComplete()'d a 'once' on ANY throw, so 'remind me to take my meds at 3pm' vanished on a momentary anvil/LLM hiccup at 3pm (only the rate-cap path deferred). Now a failed 'once' calls store.recordFailure (new Schedule.attempts) and DEFERS (left due, retried next tick) until MAX_FIRE_ATTEMPTS (RELAY_ONCE_MAX_ATTEMPTS, default 5), then gives up: sends the failure notice once + drops it, so a permanently-broken task can't loop forever. A daily still advances (no attempts accrued). Updated the old drop-on-first-fail test + the failure-notice test (now fires after retries) + added give-up-after-cap + daily-still-advances tests. Added RELAY_ONCE_MAX_ATTEMPTS to .env.example. 700 pass, tsc clean. call-tested false (runner logic w/ mock clock). Remaining: recurring-schedules, auto-suggest-save."
     },
     {
       "event": "PRODUCT-LOOP iter 37: backlog dry after iter 36 -> ran 9th audit (3 lenses), seeded 4, built schedule-matcher-hijack (audit 9 B#1, high/S, real bug). The NL schedule keyword-regex ran BEFORE the alert/save/digest define branches, guarded only against slash + run/schedule verbs; a define/edit whose name or task contained a cadence word ('watch daily: btc', 'save morning-brief: ...', 'change btc to below 5 every check') got turned into a reminder + the alert/recipe/digest was NEVER created. Guard now also skips define SHAPES ('<watch|alert me|save|[define] digest> <name>: <task>') + alert-edit shapes ('<change|set|make> ... <below|above|in stock|by>'); matched by shape not verb so 'set a reminder every day' still schedules. Updated the DEV-0174 precedence test (schedule now skipped, not tried-then-rejected) + 3 new handler-schedule tests (watch/save not hijacked, plain 'set' reminder still schedules). 698 pass, tsc clean. call-tested false (routing logic, unit-tested). Seeded also: once-reminder-transient-retry(M), recurring-schedules(M), auto-suggest-save(S)."
