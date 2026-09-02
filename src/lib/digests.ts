@@ -3,8 +3,7 @@
 // on recipes (m7) + scheduler (m4): one curated message instead of N proactive pings.
 // Pure parse + persistent store (JSON file, gitignored, like RecipeStore/ScheduleStore).
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import { dirname } from "path";
+import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
 
 export interface Digest {
   chatId: number;
@@ -58,20 +57,14 @@ export class DigestStore {
   }
 
   private load(): void {
-    try {
-      if (!existsSync(this.file)) return;
-      const obj = JSON.parse(readFileSync(this.file, "utf8"));
-      if (obj && Array.isArray(obj.items)) {
-        this.items = obj.items.filter((d: Digest) => d && typeof d.name === "string" && Array.isArray(d.members));
-      }
-    } catch { this.items = []; }
+    const obj = readJsonSafe<{ items?: Digest[] }>(this.file);
+    if (obj && Array.isArray(obj.items)) {
+      this.items = obj.items.filter((d) => d && typeof d.name === "string" && Array.isArray(d.members));
+    }
   }
 
   private persist(): void {
-    try {
-      mkdirSync(dirname(this.file), { recursive: true });
-      writeFileSync(this.file, JSON.stringify({ v: 1, items: this.items }), "utf8");
-    } catch { /* best-effort */ }
+    atomicWriteJson(this.file, { v: 1, items: this.items });
   }
 
   /** Add/overwrite a digest by name. Members capped. Returns record, or null if at chat cap

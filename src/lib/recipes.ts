@@ -3,8 +3,7 @@
 // Pure parse + persistent store (JSON file, gitignored, like ScheduleStore). The handler
 // (recipe-2) routes commands; scheduled recipes (recipe-3) bridge to ScheduleStore.
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import { dirname } from "path";
+import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
 
 export interface Recipe {
   chatId: number;
@@ -70,20 +69,14 @@ export class RecipeStore {
   }
 
   private load(): void {
-    try {
-      if (!existsSync(this.file)) return;
-      const obj = JSON.parse(readFileSync(this.file, "utf8"));
-      if (obj && Array.isArray(obj.items)) {
-        this.items = obj.items.filter((r: Recipe) => r && typeof r.name === "string" && typeof r.task === "string");
-      }
-    } catch { this.items = []; }
+    const obj = readJsonSafe<{ items?: Recipe[] }>(this.file);
+    if (obj && Array.isArray(obj.items)) {
+      this.items = obj.items.filter((r) => r && typeof r.name === "string" && typeof r.task === "string");
+    }
   }
 
   private persist(): void {
-    try {
-      mkdirSync(dirname(this.file), { recursive: true });
-      writeFileSync(this.file, JSON.stringify({ v: 1, items: this.items }), "utf8");
-    } catch { /* best-effort */ }
+    atomicWriteJson(this.file, { v: 1, items: this.items });
   }
 
   /** Add or overwrite a recipe by name. Returns the record, or null if the chat is at cap

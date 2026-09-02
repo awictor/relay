@@ -8,8 +8,7 @@
 //   - maxChats: distinct chats retained; when exceeded, the LEAST-RECENTLY-UPDATED chat is evicted.
 // A corrupt/absent file loads as empty (never throws on boot — a bad file must not crash the bot).
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import { dirname } from "path";
+import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
 
 // Kept structural (not importing LLMMessage) so this module has no cycle with agent/llm; the caller
 // stores whatever message shape it uses. `unknown[]` = an opaque per-chat context array.
@@ -39,33 +38,23 @@ export class MemoryStore {
   // Load on construct. A missing or corrupt file is NOT fatal — start empty. This is why the bot
   // survives a first boot (no file yet) and a truncated write (partial JSON) without crashing.
   private load(): void {
-    try {
-      if (!existsSync(this.file)) return;
-      const raw = readFileSync(this.file, "utf8");
-      const obj = JSON.parse(raw);
-      if (obj && typeof obj === "object" && obj.chats && typeof obj.chats === "object") {
-        for (const [k, v] of Object.entries(obj.chats)) {
-          const e = v as Entry;
-          if (e && Array.isArray(e.history)) {
-            this.map.set(Number(k), { history: e.history.slice(-this.maxTurns), updated: Number(e.updated) || 0 });
-          }
+    // Corrupt file is backed up to .corrupt by readJsonSafe (recoverable), then we start clean —
+    // never throw on boot, never silently discard the file without a trace.
+    const obj = readJsonSafe<{ chats?: Record<string, Entry> }>(this.file);
+    if (obj && obj.chats && typeof obj.chats === "object") {
+      for (const [k, v] of Object.entries(obj.chats)) {
+        const e = v as Entry;
+        if (e && Array.isArray(e.history)) {
+          this.map.set(Number(k), { history: e.history.slice(-this.maxTurns), updated: Number(e.updated) || 0 });
         }
       }
-    } catch {
-      // Corrupt file → start clean. Never throw on boot.
-      this.map.clear();
     }
   }
 
   private persist(): void {
-    try {
-      mkdirSync(dirname(this.file), { recursive: true });
-      const chats: Record<string, Entry> = {};
-      for (const [k, v] of this.map) chats[String(k)] = v;
-      writeFileSync(this.file, JSON.stringify({ v: 1, chats }), "utf8");
-    } catch {
-      // A failed write must not take down the request path — memory is best-effort.
-    }
+    const chats: Record<string, Entry> = {};
+    for (const [k, v] of this.map) chats[String(k)] = v;
+    atomicWriteJson(this.file, { v: 1, chats }); // atomic temp+rename — a crash mid-write can't truncate memory
   }
 
   get(chatId: ChatId): unknown[] {

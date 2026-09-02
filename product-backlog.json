@@ -32,7 +32,7 @@
       "title": "Atomic store writes (temp+rename)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Non-atomic writeFileSync + load-empty-on-parse-error = a crash mid-write silently wipes saved reminders/recipes/alerts.",
       "how": "Write tmp then rename; on load parse-error back up the corrupt file instead of starting empty."
     },
@@ -55,6 +55,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 3: built alert-value-compare (audit B, core proactive-promise fix). changed() now compares the SALIENT VALUE via new extractValue() (currency-tagged > decimal > largest-magnitude) instead of raw LLM prose + firstNumber (which grabbed a date/count). So a watch-alert no longer false-pings when wording drifts run-to-run but the tracked price is identical, and a real move still fires. Non-numeric watches (in-stock/sold-out) fall back to text-diff. firstNumber kept (signature unchanged). +8 tests incl the drift-same-value + incidental-date cases. 584 pass, tsc clean. call-tested false (pure compare logic, exhaustively unit-tested). Remaining: atomic-store-writes, tz-daily-schedules."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 4: built atomic-store-writes (audit B, highest-severity data-loss). New src/lib/safe-store.ts: atomicWriteJson (mkdir+write .tmp+rename = atomic, reader sees old-or-new never torn; cleans .tmp on failed rename; never throws) + readJsonSafe (missing->null; CORRUPT->move to .corrupt then null, instead of silently wiping). Applied to all 5 stores (schedule/recipes/digests/alerts/memory) — replaced their bare writeFileSync + catch-set-empty. So a crash mid-write or one corrupt byte no longer vanishes every saved reminder/recipe/alert; corrupt data is preserved for recovery. +8 safe-store tests (round-trip, mkdir, no-tmp-leak, no-throw-unwritable, corrupt-backup, torn-tmp-not-live); all 5 stores existing tests still green (behavior-preserving). 592 pass, tsc clean. call-tested false (fs-level, unit-tested incl crash-sim). Remaining: tz-daily-schedules (last todo -> audit refills next)."
     }
   ],
   "audits": [

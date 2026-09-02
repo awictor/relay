@@ -3,8 +3,7 @@
 // demand into watch-and-notify. Pure parse + compare + persistent store (JSON file, like
 // RecipeStore). The runner (alert-2) compares new vs stored lastValue and sends only on change.
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import { dirname } from "path";
+import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
 
 export interface Alert {
   chatId: number;
@@ -102,15 +101,12 @@ export class AlertStore {
   }
 
   private load(): void {
-    try {
-      if (!existsSync(this.file)) return;
-      const obj = JSON.parse(readFileSync(this.file, "utf8"));
-      if (obj && Array.isArray(obj.items)) this.items = obj.items.filter((a: Alert) => a && typeof a.name === "string" && typeof a.task === "string");
-    } catch { this.items = []; }
+    const obj = readJsonSafe<{ items?: Alert[] }>(this.file);
+    if (obj && Array.isArray(obj.items)) this.items = obj.items.filter((a) => a && typeof a.name === "string" && typeof a.task === "string");
   }
 
   private persist(): void {
-    try { mkdirSync(dirname(this.file), { recursive: true }); writeFileSync(this.file, JSON.stringify({ v: 1, items: this.items }), "utf8"); } catch { /* best-effort */ }
+    atomicWriteJson(this.file, { v: 1, items: this.items });
   }
 
   /** Add/overwrite by name (update-in-place, cap-exempt). */

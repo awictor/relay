@@ -4,8 +4,7 @@
 // Free-infra: a JSON file like MemoryStore — no external cron/DB. Clock is injected so
 // parse + due-check are deterministic and unit-testable.
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import { dirname } from "path";
+import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
 
 export type ScheduleKind = "once" | "daily";
 
@@ -185,19 +184,14 @@ export class ScheduleStore {
   }
 
   private load(): void {
-    try {
-      if (!existsSync(this.file)) return;
-      const obj = JSON.parse(readFileSync(this.file, "utf8"));
-      if (obj && Array.isArray(obj.items)) this.items = obj.items.filter((s: Schedule) => s && typeof s.id === "string" && typeof s.dueMs === "number");
-      if (typeof obj.seq === "number") this.seq = obj.seq;
-    } catch { this.items = []; }
+    const obj = readJsonSafe<{ items?: Schedule[]; seq?: number }>(this.file);
+    if (!obj) return; // missing or corrupt (corrupt is backed up to .corrupt by readJsonSafe)
+    if (Array.isArray(obj.items)) this.items = obj.items.filter((s) => s && typeof s.id === "string" && typeof s.dueMs === "number");
+    if (typeof obj.seq === "number") this.seq = obj.seq;
   }
 
   private persist(): void {
-    try {
-      mkdirSync(dirname(this.file), { recursive: true });
-      writeFileSync(this.file, JSON.stringify({ v: 1, seq: this.seq, items: this.items }), "utf8");
-    } catch { /* best-effort */ }
+    atomicWriteJson(this.file, { v: 1, seq: this.seq, items: this.items });
   }
 
   /** Add a schedule for a chat. Returns the stored record, or null if the chat is at its cap. */
