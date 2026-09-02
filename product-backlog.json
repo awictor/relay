@@ -824,7 +824,7 @@
       "title": "watch for NEW items in a list (set-diff monitoring)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "\"ping me when a new remote React job / PS5 restock appears\" is impossible — alerts only track a single changed value, not new entries in a list.",
       "how": "Add a seen-set diff alert kind on top of the existing alert-runner + persistent store; notify only on genuinely new entries."
     },
@@ -1098,6 +1098,10 @@
     {
       "id": "remember-facts-store",
       "note": "Added durable long-term memory: \"remember I am vegetarian\" / \"remember my wife birthday is June 3\" stores a per-chat fact (NotesStore mirrors ProfileStore, atomic JSON, 30-fact cap, dedupe). Facts inject into every agent run via the combined profileContext line. \"what do you know about me\" recites them (no agent run); \"forget that X\" fuzzy-deletes; \"forget everything you know\" clears. \"remember TO X\" still falls through to the scheduler. Help text + RELAY_NOTES_FILE documented. 833 tests green."
+    },
+    {
+      "id": "new-item-feed-watch",
+      "note": "Added feed-watch: \"watch jobs: remote react roles for new listings\" / \"watch x: new PS5 restocks\" pings ONLY when a new list entry appears, not on any value change. New Alert.feed + seen-set (capped 200, oldest-drop); extractListItems strips bullets/lead-ins, feedItemKey normalizes for stable dedupe. First run seeds silently (no dump). Seen-set advance deferred to post-send commit (failed send re-reports). Price/stock trigger wins over feed cue. /alerts marks (new items); help + confirm updated. 842 tests green."
     }
   ],
   "audits": [

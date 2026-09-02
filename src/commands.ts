@@ -36,6 +36,8 @@ Bundle into a briefing: "define digest morning: weather, hn, btc" then /run morn
 
 Watch for changes: "watch btc: price of bitcoin when it changes by 1000" — I only ping you when it moves. Or set a target: "watch btc: bitcoin below 50000", "watch eth: ethereum above 4000", "watch ps5: the PS5 back in stock" — I ping once when it crosses. /alerts lists them, /forget-alert <name> stops one. Retune one anytime: "change btc to below 45000" or "make ps5 fire under 200".
 
+Watch for NEW items in a list: "watch jobs: remote react roles for new listings" or "watch deals: new deals on OLED TVs" — I ping you only when a NEW entry shows up (not on every check). Great for job boards, listings, restocks, releases.
+
 Set your location: "/setlocation Austin, TX" (or just "I'm in London") so "weather" and "near me" work without repeating the city. Add "(metric)" or "(imperial)" for units, and "UTC-5" so daily reminders fire at YOUR local time. /profile shows what's stored; "/profile clear" forgets it.
 
 Remember things about you: "remember I'm vegetarian", "remember my wife's birthday is June 3" — I'll factor them into every answer. Ask "what do you know about me" to see them; "forget that I'm vegetarian" or "forget everything you know" to clear.

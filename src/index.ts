@@ -110,7 +110,7 @@ const digestRunText = (chatId: number, name: string): Promise<string | null> => 
 const alertCheck = async (chatId: number, name: string): Promise<{ message: string | null; commit: () => void }> => {
   const a = alerts.get(chatId, name);
   if (!a) return { message: null, commit: () => {} };
-  const r = await checkAlert(a, { llm, runAgent, formatReply, setLast: (c, n, v) => alerts.setLast(c, n, v), contextFor: (c) => profiles.contextLine(c) });
+  const r = await checkAlert(a, { llm, runAgent, formatReply, setLast: (c, n, v) => alerts.setLast(c, n, v), recordSeen: (c, n, keys) => alerts.recordSeen(c, n, keys), contextFor: (c) => profiles.contextLine(c) });
   return { message: r.notify ? r.message : null, commit: r.commit };
 };
 const ALERT_CADENCE = process.env.RELAY_ALERT_CADENCE ?? "every day at 09:00"; // default alert check cadence
@@ -346,7 +346,7 @@ const handle = createHandler({
     schedules.removeByTask(chatId, `alert:${rec.name}`);
     const sp = parseScheduleFor(ALERT_CADENCE, `alert:${rec.name}`, now, profiles.offsetMin(chatId));
     if (sp) schedules.add(chatId, sp, now);
-    return { ok: true, name: rec.name };
+    return { ok: true, name: rec.name, feed: rec.feed };
   },
   // Run one check right after define (product-loop) via the same path the scheduler uses.
   alertRunNow: (chatId, name) => alertCheck(chatId, name),
@@ -361,7 +361,7 @@ const handle = createHandler({
       : `on any change of ${rec.threshold}`;
     return { ok: true, name: rec.name, summary: `now alerts ${summary}` };
   },
-  alertList: (chatId) => alerts.list(chatId).map((a) => ({ name: a.name, task: a.task, lastValue: a.lastValue, threshold: a.threshold })),
+  alertList: (chatId) => alerts.list(chatId).map((a) => ({ name: a.name, task: a.task, lastValue: a.lastValue, threshold: a.threshold, feed: a.feed })),
   alertForget: (chatId, name) => {
     // Also cancel the auto-scheduled "alert:<name>" check so a forgotten alert stops running on its
     // cadence forever (orphaned-schedule-on-forget).

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { checkAlert } from "../src/alert-runner.js";
 import type { Alert } from "../src/lib/alerts.js";
+import { feedItemKey as normKey } from "../src/lib/alerts.js";
 
 const NOW = 1_700_000_000_000;
 const alert = (over: Partial<Alert> = {}): Alert => ({ chatId: 1, name: "btc", task: "price", created: NOW, ...over });
@@ -191,5 +192,52 @@ describe("checkAlert", () => {
     const r = await checkAlert(alert({ lastValue: "prev" }), d);
     expect(r.notify).toBe(false);
     expect(r.value).toBe("prev");
+  });
+});
+
+describe("checkAlert — feed-watch (new-item-feed-watch)", () => {
+  function feedDeps(reply: string) {
+    const lastSet: Array<{ name: string; value: string }> = [];
+    const seenRec: Array<{ name: string; keys: string[] }> = [];
+    return {
+      d: {
+        llm: {} as never,
+        runAgent: async () => ({ reply }),
+        formatReply: (t: string) => t,
+        setLast: (_c: number, name: string, value: string) => lastSet.push({ name, value }),
+        recordSeen: (_c: number, name: string, keys: string[]) => seenRec.push({ name, keys }),
+      },
+      lastSet, seenRec,
+    };
+  }
+
+  it("first run seeds the whole list SILENTLY (no dump of current items as new)", async () => {
+    const { d, seenRec } = feedDeps("• Job A\n• Job B\n• Job C");
+    const r = await checkAlert(alert({ feed: true }), d); // seen undefined
+    expect(r.notify).toBe(false);
+    expect(seenRec).toHaveLength(1);
+    expect(seenRec[0]!.keys).toHaveLength(3); // all three recorded as seen
+  });
+
+  it("notifies ONLY about a genuinely-new item; commit records it", async () => {
+    const { d, seenRec } = feedDeps("• Job A\n• Job B\n• Job NEW");
+    // seen already has A and B (by their normalized keys)
+    const a = alert({ feed: true, seen: [normKey("Job A"), normKey("Job B")] });
+    const r = await checkAlert(a, d);
+    expect(r.notify).toBe(true);
+    expect(r.message).toMatch(/1 new/);
+    expect(r.message).toMatch(/Job NEW/);
+    expect(r.message).not.toMatch(/Job A/); // only the new one
+    expect(seenRec).toHaveLength(0);        // NOT recorded until commit (post-send)
+    r.commit();
+    expect(seenRec).toHaveLength(1);
+    expect(seenRec[0]!.keys).toEqual([normKey("Job NEW")]);
+  });
+
+  it("stays silent when nothing is new", async () => {
+    const { d } = feedDeps("• Job A\n• Job B");
+    const r = await checkAlert(alert({ feed: true, seen: [normKey("Job A"), normKey("Job B")] }), d);
+    expect(r.notify).toBe(false);
+    expect(r.message).toBeNull();
   });
 });

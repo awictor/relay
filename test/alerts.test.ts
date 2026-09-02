@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseAlertCommand, parseAlertEdit, changed, normalizeForCompare, firstNumber, extractValue, conditionHolds, AlertStore } from "../src/lib/alerts.js";
+import { parseAlertCommand, parseAlertEdit, changed, normalizeForCompare, firstNumber, extractValue, conditionHolds, extractListItems, feedItemKey, AlertStore } from "../src/lib/alerts.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -184,5 +184,44 @@ describe("parseAlertEdit (conversational retune, product-loop)", () => {
     expect(parseAlertEdit("change my flight to Tuesday")).toBeNull(); // no trigger clause
     expect(parseAlertEdit("what's the price of btc")).toBeNull();
     expect(parseAlertEdit("watch btc: price of bitcoin below 50000")).toBeNull(); // a define, not an edit
+  });
+});
+
+describe("feed-watch (new-item-feed-watch)", () => {
+  it("parses a feed watch from a trailing 'for new X' or a leading 'new'", () => {
+    expect(parseAlertCommand("watch jobs: remote react roles for new listings")).toEqual({ name: "jobs", task: "remote react roles", feed: true });
+    expect(parseAlertCommand("watch ps5: new PS5 restocks")).toEqual({ name: "ps5", task: "new PS5 restocks", feed: true });
+  });
+  it("a price/stock trigger wins over the feed cue (no false feed)", () => {
+    expect(parseAlertCommand("watch btc: new bitcoin price below 50000")).toEqual({ name: "btc", task: "new bitcoin price", condition: { op: "below", operand: 50000 } });
+    expect(parseAlertCommand("watch ps5: the PS5 back in stock")).toEqual({ name: "ps5", task: "the PS5", condition: { op: "in_stock" } });
+  });
+  it("extractListItems strips bullets/numbers + drops lead-ins", () => {
+    const reply = "Here are the latest jobs:\n• Senior React dev — Acme\n2. Frontend eng — Beta\n- Staff eng — Gamma\n";
+    expect(extractListItems(reply)).toEqual(["Senior React dev — Acme", "Frontend eng — Beta", "Staff eng — Gamma"]);
+  });
+  it("feedItemKey is stable across phrasing/case/punctuation drift", () => {
+    expect(feedItemKey("• Senior React Dev — Acme!")).toBe(feedItemKey("senior react dev acme"));
+  });
+  it("store records + caps the seen-set, dropping oldest", () => {
+    const s = new AlertStore({ file: tmpFile() });
+    s.add(1, { name: "jobs", task: "roles", feed: true }, NOW);
+    const keys = Array.from({ length: 250 }, (_, i) => `k${i}`);
+    s.recordSeen(1, "jobs", keys);
+    const a = s.get(1, "jobs")!;
+    expect(a.seen).toHaveLength(200);         // capped
+    expect(a.seen![0]).toBe("k50");            // oldest 50 dropped
+    expect(a.seen![199]).toBe("k249");
+  });
+  it("switching an alert to/from feed resets its baseline", () => {
+    const s = new AlertStore({ file: tmpFile() });
+    s.add(1, { name: "x", task: "t" }, NOW);
+    s.setLast(1, "x", "old value");
+    s.recordSeen(1, "x", ["a"]); // (no-op-ish; it's not feed yet, but seed seen)
+    s.add(1, { name: "x", task: "t", feed: true }, NOW); // flip to feed
+    const a = s.get(1, "x")!;
+    expect(a.feed).toBe(true);
+    expect(a.lastValue).toBeUndefined();
+    expect(a.seen).toBeUndefined();
   });
 });

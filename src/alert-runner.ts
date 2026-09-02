@@ -5,7 +5,7 @@
 
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Alert } from "./lib/alerts.js";
-import { changed, conditionHolds, extractValue } from "./lib/alerts.js";
+import { changed, conditionHolds, extractValue, extractListItems, feedItemKey } from "./lib/alerts.js";
 
 export interface AlertRunResult {
   notify: boolean;   // did the value change (or first run)?
@@ -24,6 +24,9 @@ export interface AlertRunnerDeps {
   runAgent: (userText: string, deps: { llm: LLMClient; context?: string }, history: LLMMessage[]) => Promise<{ reply: string; degraded?: boolean }>;
   formatReply: (text: string) => string;
   setLast: (chatId: number, name: string, value: string) => void;
+  // Feed-watch (new-item-feed-watch): merge newly-reported item keys into the alert's seen-set. Called
+  // by the caller's commit() only after a successful send (so a failed send re-reports next check).
+  recordSeen?: (chatId: number, name: string, keys: string[]) => void;
   // Per-user profile context (product-loop) so a watched "weather near me" uses the saved location.
   contextFor?: (chatId: number) => string;
 }
@@ -52,6 +55,40 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   }
 
   const firstRun = alert.lastValue === undefined;
+
+  // Feed-watch (new-item-feed-watch): the task returns a LIST; notify only about entries we haven't
+  // seen before. First run (seen undefined) seeds the whole list SILENTLY so setup doesn't dump every
+  // current item as "new". After that, only genuinely-new item keys fire, and the seen-set advance is
+  // deferred to the caller's post-send commit (a failed send re-reports next check).
+  if (alert.feed) {
+    const items = extractListItems(value);
+    const seen = new Set(alert.seen ?? []);
+    // Map key -> display text (first occurrence wins) so we report the human line, dedupe by key.
+    const freshByKey = new Map<string, string>();
+    for (const it of items) {
+      const k = feedItemKey(it);
+      if (!k || seen.has(k) || freshByKey.has(k)) continue;
+      freshByKey.set(k, it);
+    }
+    const allKeys = items.map(feedItemKey).filter(Boolean);
+    if (alert.seen === undefined) {
+      // Seed silently: record every current item as seen, don't notify.
+      deps.recordSeen?.(alert.chatId, alert.name, allKeys);
+      deps.setLast(alert.chatId, alert.name, value); // mark checked (seen !== undefined next time)
+      return { notify: false, message: null, value, commit: noop };
+    }
+    if (freshByKey.size === 0) {
+      // Nothing new — stay silent, but still record (no-op) so the store reflects the check.
+      return { notify: false, message: null, value, commit: noop };
+    }
+    const fresh = [...freshByKey.values()];
+    const shown = fresh.slice(0, 10);
+    const more = fresh.length > shown.length ? `\n…and ${fresh.length - shown.length} more` : "";
+    const header = fresh.length === 1 ? `🔔 ${alert.name}: 1 new` : `🔔 ${alert.name}: ${fresh.length} new`;
+    const message = `${header}\n${shown.map((s) => `• ${s}`).join("\n")}${more}`;
+    // Defer the seen-set advance to the caller's post-send commit (failed send -> re-report next check).
+    return { notify: true, message, value, commit: () => deps.recordSeen?.(alert.chatId, alert.name, [...freshByKey.keys()]) };
+  }
 
   // Predicate alert (below/above/in_stock): edge-triggered — notify when the condition FIRST becomes
   // true (was false/unknown last time), so "below 50k" pings once on the drop, not every check while

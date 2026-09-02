@@ -12,8 +12,18 @@ export interface Alert {
   lastValue?: string;  // last agent reply, for change comparison
   threshold?: number;  // optional: only notify if a numeric value moved >= this much
   condition?: AlertCondition; // optional: notify when a predicate holds (below/above/in-stock)
+  // Feed-watch (new-item-feed-watch): the task returns a LIST (jobs, listings, restocks) and we notify
+  // only when a NEW entry appears — not on any value change. `seen` is the set of item keys already
+  // reported; undefined = never checked (seed silently on the first run so setup doesn't dump the
+  // whole list). A feed alert has neither threshold nor condition.
+  feed?: boolean;
+  seen?: string[];
   created: number;
 }
+
+// Cap the per-alert seen-set so a long-lived feed watch can't grow its stored keys without bound.
+// Oldest keys drop first; a dropped item re-notifying once months later is acceptable.
+const MAX_SEEN_KEYS = 200;
 
 // A predicate alert: notify when the watched value satisfies it (edge-triggered — fires when it
 // FIRST becomes true, not every check while true, so "below 50k" pings once on the drop).
@@ -27,6 +37,34 @@ export interface ParsedAlert {
   task: string;
   threshold?: number;
   condition?: AlertCondition;
+  feed?: boolean; // notify on a NEW list item, not on a value change
+}
+
+/** Split an agent reply into candidate list items. A feed reply is usually a bulleted/numbered list
+ * ("• Senior React dev — Acme\n• ...") or newline-separated lines; fall back to lines. Each item is
+ * trimmed of its bullet/number marker. Blank + obvious non-item lines (a lead-in like "Here are the
+ * latest jobs:") are dropped so they don't count as entries. Exported for tests. */
+export function extractListItems(reply: string): string[] {
+  const out: string[] = [];
+  for (const rawLine of reply.split(/\r?\n/)) {
+    let line = rawLine.trim();
+    if (!line) continue;
+    // Strip a leading bullet (-, *, •, ·) or "1." / "1)" ordinal marker.
+    const stripped = line.replace(/^\s*(?:[-*•·]|\d+[.)])\s+/, "").trim();
+    // A lead-in / trailing note ("Here are the latest ...:", "Let me know ...") isn't an item: it ends
+    // with a colon, or is the only line, or has no bullet AND reads like a sentence to the user.
+    if (stripped.endsWith(":")) continue;
+    if (stripped.length < 2) continue;
+    line = stripped;
+    out.push(line);
+  }
+  return out;
+}
+
+/** A stable-ish key for a feed item so re-phrasing/reordering doesn't read as new. Lowercased, punctuation
+ * and volatile lead-ins stripped, whitespace collapsed (reuses normalizeForCompare). Exported for tests. */
+export function feedItemKey(item: string): string {
+  return normalizeForCompare(item).slice(0, 120);
 }
 
 /** Evaluate a condition against an observed value string. below/above use extractValue; in_stock
@@ -63,17 +101,27 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
   let threshold: number | undefined;
   let condition: AlertCondition | undefined;
 
+  // Feed-watch: a trailing "for new items/listings/jobs/posts" or a leading "new " in the task
+  // ("watch jobs: new remote react roles") means notify on a NEW list entry, not a value change.
+  const feedTail = task.match(/\s+for\s+new\s+(?:items?|listings?|jobs?|posts?|results?|entries|ones?)\s*$/i);
+  let feed = false;
+  if (feedTail) { feed = true; task = task.slice(0, feedTail.index).trim(); }
+  else if (/^new\s+\S/i.test(task)) { feed = true; }
+
   const below = task.match(/\s+(?:when\s+it\s+)?(?:drops?\s+)?(?:below|under|<)\s+\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s*$/i);
   const above = task.match(/\s+(?:when\s+it\s+)?(?:goes?\s+|rises?\s+)?(?:above|over|hits?|reaches?|>)\s+\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s*$/i);
   const stock = task.match(/\s+(?:when\s+(?:it'?s\s+)?)?(?:back\s+)?in\s+stock\s*$/i);
   const th = task.match(/\s+(?:when it changes\s+)?by\s+(\d+(?:\.\d+)?)\s*$/i);
 
-  if (below) { condition = { op: "below", operand: parseFloat(below[1]!.replace(/,/g, "")) }; task = task.slice(0, below.index).trim(); }
-  else if (above) { condition = { op: "above", operand: parseFloat(above[1]!.replace(/,/g, "")) }; task = task.slice(0, above.index).trim(); }
-  else if (stock) { condition = { op: "in_stock" }; task = task.slice(0, stock.index).trim(); }
-  else if (th) { threshold = parseFloat(th[1]!); task = task.slice(0, th.index).trim(); }
+  // A price/stock trigger takes precedence over the feed cue (an explicit number/stock clause is
+  // unambiguous); only treat as a feed watch when no such trigger is present.
+  if (below) { condition = { op: "below", operand: parseFloat(below[1]!.replace(/,/g, "")) }; task = task.slice(0, below.index).trim(); feed = false; }
+  else if (above) { condition = { op: "above", operand: parseFloat(above[1]!.replace(/,/g, "")) }; task = task.slice(0, above.index).trim(); feed = false; }
+  else if (stock) { condition = { op: "in_stock" }; task = task.slice(0, stock.index).trim(); feed = false; }
+  else if (th) { threshold = parseFloat(th[1]!); task = task.slice(0, th.index).trim(); feed = false; }
 
   if (!name || !task) return null;
+  if (feed) return { name, task, feed: true };
   return threshold !== undefined ? { name, task, threshold } : condition ? { name, task, condition } : { name, task };
 }
 
@@ -234,8 +282,13 @@ export class AlertStore {
     const name = normalizeName(a.name);
     const existing = this.items.find((x) => x.chatId === chatId && x.name === name);
     if (!existing && this.items.filter((x) => x.chatId === chatId).length >= this.maxPerChat) return null;
-    if (existing) { existing.task = a.task; existing.threshold = a.threshold; existing.condition = a.condition; this.persist(); return existing; }
-    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, created: now };
+    if (existing) {
+      existing.task = a.task; existing.threshold = a.threshold; existing.condition = a.condition;
+      // Switching an existing alert to/from a feed watch resets its baseline so the new mode seeds fresh.
+      if (!!existing.feed !== !!a.feed) { existing.feed = a.feed; existing.seen = undefined; existing.lastValue = undefined; }
+      this.persist(); return existing;
+    }
+    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, feed: a.feed, created: now };
     this.items.push(rec);
     this.persist();
     return rec;
@@ -270,6 +323,19 @@ export class AlertStore {
   setLast(chatId: number, name: string, value: string): void {
     const a = this.get(chatId, name);
     if (a) { a.lastValue = value; this.persist(); }
+  }
+
+  /** Feed-watch (new-item-feed-watch): merge freshly-seen item keys into the alert's seen-set, capping
+   * its size (oldest keys drop first). Called after a feed check so the newly-reported items aren't
+   * re-notified next time. No-op if the alert isn't found. */
+  recordSeen(chatId: number, name: string, keys: string[]): void {
+    const a = this.get(chatId, name);
+    if (!a) return;
+    const merged = [...(a.seen ?? [])];
+    const have = new Set(merged);
+    for (const k of keys) { if (!have.has(k)) { merged.push(k); have.add(k); } }
+    a.seen = merged.length > MAX_SEEN_KEYS ? merged.slice(merged.length - MAX_SEEN_KEYS) : merged;
+    this.persist();
   }
 
   remove(chatId: number, name: string): boolean {
