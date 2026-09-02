@@ -266,7 +266,7 @@
       "title": "Don't silently delete a once-reminder that hits the hourly cap",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "schedule-runner over-cap path safeComplete()s a due 'once' reminder with no send + no failureNotice, so 'remind me to take my meds at 3pm' during a busy hour is deleted forever with only a log line — the highest-trust promise, a black hole (audit 7 B#2, 6 B).",
       "how": "In the runner tick, when a DUE once-reminder is over the proactive cap, DON'T complete it — defer (leave dueMs or bump slightly) so it fires next tick, or send it anyway (a one-shot the user explicitly set isn't spam). Dailies keep the cap. Add a test for defer-not-drop."
     },
@@ -337,6 +337,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 30: built once-reminder-cap-drop (audit 7 B#2, high/M, real bug). The schedule-runner over-cap path safeComplete()'d a DUE 'once' reminder with no send + no failureNotice, so 'remind me to take my meds at 3pm' arriving during a busy proactive hour was deleted forever with only a log line — a black hole on the highest-trust promise. Now an over-cap 'once' is DEFERRED (not completed): left due so a later tick, once the rolling-hour cap frees a slot, delivers it. A daily over-cap occurrence is still dropped (it advances + must not storm). Updated the old drop-pinning test + added deferred-delivered-later + daily-still-drops tests. 681 pass, tsc clean. call-tested false (runner logic w/ mock clock). Remaining: telegram-command-menu, instant-calc-convert."
     },
     {
       "event": "PRODUCT-LOOP iter 29: backlog dry after iter 28 -> ran 7th audit (3 lenses), seeded 4, built dangerous-guard-typed-text (audit 7 B#1, high/S, chronic bug flagged 3 audits running). The click/type guard built its label as label+selector+TYPED-text, so typing a query containing a trigger word ('search Goodreads for this book', 'cancel culture', 'order status') was REFUSED as a committing action -> a whole class of normal browsing silently dead-ended with a scary refusal. Now the guard checks the click TARGET only (label + selector); typing into a field isn't the committing act (the submit/click is), and a committing verb in the label/selector ('#checkout-submit', 'Confirm purchase') still gets caught. +2 tests (typed trigger-word runs not refused; selector-named commit still refused). isDangerousAction() + the adversarial suite unchanged. 679 pass, tsc clean. call-tested false (guard logic, unit-tested via MockLLM). Seeded also: once-reminder-cap-drop(M), telegram-command-menu(S), instant-calc-convert(S)."

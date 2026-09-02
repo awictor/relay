@@ -207,7 +207,7 @@ describe("makeScheduleRunner start/stop", () => {
 });
 
 describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
-  it("stops sending to a chat past the hourly cap; over-cap schedules are dropped, not fired", async () => {
+  it("stops sending past the hourly cap; over-cap ONCE-reminders are deferred (kept), not dropped", async () => {
     const clock = { t: NOW };
     const sent: Array<{ chatId: number }> = [];
     let agentCalls = 0;
@@ -216,12 +216,48 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
       runAgent: async (task) => { agentCalls++; return { reply: `did:${task}` }; },
       send: async (chatId) => { sent.push({ chatId }); },
     });
-    // 4 due once-tasks for the same chat; cap 2 -> only 2 fire, 2 dropped.
+    // 4 due once-tasks for the same chat; cap 2 -> only 2 fire this tick; the other 2 are DEFERRED,
+    // NOT deleted (an explicit reminder must not vanish silently — once-reminder-cap-drop fix).
     for (let i = 0; i < 4; i++) store.add(1, { kind: "once", task: `t${i}`, dueMs: NOW - 1 }, NOW);
     await runner.tick();
     expect(sent).toHaveLength(2);
     expect(agentCalls).toBe(2);
-    expect(store.list(1)).toHaveLength(0); // over-cap ones completed (dropped), not left to storm
+    expect(store.list(1)).toHaveLength(2); // the 2 over-cap once-tasks are still queued, not dropped
+  });
+
+  it("a deferred once-reminder is delivered on a later tick once the rolling-hour cap frees up", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    const { store, runner } = harness(clock, {
+      maxPerChatPerHour: 2,
+      runAgent: async (task) => ({ reply: `did:${task}` }),
+      send: async (_c, text) => { sent.push(text); },
+    });
+    for (let i = 0; i < 4; i++) store.add(1, { kind: "once", task: `t${i}`, dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(sent).toHaveLength(2);      // cap 2 this hour
+    expect(store.list(1)).toHaveLength(2);
+    clock.t = NOW + 3_600_001;         // an hour later: the rolling window has cleared
+    await runner.tick();
+    expect(sent).toHaveLength(4);      // the 2 deferred reminders now delivered
+    expect(store.list(1)).toHaveLength(0); // and completed
+  });
+
+  it("an over-cap DAILY occurrence is still dropped (advances), not deferred — it must not storm", async () => {
+    const clock = { t: NOW };
+    const sent: unknown[] = [];
+    const { store, runner } = harness(clock, {
+      maxPerChatPerHour: 1,
+      runAgent: async (task) => ({ reply: `did:${task}` }),
+      send: async () => { sent.push(1); },
+    });
+    store.add(1, { kind: "once", task: "a", dueMs: NOW - 1 }, NOW);                    // consumes the 1 slot
+    store.add(1, { kind: "daily", task: "d", dueMs: NOW - 1, hourMin: "09:00" }, NOW); // over cap -> daily drops this occurrence
+    await runner.tick();
+    expect(sent).toHaveLength(1);
+    const daily = store.list(1).find((s) => s.kind === "daily")!;
+    expect(daily).toBeTruthy();                    // daily stays in the store
+    expect(daily.dueMs).toBeGreaterThan(NOW);      // advanced to its next occurrence, not fired now
   });
 
   it("the cap is per-chat (a 2nd chat is unaffected)", async () => {

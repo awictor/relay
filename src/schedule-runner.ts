@@ -140,11 +140,18 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     try {
       const due = deps.store.dueNow(deps.now());
       for (const s of due) {
-        // Anti-spam: if this chat is over its hourly cap, skip the send + complete the schedule
-        // (drop once / advance daily) so it doesn't storm — log the skip instead of firing.
+        // Anti-spam: if this chat is over its hourly cap, don't send now. A DAILY occurrence is
+        // dropped (advance to tomorrow) — it re-fires on its own and must not storm. But a "once"
+        // reminder is an explicit, single promise ("remind me to take my meds at 3pm"); completing
+        // it here deleted it forever with only a log line — a black hole. Instead DEFER it: leave it
+        // due (don't complete) so a later tick, once the rolling-hour cap frees a slot, delivers it.
         if (overCap(s.chatId, deps.now())) {
+          if (s.kind === "once") {
+            log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, deferred: "rate_cap" })}`);
+            continue; // keep it in the store; retried next tick
+          }
           log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, skipped: "rate_cap" })}`);
-          safeComplete(s);
+          safeComplete(s); // daily: drop this occurrence, it advances to the next
           continue;
         }
         try { await fireOne(s); fired++; }
