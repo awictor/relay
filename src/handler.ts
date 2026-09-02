@@ -133,7 +133,13 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       try {
         await deps.sendTyping(msg.chatId);
         const answer = await deps.describeImage(msg.photoFileId, msg.text);
-        await deps.sendMessage(msg.chatId, formatReply(answer));
+        const out = formatReply(answer);
+        await deps.sendMessage(msg.chatId, out);
+        // Persist the turn so a follow-up ("what about the second item?", "is that safe to eat?") has
+        // context — the text + error paths already do this; these media success paths silently didn't,
+        // so the bot appeared to instantly forget the image it just described.
+        const q = msg.text?.trim() ? msg.text.trim() : "[sent a photo]";
+        deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[photo] ${q}` }, { role: "assistant", content: out }]);
       } catch (e) {
         await deps.sendMessage(msg.chatId, friendlyError(e instanceof Error ? e.message : String(e)));
       }
@@ -149,7 +155,11 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       try {
         await deps.sendTyping(msg.chatId);
         const answer = await deps.describeDocument(msg.documentFileId, msg.text);
-        await deps.sendMessage(msg.chatId, formatReply(answer));
+        const out = formatReply(answer);
+        await deps.sendMessage(msg.chatId, out);
+        // Persist the turn so a follow-up about the document has context (see the photo branch).
+        const q = msg.text?.trim() ? msg.text.trim() : "[sent a document]";
+        deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[document] ${q}` }, { role: "assistant", content: out }]);
       } catch (e) {
         await deps.sendMessage(msg.chatId, friendlyError(e instanceof Error ? e.message : String(e)));
       }

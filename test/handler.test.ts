@@ -182,6 +182,28 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/\$42\.50/);
   });
 
+  it("a photo answer is persisted to memory so a follow-up has context (product-loop)", async () => {
+    const { handle, mem } = harness({
+      describeImage: async () => "That's a receipt; total is $42.50.",
+    });
+    await handle({ chatId: 5, from: "u", text: "what's the total?", messageId: 1, photoFileId: "F1" } as InboundMessage);
+    const h = mem.get(5)!;
+    expect(h).toHaveLength(2);
+    expect(h[0]).toEqual({ role: "user", content: "[photo] what's the total?" });
+    expect(h[1]).toEqual({ role: "assistant", content: "That's a receipt; total is $42.50." });
+  });
+
+  it("a document answer is persisted to memory (product-loop)", async () => {
+    const { handle, mem } = harness({
+      describeDocument: async () => "It's an invoice for $88.",
+    });
+    await handle({ chatId: 6, from: "u", text: "", messageId: 1, documentFileId: "D1" } as InboundMessage);
+    const h = mem.get(6)!;
+    expect(h).toHaveLength(2);
+    expect(h[0]).toEqual({ role: "user", content: "[document] [sent a document]" });
+    expect(h[1]!.content).toMatch(/\$88/);
+  });
+
   it("a photo with no describeImage dep gets a clear 'can't read images' note", async () => {
     const { handle, sent } = harness();
     await handle({ chatId: 5, from: "u", text: "", messageId: 1, photoFileId: "F1" } as InboundMessage);

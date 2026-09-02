@@ -431,6 +431,42 @@
       "status": "done",
       "why": "A new user with no profile has tzOffsetMin=0 (UTC), so their first 'remind me at 8am' fires in the middle of their night; the confirm echoes a time but doesn't flag it's UTC (audit 11 A#2).",
       "how": "When scheduleAdd creates a clock-time (daily/weekly/at) schedule + the chat has no saved offset, append 'heads up: no timezone set, fires at Xam UTC — set yours with /setlocation ... UTC-5'. Needs a hasOffset signal from the profile into scheduleAdd."
+    },
+    {
+      "id": "media-answer-memory",
+      "title": "Persist photo/document Q&A to memory for follow-ups",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "The photo + document branches sent the vision answer + returned WITHOUT memorySet (text + error paths persist), so a follow-up ('what about the 2nd item?', 'is that safe to eat?') ran blind + the bot appeared to forget the image/PDF it just described (audit 12 B#5).",
+      "how": "After a successful describeImage/describeDocument, memorySet a [user '[photo]/[document] <caption>', assistant <answer>] pair onto memoryGet so the next turn has context."
+    },
+    {
+      "id": "inline-cmd-rate-limit",
+      "title": "Rate-limit the agent-executing inline commands (/run digest, alert check)",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "digestRun (one agent per member) + alertRunNow run full LLM+anvil work BEFORE checkRateLimit, so spamming '/run <digest>' or 'watch x: ... below 1' / 'change x to below 1' opens many concurrent anvil sessions, exhausts the Chrome pool + makes OTHER chats fail 'browser down', plus unbounded model cost (audit 12 B#1).",
+      "how": "Gate the expensive inline paths (digestRun, alertRunNow-on-define/edit) behind checkRateLimit like the agent path, or move the rate check earlier. Keep cheap read-only commands (/schedules, /alerts list) ungated."
+    },
+    {
+      "id": "alert-delta-in-ping",
+      "title": "Show was->now (+delta, direction) in an alert ping",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "A change/threshold alert fires '🔔 btc changed: $67,000' — the user sees the new value but not what it moved FROM or which way, so they must go check to understand it. checkAlert holds the prior baseline at the exact moment it composes the message (audit 12 C#1).",
+      "how": "In checkAlert's notify branches, when prior + new both carry a numeric value, append 'was <prev> -> now <new> (±<delta>, up/down)'. Reuse extractValue for both; fall back to the plain message when non-numeric."
+    },
+    {
+      "id": "save-that-as",
+      "title": "\"save that as <name>\" captures the task you just ran",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "Starting a recipe forces retyping the whole task after a colon; after a good one-off the natural move is 'save that as morning-btc' referencing the prior turn. recipes.ts has a half-built UNWIRED 'save this as X' hook; auto-suggest-save still makes them retype (audit 12 C#2).",
+      "how": "Parse 'save (that|this) as <name>' -> take the last USER task turn from memory as the recipe task; wire the existing recipes hook. Reject if the prior turn was itself a command/empty."
     }
   ],
   "history": [
@@ -481,6 +517,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 49: backlog dry after iter 48 -> ran 12th audit (3 lenses), seeded 4, built media-answer-memory (audit 12 B#5, high/S, real bug). The inbound photo + document branches sent the vision answer + returned WITHOUT memorySet (the text + error paths both persist), so a follow-up ('what about the 2nd item?', 'is that safe to eat?') ran blind + the bot appeared to instantly forget the image/PDF it just described. Both success paths now memorySet a [user '[photo]/[document] <caption or placeholder>', assistant <answer>] pair onto memoryGet. +2 tests (photo persisted w/ caption; document persisted w/ placeholder). 737 pass, tsc clean. call-tested false (handler memory wiring, unit-tested). Seeded also: inline-cmd-rate-limit(M bug), alert-delta-in-ping(S), save-that-as(S)."
     },
     {
       "event": "PRODUCT-LOOP iter 48: built no-tz-clock-warning (audit 11 A#2, medium/S). A new user with no profile has tzOffsetMin=0 (UTC), so their first clock-time 'remind me at 8am' fired at 8am UTC = their night, with no signal. index scheduleAdd now flags noTz when the schedule is clock-time (daily/weekly, or a once 'at <time>'/morning/evening/etc) AND the chat has no saved offset AND the global default is 0; the handler appends '⚠️ No timezone set, so this is UTC — set yours with /setlocation <city> UTC-5'. A relative 'in N min' reminder has no wall-clock dependency -> never flagged. +2 tests (clock-time+noTz warns; relative/no-noTz doesn't). 735 pass, tsc clean. call-tested false (routing + flag logic). Backlog DRY -> ran 12th audit (same iteration)."
@@ -588,6 +627,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 12 (post-48-features). A/new-user: derive-tz-from-city (geocode already done for weather), quiet-hours/DND, cancel/undo-by-reference (not numeric id), ranked options for best/cheapest/vs, auto-fallback-to-search on blocked/empty page. B/reliability: media-answer-not-persisted-to-memory (built), inline-cmd-bypasses-rate-limit (digest/alert DoS+cost), memory-clobber-concurrent, alert-edge-consumed-before-send (send-fail loses it), extractValue-non-currency. C/power: delta-in-alert-ping (was->now ±Δ), 'save that as <name>' (unwired hook exists), quiet-hours (small deferred), watch-a-search. Seeded top 4: media-answer-memory(S bug, built), inline-cmd-rate-limit(M bug), alert-delta-in-ping(S), save-that-as(S). Deferred: memory-clobber(M), alert-edge-send-fail(S/M — overlaps rate-limit area), extractValue-non-currency(M), derive-tz-from-city(M), quiet-hours(M), watch-a-search(M)."
     },
     {
       "note": "Audit 11 (post-44-features). A/new-user: reminder-intent-unparseable-runs-now, no-tz-clock-warning, pasted-link-no-instruction default, offer-to-save-inline-location. B/reliability: schedule-gate-omits-clock-time (at 6pm/tomorrow, built — same invariant break as recurring gate), memory-clobber-concurrent, half-hour-tz-rounding-display (UTC+5:30->UTC+6), alert-notify-lost-when-send-fails-baseline-consumed. C/power: anvil form primitives (select/check/press/scroll — under the booking bet), wait-for-ready/retry-until-selector, decision/pick-best tool, auto-paginate lists. Seeded top 4: schedule-gate-clock-time(S bug, built), halfhour-tz-rounding(S bug), reminder-intent-clarify(M), no-tz-clock-warning(S). Deferred: memory-clobber(M), alert-notify-send-fail(M), + power primitives (anvil select/wait/paginate/pick-best — bigger, sequenced later)."
