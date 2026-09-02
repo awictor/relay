@@ -482,7 +482,7 @@
       "title": "Concurrent same-chat messages clobber memory (no per-chat lock)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "handler does memoryGet -> runAgent -> memorySet with no per-chat serialization; dispatchBatch runs up to 4 concurrent, so two quick messages from one chat both read the same base history + the later write drops the earlier turn -> the bot 'forgets' a turn a follow-up needed (audit 13 B#2, flagged repeatedly).",
       "how": "Serialize the read-modify-write per chatId (a per-chat promise chain / async mutex around the memoryGet..memorySet span, or make memorySet append-merge). Keep other chats concurrent. Test two overlapping same-chat handles both persist."
     },
@@ -553,6 +553,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 54: built memory-clobber-lock (audit 13 B#2, high/M, real bug). The turn does memoryGet -> runAgent -> memorySet with no per-chat serialization; dispatchBatch runs up to 4 concurrent + one getUpdates batch can carry two messages from the SAME chat, so both read the same base history + the later memorySet drops the earlier turn (bot 'forgets' a turn a follow-up needed). createHandler now wraps the body (renamed handleOne) in a per-chat promise chain: same-chat handles run strictly in order, other chats stay fully concurrent; each link is caught so a failure can't wedge the queue; the map entry is pruned when its tail settles (no unbounded growth). +1 test (two overlapping same-chat handles both persist in order — the 2nd waits for the 1st instead of reading a stale snapshot). 749 pass, tsc clean. call-tested false (concurrency logic, unit-tested w/ a gated agent). Remaining: alert-notify-send-fail, meta-trust-canned-answers."
     },
     {
       "event": "PRODUCT-LOOP iter 53: backlog dry after iter 52 -> ran 13th audit (3 lenses), seeded 4, built alert-delta-mutation-bug (audit 13 B#1, high/S — a REGRESSION in my OWN iter-51 alert-delta code). setLast mutates alert.lastValue in place (the store returns the same object), so the delta block read the NEW value for pv -> pv===nv -> the 'was X → now Y' line NEVER rendered in production; the iter-51 offline tests passed only because the mock setLast didn't mutate. Fixed: snapshot prevValue = alert.lastValue BEFORE setLast; delta computes from that. +1 regression test whose mock setLast MUTATES the alert (real-store semantics). LIVE-VERIFIED against the real AlertStore: '🔔 btc changed:\\n$67,000\\n(was $65,000 → now $67,000; ↑2000)'. call-tested TRUE. 748 pass, tsc clean. KEY LESSON logged in audits[]: a mock that doesn't mirror real mutation hid a prod bug behind green tests — live-verify store-mutation paths. Seeded also: memory-clobber-lock(M), alert-notify-send-fail(M), meta-trust-canned-answers(S)."

@@ -351,6 +351,36 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/Nothing recent to save/i);
   });
 
+  it("serializes two overlapping same-chat messages so neither turn is clobbered (memory-clobber-lock)", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    let firstRelease!: () => void;
+    const firstGate = new Promise<void>((r) => { firstRelease = r; });
+    let n = 0;
+    const handle = createHandler({
+      llm: {} as never,
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      memoryClear: () => false,
+      sendMessage: async () => {},
+      sendTyping: async () => {},
+      handleCommand: () => null,
+      checkRateLimit: () => ({ allowed: true }),
+      redactText: (t) => t, hasModelKey: () => true, recordTurn: () => {}, now: () => 0,
+      runAgentFn: async (text) => { n++; if (n === 1) await firstGate; return { reply: `r:${text}`, steps: 1, tools: [] }; },
+      log: () => {},
+    });
+    const p1 = handle(msg("first", 9));   // blocks in the agent until released
+    const p2 = handle(msg("second", 9));  // must WAIT for p1 (same chat), not read the same base history
+    await Promise.resolve(); await Promise.resolve();
+    firstRelease();                        // let the first finish; the second then runs on top of it
+    await Promise.all([p1, p2]);
+    const h = mem.get(9)!;
+    // Both turns survived, in order — the second didn't overwrite the first from a stale snapshot.
+    expect(h).toHaveLength(4);
+    expect(h[0]).toEqual({ role: "user", content: "first" });
+    expect(h[2]).toEqual({ role: "user", content: "second" });
+  });
+
   it("passes the profile context into the agent run", async () => {
     let gotContext: string | undefined;
     const { handle } = harness({

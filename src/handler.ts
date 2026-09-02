@@ -124,7 +124,24 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   const runIt = deps.runAgentFn ?? runAgent;
   const log = deps.log ?? console.log;
 
-  return async function handle(msg: InboundMessage): Promise<void> {
+  // Per-chat serialization (memory-clobber-lock): the turn does a read-modify-write of memory
+  // (memoryGet -> runAgent -> memorySet). dispatchBatch runs up to 4 handlers concurrently, and a
+  // single getUpdates batch can carry two messages from the SAME chat — both would read the same
+  // base history and the later memorySet would drop the earlier turn. Chain same-chat handles so
+  // they run strictly in order (other chats stay fully concurrent). The chain never rejects (each
+  // link is caught) so one failure can't wedge the queue.
+  const chainByChat = new Map<number, Promise<void>>();
+  function handle(msg: InboundMessage): Promise<void> {
+    const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
+    const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
+    // Store the tail; prune when this is the last link so the map doesn't grow unbounded per chat.
+    chainByChat.set(msg.chatId, next);
+    void next.then(() => { if (chainByChat.get(msg.chatId) === next) chainByChat.delete(msg.chatId); });
+    return next;
+  }
+  return handle;
+
+  async function handleOne(msg: InboundMessage): Promise<void> {
     log(`[in] ${msg.from}: ${msg.photoFileId ? "[photo] " : ""}${msg.voiceFileId ? "[voice] " : ""}${msg.documentFileId ? "[doc] " : ""}${deps.redactText(msg.text).slice(0, 120)}`);
 
     // Inbound photo (product-loop): answer about the image (caption = question, or a default). This is
@@ -583,5 +600,5 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       const failNote = `(That attempt failed: ${friendly})`;
       deps.memorySet(msg.chatId, [...history, { role: "user", content: msg.text }, { role: "assistant", content: failNote }]);
     }
-  };
+  }
 }
