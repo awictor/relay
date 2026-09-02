@@ -59,11 +59,17 @@ export function repeatedTaskNudge(current: string, history: LLMMessage[]): strin
  */
 export function recurringCta(userText: string, reply: string, tools: string[] = []): string {
   const t = userText.trim();
-  const hasPrice = /[$€£]\s?\d|(\bprice\b|\bcost\b|\bworth\b|\bstock\b|\bin stock\b)/i.test(userText + " " + reply);
-  const fetched = tools.some((x) => /scrape|extract|browse|search|fetch_json|screenshot|pdf/.test(x));
-  if (hasPrice) {
-    return `\n\n💡 Tip: I can watch this for you — say "watch it: ${t} below <price>" and I'll ping you when it crosses.`;
+  const both = userText + " " + reply;
+  // "Price-like" only when there's an actual money amount, OR the ASK is about a price/cost AND the
+  // answer carries a number. A bare "stock"/"market" in prose ("the stock market fell") must NOT
+  // trigger the watch tip (audit: it did, giving a nonsensical "watch it: <news> below <price>").
+  const hasMoney = /[$€£]\s?\d/.test(both);
+  const priceAsk = /\b(price|cost|worth|how much|in stock|back in stock)\b/i.test(userText) && /\d/.test(reply);
+  if (hasMoney || priceAsk) {
+    // Name the watch after the ask, not the literal "it" (two "watch it:" alerts would collide by name).
+    return `\n\n💡 Tip: I can watch this — say "watch <name>: ${t} below <price>" and I'll ping you when it crosses.`;
   }
+  const fetched = tools.some((x) => /scrape|extract|browse|search|fetch_json|screenshot|pdf/.test(x));
   if (fetched) {
     return `\n\n💡 Tip: want this on a schedule? Say "every morning ${t}" for a daily text, or "save that as <name>" to re-run it anytime.`;
   }

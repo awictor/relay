@@ -595,6 +595,15 @@
       "how": "DEFERRED (owner decision, not autonomously loop-safe): this makes the bot perform real irreversible/outward actions (submit/pay/order) — it needs a cross-turn persisted browser session (anvil sessions are per-turn today), a durable pending-action store, and an explicit product+safety sign-off on relaxing the DANGEROUS_ACTION refusal default. The loop should NOT ship autonomous committing actions without that review. Revisit when the owner opts in + session-persistence lands (see 'persistent named browser sessions')."
     },
     {
+      "id": "cta-stock-false-fire",
+      "title": "Content-aware CTA false-fires on bare 'stock' + names the watch 'it'",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "iter-65 recurringCta hasPrice matched bare \\bstock\\b anywhere, so a news answer ('the stock market fell') got the nonsensical 'watch it: <news> below <price>' tip; the literal 'it' name also meant two such watches would collide by name (audit 17 B#4).",
+      "how": "Price tip only on an actual money amount OR (price/cost/worth/in-stock ASK + a number in the reply); drop bare 'stock'/'market'. Template says 'watch <name>: ...' not 'watch it:'. Tests: money->watch<name>, stock-prose->no watch."
+    },
+    {
       "id": "content-aware-cta",
       "title": "Make the post-answer follow-up offer answer-specific",
       "impact": "medium",
@@ -602,6 +611,33 @@
       "status": "done",
       "why": "The post-answer tip + save-nudge fire on shape not meaning (templated), so they're easy to ignore + don't convert. A price answer should offer 'watch it under $X?', a how-to 'save as PDF?' (audit 16 C#2).",
       "how": "A heuristic on the reply text + which tools ran picks ONE relevant CTA (price/number -> watch; list -> save recipe; page -> PDF/screenshot). Replace the generic recurring tip when a specific one applies; keep terse."
+    },
+    {
+      "id": "command-intent-recovery",
+      "title": "Route slashed-NL + typo'd commands instead of a cold agent run",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "'/remind me to stretch at 7am' is SKIPPED by the schedule matcher (it excludes any '/'-prefixed msg) -> silently never scheduled; bare 'help'/'menu'/'commands'/'?' + near-miss '/schedule'/'/weather'/'/list' hit no branch -> wasted cold agent turn. Users habitually guess '/' + command names in the first minutes (audit 17 A#1).",
+      "how": "Before the agent: a bare 'help|menu|commands|?' -> HELP; a '/'-prefixed message that isn't a known command -> strip the slash + re-route (so '/remind ...' reaches the schedule matcher, '/weather X' the agent as text); a near-miss known-command typo -> 'did you mean /schedules?'. Deterministic, no LLM."
+    },
+    {
+      "id": "last-result-drilldown",
+      "title": "Drill into a listed result by number (\"open #2\", \"more\", \"send the link\")",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "A list answer is a dead end: nothing caches the last rendered result/URLs, so 'open the 2nd', 'more' (expand a 1200-char-capped reply), 'send the link' all can't work — the single biggest do-MORE multiplier is missing (audit 17 C#1/C#2/C#4).",
+      "how": "Per-chat last-result store: cache the rendered list items+URLs + any overflow past the format-reply cap. Resolve '#N'/'the 2nd'/'last one' -> that item's URL into browse/read; 'more'/'full' -> next chunk; 'link(s)' -> stored URLs. Read-only + safe; shared infra for all three."
+    },
+    {
+      "id": "capability-probe-answers",
+      "title": "Canned honest answer to 'can you book/email/call/buy?'",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "Boundary-probe openers ('can you book a flight?', 'can you send a text?', 'can you check my email?') match neither CAPABILITY_RE nor META, so they fall to a slow floundering agent turn — these decide whether the user trusts it enough to try a real errand (audit 17 A#2, honest-out-of-scope).",
+      "how": "A matcher (like meta/greeting) for 'can you <act>' -> a fixed reply stating what it can't (act/pay/log in as you) + pivoting to what it CAN (find/compare/watch/draft/read) + inviting a real errand. Pure + unit-tested."
     }
   ],
   "history": [
@@ -652,6 +688,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 66: backlog dry after iter 65 -> ran 17th audit (3 lenses), which caught a FRESH bug in my iter-65 recurringCta; built it. cta-stock-false-fire (audit 17 B#4, medium/S): hasPrice matched bare \\bstock\\b anywhere, so a news answer ('the stock market fell') got the nonsensical 'watch it: <news> below <price>' tip; the literal 'it' name also meant two such watches collide by name (AlertStore updates in place). Fix: price tip only on an actual money amount ($NN) OR a price/cost/worth/in-stock ASK + a number in the reply; dropped bare 'stock'/'market'; template now 'watch <name>: ...' not 'watch it:'. +2 tests (money->watch<name> not 'it'; stock-prose->no watch). 769 pass, tsc clean. call-tested false (pure heuristic). Seeded also: command-intent-recovery(S), last-result-drilldown(M), capability-probe-answers(S)."
     },
     {
       "event": "PRODUCT-LOOP iter 65: built content-aware-cta (audit 16 C#2, medium/S). The one-time first-answer tip was templated ('every morning ...') regardless of the answer, so it was easy to ignore + didn't convert. New recurringCta(userText, reply, tools) picks the CTA by content: a price/number answer -> 'watch it: ... below <price>'; a fetched page (scrape/extract/browse/search/pdf ran) -> 'every morning ... / save that as'; else the plain daily. Handler's first-tip path calls it with the reply + tools used. +4 tests (price->watch, fetched->digest/save, no-tool->plain, marker-prefixed). 768 pass, tsc clean. call-tested false (pure heuristic + wiring, unit-tested). TRIAGE NOTE: confirm-to-act was the top todo but DEFERRED (status:deferred) — it drives real irreversible/outward committing actions (submit/pay/order), needs cross-turn session persistence Relay lacks + an explicit owner safety sign-off to relax the DANGEROUS_ACTION refusal; not autonomously loop-safe to ship. Built the next actionable (content-aware-cta) instead. Backlog DRY -> ran 17th audit (same iteration)."
@@ -810,6 +849,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 17 (post-65-features). A/new-user: command-intent-recovery (slashed-NL '/remind...' skipped + typo'd commands cold-run), capability-probe canned answers ('can you book/email/call?'), self-referential how-to (answer from HELP not web), login/paywall actionable next-step (surface /sites). B/reliability: recurringCta-false-fires-on-bare-stock+names-alert-'it' (FRESH iter-65 bug, built), extractValue-non-currency, DST-drift, DANGEROUS_ACTION over-refuses benign 'send/order/book' UI labels (target-verb breadth). C/power: last-result drill-down ('open #2'/'more'/'send the link' — needs a per-chat last-result cache, biggest do-more multiplier), 'do that again' replay. Built the fresh CTA bug; seeded command-intent-recovery(S), last-result-drilldown(M), capability-probe-answers(S). Deferred: extractValue-non-currency(M), DST(M/L), dangerous-verb-narrowing(S, care needed). B auditor confirmed the newest recall-escape + slot-guard code is sound (no new hard bug there)."
     },
     {
       "note": "Audit 16 (post-62-features). A/new-user: accept Telegram location pin (near-me in one tap), voice-note reply for voice-in, cheap 'tell me more' (retain last fetched page), chain inbound photo into a browse errand. B/reliability: recipe-auto-recall-no-escape-hatch (FRESH iter-62 bug — inescapable loop + false 'do it fresh', built), scheduled-recipe-edited-to-slot-fires-literal (gap from recipe-schedule-stable-marker), matchRecipe-threshold-0.6-vs-doc-0.7 (built w/ escape), extractValue-non-currency, DST. C/power: confirm-to-act single committing click (THE read-only ceiling vs Instinct), content-aware CTA, auto-proof screenshot on alerts (S), first-run activation flow. Built the fresh recall bug (escape hatch + 0.7 threshold); seeded scheduled-recipe-slot-refire(S bug), confirm-to-act(M), content-aware-cta(S). Deferred: extractValue-non-currency(M), DST(L/M), + power/UX bets. LESSON (again): a new reactive branch that returns early needs an escape/marker like the save-nudge — check every early-return for a loop."

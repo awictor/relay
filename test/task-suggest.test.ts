@@ -54,8 +54,14 @@ describe("matchRecipe (recipe-auto-recall)", () => {
 });
 
 describe("recurringCta (content-aware-cta)", () => {
-  it("offers a WATCH for a price/number answer", () => {
-    expect(recurringCta("price of bitcoin", "Bitcoin is $67,000 right now.", ["web_search", "scrape"])).toMatch(/watch it:/i);
+  it("offers a WATCH for a price/number answer, named after the ask (not literal 'it')", () => {
+    const c = recurringCta("price of bitcoin", "Bitcoin is $67,000 right now.", ["web_search", "scrape"]);
+    expect(c).toMatch(/watch <name>:/i);
+    expect(c).not.toMatch(/watch it:/i);
+  });
+  it("does NOT offer a watch when 'stock'/'market' is just prose (no money, no price ask)", () => {
+    const c = recurringCta("top news story", "The stock market fell today.", ["scrape"]);
+    expect(c).not.toMatch(/watch <name>:|below <price>/i); // it's a fetched-page tip, not a price watch
   });
   it("offers a digest/save for a fetched page with no price", () => {
     const c = recurringCta("top hacker news story", "The top story is X.", ["scrape"]);
