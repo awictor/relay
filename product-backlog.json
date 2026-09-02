@@ -176,9 +176,45 @@
       "title": "Persist the user turn on the agent-error path",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "On runAgent throw the handler sends friendlyError but never memorySet, so a follow-up ('why did that fail? try again') has zero context.",
       "how": "In the handler catch, record the user message (+ a brief note the attempt failed) to memory so the next turn is coherent."
+    },
+    {
+      "id": "alert-baseline-ratchet",
+      "title": "Change-alerts compare against the last NOTIFIED value, not last observed",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "checkAlert calls setLast on EVERY check, so a 'by 1000' watch resets its baseline to the newest value each time; BTC drifting 65000->66200 in three <1000 steps never fires. Core threshold promise silently broken (audit 5 B#1).",
+      "how": "For the change (threshold) path, only advance lastValue when it actually notifies (or on first run); keep the last-notified value as the comparison baseline so cumulative drift is measured."
+    },
+    {
+      "id": "greeting-onboarding",
+      "title": "Greet + show intro on 'hi'/'what can you do', not just /start",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Onboarding fires only on the literal /start command a new user doesn't know; 'hi'/'hey'/'what can you do?' get run as a browser task -> wasted first message, user bounces (audit 5 A#1).",
+      "how": "Detect a bare greeting / capability question in the handler (before the agent) and reply with the /start intro. Keep it tight so it doesn't swallow real tasks."
+    },
+    {
+      "id": "predicate-refire-guard",
+      "title": "Don't re-fire a predicate alert after a transient numberless check",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "A real-but-numberless reply ('price unavailable') isn't degraded, so it's stored as lastValue; next check prevHolds=null and the edge test re-fires 'below 50k' though it never left the below state -> spurious double-ping trains users to ignore alerts (audit 5 B#5).",
+      "how": "In checkAlert's predicate path, if the new value has no comparable value (conditionHolds indeterminate / extractValue null for below-above), skip setLast + skip notify (like the degraded guard) so the last GOOD value stays the baseline."
+    },
+    {
+      "id": "conversational-edit-automations",
+      "title": "Edit a saved recipe/digest/alert by talking to it",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "To change a digest time or an alert threshold a user must delete + recreate; the parse layers already exist, so an edit path is cheap and grows how many automations a user keeps alive (audit 5 C#4).",
+      "how": "Parse an edit intent ('change my morning digest to 7am', 'make that alert fire under 200') -> find by name -> update the stored item in place via the existing stores. Start with the highest-value field (schedule time / threshold)."
     }
   ],
   "history": [
@@ -231,6 +267,12 @@
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
     },
     {
+      "event": "PRODUCT-LOOP iter 21: built alert-baseline-ratchet (audit 5 B#1, high/S, real bug). checkAlert's change/threshold path called setLast on EVERY check, so a 'watch btc by 1000' baseline chased the newest value and a cumulative move made in sub-threshold steps (65000->65600->66200) never fired — the core threshold promise silently broken. Now the baseline advances ONLY when the alert notifies (or first run), so drift is measured against the last value the user actually saw. Predicate + degraded + first-run paths unchanged. Updated the 'unchanged refreshes lastValue' test (it pinned the bug) + added a cumulative-drift test. 658 pass, tsc clean. call-tested false (pure runner logic, unit-tested). Remaining: greeting-onboarding, predicate-refire-guard, conversational-edit-automations."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 20: built memory-on-error (audit 4, medium/S). The success path records every turn but the agent-error catch never called memorySet, so a follow-up ('why did that fail? try again') ran with zero context + the agent re-asked. Now the catch persists the user turn + an assistant failure NOTE using the FRIENDLY text (never the raw error — memory feeds back into the prompt, so hostnames/status must not leak). Revised the old DEV-0021 poison-guard tests (which pinned no-write-on-error) to assert a clean complete pair is appended without mutating the prior array. 657 pass, tsc clean. call-tested false (handler memory wiring, unit-tested). Backlog DRY -> ran 5th audit (same iteration). Seeded 4: alert-baseline-ratchet(S), greeting-onboarding(S), predicate-refire-guard(S), conversational-edit-automations(S)."
+    },
+    {
       "event": "PRODUCT-LOOP iter 19: built extractvalue-percentage-guard (audit 4 B, high/M). extractValue's decimal-preference grabbed the % delta in 'BTC up 2.5% at 68000' (returned 2.5), so 'below 50000' always fired + 'above 70000' never did — predicate alerts silently broken. Now every number is scanned WITH a trailing-% flag; non-percent numbers are preferred for the decimal/largest-magnitude pick, and a percent is used only when it's the sole number ('interest rate 4.5%'). Currency-tag still wins outright. +2 tests (ignores-% tracks price incl currency-wins, %-only fallback). 656 pass, tsc clean. call-tested false (pure extraction, unit-tested). Remaining: memory-on-error -> then backlog dry -> audit refills."
     },
     {
@@ -249,6 +291,9 @@
     },
     {
       "note": "Audit 3 (post-10-features). A: voice-notes(unanimous), dev-centric-help-examples, directions/maps, weather-first-run, inbound-doc. B: proactive-profile-context(built - real bug), extractOne-truncation, over-cap-once-reminder-dropped, non-numeric-alert-drift, empty-slot-arg. C: inline-keyboards(one-tap actions), voice-notes, alert->action(when/then), inbound-doc, share-digest. Seeded: extractOne-truncation, empty-slot-arg, voice-notes, inbound-document-pdf (proactive-profile-context built)."
+    },
+    {
+      "note": "Audit 5 (post-19-features). A/new-user: greeting-onboarding(hi/what-can-you-do != /start), dev-flavored-help-examples, confirm-to-submit for benign forms, drive-to-confirm-screen for buy/book, package/order-status surfacing. B/reliability: alert-baseline-ratchet(setLast every check kills 'by N' cumulative moves), memory-clobber-on-concurrent-messages, DANGEROUS_ACTION_RE matches TYPED text (over-refuses 'search for this book'), once-reminder-dropped-at-hourly-cap, predicate-refire-after-numberless-check. C/power: trigger->action chains(alert fires recipe), inline-keyboard one-tap actions, multi-step booking w/ confirm gate, conversational-edit-automations, share-to-group. Seeded top 4 by impact/effort: alert-baseline-ratchet, greeting-onboarding, predicate-refire-guard, conversational-edit-automations (all high/S). Deferred bigger C items (inline-keyboards, trigger-chains, booking-confirm) + the safety-refusal rework as M/L for later."
     },
     {
       "note": "Audit 4 (post-15-features). A: tz-from-location(city->no tz), clarifying-Q, login-refusal-guidance, prompt-location-first-run, echo-fire-time. B: scheduled-slot-literal(built), extractValue-tracks-%, alert-check-on-define, over-cap-once-reminder-dropped, memory-on-error. C: human-in-loop-commit(when->then depth), trigger-chains, visual/any-content-watch, relay-to-group, conversational-edit-of-automations. Seeded: tz-from-location, alert-check-on-define, extractvalue-percentage-guard, memory-on-error."

@@ -157,6 +157,17 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/something went wrong/i);
   });
 
+  it("persists the user turn + a failure note on the error path so a follow-up has context (product-loop)", async () => {
+    const { handle, mem } = harness({ runAgentFn: async () => { throw new Error("anvil down at host 10.0.0.1"); } });
+    await handle(msg("check the price of bitcoin", 9));
+    const h = mem.get(9)!;
+    expect(h).toHaveLength(2);
+    expect(h[0]).toEqual({ role: "user", content: "check the price of bitcoin" });
+    expect(h[1]!.role).toBe("assistant");
+    expect(h[1]!.content).toMatch(/that attempt failed/i);
+    expect(h[1]!.content).not.toMatch(/10\.0\.0\.1/); // raw error (hostnames) never enters memory
+  });
+
   it("a photo message is answered via describeImage, not the browser agent (product-loop)", async () => {
     let agentCalled = false;
     let gotFile = ""; let gotCaption = "";
@@ -348,14 +359,19 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toContain("I ran out of steps before finishing.");
   });
 
-  it("an agent error -> friendly reply + a failed turn recorded (no memory write)", async () => {
+  it("an agent error -> friendly reply + a failed turn recorded + a coherent memory pair (product-loop)", async () => {
     const { handle, sent, recorded, mem } = harness({
       runAgentFn: async () => { throw new Error("boom"); },
     });
     await handle(msg("do it", 7));
     expect(sent[0]!.text).toMatch(/something went wrong/i);
     expect(recorded).toEqual([{ ok: false, steps: 0, tools: [] }]);
-    expect(mem.has(7)).toBe(false);
+    // The user turn + a failure NOTE are persisted so a follow-up ("try again") has context.
+    const h = mem.get(7)!;
+    expect(h).toEqual([
+      { role: "user", content: "do it" },
+      { role: "assistant", content: expect.stringMatching(/that attempt failed/i) },
+    ]);
   });
 
   it("a transient model error -> the overloaded hint", async () => {
@@ -387,10 +403,10 @@ describe("createHandler", () => {
     expect(sent[0]!.text).not.toMatch(/10\.0\.0\.5/);
   });
 
-  // DEV-0021: the memory-poison guard under a PRE-EXISTING conversation. The error branch is
-  // reached AFTER memoryGet but BEFORE memorySet, so a failed turn must leave the prior history
-  // exactly as it was — not cleared, not extended with a dangling user/assistant turn.
-  it("an error on a chat WITH history leaves the prior history untouched", async () => {
+  // DEV-0021 (revised, product-loop): a failed turn on a chat WITH history APPENDS a clean
+  // user+failure-note pair (so a follow-up is coherent) WITHOUT mutating the prior array and
+  // WITHOUT a dangling half-turn. The prior array itself must stay untouched (new array written).
+  it("an error on a chat WITH history appends a clean pair, prior array untouched", async () => {
     const prior: LLMMessage[] = [
       { role: "user", content: "earlier" },
       { role: "assistant", content: "earlier reply" },
@@ -400,14 +416,18 @@ describe("createHandler", () => {
       runAgentFn: async () => { throw new Error("boom"); },
     });
     await handle(msg("this one fails", 5));
-    // memorySet was never called, so the store has no entry for 5 (prior lives in the closure only)
-    expect(mem.has(5)).toBe(false);
-    // and the prior array itself was not mutated (no half-turn appended)
+    // A complete new history was persisted: prior 2 + this user turn + a failure note.
+    const h = mem.get(5)!;
+    expect(h).toHaveLength(4);
+    expect(h.slice(0, 2)).toEqual(prior);
+    expect(h[2]).toEqual({ role: "user", content: "this one fails" });
+    expect(h[3]!.role).toBe("assistant");
+    // the prior array itself was not mutated in place
     expect(prior).toHaveLength(2);
     expect(prior[prior.length - 1]).toEqual({ role: "assistant", content: "earlier reply" });
   });
 
-  it("a failed turn then a successful one: success persists a clean user+assistant pair", async () => {
+  it("a failed turn then a successful one: the follow-up sees the failure context (product-loop)", async () => {
     let calls = 0;
     const { handle, mem, sent } = harness({
       runAgentFn: async (text) => {
@@ -420,11 +440,12 @@ describe("createHandler", () => {
     await handle(msg("works", 8));
     expect(sent[0]!.text).toMatch(/something went wrong/i);
     expect(sent[1]!.text).toBe("ok:works");
-    // memory holds ONLY the successful turn — the failed one left nothing behind
+    // The failed turn left a coherent pair, so the success ran WITH that context and appended to it.
     const h = mem.get(8)!;
-    expect(h).toEqual([
-      { role: "user", content: "works" },
-      { role: "assistant", content: "ok:works" },
-    ]);
+    expect(h).toHaveLength(4);
+    expect(h[0]).toEqual({ role: "user", content: "fails" });
+    expect(h[1]!.content).toMatch(/that attempt failed/i);
+    expect(h[2]).toEqual({ role: "user", content: "works" });
+    expect(h[3]).toEqual({ role: "assistant", content: "ok:works" });
   });
 });

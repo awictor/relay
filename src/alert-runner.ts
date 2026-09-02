@@ -58,7 +58,12 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   }
 
   const didChange = firstRun ? true : changed(alert.lastValue!, value, alert.threshold);
-  deps.setLast(alert.chatId, alert.name, value);
+
+  // Advance the stored baseline ONLY when we notify (or on first run). Refreshing lastValue on every
+  // check ratcheted the baseline to the newest value, so a "by 1000" watch never saw a cumulative
+  // move made in sub-threshold steps (65000 -> 66200 via three <1000 checks fired nothing). Keeping
+  // the last-NOTIFIED value as the baseline measures drift against the last value the user saw.
+  if (firstRun || didChange) deps.setLast(alert.chatId, alert.name, value);
 
   if (!didChange) return { notify: false, message: null, value };
   const header = firstRun ? `🔔 ${alert.name} (watching)` : `🔔 ${alert.name} changed`;

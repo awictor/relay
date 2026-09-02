@@ -38,12 +38,26 @@ describe("checkAlert", () => {
     expect(lastSet).toEqual([]);             // setLast NOT called with the degraded value
   });
 
-  it("unchanged value -> silent (no notify), still refreshes lastValue", async () => {
+  it("unchanged value -> silent (no notify), keeps the baseline (does NOT re-seed lastValue)", async () => {
     const { d, lastSet } = deps("sunny");
     const r = await checkAlert(alert({ lastValue: "sunny" }), d);
     expect(r.notify).toBe(false);
     expect(r.message).toBeNull();
-    expect(lastSet).toEqual([{ name: "btc", value: "sunny" }]);
+    expect(lastSet).toEqual([]); // baseline only advances when we notify (alert-baseline-ratchet)
+  });
+
+  it("threshold: cumulative sub-threshold drift eventually fires (baseline is last-NOTIFIED, not last-observed)", async () => {
+    // 65000 -> 65600 -> 66200, threshold 1000. Each step < 1000, but the baseline must stay 65000
+    // (last notified) so the cumulative +1200 move fires. The old bug re-seeded lastValue each check,
+    // so the baseline chased the price and the move was never seen.
+    const s1 = deps("$65,600");
+    const c1 = await checkAlert(alert({ lastValue: "$65,000", threshold: 1000 }), s1.d);
+    expect(c1.notify).toBe(false);
+    expect(s1.lastSet).toEqual([]); // did NOT advance the baseline
+    const s2 = deps("$66,200");
+    const c2 = await checkAlert(alert({ lastValue: "$65,000", threshold: 1000 }), s2.d); // still vs 65000
+    expect(c2.notify).toBe(true);  // +1200 >= 1000
+    expect(s2.lastSet).toEqual([{ name: "btc", value: "$66,200" }]); // advances only now
   });
 
   it("changed value -> notify with a 'changed' message", async () => {

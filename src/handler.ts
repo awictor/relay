@@ -438,7 +438,14 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       // Never leak the raw error to the user (it can carry hostnames/status/stack text). The raw
       // message is already logged above via formatTurnLog; the user gets a friendly, category-
       // specific line (browser down / model busy / blocked link / generic). m14 degrade-1.
-      await deps.sendMessage(msg.chatId, friendlyError(emsg));
+      const friendly = friendlyError(emsg);
+      await deps.sendMessage(msg.chatId, friendly);
+      // Persist the user turn + the failure note to memory (product-loop): the success path records
+      // every turn but the error path did not, so a follow-up ("why did that fail? try again") ran
+      // with zero context and the agent re-asked what the user meant. Store the FRIENDLY text (never
+      // the raw error — memory feeds back into the prompt) so the next turn is coherent.
+      const failNote = `(That attempt failed: ${friendly})`;
+      deps.memorySet(msg.chatId, [...history, { role: "user", content: msg.text }, { role: "assistant", content: failNote }]);
     }
   };
 }
