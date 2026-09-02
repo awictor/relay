@@ -10,6 +10,17 @@ export interface Profile {
   tzOffsetMin?: number;           // minutes EAST of UTC (from a "UTC-5"-style clause), for schedules
 }
 
+/** Render a minutes-east-of-UTC offset as "UTC-5" / "UTC+5:30" / "UTC+0". Preserves the half/quarter-
+ * hour minutes that Math.round(offset/60) dropped (India UTC+5:30 wrongly showed "UTC+6"). Handles
+ * negative offsets with a fractional part correctly (e.g. -210 -> "UTC-3:30"). */
+export function formatUtcOffset(offsetMin: number): string {
+  const sign = offsetMin < 0 ? "-" : "+";
+  const abs = Math.abs(offsetMin);
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  return `UTC${sign}${h}${m ? ":" + String(m).padStart(2, "0") : ""}`;
+}
+
 /** Parse a UTC-offset clause like "UTC-5", "utc+1", "GMT+5:30" -> minutes east of UTC, or null. */
 export function parseUtcOffset(s: string): number | null {
   const m = s.match(/\b(?:utc|gmt)\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?\b/i);
@@ -107,7 +118,7 @@ export class ProfileStore {
     const bits: string[] = [];
     if (p.location) bits.push(`home location is ${p.location}`);
     if (p.units) bits.push(`prefers ${p.units} units`);
-    if (typeof p.tzOffsetMin === "number") bits.push(`timezone is UTC${p.tzOffsetMin >= 0 ? "+" : "-"}${Math.abs(Math.round(p.tzOffsetMin / 60))}`);
+    if (typeof p.tzOffsetMin === "number") bits.push(`timezone is ${formatUtcOffset(p.tzOffsetMin)}`);
     return bits.join("; ");
   }
 

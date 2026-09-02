@@ -11,6 +11,7 @@ import { formatTurnLog } from "./lib/turn-log.js";
 import { friendlyError } from "./lib/failure.js";
 import { splitScheduleCommand } from "./lib/schedule.js";
 import { repeatedTaskNudge } from "./lib/task-suggest.js";
+import { formatUtcOffset } from "./lib/profile.js";
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -231,7 +232,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         const u = set.units ? ` (${set.units})` : "";
         // Confirm the tz too when the user gave one, so they know daily reminders now fire in their zone.
         const tz = typeof set.tzOffsetMin === "number"
-          ? ` I'll fire daily reminders at your local time (UTC${set.tzOffsetMin >= 0 ? "+" : "-"}${Math.abs(Math.round(set.tzOffsetMin / 60))}).`
+          ? ` I'll fire daily reminders at your local time (${formatUtcOffset(set.tzOffsetMin)}).`
           : "";
         await deps.sendMessage(msg.chatId, `Got it — I'll use ${set.location}${u} for "weather", "near me", and the like.${tz}`);
         return;

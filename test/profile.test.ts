@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSetLocation, parseUtcOffset, ProfileStore } from "../src/lib/profile.js";
+import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore } from "../src/lib/profile.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -58,6 +58,24 @@ describe("parseUtcOffset", () => {
   });
 });
 
+describe("formatUtcOffset (halfhour-tz-rounding)", () => {
+  it("preserves half/quarter-hour minutes instead of rounding to whole hours", () => {
+    expect(formatUtcOffset(330)).toBe("UTC+5:30");   // India (was wrongly "UTC+6")
+    expect(formatUtcOffset(-210)).toBe("UTC-3:30");  // Newfoundland (was wrongly "UTC-3")
+    expect(formatUtcOffset(345)).toBe("UTC+5:45");   // Nepal
+  });
+  it("whole-hour + zero offsets read cleanly", () => {
+    expect(formatUtcOffset(-300)).toBe("UTC-5");
+    expect(formatUtcOffset(60)).toBe("UTC+1");
+    expect(formatUtcOffset(0)).toBe("UTC+0");
+  });
+  it("round-trips with parseUtcOffset", () => {
+    for (const s of ["UTC-5", "UTC+5:30", "UTC-3:30", "UTC+0"]) {
+      expect(formatUtcOffset(parseUtcOffset(s)!)).toBe(s);
+    }
+  });
+});
+
 describe("ProfileStore", () => {
   it("set/get/merge + contextLine, persisted", () => {
     const f = tmp();
@@ -79,6 +97,8 @@ describe("ProfileStore", () => {
     s.set(1, { location: "NYC", tzOffsetMin: -300 });
     expect(s.offsetMin(1)).toBe(-300);
     expect(s.contextLine(1)).toMatch(/timezone is UTC-5/);
+    s.set(2, { location: "Mumbai", tzOffsetMin: 330 });
+    expect(s.contextLine(2)).toMatch(/timezone is UTC\+5:30/); // half-hour zone shown correctly
   });
   it("contextLine is empty for an unknown chat", () => {
     expect(new ProfileStore({ file: tmp() }).contextLine(99)).toBe("");

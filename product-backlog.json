@@ -410,7 +410,7 @@
       "title": "Half-hour tz offsets shown wrong (UTC+5:30 -> 'UTC+6')",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "profile.contextLine + the setLocation tz confirm do Math.round(offset/60), so UTC+5:30 (India) displays 'UTC+6', UTC-3:30 shows 'UTC-3'. Offset is STORED right (fires correctly) but the confirmation meant to catch a wrong tz is itself wrong + the LLM gets a wrong zone (audit 11 B#3).",
       "how": "Format the offset as H:MM (sign + abs hours + ':' + 2-digit minutes when non-zero), e.g. UTC+5:30 / UTC-3:30 / UTC-5. Shared formatter used by contextLine + the handler confirm; +tests."
     },
@@ -481,6 +481,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 46: built halfhour-tz-rounding (audit 11 B#3, medium/S, real bug). profile.contextLine + the setLocation tz confirm did Math.abs(Math.round(offset/60)), dropping the minutes -> India UTC+5:30 displayed 'UTC+6', Newfoundland UTC-3:30 showed 'UTC-3'. Offset was STORED right (fires correctly) but the confirmation meant to catch a wrong tz was itself wrong + the LLM got a wrong zone. New exported formatUtcOffset(offsetMin) renders sign + hours + ':MM' when non-zero (UTC-5 / UTC+5:30 / UTC+0); used by contextLine + the handler confirm (imported formatUtcOffset). +tests (formatUtcOffset half/quarter/whole/zero + round-trips with parseUtcOffset; contextLine shows UTC+5:30). 731 pass, tsc clean. call-tested false (pure formatter, unit-tested). Remaining: reminder-intent-clarify, no-tz-clock-warning."
     },
     {
       "event": "PRODUCT-LOOP iter 45: backlog dry after iter 44 -> ran 11th audit (3 lenses), seeded 4, built schedule-gate-clock-time (audit 11 B#1, high/S — a SECOND instance of the gate-vs-parser invariant break, this time the absolute clock-time shapes). scheduleCue still omitted parseSchedule's at/at24/tomorrow branches, so 'text me the headlines at 6pm', 'send the weather tomorrow at 9am', 'at 14:30 ping me' never reached the parser + ran once. Added 'tomorrow', 'at <N>am/pm', 'at HH:MM' to the cue; a bare 'at 5' stays uncued (parser rejects it too). +2 tests (3 clock-time phrasings reach scheduleAdd; bare 'at 5' does not). 728 pass, tsc clean. call-tested false (routing regex). LESSON (repeat): the cue-gate and parser must be kept in lockstep — a parser test passing doesn't prove the handler routes the message to it. Seeded also: halfhour-tz-rounding(S bug), reminder-intent-clarify(M), no-tz-clock-warning(S)."
