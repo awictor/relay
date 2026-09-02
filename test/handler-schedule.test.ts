@@ -58,12 +58,26 @@ describe("handler — schedule routing", () => {
     expect(sent[0]).toMatch(/daily/i);
   });
 
-  it("an unparsed 'remind' request falls through to the agent", async () => {
+  it("a 'remind me WHY/WHAT ...' question falls through to the agent (not a reminder)", async () => {
     const { handle, calls } = harness({
       scheduleAdd: () => ({ ok: false, reason: "unparsed" }),
     });
-    await handle(msg("remind me why the sky is blue")); // no time clause
+    await handle(msg("remind me why the sky is blue")); // a "tell me" question, not a reminder
     expect(calls()).toBe(1); // agent handled it
+  });
+
+  it("'remind me to <task> at 3' (no am/pm) ASKS for the time, no agent, no silent drop (reminder-intent-clarify)", async () => {
+    const { handle, sent, calls } = harness({ scheduleAdd: () => ({ ok: false, reason: "unparsed" }) });
+    await handle(msg("remind me to call mom at 3"));
+    expect(sent[0]).toMatch(/when should i remind you/i);
+    expect(calls()).toBe(0); // did NOT run it as an immediate agent task
+  });
+
+  it("'remind me to X tonight' (vague time) ASKS instead of running now", async () => {
+    const { handle, sent, calls } = harness({ scheduleAdd: () => ({ ok: false, reason: "unparsed" }) });
+    await handle(msg("remind me to take the trash out tonight"));
+    expect(sent[0]).toMatch(/when should i remind you/i);
+    expect(calls()).toBe(0);
   });
 
   it("capped scheduling tells the user, no agent", async () => {

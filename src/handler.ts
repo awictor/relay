@@ -292,7 +292,20 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         return;
       }
       if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the limit of scheduled tasks — cancel one with /schedules first."); return; }
-      // reason === "unparsed": fall through to the agent (it wasn't really a schedule request).
+      // reason === "unparsed" AND the user clearly meant to SET a reminder ("remind me to call mom at
+      // 3" with no am/pm, "remind me tonight") -> DON'T run it as an immediate agent task (there's no
+      // reminder tool, so the reminder would silently never be set). Ask for the missing time instead.
+      // Exclude question forms ("remind me WHY the sky is blue", "remind me what X is") — those are
+      // "tell me" asks, not reminders, and should reach the agent. A time-ish word present but
+      // unparsed (tonight/later/this evening/at <n>) is a strong signal it really was a reminder.
+      const isReminderToDo = /\bremind\s+me\s+(to|about|that)\b/i.test(msg.text)
+        && !/\bremind\s+me\s+(why|what|who|when|where|how|whether|if)\b/i.test(msg.text);
+      const hasVagueTime = /\b(tonight|later|this (morning|afternoon|evening)|soon|in a (min|minute|bit|sec|second|hour)|at \d)/i.test(msg.text);
+      if (isReminderToDo || (/\bremind\b/i.test(msg.text) && hasVagueTime)) {
+        await deps.sendMessage(msg.chatId, "When should I remind you? Give me a time like \"at 3pm\", \"in 2 hours\", or \"tomorrow at 9am\".");
+        return;
+      }
+      // otherwise fall through to the agent (it wasn't really a schedule request).
     }
 
     // /recipes: list saved recipes. No agent run.

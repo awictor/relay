@@ -419,7 +419,7 @@
       "title": "Reminder intent with an unparseable time should ask, not run now",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "'remind me to call mom at 3' (no am/pm), 'remind me tonight', 'remind me in an hour' fail parseSchedule + fall through to an immediate agent run (which has no reminder tool) — the user's literal reminder is silently never scheduled (audit 11 A#1).",
       "how": "When the message has a reminder cue ('remind me'/'remind') but parseSchedule returns null, reply asking for the missing detail ('AM or PM?' / 'when exactly?') instead of running it as a task. Also broaden parsing where cheap ('in an hour' -> 60m, bare 'at 3' + reminder context -> ask am/pm)."
     },
@@ -481,6 +481,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 47: built reminder-intent-clarify (audit 11 A#1, high/M). 'remind me to call mom at 3' (no am/pm), 'remind me to X tonight' failed parseSchedule + fell through to an immediate agent run (no reminder tool -> reminder silently never set). Now on an unparsed schedule where the user meant to SET a reminder — /remind me (to|about|that)/ and NOT a question form (/remind me (why|what|who|when|where|how)/), OR 'remind' + a vague-time word (tonight/later/this evening/soon/in a bit/at <n>) — the handler ASKS 'When should I remind you? (at 3pm / in 2 hours / tomorrow at 9am)' instead of running it. A 'remind me why the sky is blue' question still reaches the agent. +2 tests (to-task+bare-3 asks; tonight asks) + renamed the falls-through test to the why-question case. 733 pass, tsc clean. call-tested false (routing logic). Remaining: no-tz-clock-warning -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 46: built halfhour-tz-rounding (audit 11 B#3, medium/S, real bug). profile.contextLine + the setLocation tz confirm did Math.abs(Math.round(offset/60)), dropping the minutes -> India UTC+5:30 displayed 'UTC+6', Newfoundland UTC-3:30 showed 'UTC-3'. Offset was STORED right (fires correctly) but the confirmation meant to catch a wrong tz was itself wrong + the LLM got a wrong zone. New exported formatUtcOffset(offsetMin) renders sign + hours + ':MM' when non-zero (UTC-5 / UTC+5:30 / UTC+0); used by contextLine + the handler confirm (imported formatUtcOffset). +tests (formatUtcOffset half/quarter/whole/zero + round-trips with parseUtcOffset; contextLine shows UTC+5:30). 731 pass, tsc clean. call-tested false (pure formatter, unit-tested). Remaining: reminder-intent-clarify, no-tz-clock-warning."
