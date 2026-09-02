@@ -242,7 +242,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     if (first === "/schedules" && deps.scheduleList) {
       const list = deps.scheduleList(msg.chatId);
       if (!list.length) { await deps.sendMessage(msg.chatId, "No scheduled tasks. Try: \"remind me to stretch in 20 min\"."); return; }
-      const lines = list.map((s, i) => `${i + 1}. [${s.id}] ${s.kind === "daily" ? "daily" : "once"} — ${s.task}`);
+      const lines = list.map((s, i) => `${i + 1}. [${s.id}] ${s.kind} — ${s.task}`);
       await deps.sendMessage(msg.chatId, `Your scheduled tasks:\n${lines.join("\n")}\n\nCancel one with /cancel <id> (or /cancel all).`);
       return;
     }
@@ -273,7 +273,11 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     const isDefineShape = /^\s*(?:watch|alert(?:\s+me)?|save(?:\s+recipe)?|(?:define\s+)?digest)\s+[^:]+:\s*\S/i.test(t0);
     const isAlertEditShape = /^\s*(?:change|update|edit|set|make)\s+.+\s(?:below|under|above|over|hits?|reaches?|in\s+stock|by)\b/i.test(t0);
     const isExplicitCommand = first?.startsWith("/") || /^(?:run|schedule)\b/i.test(t0) || isDefineShape || isAlertEditShape;
-    if (!isExplicitCommand && deps.scheduleAdd && /\b(remind me|every day|every morning|every evening|every night|daily)\b|\bin \d+\s*(min|hour|day)/i.test(msg.text)) {
+    // Cue set MUST cover every shape parseSchedule accepts, or a valid schedule never reaches it and
+    // silently runs once. Includes weekly/interval (every <weekday>, every N min/hours, weekday/weekend)
+    // added with recurring-schedules — omitting them made that whole feature unreachable from chat.
+    const scheduleCue = /\b(remind me|every day|every morning|every evening|every night|daily|weekdays?|weekends?)\b|\bevery\s+(mon|tue|wed|thu|fri|sat|sun)|\bevery\s+\d+\s*(min|hour|hr)|\bin \d+\s*(min|hour|day)/i;
+    if (!isExplicitCommand && deps.scheduleAdd && scheduleCue.test(msg.text)) {
       const r = deps.scheduleAdd(msg.chatId, msg.text, deps.now());
       if (r.ok) {
         const verb = r.kind === "once" ? "remind you" : r.kind === "daily" ? "do this daily" : r.kind === "weekly" ? "do this on the days you said" : "do this on that schedule";
@@ -399,7 +403,7 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
         const isDig = !split.explicitRecipe && deps.isDigest?.(msg.chatId, name) && deps.digestSchedule;
         const r = isDig ? deps.digestSchedule!(msg.chatId, name, split.clause, deps.now())
                         : deps.recipeSchedule?.(msg.chatId, name, split.clause, deps.now());
-        if (r?.ok) { await deps.sendMessage(msg.chatId, `Scheduled "${name}" to run ${r.kind === "daily" ? "daily" : "once"}. Manage with /schedules.`); return; }
+        if (r?.ok) { await deps.sendMessage(msg.chatId, `Scheduled "${name}" (${r.kind}). Manage with /schedules.`); return; }
         const why = r?.reason === "unknown" ? "No recipe or digest by that name." : r?.reason === "capped" ? "You've hit the scheduled-task limit — /cancel one first." : r?.reason === "needsarg" ? `"${name}" has a fill-in value ({...}), so it can't run on a schedule with a fixed value. Save a version without the {slot} to schedule it.` : "I couldn't parse that time. Try \"schedule <name> every morning\".";
         await deps.sendMessage(msg.chatId, why); return;
       }

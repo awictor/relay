@@ -85,7 +85,7 @@ describe("handler — digest routing", () => {
   it("schedule <digest> dispatches to digestSchedule", async () => {
     const { handle, sent } = harness();
     await handle(msg("schedule morning every morning"));
-    expect(sent[0]).toMatch(/Scheduled "morning" to run daily/);
+    expect(sent[0]).toMatch(/Scheduled "morning" \(daily\)/);
   });
 
   it("DEV-0131: 'schedule recipe <name>' dispatches to recipeSchedule even when a same-named digest exists", async () => {
@@ -98,7 +98,7 @@ describe("handler — digest routing", () => {
     });
     await handle(msg("schedule recipe morning every morning"));
     expect(calls).toEqual(["recipe:morning"]); // recipe scheduled, digest NOT touched
-    expect(sent[0]).toMatch(/Scheduled "morning" to run daily/);
+    expect(sent[0]).toMatch(/Scheduled "morning" \(daily\)/);
   });
 
   it("DEV-0131: bare 'schedule <name>' still dispatches to digestSchedule (digest-first preserved)", async () => {

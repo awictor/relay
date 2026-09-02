@@ -84,6 +84,15 @@ describe("handler — schedule routing", () => {
     expect(added).toHaveLength(0);
   });
 
+  it("weekly + interval phrasings REACH scheduleAdd (recurring-schedules gate fix)", async () => {
+    for (const text of ["every monday tell me the news", "every 2 hours check btc", "every weekday at 8 stand up", "weekends brunch spots"]) {
+      const added: string[] = [];
+      const { handle } = harness({ scheduleAdd: (_c, t) => { added.push(t); return { ok: true, kind: "weekly", task: t, whenMs: 0 }; } });
+      await handle(msg(text));
+      expect(added, `"${text}" should reach scheduleAdd`).toHaveLength(1);
+    }
+  });
+
   it("a plain reminder that merely starts with 'set' still schedules (guard not too broad)", async () => {
     const added: Array<{ text: string }> = [];
     const { handle } = harness({ scheduleAdd: (_c, text) => { added.push({ text }); return { ok: true, kind: "once", task: "call mom", whenMs: 0 }; } });
