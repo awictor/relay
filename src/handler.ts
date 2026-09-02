@@ -34,7 +34,7 @@ export interface HandlerDeps {
   // Per-user profile (product-loop). setLocation parses + stores a "set my location" message (null
   // if it isn't one); profileContext returns the agent context line for a chat (""/absent = none).
   // All optional so older wiring/tests are unaffected.
-  setLocation?: (chatId: number, text: string) => { location: string; units?: string } | null;
+  setLocation?: (chatId: number, text: string) => { location: string; units?: string; tzOffsetMin?: number } | null;
   profileContext?: (chatId: number) => string;
   // Inbound photo (product-loop): when a message carries photoFileId, describeImage answers about it
   // (caption = the question). Optional; absent -> a photo message gets a "can't read images yet" note.
@@ -196,7 +196,11 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
       const set = deps.setLocation(msg.chatId, msg.text);
       if (set) {
         const u = set.units ? ` (${set.units})` : "";
-        await deps.sendMessage(msg.chatId, `Got it — I'll use ${set.location}${u} for "weather", "near me", and the like.`);
+        // Confirm the tz too when the user gave one, so they know daily reminders now fire in their zone.
+        const tz = typeof set.tzOffsetMin === "number"
+          ? ` I'll fire daily reminders at your local time (UTC${set.tzOffsetMin >= 0 ? "+" : "-"}${Math.abs(Math.round(set.tzOffsetMin / 60))}).`
+          : "";
+        await deps.sendMessage(msg.chatId, `Got it — I'll use ${set.location}${u} for "weather", "near me", and the like.${tz}`);
         return;
       }
     }

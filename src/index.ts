@@ -147,7 +147,7 @@ const handle = createHandler({
     const p = parseSetLocation(text);
     if (!p) return null;
     const rec = profiles.set(chatId, p);
-    return { location: rec.location!, units: rec.units };
+    return { location: rec.location!, units: rec.units, tzOffsetMin: rec.tzOffsetMin };
   },
   profileContext: (chatId) => profiles.contextLine(chatId),
   // Inbound photo (product-loop): download the Telegram file, ask the LLM to answer about it. Needs
@@ -180,7 +180,9 @@ const handle = createHandler({
       }
     : undefined,
   scheduleAdd: (chatId, text, now) => {
-    const p = parseSchedule(text, now);
+    // Use the chat's own timezone (from their profile) so "every morning" fires at THEIR 9am,
+    // not the deploy host's UTC. Falls back to the global RELAY_TZ_OFFSET_MIN when unset.
+    const p = parseSchedule(text, now, profiles.offsetMin(chatId));
     if (!p) return { ok: false, reason: "unparsed" };
     const rec = schedules.add(chatId, p, now);
     if (!rec) return { ok: false, reason: "capped" };
@@ -220,7 +222,7 @@ const handle = createHandler({
     // A slotted recipe has no per-fire value on a schedule, so it would emit the literal "{slot}"
     // and return nonsense every day (product-loop) — refuse with a clear reason.
     if (hasSlots(rec.task)) return { ok: false, reason: "needsarg" };
-    const p = parseScheduleFor(whenClause, rec.task, now);
+    const p = parseScheduleFor(whenClause, rec.task, now, profiles.offsetMin(chatId));
     if (!p) return { ok: false, reason: "unparsed" };
     const s = schedules.add(chatId, p, now);
     if (!s) return { ok: false, reason: "capped" };
@@ -241,7 +243,7 @@ const handle = createHandler({
     const d = digests.get(chatId, name);
     if (!d) return { ok: false, reason: "unknown" };
     // Schedule a marker task; when it fires, the runner runs the digest. Encode as "digest:<name>".
-    const p = parseScheduleFor(whenClause, `digest:${d.name}`, now);
+    const p = parseScheduleFor(whenClause, `digest:${d.name}`, now, profiles.offsetMin(chatId));
     if (!p) return { ok: false, reason: "unparsed" };
     const s = schedules.add(chatId, p, now);
     if (!s) return { ok: false, reason: "capped" };
@@ -253,7 +255,7 @@ const handle = createHandler({
     const rec = alerts.add(chatId, p, now);
     if (!rec) return { ok: false, reason: "capped" };
     // Auto-schedule the check (marker "alert:<name>"); the runner runs checkAlert on fire.
-    const sp = parseScheduleFor(ALERT_CADENCE, `alert:${rec.name}`, now);
+    const sp = parseScheduleFor(ALERT_CADENCE, `alert:${rec.name}`, now, profiles.offsetMin(chatId));
     if (sp) schedules.add(chatId, sp, now);
     return { ok: true, name: rec.name };
   },

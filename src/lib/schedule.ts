@@ -15,6 +15,7 @@ export interface Schedule {
   task: string;        // the natural-language task to hand runAgent
   dueMs: number;       // next fire time (epoch ms)
   hourMin?: string;    // "HH:MM" local, for daily reschedule
+  offsetMin?: number;  // tz offset (min east of UTC) the hourMin is measured in, for daily reschedule
   created: number;
 }
 
@@ -23,6 +24,7 @@ export interface ParsedSchedule {
   task: string;
   dueMs: number;
   hourMin?: string;
+  offsetMin?: number;  // tz offset used to compute dueMs, carried so reschedule stays in the user's zone
 }
 
 const MINUTE = 60_000;
@@ -47,8 +49,8 @@ function stripReminderPrefix(s: string): string {
  * saved recipe ("schedule btc every morning" -> timing from "every morning", task = the
  * recipe's stored task). Reuses parseSchedule with a placeholder task, then swaps it in.
  */
-export function parseScheduleFor(clause: string, task: string, now: number): ParsedSchedule | null {
-  const p = parseSchedule(`${clause} __recipe__`, now);
+export function parseScheduleFor(clause: string, task: string, now: number, offsetMin?: number): ParsedSchedule | null {
+  const p = parseSchedule(`${clause} __recipe__`, now, offsetMin);
   if (!p || !task.trim()) return null;
   return { ...p, task: task.trim() };
 }
@@ -79,7 +81,7 @@ export function splitScheduleCommand(text: string, now: number): { name: string;
   return null;
 }
 
-export function parseSchedule(text: string, now: number): ParsedSchedule | null {
+export function parseSchedule(text: string, now: number, offsetMin: number = tzOffsetMin()): ParsedSchedule | null {
   const raw = text.trim();
   const lower = raw.toLowerCase();
 
@@ -106,7 +108,7 @@ export function parseSchedule(text: string, now: number): ParsedSchedule | null 
     const hourMin = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
     const task = cleanTask(raw, daily[0]!);
     if (!task) return null;
-    return { kind: "daily", task, dueMs: nextDailyMs(now, hh, mm), hourMin };
+    return { kind: "daily", task, dueMs: nextDailyMs(now, hh, mm, offsetMin), hourMin, offsetMin };
   }
 
   // --- 24-hour clock: "at 14:30", "tomorrow at 09:00" (DEV-0189) ---
@@ -117,7 +119,7 @@ export function parseSchedule(text: string, now: number): ParsedSchedule | null 
   if (at24) {
     const hh = parseInt(at24[2]!, 10);
     const mm = parseInt(at24[3]!, 10);
-    let due = nextDailyMs(now, hh, mm);
+    let due = nextDailyMs(now, hh, mm, offsetMin);
     if (at24[1] && due - now < DAY) due += DAY; // "tomorrow" forces the next day if the time is still today
     const task = cleanTask(raw, at24[0]!);
     if (!task) return null;
@@ -129,7 +131,7 @@ export function parseSchedule(text: string, now: number): ParsedSchedule | null 
   if (at && (at[1] || at[4])) { // require "tomorrow" or an am/pm to avoid matching stray numbers
     const hh = to24h(parseInt(at[2]!, 10), at[4]);
     const mm = at[3] ? parseInt(at[3], 10) : 0;
-    let due = nextDailyMs(now, hh, mm);
+    let due = nextDailyMs(now, hh, mm, offsetMin);
     if (at[1]) due = due <= now + DAY ? due : due; // "tomorrow" -> ensure at least today+1 handled by nextDailyMs
     if (at[1] && due - now < DAY) due += DAY; // force tomorrow if the time is still today
     const task = cleanTask(raw, at[0]!);
@@ -209,7 +211,7 @@ export class ScheduleStore {
   /** Add a schedule for a chat. Returns the stored record, or null if the chat is at its cap. */
   add(chatId: number, p: ParsedSchedule, now: number): Schedule | null {
     if (this.items.filter((s) => s.chatId === chatId).length >= this.maxPerChat) return null;
-    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, created: now };
+    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, created: now };
     this.items.push(s);
     this.persist();
     return s;
@@ -239,7 +241,9 @@ export class ScheduleStore {
     if (!s) return;
     if (s.kind === "daily" && s.hourMin) {
       const [hh, mm] = s.hourMin.split(":").map((n) => parseInt(n, 10));
-      s.dueMs = nextDailyMs(now, hh!, mm!);
+      // Reschedule in the SAME zone the schedule was created in (per-chat offset stamped at add
+      // time), falling back to the global default for schedules created before offsets existed.
+      s.dueMs = nextDailyMs(now, hh!, mm!, s.offsetMin ?? tzOffsetMin());
     } else {
       this.items = this.items.filter((x) => x.id !== id);
     }

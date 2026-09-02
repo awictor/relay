@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSetLocation, ProfileStore } from "../src/lib/profile.js";
+import { parseSetLocation, parseUtcOffset, ProfileStore } from "../src/lib/profile.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -21,9 +21,27 @@ describe("parseSetLocation", () => {
     expect(parseSetLocation("/setlocation Denver (imperial)")).toEqual({ location: "Denver", units: "imperial" });
     expect(parseSetLocation("I'm in Tokyo in metric")).toEqual({ location: "Tokyo", units: "metric" });
   });
+  it("captures a UTC offset clause without swallowing the place (tz-from-location)", () => {
+    expect(parseSetLocation("/setlocation NYC UTC-5")).toEqual({ location: "NYC", tzOffsetMin: -300 });
+    expect(parseSetLocation("I'm in Berlin UTC+1 (metric)")).toEqual({ location: "Berlin", units: "metric", tzOffsetMin: 60 });
+    expect(parseSetLocation("set my location to Mumbai GMT+5:30")).toEqual({ location: "Mumbai", tzOffsetMin: 330 });
+  });
   it("returns null for a non-location message", () => {
     expect(parseSetLocation("what's the weather")).toBeNull();
     expect(parseSetLocation("/setlocation")).toBeNull(); // no place
+  });
+});
+
+describe("parseUtcOffset", () => {
+  it("parses signed hour/min offsets", () => {
+    expect(parseUtcOffset("UTC-5")).toBe(-300);
+    expect(parseUtcOffset("utc+1")).toBe(60);
+    expect(parseUtcOffset("GMT+5:30")).toBe(330);
+    expect(parseUtcOffset("gmt-0")).toBe(0);
+  });
+  it("returns null when absent or out of range", () => {
+    expect(parseUtcOffset("Austin")).toBeNull();
+    expect(parseUtcOffset("UTC+20")).toBeNull(); // >14h
   });
 });
 
@@ -41,6 +59,13 @@ describe("ProfileStore", () => {
     const s2 = new ProfileStore({ file: f });
     expect(s2.get(1)!.location).toBe("Austin, TX");
     expect(s2.get(1)!.units).toBe("imperial");
+  });
+  it("stores + exposes tzOffsetMin, surfaces it in contextLine (tz-from-location)", () => {
+    const s = new ProfileStore({ file: tmp() });
+    expect(s.offsetMin(1)).toBeUndefined(); // unset -> caller falls back to global
+    s.set(1, { location: "NYC", tzOffsetMin: -300 });
+    expect(s.offsetMin(1)).toBe(-300);
+    expect(s.contextLine(1)).toMatch(/timezone is UTC-5/);
   });
   it("contextLine is empty for an unknown chat", () => {
     expect(new ProfileStore({ file: tmp() }).contextLine(99)).toBe("");

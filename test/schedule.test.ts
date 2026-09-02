@@ -122,6 +122,13 @@ describe("parseSchedule — daily", () => {
     expect(s.hourMin).toBe("20:00");
     expect(s.task).toMatch(/summarize my emails/);
   });
+
+  it("an explicit offset stamps offsetMin + shifts dueMs into that zone (tz-from-location)", () => {
+    // "every morning" == 09:00 local; with offsetMin=-300 (Eastern) that's 14:00 UTC.
+    const s = parseSchedule("every morning tell me the weather", NOW, -300)!;
+    expect(s.offsetMin).toBe(-300);
+    expect(new Date(s.dueMs).getUTCHours()).toBe(14);
+  });
 });
 
 describe("nextDailyMs — timezone offset (tz-daily fix)", () => {
@@ -180,6 +187,15 @@ describe("ScheduleStore", () => {
     const after = s.list(1);
     expect(after).toHaveLength(1);       // still there
     expect(after[0]!.dueMs).toBeGreaterThan(NOW + 2 * HR); // moved forward
+  });
+
+  it("a daily reschedules in the chat's stored timezone, not the global default (tz-from-location)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    // offsetMin=-300 (US-Eastern): "09:00" local == 14:00 UTC. On complete, next dueMs must land at 14:00 UTC.
+    const rec = s.add(1, { kind: "daily", task: "weather", dueMs: NOW + HR, hourMin: "09:00", offsetMin: -300 }, NOW)!;
+    expect(rec.offsetMin).toBe(-300); // carried onto the stored record
+    s.complete(rec.id, NOW + 2 * HR);
+    expect(new Date(s.list(1)[0]!.dueMs).getUTCHours()).toBe(14);
   });
 
   it("persists across a reload", () => {
