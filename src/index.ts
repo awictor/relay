@@ -21,7 +21,8 @@ import { runAgent } from "./agent.js";
 import { formatReply } from "./lib/format-reply.js";
 import { friendlyError } from "./lib/failure.js";
 import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
-import { ScheduleStore, parseSchedule } from "./lib/schedule.js";
+import { ScheduleStore, parseSchedule, tzOffsetMin } from "./lib/schedule.js";
+import { formatWhen } from "./lib/format-when.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots } from "./lib/recipes.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
@@ -190,7 +191,9 @@ const handle = createHandler({
     if (!p) return { ok: false, reason: "unparsed" };
     const rec = schedules.add(chatId, p, now);
     if (!rec) return { ok: false, reason: "capped" };
-    return { ok: true, kind: rec.kind, task: rec.task, whenMs: rec.dueMs };
+    // Resolved next-fire time in the chat's own zone, so a wrong/absent tz is visible before it fires.
+    const whenText = formatWhen(rec.dueMs, profiles.offsetMin(chatId) ?? tzOffsetMin(), now);
+    return { ok: true, kind: rec.kind, task: rec.task, whenMs: rec.dueMs, whenText };
   },
   scheduleList: (chatId) => schedules.list(chatId).map((s) => ({ id: s.id, kind: s.kind, task: s.task, dueMs: s.dueMs })),
   scheduleCancel: (chatId, which) => {

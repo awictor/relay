@@ -383,7 +383,7 @@
       "title": "Echo the resolved next-fire time when confirming a schedule",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A user scheduling 'every morning'/'at 8' doesn't see WHEN it fires, so a wrong/absent tz offset silently sends the first one at the wrong hour + looks broken (audit 10 A#5).",
       "how": "scheduleAdd already returns whenMs; format it in the chat's tz ('next: Tue 8:00am your time') in the confirmation. Reuse the profile offset + a small formatter."
     },
@@ -445,6 +445,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 16: backlog dry -> 4th audit. Built scheduled-slot-guard (audit B#1, real bug): 'schedule track every morning' on a {item} recipe stored the task raw + fired literal {item} daily. hasSlots check in recipeSchedule -> 'needsarg'; handler explains it. +1 test. 645 pass, tsc clean. call-tested false (guard logic, unit-tested). Seeded 4: tz-from-location(M), alert-check-on-define(S), extractvalue-percentage-guard(M), memory-on-error(S)."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 43: built schedule-confirm-fire-time (audit 10 A#5, medium/S). A user scheduling 'every morning'/'at 8' couldn't see WHEN it fires, so a wrong/absent tz offset silently sent the first one at the wrong hour + looked broken. New src/lib/format-when.ts formatWhen(whenMs, offsetMin, now) renders the resolved instant in the user's zone ('today 3:40pm' / 'tomorrow 9:00am' / 'Wed 8:00am' / 'Nov 24, 9:00am' >6d out). index scheduleAdd computes whenText from rec.dueMs + the chat's profile offset (else global) + returns it; handler appends ' Next: <when>.' to the confirm. +6 tests (5 formatWhen: zone-applied/today/weekday/month+date/pm-minutes, 1 handler: Next echoed). 725 pass, tsc clean. call-tested false (pure formatter + wiring, unit-tested). Remaining: cite-source-link -> then backlog dry -> audit refills."
     },
     {
       "event": "PRODUCT-LOOP iter 42: built tomorrow-off-by-a-day (audit 10 B#2, high/S, real bug). Both 'tomorrow at <time>' branches did nextDailyMs (which ALREADY rolls to tomorrow when today's time passed) THEN +DAY if <DAY away, so 'remind me tomorrow at 9am' said after 9am fired ~47h out (a full day late). New dayAtMs(now,hh,mm,dayOffset,offsetMin) computes the calendar day+1 instant directly; the tomorrow branches (am/pm + 24h) now use it, non-tomorrow keeps nextDailyMs (today-or-next). +3 tests (9am-passed lands next calendar day <24h out; 24h form; 'tomorrow at 11pm' still tomorrow though 11pm ahead today). 719 pass, tsc clean. call-tested false (pure time math, unit-tested). Remaining: schedule-confirm-fire-time, cite-source-link."

@@ -42,6 +42,14 @@ describe("handler — schedule routing", () => {
     expect(calls()).toBe(0);
   });
 
+  it("echoes the resolved next-fire time when scheduleAdd returns whenText (schedule-confirm-fire-time)", async () => {
+    const { handle, sent } = harness({
+      scheduleAdd: () => ({ ok: true, kind: "daily", task: "weather", whenMs: 0, whenText: "tomorrow 9:00am" }),
+    });
+    await handle(msg("every morning tell me the weather"));
+    expect(sent[0]).toMatch(/Next: tomorrow 9:00am/);
+  });
+
   it("\"every morning ...\" routes to scheduleAdd as daily", async () => {
     const { handle, sent } = harness({
       scheduleAdd: () => ({ ok: true, kind: "daily", task: "weather", whenMs: 0 }),
