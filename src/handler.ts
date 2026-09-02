@@ -36,6 +36,9 @@ export interface HandlerDeps {
   // All optional so older wiring/tests are unaffected.
   setLocation?: (chatId: number, text: string) => { location: string; units?: string } | null;
   profileContext?: (chatId: number) => string;
+  // Inbound photo (product-loop): when a message carries photoFileId, describeImage answers about it
+  // (caption = the question). Optional; absent -> a photo message gets a "can't read images yet" note.
+  describeImage?: (fileId: string, caption: string) => Promise<string>;
   // Scheduled/proactive tasks (m4 sched-3). All optional so older wiring stays valid; when
   // absent, a "remind me" message just falls through to the normal agent.
   scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number } | { ok: false; reason: "unparsed" | "capped" };
@@ -93,11 +96,28 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   const log = deps.log ?? console.log;
 
   return async function handle(msg: InboundMessage): Promise<void> {
-    log(`[in] ${msg.from}: ${deps.redactText(msg.text).slice(0, 120)}`);
+    log(`[in] ${msg.from}: ${msg.photoFileId ? "[photo] " : ""}${deps.redactText(msg.text).slice(0, 120)}`);
 
-    // DEV-0124: a photo-only / sticker / blank inbound arrives with empty text. It matches no command
-    // and would otherwise burn an LLM call on an empty prompt (and reply confusingly). Nudge + return
-    // before rate-limit/agent.
+    // Inbound photo (product-loop): answer about the image (caption = question, or a default). This is
+    // a vision call, not the browser agent — handled before the empty-text guard so a captionless
+    // photo isn't rejected. Rate-limited like a normal turn.
+    if (msg.photoFileId) {
+      const rl = deps.checkRateLimit(msg.chatId);
+      if (!rl.allowed) { await deps.sendMessage(msg.chatId, `You're sending a lot — give me ${rl.retryAfterSec}s to catch up.`); return; }
+      if (!deps.describeImage) { await deps.sendMessage(msg.chatId, "I can't read images yet — send me a task in words for now."); return; }
+      try {
+        await deps.sendTyping(msg.chatId);
+        const answer = await deps.describeImage(msg.photoFileId, msg.text);
+        await deps.sendMessage(msg.chatId, formatReply(answer));
+      } catch (e) {
+        await deps.sendMessage(msg.chatId, friendlyError(e instanceof Error ? e.message : String(e)));
+      }
+      return;
+    }
+
+    // DEV-0124: a sticker / blank inbound arrives with empty text. It matches no command and would
+    // otherwise burn an LLM call on an empty prompt (and reply confusingly). Nudge + return before
+    // rate-limit/agent.
     if (!msg.text.trim()) {
       await deps.sendMessage(msg.chatId, "Send me a task in words — e.g. \"top HN story\" or \"weather in Paris\".");
       return;

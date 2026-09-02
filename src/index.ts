@@ -3,6 +3,7 @@
 // if keys/anvil are missing so it never hangs silently.
 
 import { selectChannel, type Channel } from "./channel.js";
+import { downloadFile } from "./telegram.js";
 import { anvilLive } from "./anvil.js";
 import { GeminiClient, ClaudeClient, resolveProvider } from "./llm.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
@@ -149,6 +150,16 @@ const handle = createHandler({
     return { location: rec.location!, units: rec.units };
   },
   profileContext: (chatId) => profiles.contextLine(chatId),
+  // Inbound photo (product-loop): download the Telegram file, ask the LLM to answer about it. Needs
+  // a multimodal LLM (Gemini); absent describeImage -> handler tells the user images aren't supported.
+  describeImage: llm.describeImage
+    ? async (fileId, caption) => {
+        const file = await downloadFile(fileId);
+        if (!file) return "I couldn't download that image — try resending it.";
+        const prompt = caption?.trim() || "What is this? Summarize it and flag anything important.";
+        return llm.describeImage!(file.bytes, file.mimeType, prompt);
+      }
+    : undefined,
   scheduleAdd: (chatId, text, now) => {
     const p = parseSchedule(text, now);
     if (!p) return { ok: false, reason: "unparsed" };

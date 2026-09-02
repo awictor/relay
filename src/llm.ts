@@ -49,6 +49,9 @@ export interface LLMResult {
 
 export interface LLMClient {
   complete(messages: LLMMessage[], tools: ToolSpec[]): Promise<LLMResult>;
+  // Optional multimodal: describe/answer about an image (product-loop). Given raw bytes + mime +
+  // the user's question (caption), return a text answer. Absent = the provider has no vision path.
+  describeImage?(image: Uint8Array, mimeType: string, prompt: string): Promise<string>;
 }
 
 // ---- Gemini (free tier) ----------------------------------------------------
@@ -176,6 +179,40 @@ export class GeminiClient implements LLMClient {
       return { text, toolCall: tc };
     }
     return { text };
+  }
+
+  /** Vision: answer `prompt` about an image via Gemini's inlineData part (multimodal, free tier).
+   * Fails over across GEMINI_MODELS on quota like complete(). Throws on total failure. */
+  async describeImage(image: Uint8Array, mimeType: string, prompt: string): Promise<string> {
+    if (!this.apiKey) throw new Error("GEMINI_API_KEY not set");
+    const b64 = Buffer.from(image).toString("base64");
+    const body = {
+      contents: [{ role: "user", parts: [
+        { text: prompt || "Describe this image and answer any question in it." },
+        { inlineData: { mimeType: mimeType || "image/jpeg", data: b64 } },
+      ] }],
+    };
+    const TRANSIENT = new Set([500, 502, 503, 504, 408]);
+    let r!: Response; let lastErr = "";
+    outer: for (const model of GEMINI_MODELS) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        r = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-goog-api-key": this.apiKey },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(30000),
+        }).catch((e) => new Response(JSON.stringify({ error: { message: String(e) } }), { status: 503 }));
+        if (r.ok) break outer;
+        if (r.status === 429 || r.status === 403) { lastErr = `${model} ${r.status}`; r.body?.cancel?.(); continue outer; }
+        if (TRANSIENT.has(r.status) && attempt < 3) { r.body?.cancel?.(); await new Promise((res) => setTimeout(res, 800 * 2 ** (attempt - 1))); continue; }
+        lastErr = `${model} ${r.status}`; r.body?.cancel?.(); continue outer;
+      }
+    }
+    if (!r.ok) throw new Error(`Gemini vision failed (${lastErr})`);
+    const j = (await r.json()) as { candidates?: { content?: { parts?: GeminiPart[] } }[] };
+    const parts = j.candidates?.[0]?.content?.parts ?? [];
+    return parts.map((p) => p.text).filter(Boolean).join("").trim() || "I couldn't read that image.";
   }
 }
 

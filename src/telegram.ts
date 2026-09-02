@@ -17,6 +17,8 @@ export interface InboundMessage {
   text: string;
   from: string; // username or first name, for logs
   messageId: number;
+  photoFileId?: string; // set when the message is a photo (product-loop): Telegram file_id of the
+                        // largest size; `text` carries the caption (may be empty). Handler downloads it.
 }
 
 export function hasToken(): boolean {
@@ -38,6 +40,27 @@ export async function sendMessage(chatId: number, text: string): Promise<void> {
     if (!r.ok) console.error("telegram sendMessage failed:", r.status, (await r.text().catch(() => "")).slice(0, 200));
   } catch (e) {
     console.error("telegram sendMessage error:", e instanceof Error ? e.message : String(e));
+  }
+}
+
+/** Download a Telegram file by file_id (product-loop): getFile -> file_path -> the file bytes.
+ * Returns { bytes, mimeType } or null on any failure. Used to fetch inbound photos for vision. */
+export async function downloadFile(fileId: string): Promise<{ bytes: Uint8Array; mimeType: string } | null> {
+  if (!TOKEN) return null;
+  try {
+    const gf = await fetch(`${API}/getFile?file_id=${encodeURIComponent(fileId)}`, { signal: AbortSignal.timeout(15000) });
+    if (!gf.ok) return null;
+    const j = (await gf.json()) as { ok?: boolean; result?: { file_path?: string } };
+    const path = j.result?.file_path;
+    if (!path) return null;
+    const dl = await fetch(`https://api.telegram.org/file/bot${TOKEN}/${path}`, { signal: AbortSignal.timeout(20000) });
+    if (!dl.ok) return null;
+    const bytes = new Uint8Array(await dl.arrayBuffer());
+    const ext = path.split(".").pop()?.toLowerCase();
+    const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+    return { bytes, mimeType };
+  } catch {
+    return null;
   }
 }
 
@@ -102,6 +125,8 @@ interface TgUpdate {
     message_id: number;
     chat: { id: number };
     text?: string;
+    caption?: string;                                  // photo/media caption
+    photo?: Array<{ file_id: string; width?: number; height?: number }>; // size variants, ascending
     from?: { username?: string; first_name?: string };
   };
 }
@@ -121,9 +146,16 @@ export function parseUpdates(updates: TgUpdate[], offset: number): { messages: I
   for (const u of updates ?? []) {
     if (u.update_id + 1 > nextOffset) nextOffset = u.update_id + 1;
     const m = u.message;
-    if (!m || !m.text) continue;
+    if (!m) continue;
     const from = m.from?.username || m.from?.first_name || String(m.chat.id);
-    messages.push({ chatId: m.chat.id, text: m.text, from, messageId: m.message_id });
+    // A photo message (product-loop): take the LARGEST size variant (last in the array) + its caption
+    // as the text. A text message: as before. Everything else (stickers/etc) is still dropped.
+    if (m.photo && m.photo.length) {
+      const largest = m.photo[m.photo.length - 1]!;
+      messages.push({ chatId: m.chat.id, text: (m.caption ?? "").trim(), from, messageId: m.message_id, photoFileId: largest.file_id });
+    } else if (m.text) {
+      messages.push({ chatId: m.chat.id, text: m.text, from, messageId: m.message_id });
+    }
   }
   return { messages, nextOffset };
 }

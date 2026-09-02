@@ -86,7 +86,7 @@
       "title": "Accept inbound photos (vision)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Image-only messages get rejected ('send a task in words'); texting a photo (menu/receipt/product) is a natural first move + the biggest input gap vs Instinct. A+C.",
       "how": "Download Telegram photo file_id, pass bytes to Gemini (already multimodal) as an image part; handler accepts media messages. Free (Gemini free tier is multimodal)."
     }
@@ -118,6 +118,9 @@
     },
     {
       "event": "PRODUCT-LOOP iter 9: built absolute-threshold-alerts (audit C, high/S). alerts.ts: AlertCondition {op: below|above|in_stock, operand?} + conditionHolds() (below/above via extractValue, in_stock via stock-language) + parseAlertCommand parses trailing 'below/under N', 'above/over/hits N', 'back in stock'; AlertStore.add persists condition. alert-runner: predicate alerts are EDGE-triggered — notify when the condition FIRST becomes true (fires on crossing + on first-run-already-true; silent while it stays true) so 'below 50k' pings once on the drop not every check. HELP documents the forms. +tests: parse (below/above/in-stock), conditionHolds (compare/stock/ambiguous), runner edge-fire (cross/stay/first-run-both-ways/in-stock). 624 pass, tsc clean. call-tested false (pure parse+predicate, unit-tested). LAST seeded todo -> inbound-photo-vision next, then backlog dry -> audit refills."
+    },
+    {
+      "event": "PRODUCT-LOOP iter 10: built inbound-photo-vision (audit A+C, biggest input gap vs Instinct). LLMClient.describeImage (optional) + GeminiClient impl (inlineData part, model-failover, free multimodal). telegram: InboundMessage.photoFileId, parseUpdates maps photo msgs (largest size + caption as text), downloadFile(fileId) via getFile. handler: photo branch BEFORE empty-text guard -> describeImage (rate-limited, friendlyError on fail, 'cant read images' if no dep). index wires describeImage = download + llm.describeImage. +tests: parseUpdates photo (caption + captionless), handler photo branch (answered-not-agent + no-dep), GeminiClient.describeImage (inlineData shape + 429 failover). 630 pass, tsc clean. LIVE-VERIFIED: real Gemini vision on a 1x1 PNG -> 'Coral' (read the pixel; assertion was too strict, path works). call-tested TRUE. Backlog DRY -> audit refills next iteration."
     }
   ],
   "audits": [

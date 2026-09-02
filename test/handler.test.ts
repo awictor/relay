@@ -157,6 +157,26 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/something went wrong/i);
   });
 
+  it("a photo message is answered via describeImage, not the browser agent (product-loop)", async () => {
+    let agentCalled = false;
+    let gotFile = ""; let gotCaption = "";
+    const { handle, sent } = harness({
+      describeImage: async (fileId, caption) => { gotFile = fileId; gotCaption = caption; return "That's a receipt; total is $42.50."; },
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle({ chatId: 5, from: "u", text: "what's the total?", messageId: 1, photoFileId: "F1" } as InboundMessage);
+    expect(agentCalled).toBe(false);
+    expect(gotFile).toBe("F1");
+    expect(gotCaption).toBe("what's the total?");
+    expect(sent[0]!.text).toMatch(/\$42\.50/);
+  });
+
+  it("a photo with no describeImage dep gets a clear 'can't read images' note", async () => {
+    const { handle, sent } = harness();
+    await handle({ chatId: 5, from: "u", text: "", messageId: 1, photoFileId: "F1" } as InboundMessage);
+    expect(sent[0]!.text).toMatch(/can't read images/i);
+  });
+
   it("a location message stores it and does NOT run the agent (product-loop)", async () => {
     let agentCalled = false;
     const { handle, sent } = harness({

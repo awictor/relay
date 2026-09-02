@@ -104,4 +104,23 @@ describe("GeminiClient response parse (DEV-0040)", () => {
     const res = await new GeminiClient("k").complete([{ role: "user", content: "x" }], []);
     expect(res.toolCall).toEqual({ name: "read", args: {} });
   });
+
+  it("describeImage sends an inlineData part and returns the text answer (product-loop)", async () => {
+    let sentBody: any = null;
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      sentBody = JSON.parse(String(init.body));
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "A receipt, total $42.50" }] } }] }), { status: 200 });
+    }));
+    const ans = await new GeminiClient("k").describeImage(new Uint8Array([1, 2, 3]), "image/png", "what's the total?");
+    expect(ans).toBe("A receipt, total $42.50");
+    const parts0 = sentBody.contents[0].parts;
+    expect(parts0[0].text).toBe("what's the total?");
+    expect(parts0[1].inlineData.mimeType).toBe("image/png");
+    expect(typeof parts0[1].inlineData.data).toBe("string"); // base64
+  });
+
+  it("describeImage fails over on 429 then throws if all models 429", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "quota" } }), { status: 429 })));
+    await expect(new GeminiClient("k").describeImage(new Uint8Array([1]), "image/jpeg", "x")).rejects.toThrow(/vision failed/i);
+  });
 });
