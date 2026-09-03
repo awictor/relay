@@ -2759,9 +2759,18 @@
       "title": "no personal quick-log tracker ('log weight 182', 'spent $14 lunch') + trends",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Notes stores facts, alerts watch external values — nothing lets a user log their OWN tagged data points + ask 'show my weight this month' / 'how much did I spend on food'. The single strongest daily-habit retention primitive Relay lacks; Instinct's moat is 'the assistant that remembers your life'.",
       "how": "A tagged append-only store (tag -> [{t,v}]) + parse 'log <tag> <value>' + a 'show/how much <tag>' aggregator (sum/avg/latest/trend). Reuse chart.ts (line chart), summarizeSeries, to-csv, safe-store. Keyless."
+    },
+    {
+      "id": "contact-followup-nudge",
+      "title": "reminders aren't person-anchored ('follow up with Sarah in 3 days')",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "Reminders exist but aren't tied to a PERSON, and contacts.ts is a passive lookup. 'nudge me to reply to my landlord' / 'follow up with Sarah Fri' should fire AND pull that contact's details + offer a tap-to-draft (compose) in the same ping — a lightweight personal-CRM loop, the 'assistant that has your back' behavior.",
+      "how": "Parse 'follow up with <contact> <when>' -> a reminder-once whose task references the contact; on fire, resolve the saved contact + append their email/phone + a compose deep-link. Reuse schedule + contacts + compose."
     }
   ],
   "history": [
@@ -3860,6 +3869,10 @@
     {
       "item": "countdown-tracker",
       "note": "Countdowns (countdown-tracker): 'countdown to my flight Dec 20' / 'countdown to vacation on 2026-07-01' now PERSIST as milestone reminders (a month/week out, day before, morning of) + confirm the day count, instead of date_math's one-shot answer — a sticky re-engagement hook. New src/lib/countdown.ts: parseCountdown (label + date via datecalc.parseDate incl holidays/ISO/M-D/'Dec 20', peels the trailing date phrase off the label, preferFuture rolls a bare month/day forward), countdownMilestones (future-only fire instants at 9am local, tz-shifted; near-term targets get only the applicable milestones), formatCountdown + milestonePing. Handler routes on the explicit 'countdown' word ONLY (a bare 'how many days until Christmas' stays a date_math QUESTION, not a scheduled countdown), BEFORE the schedule cue; index.countdownAdd synthesizes reminder-only clock-time onces via the existing ScheduleStore (no new runner) + returns the confirmation, past-date -> honest note. HELP line. 12 new tests (parse/milestone-future-filter/tz/format + handler route/past/not-a-countdown-question). suite 1866 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "quick-log-tracker",
+      "note": "Personal quick-log tracker (quick-log-tracker) — the strongest daily-habit hook Relay lacked. 'log weight 182' / 'spent $14 on lunch' / 'log mood 7' append a tagged data point; 'show my weight this month' returns a summary + chart PNG, 'how much did I spend on food this week' returns a windowed total. New src/lib/logs.ts: LogStore (per-chat tag -> [{t,v}] + unit, atomic/corrupt-safe, caps 50 tags / 1000 pts oldest-drop, lastSaveOk), parseLogCommand ('log/track <tag> <value> [unit]' + money 'spent $X on <thing>' -> tag=thing unit=$), parseLogQuery (sum vs trend + today/week/month/year window; 'show my <tag>'/'how much did I spend on <tag>' — tightened so a bare 'what's the weather' isn't a log query), sumSeries. Wired logAdd + logQuery deps (index reuses summarizeSeries + renderChart via defaultFetchBytes) + state-paths RELAY_LOGS_FILE + .env parity + corrupt-store label. Handler routes log-ADD before the scheduler, log-QUERY gated on a show/how-much/trend cue + AFTER places/lists so 'show my grocery list' still lists. HELP line. 13 new tests (parse cmd/query, store append/per-chat/persist/unit, sumSeries windowed; handler log/sum/chart-photo/fallthrough). suite 1879 green, tsc clean. Offline; anvil-independent (quickchart render is the existing keyless path)."
     }
   ],
   "audits": [
@@ -4093,6 +4106,9 @@
     },
     {
       "note": "No audit this run — built from the prior queue (countdown-tracker). Refilled by promoting a parked Agent-C finding: quick-log-tracker (medium/M, tagged self-log + trends, reuses chart/series/csv). Remaining: quick-log-tracker, callback-edit-in-place(low), confirm-to-act(owner-gated)."
+    },
+    {
+      "note": "No audit this run — built from the prior queue (quick-log-tracker). Refilled by promoting a parked Agent-C finding: contact-followup-nudge (medium/S, reminder x contacts x compose). Remaining: contact-followup-nudge, callback-edit-in-place(low), confirm-to-act(owner-gated)."
     }
   ]
 }

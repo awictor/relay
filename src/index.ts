@@ -39,6 +39,7 @@ import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
+import { LogStore, parseLogCommand, parseLogQuery, sumSeries } from "./lib/logs.js";
 import { ListStore, parseListCommand, parseListExport, splitItems } from "./lib/lists.js";
 import { ContactStore, parseSaveContact, parseForgetContact } from "./lib/contacts.js";
 import { isTextualDoc, decodeTextDoc, buildDocPrompt } from "./lib/docs.js";
@@ -107,7 +108,7 @@ const metricsHeartbeat = makeMetricsHeartbeat({
 const CORRUPT_LABELS: Record<string, string> = {
   [paths.schedules]: "reminders", [paths.recipes]: "saved recipes", [paths.digests]: "digests",
   [paths.alerts]: "watches/alerts", [paths.profile]: "your saved location/profile", [paths.notes]: "remembered facts",
-  [paths.lists]: "your lists", [paths.contacts]: "contacts", [paths.places]: "your saved places",
+  [paths.lists]: "your lists", [paths.contacts]: "contacts", [paths.places]: "your saved places", [paths.logs]: "your tracked logs",
 };
 const corruptedStores: string[] = [];
 setCorruptHandler((file) => { const label = CORRUPT_LABELS[file] ?? file; if (!corruptedStores.includes(label)) corruptedStores.push(label); });
@@ -127,6 +128,7 @@ const alerts = new AlertStore({ file: paths.alerts });
 const profiles = new ProfileStore({ file: paths.profile });
 const notes = new NotesStore({ file: paths.notes });
 const places = new PlacesStore({ file: paths.places });
+const logs = new LogStore({ file: paths.logs });
 const lists = new ListStore({ file: paths.lists });
 const contacts = new ContactStore({ file: paths.contacts });
 const answerLog = new AnswerLog({ file: paths.answers });
@@ -344,6 +346,32 @@ const handle = createHandler({
   },
   isListPlacesRequest: (text) => isListPlacesRequest(text),
   placeList: (chatId) => places.list(chatId).map((p) => ({ name: p.name, address: p.address })),
+  // Quick-log tracker (quick-log-tracker): "log weight 182" / "spent $14 on lunch" -> append a tagged
+  // point; "show my weight this month" / "how much did I spend on food" -> a summary (+ chart PNG for a
+  // trend). null when the message isn't a log command/query. Reuses summarizeSeries + renderChart.
+  logAdd: (chatId, text, now) => {
+    const cmd = parseLogCommand(text);
+    if (!cmd) return null;
+    const r = logs.add(chatId, cmd.tag, cmd.value, now, cmd.unit);
+    if (!r) return { ok: false, reason: "capped" };
+    return { ok: true, tag: cmd.tag, value: cmd.value, unit: cmd.unit ?? logs.unitOf(chatId, cmd.tag), count: r.count, saved: r.saved };
+  },
+  logQuery: async (chatId, text, now) => {
+    const q = parseLogQuery(text, now);
+    if (!q) return null;
+    const points = logs.seriesOf(chatId, q.tag);
+    if (!points.length) return { tag: q.tag, text: `I don't have any "${q.tag}" logged yet. Track it with "log ${q.tag} <value>" (or "spent $X on ${q.tag}").` };
+    const unit = logs.unitOf(chatId, q.tag);
+    if (q.mode === "sum") {
+      const { total, count } = sumSeries(points, q.sinceMs);
+      const when = q.sinceMs ? " in that window" : " total";
+      return { tag: q.tag, text: `You've spent ${unit === "$" ? "$" : ""}${total % 1 === 0 ? total : total.toFixed(2)}${unit && unit !== "$" ? ` ${unit}` : ""} on ${q.tag}${when} (${count} entr${count === 1 ? "y" : "ies"}).` };
+    }
+    // trend: text summary + a chart PNG (falls back to text if the render fails / not enough points).
+    const summary = summarizeSeries(points, now, q.sinceMs);
+    const png = await renderChart(q.tag, points, defaultFetchBytes, q.sinceMs);
+    return { tag: q.tag, text: summary ? `📈 ${q.tag}: ${summary}` : `Not enough "${q.tag}" data to chart yet — log a few more.`, ...(png ? { png } : {}) };
+  },
   // Contacts book (contacts-book-compose): save/resolve/forget/list a name -> email/phone.
   saveContact: (chatId, text) => {
     const p = parseSaveContact(text);

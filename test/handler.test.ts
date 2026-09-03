@@ -59,6 +59,44 @@ describe("createHandler — memory-write hedge (memory-write-silent-fail)", () =
   });
 });
 
+describe("createHandler — quick-log tracker (quick-log-tracker)", () => {
+  it("'log weight 182' stores it + confirms, no agent", async () => {
+    let logged = "";
+    const { handle, sent, recorded } = harness({
+      logAdd: (_c, text) => { logged = text; return { ok: true, tag: "weight", value: 182, count: 1 }; },
+    });
+    await handle(msg("log weight 182", 5));
+    expect(logged).toBe("log weight 182");
+    expect(sent[0]!.text).toMatch(/Logged weight: 182/);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it("'how much did I spend on food' answers a sum, no agent", async () => {
+    const { handle, sent, recorded } = harness({
+      logAdd: () => null,
+      logQuery: async () => ({ tag: "food", text: "You've spent $43 on food total (3 entries)." }),
+    });
+    await handle(msg("how much did I spend on food", 5));
+    expect(sent[0]!.text).toMatch(/spent \$43 on food/);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it("'show my weight' with a chart sends the PNG", async () => {
+    const { handle, photos } = harness({
+      logAdd: () => null,
+      logQuery: async () => ({ tag: "weight", text: "📈 weight: 182 → 179", png: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) }),
+    });
+    await handle(msg("show my weight this month", 5));
+    expect(photos).toHaveLength(1);
+  });
+
+  it("a non-log message falls through to the agent", async () => {
+    const { handle, recorded } = harness({ logAdd: () => null, logQuery: async () => null });
+    await handle(msg("what's the weather in Paris", 5));
+    expect(recorded).toHaveLength(1);
+  });
+});
+
 describe("createHandler — countdown (countdown-tracker)", () => {
   it("'countdown to X' routes to countdownAdd + confirms, no agent", async () => {
     let seen = "";

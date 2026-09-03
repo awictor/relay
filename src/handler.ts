@@ -158,6 +158,12 @@ export interface HandlerDeps {
   forgetPlace?: (chatId: number, text: string) => { name: string; saved?: boolean; notFound?: boolean } | null;
   isListPlacesRequest?: (text: string) => boolean;
   placeList?: (chatId: number) => Array<{ name: string; address: string }>;
+  // Quick-log tracker (quick-log-tracker): logAdd parses + stores "log weight 182"/"spent $14 on lunch"
+  // (null if not a log command); logQuery answers "show my weight this month"/"how much did I spend on
+  // food" with a text summary + optional chart PNG (null if not a log query). Both optional.
+  logAdd?: (chatId: number, text: string, now: number) =>
+    { ok: true; tag: string; value: number; unit?: string; count: number; saved?: boolean } | { ok: false; reason: "capped" } | null;
+  logQuery?: (chatId: number, text: string, now: number) => Promise<{ tag: string; text: string; png?: Uint8Array } | null>;
   // Named lists (personal-notes-lists-store): a durable, editable collection the user reads back +
   // checks off ("add eggs to my grocery list", "what's on my list"). Distinct from remembered FACTS
   // (which get injected into every answer) — a list is data the user manages, not context. Returns a
@@ -1094,6 +1100,29 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           const scope = s.which === "all" ? "all your automations" : `"${s.which}"`;
           await deps.sendMessage(msg.chatId, `Resumed ${scope} — back on its normal schedule.`);
         }
+        return;
+      }
+    }
+
+    // Quick-log tracker (quick-log-tracker): "log weight 182" / "spent $14 on lunch" appends a tagged
+    // point; "show my weight this month" / "how much did I spend on food" answers with a summary (+ a
+    // chart for a trend). Log-ADD is checked before the scheduler ("log X" isn't a reminder); the QUERY
+    // is gated on a show/how-much cue. Both null-fall-through when the message isn't a log command.
+    if (!isExplicitCommand && deps.logAdd) {
+      const r = deps.logAdd(msg.chatId, msg.text, deps.now());
+      if (r) {
+        if (!r.ok) { await deps.sendMessage(msg.chatId, `You're tracking a lot of things already — I've hit my per-chat log limit. Pick one to stop first.`); return; }
+        const val = r.unit === "$" ? `$${r.value}` : `${r.value}${r.unit ? ` ${r.unit}` : ""}`;
+        const warn = r.saved === false ? ` (⚠️ couldn't save to disk — may be lost on restart)` : "";
+        await deps.sendMessage(msg.chatId, `📝 Logged ${r.tag}: ${val}. ${r.count} entr${r.count === 1 ? "y" : "ies"} so far — ask "show my ${r.tag}" anytime.${warn}`);
+        return;
+      }
+    }
+    if (!isExplicitCommand && deps.logQuery && /\b(how much (?:did|have|do)|show\s+(?:me\s+)?(?:my|the)|my\s+\w+\s+(?:trend|history|log)|\btrend\b|\bhistory\b)\b/i.test(msg.text)) {
+      const r = await deps.logQuery(msg.chatId, msg.text, deps.now());
+      if (r) {
+        if (r.png && deps.sendPhoto) { await deps.sendPhoto(msg.chatId, r.png, r.text); return; }
+        await deps.sendMessage(msg.chatId, r.text);
         return;
       }
     }

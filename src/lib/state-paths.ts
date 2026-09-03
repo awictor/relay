@@ -23,6 +23,7 @@ export interface StatePaths {
   answers: string;
   background: string;
   places: string;
+  logs: string;
 }
 
 /** Resolve all durable-state file paths from env (with the data/ defaults). */
@@ -41,6 +42,7 @@ export function statePaths(env: NodeJS.ProcessEnv = process.env): StatePaths {
     answers: env.RELAY_ANSWERS_FILE ?? "data/relay-answers.json",
     background: env.RELAY_BACKGROUND_FILE ?? "data/relay-background.json",
     places: env.RELAY_PLACES_FILE ?? "data/relay-places.json",
+    logs: env.RELAY_LOGS_FILE ?? "data/relay-logs.json",
   };
 }
 
