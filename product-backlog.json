@@ -1967,7 +1967,7 @@
       "title": "chart/trend series poisoned by a spurious number in a non-degraded error reply",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "recordPoint runs before the numberless/baseline-protection guards + only skips on null extractValue; a non-degraded reply like \"the page returned a 404\" yields 404, stored in the series chart/trend read -> a bogus spike.",
       "how": "Move recordPoint after the numberless guard, or skip recording when the reply matches an error-ish shape / when extractValue would also fail the baseline guard."
     },
@@ -2745,6 +2745,10 @@
     {
       "item": "reminderonly-no-cancel-guard",
       "note": "Added the isCancelled() guard to the reminderOnly fire path. The main/alert-silent/digest-null paths all check isCancelled() before their side effects (timeout late-finish guard), but reminderOnly awaited deps.send + completed with no check — so a send stalling past the 90s fire timeout could double-send the most common reminder type ('take my meds') when the retry tick ran. Now guards before send+complete like the others. 1 new test (stalled reminderOnly send doesn't double-deliver). Suite 1446 green, tsc clean."
+    },
+    {
+      "item": "alert-series-poisoned-by-error-number",
+      "note": "Fixed chart/trend series poisoned by a stray number in a non-degraded error reply. recordPoint recorded any extractable number, so 'the price page returned a 404 error' stored 404 -> a phantom spike in the watch's series. New looksLikeErrorReply (alerts.ts) flags soft-failure shapes (error/failed/couldn't/no data/timed out/blocked + status codes ONLY inside an explicit error phrase, so a real $450/Nasdaq 5900 isn't flagged); recordPoint now skips those. 5 new tests (looksLikeErrorReply true/false cases + recordPoint skips 404-reply but records a $450 price). Suite 1448 green, tsc clean."
     }
   ],
   "audits": [

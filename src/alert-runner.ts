@@ -5,7 +5,7 @@
 
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Alert } from "./lib/alerts.js";
-import { changed, conditionHolds, extractValue, extractListItems, feedItemKey } from "./lib/alerts.js";
+import { changed, conditionHolds, extractValue, extractListItems, feedItemKey, looksLikeErrorReply } from "./lib/alerts.js";
 import { mapPool } from "./lib/pool.js";
 import type { AgentEnv } from "./chain-runner.js";
 
@@ -189,7 +189,10 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // for "how has X moved", not the alert trigger. Deferred nothing: safe to record now (a check happened).
   if (!alert.feed && deps.recordPoint) {
     const num = extractValue(value, alert.task);
-    if (num !== null) deps.recordPoint(alert.chatId, alert.name, num, (deps.now ?? Date.now)());
+    // Skip an error-shaped reply even when it has a number (alert-series-poisoned-by-error-number): a
+    // non-degraded "the page returned a 404" would otherwise record 404 as a data point and the
+    // chart/trend would show a phantom spike. A real value from a normal reply still records.
+    if (num !== null && !looksLikeErrorReply(value)) deps.recordPoint(alert.chatId, alert.name, num, (deps.now ?? Date.now)());
   }
 
   // Trigger-to-action (trigger-to-action-alerts): when this alert fires AND has a `then` recipe, run it

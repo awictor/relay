@@ -313,6 +313,17 @@ describe("checkAlert — time series (watch-time-series)", () => {
     await checkAlert(alert({ feed: true, seen: [] }), deps("• item", { recordPoint: rp }).d); // feed
     expect(points).toEqual([]);
   });
+  it("does NOT record an error-shaped reply's stray number (alert-series-poisoned-by-error-number)", async () => {
+    const points: unknown[] = [];
+    const rp = (_c: number, n: string, v: number) => points.push({ n, v });
+    // A non-degraded soft-failure reply that happens to contain a number must not poison the series.
+    await checkAlert(alert({ threshold: 1000, lastValue: "$64,000" }), deps("The price page returned a 404 error", { recordPoint: rp }).d);
+    await checkAlert(alert({ threshold: 1000, lastValue: "$64,000" }), deps("Couldn't load the price right now", { recordPoint: rp }).d);
+    expect(points).toEqual([]);
+    // But a normal reply that merely contains a status-code-shaped price ($450) DOES record.
+    await checkAlert(alert({ threshold: 1, lastValue: "$400" }), deps("It's $450 now", { recordPoint: rp }).d);
+    expect(points).toEqual([{ n: "btc", v: 450 }]);
+  });
 });
 
 describe("checkAlert — watchlists", () => {

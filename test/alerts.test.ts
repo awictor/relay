@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseAlertCommand, parseAlertEdit, changed, normalizeForCompare, firstNumber, extractValue, conditionHolds, extractListItems, feedItemKey, parseTrendRequest, summarizeSeries, AlertStore } from "../src/lib/alerts.js";
+import { parseAlertCommand, parseAlertEdit, changed, normalizeForCompare, firstNumber, extractValue, conditionHolds, extractListItems, feedItemKey, parseTrendRequest, summarizeSeries, looksLikeErrorReply, AlertStore } from "../src/lib/alerts.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -264,6 +264,16 @@ describe("feed-watch (new-item-feed-watch)", () => {
   it("a bare (unmarked) multi-line list of short titles still counts as a feed", () => {
     const reply = "Senior React dev — Acme\nFrontend eng — Beta\nStaff eng — Gamma";
     expect(extractListItems(reply)).toEqual(["Senior React dev — Acme", "Frontend eng — Beta", "Staff eng — Gamma"]);
+  });
+  it("looksLikeErrorReply flags soft failures but not real values (alert-series-poisoned-by-error-number)", () => {
+    expect(looksLikeErrorReply("The price page returned a 404 error")).toBe(true);
+    expect(looksLikeErrorReply("Couldn't load the price right now")).toBe(true);
+    expect(looksLikeErrorReply("error 500")).toBe(true);
+    expect(looksLikeErrorReply("no data available")).toBe(true);
+    // Real values must NOT be flagged (a status-code-shaped price is fine).
+    expect(looksLikeErrorReply("BTC is $65,000")).toBe(false);
+    expect(looksLikeErrorReply("It's $450 now")).toBe(false);
+    expect(looksLikeErrorReply("Nasdaq 5900")).toBe(false);
   });
   it("feedItemKey is stable across phrasing/case/punctuation drift", () => {
     expect(feedItemKey("• Senior React Dev — Acme!")).toBe(feedItemKey("senior react dev acme"));

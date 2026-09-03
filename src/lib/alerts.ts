@@ -108,6 +108,19 @@ export function feedItemKey(item: string): string {
 
 // Out-of-stock language (checked first — takes precedence over any affirmative on the same page).
 const OUT_OF_STOCK_RE = /\b(out of stock|sold out|unavailable|out-of-stock|currently unavailable|not available)\b/i;
+
+// An error-ish / no-real-value reply (alert-series-poisoned-by-error-number). A non-degraded agent
+// answer can still be a soft failure that happens to contain a number ("the page returned a 404",
+// "couldn't load the price right now", "error 500") — extractValue would pull 404/500 and the
+// time-series (chart/trend) would show a bogus spike. Detect the shape so recordPoint can skip it.
+// NOTE: does NOT include a bare 4xx/5xx number — "$450" / "bitcoin 5900" are real values, so a status
+// code only counts inside an explicit error phrase ("error 404", "status 500", "returned a 503").
+const ERROR_REPLY_RE = /\b(errored|failed|couldn'?t|could not|can'?t|cannot|unable to|unavailable|not available|no (?:data|price|result|results|info|information)|timed? ?out|try again|blocked|forbidden|access denied)\b|\b(?:error|status|code|returned|http)\s*(?:code\s*)?[:#]?\s*[45]\d\d\b|\berror\b/i;
+/** True if a reply reads like a fetch/soft failure rather than a real value — so a stray status code
+ * (404/500) or "N/A" number isn't recorded into the watch's time series. Exported for tests. */
+export function looksLikeErrorReply(reply: string): boolean {
+  return ERROR_REPLY_RE.test(reply);
+}
 // STRONG availability phrases: an explicit statement the item itself is in stock. Enough on their own.
 const IN_STOCK_STRONG_RE = /\b(in stock|in-stock|available (?:now|to (?:buy|order|purchase))|available for (?:purchase|order)|back in stock)\b/i;
 // WEAK signals: a purchase CTA. On a product page these ride along with CROSS-SELL/recommended items
