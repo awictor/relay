@@ -205,6 +205,17 @@ export class ProfileStore {
     return { lat: p.lat, lng: p.lng };
   }
 
+  /** Durable coords for a PROACTIVE run (recurring-near-me-pin-ttl-breaks), ignoring the privacy TTL that
+   * freshCoords enforces. The TTL exists so an ad-hoc inbound turn stops leaking a ~1m pin to the LLM
+   * after 6h — but a STANDING automation the user explicitly set ("weather near me every morning") needs
+   * a location anchor to keep working; without this it silently fires "which city?" into the void the
+   * same day. Use ONLY for scheduled/alert/digest runs the user opted into, never for ad-hoc replies. */
+  homeCoords(chatId: number): { lat: number; lng: number } | undefined {
+    const p = this.get(chatId);
+    if (!p || typeof p.lat !== "number" || typeof p.lng !== "number") return undefined;
+    return { lat: p.lat, lng: p.lng };
+  }
+
   /** The chat's tz offset (min east of UTC) if set, else undefined so callers fall back to global. */
   offsetMin(chatId: number): number | undefined { return this.get(chatId)?.tzOffsetMin; }
 

@@ -127,6 +127,17 @@ describe("ProfileStore", () => {
     s.set(1, { location: "Austin" });
     expect(s.contextLine(1, t0 + COORDS_TTL_MS + 1)).toMatch(/home location is Austin/);
   });
+  it("homeCoords ignores the TTL so a standing automation keeps a location anchor (recurring-near-me-pin-ttl-breaks)", async () => {
+    const { COORDS_TTL_MS } = await import("../src/lib/profile.js");
+    const s = new ProfileStore({ file: tmp() });
+    const t0 = 1_700_000_000_000;
+    s.set(1, { lat: 30.2711, lng: -97.7437, coordsAt: t0 });
+    // freshCoords expires (ad-hoc privacy), but homeCoords stays for a proactive run the user opted into.
+    expect(s.freshCoords(1, t0 + COORDS_TTL_MS + 1)).toBeUndefined();
+    expect(s.homeCoords(1)).toEqual({ lat: 30.2711, lng: -97.7437 });
+    // No coords at all -> undefined either way.
+    expect(s.homeCoords(2)).toBeUndefined();
+  });
   it("clear() forgets a chat's profile + reports whether there was one (profile-view-reset)", () => {
     const f = tmp();
     const s = new ProfileStore({ file: f });

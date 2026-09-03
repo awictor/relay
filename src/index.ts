@@ -107,10 +107,14 @@ const backgroundStore = new BackgroundStore({ file: paths.background });
 // Per-chat agent environment for PROACTIVE runs (proactive-runs-datetime-units-blind): the clock + tz +
 // coords + units the inbound path already threads into runAgent, so a scheduled/alert/digest/chain task
 // reasons from the real date and the user's units instead of the model's training date / a hardcoded °F.
+// Uses homeCoords (durable, TTL-ignoring) not freshCoords: a STANDING automation the user set ("weather
+// near me every morning") must keep resolving a location past the 6h privacy TTL, or it silently fires
+// "which city?" into the void the same day (recurring-near-me-pin-ttl-breaks). The TTL still guards the
+// ad-hoc inbound path (index wires weatherCoords: freshCoords there).
 const agentEnvFor = (chatId: number) => ({
   nowMs: Date.now(),
   tzOffsetMin: profiles.offsetMin(chatId) ?? tzOffsetMin(),
-  weatherCoords: profiles.freshCoords(chatId, Date.now()),
+  weatherCoords: profiles.homeCoords(chatId),
   weatherUnits: profiles.get(chatId)?.units,
 });
 // Run a digest -> composed briefing text (member recipes -> one message). Shared by /run + schedule.

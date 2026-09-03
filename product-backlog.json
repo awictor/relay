@@ -14,7 +14,7 @@
       "title": "a daily 'weather near me' set from a pin silently dies after the coords TTL",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "agentEnvFor uses profiles.freshCoords which returns undefined past COORDS_TTL_MS (6h), so a 'weather near me every morning' set up by a user who only shared a location PIN (no saved home city) starts firing a useless 'which city?' into the void the same day — a standing automation the user believes works degrades silently (audit 26 B#2).",
       "how": "For a RECURRING schedule/alert, fall back to the last-known coords (or a persisted home city derived from the pin at set time) rather than only fresh-within-TTL coords — the privacy TTL is about not leaking coords to the LLM on ad-hoc turns, but a standing location automation the user set needs a durable anchor. Or: at set time, if only a pin exists, reverse-geocode to a city + save it. Test: a daily near-me run past the TTL still resolves a location."
     },
@@ -2044,6 +2044,10 @@
     {
       "id": "maps-link-on-nearby-directions",
       "note": "A 'coffee near me' / 'directions to X' answer was a dead end on a phone — name + straight-line distance, no way to navigate. Added lat/lng to the Place model (parsePlaces now carries the node coords) + a mapsLink helper (coords -> a pinned https://google.com/maps/search query, else a name search); formatPlaces appends a tappable link per row. Directions: added from/to coords to Route + a directionsLink helper (https://google.com/maps/dir with origin/destination coords or labels + travelmode from the mode); formatRoute appends it. So both marquee location errands are now tap-to-navigate. 4 tests (place link w/ coords + name-search fallback / route link w/ labels + coords). call-tested: false (pure format; live path needs anvil+Nominatim). 1191 tests green."
+    },
+    {
+      "id": "recurring-near-me-pin-ttl-breaks",
+      "note": "A standing 'weather near me every morning' set by a user who only shared a location PIN (no typed home city) silently died the same day: agentEnvFor (the proactive env) used profiles.freshCoords, which returns undefined past the 6h COORDS_TTL_MS, so the scheduled get_weather hit its 'no place, no location' branch and fired 'which city?' into the void forever. Added profiles.homeCoords (durable, TTL-ignoring) + switched agentEnvFor to it — a standing automation the user opted into keeps its location anchor, while the ad-hoc INBOUND path still uses freshCoords so the privacy TTL (don't leak a ~1m pin to the LLM on every later message) is unchanged. 1 profile test (homeCoords ignores TTL / undefined w/ no coords) + the existing freshCoords-expiry test still green. call-tested: false (pure store + wiring). 1192 tests green."
     }
   ],
   "audits": [
