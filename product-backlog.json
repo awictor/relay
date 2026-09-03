@@ -3029,9 +3029,18 @@
       "title": "Confirm isDangerousAction actually gates the click/type dispatch at runtime",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "the guard's REGEX is now well-tested, but the loop's value depends on the agent's click/type/submit dispatch actually calling isDangerousAction on the target text + refusing — a wiring regression would silently disarm it with all unit tests still green.",
       "how": "Trace the click/type tool dispatch in agent.ts; add an integration test that a scripted 'click Pay now' is refused (not dispatched to the backend) and a 'click Read more' proceeds, so the gate is proven wired, not just the regex."
+    },
+    {
+      "id": "memory-store-eviction-audit",
+      "title": "Audit memory/notes/store eviction + persistence-failure UX for silent data loss",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "several stores cap per-chat + drop oldest; a silent eviction of the earliest (often most important) item, or a persist failure not surfaced, reads as 'the bot forgot' — worth a sweep for any store that evicts/fails without telling the user (notes already warns; others may not).",
+      "how": "Probe NotesStore/SavedStore/ListStore/ContactStore/PlacesStore add() at the cap + lastSaveOk() paths; ensure eviction returns what was dropped + the handler surfaces it, and a failed persist hedges the confirmation. Fix any that silently lose."
     }
   ],
   "history": [
@@ -4238,6 +4247,10 @@
     {
       "id": "dangerous-action-more-verbs",
       "note": "Adversarial-probed the dangerous-action guard: ~34 real commit/destroy button labels slipped through. Added catches for apply/enroll/register/reserve/rent + now/for (application/enrollment commits, not 'apply filter'/'register to read'), accept|agree + offer/terms/continue (not 'accept cookies'), remove|delete all/everything, block/report/flag a user/post + 'report as spam', cash out, post/publish/leave/submit + comment/review, sign|downgrade|upgrade + a commit object (plan/contract/lease/membership added to COMMIT_OBJ), + publish/unfriend/unfollow as strong verbs. Re-verified no overblock (sign in, apply filter/coupon, accept cookies, register to read, design plan, assign a task, vote count, report card, update profile). +36 adversarial test cases, 1995 green."
+    },
+    {
+      "id": "dangerous-action-runtime-gate-verify",
+      "note": "Traced the click/type dispatch (agent.ts:964-983): isDangerousAction(label+selector) at L972 refuses + continues BEFORE backend.click/type at L977-978 — the guard IS wired. Added 3 integration tests via the recording backend: 'click Pay now' -> refused (backend.click never runs) + agent replies it can't; 'click Read more' -> click:.read-more DOES reach the backend (no over-block); a danger named only in the SELECTOR (#delete-account-btn, no label) -> also refused (guard sees label+selector). Proves the hardened regex is enforced at runtime, not just unit-tested — a wiring regression now fails a test. +3 tests, 1998 green."
     }
   ],
   "audits": [
@@ -4519,6 +4532,9 @@
     },
     {
       "note": "Self-audit inline (agent cap 200/200). Adversarial dangerous-action sweep: guard missed ~34 real commit/destroy labels (application/enrollment, agreement-accept, bulk-delete, social/moderation, publish-content, billing sign/downgrade). Widened CONTEXTUAL_RE + COMMIT_OBJ + a few strong verbs, no overblock. Seeded dangerous-action-runtime-gate-verify (prove the regex is actually wired to the click dispatch) + carried single-slot papercut."
+    },
+    {
+      "note": "Self-audit follow-through (agent cap 200/200): verified the dangerous-action guard is wired to the click/type dispatch at runtime (not just regex-tested) with 3 integration tests. Closes the safety-hardening arc (widen regex -> prove enforced). Seeded memory-store-eviction-audit as the next self-audit target."
     }
   ]
 }

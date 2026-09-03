@@ -276,6 +276,40 @@ describe("runAgent dispatch", () => {
     expect(out.reply).toMatch(/couldn't save/i);
   });
 
+  it("REFUSES a dangerous click at dispatch — the guard is wired, backend.click never runs (dangerous-action-runtime-gate-verify)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://shop.example.com/cart" } } as ToolCall },
+      { toolCall: { name: "click", args: { label: "Pay now", selector: "#pay" } } as ToolCall }, // committing action
+      { toolCall: { name: "reply", args: { text: "I can't complete a payment for you." } } as ToolCall },
+    ]);
+    const out = await runAgent("check out my cart and pay", { llm, backend: b });
+    expect(hits.some((h) => h.startsWith("click:"))).toBe(false); // guard fired BEFORE backend.click
+    expect(out.reply).toMatch(/can't|won't|complete/i);
+  });
+
+  it("ALLOWS a benign click — the guard doesn't over-block navigation (dangerous-action-runtime-gate-verify)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://news.example.com" } } as ToolCall },
+      { toolCall: { name: "click", args: { label: "Read more", selector: ".read-more" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "Opened the article." } } as ToolCall },
+    ]);
+    await runAgent("open the full article", { llm, backend: b });
+    expect(hits).toContain("click:.read-more"); // a safe click DID reach the backend
+  });
+
+  it("REFUSES a dangerous action named only in the SELECTOR, not the label (guard sees label+selector)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://x.example.com" } } as ToolCall },
+      { toolCall: { name: "click", args: { selector: "#delete-account-btn" } } as ToolCall }, // no label, danger in selector
+      { toolCall: { name: "reply", args: { text: "I won't delete your account." } } as ToolCall },
+    ]);
+    await runAgent("clean up my account", { llm, backend: b });
+    expect(hits.some((h) => h.startsWith("click:"))).toBe(false);
+  });
+
   it("get_nutrition -> backend.getNutrition, reaches reply, no browser (nutrition-lookup)", async () => {
     const { b, hits } = recordingBackend();
     b.getNutrition = async (food) => { hits.push(`getNutrition:${food}`); return { food: "Banana, raw", kcal: 89, proteinG: 1.1, carbG: 22.8, fatG: 0.3 }; };
