@@ -2,19 +2,26 @@
 // Returns a reply string for a recognized command, or null to pass the message
 // through to the agent.
 
-const START = `👋 I'm Relay. Text me a task and I'll do it in a real browser and text you back.
+const START = `👋 I'm Relay. Text me like you'd text a helpful friend — plain English, no commands to learn. I'll look things up on the web and text you back.
 
-Try:
-• "top story on Hacker News"
-• "extract the price and title from <link>"
-• "compare the price across these 3 links"
-• "find the newest HN posts about AI"
-• "screenshot the top of Hacker News"
-• "save this page as a PDF: <link>"
+Just ask:
+• "weather this weekend?" · "what does escrow mean?"
+• "20% tip on $47" · "what time is it in Tokyo?"
+• "price of bitcoin" · "is AAPL up today?"
+• "where's my package 1Z999..." · "coffee near me"
 
-Or schedule me: "remind me to stretch in 20 min", "every morning text me the weather".
+Remember & remind:
+• "remind me to leave at 5:30" · "every morning: weather + top news"
+• "add milk to my grocery list" · "remember I'm vegetarian"
+• "follow r/programming" — I'll ping you when there's something new
 
-Save a recipe: "save btc: check the price of bitcoin", then /run btc anytime.
+Bigger stuff (send a link or name a site):
+• "compare the price across these 3 links" · "summarize this video: <link>"
+• "find the 5 cheapest flights to Lisbon and get back to me"
+
+📍 Tap the paperclip → Location once and "weather", "near me", and directions just work.
+
+Not sure what to try? Text "help" for the full list.
 
 Commands: /help  /start  /reset  /status  /sites  /setlocation  /profile  /dashboard  /schedules  /cancel  /recipes  /templates  /run  /forget  /digests  /alerts`;
 

@@ -16,6 +16,17 @@ describe("handleCommand", () => {
     expect(handleCommand("  /start extra args")).toMatch(/I'm Relay/);
   });
 
+  it("/start leads with everyday errands + the 'just ask' framing, not a scraper pitch (onboarding-copy-life-assistant)", () => {
+    const start = handleCommand("/start")!;
+    // The plain-English framing appears before any power/scraper example.
+    expect(start).toMatch(/just ask/i);
+    // Everyday errands are advertised (weather / tip / reminder), not only HN/extract/screenshot.
+    expect(start.toLowerCase()).toMatch(/weather/);
+    expect(start.toLowerCase()).toMatch(/remind me/);
+    // The location unlock is surfaced in onboarding (not buried in /help).
+    expect(start.toLowerCase()).toMatch(/location/);
+  });
+
   it("passes normal messages through (null)", () => {
     expect(handleCommand("top HN story")).toBeNull();
     expect(handleCommand("what is /help useful for")).toBeNull(); // not a leading command
