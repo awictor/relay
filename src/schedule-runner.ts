@@ -79,6 +79,13 @@ export interface ScheduleRunnerDeps {
   // Push a schedule's next fire to a specific instant (quiet-hours defer) without advancing its
   // recurrence. Optional; when absent the runner just sends (no defer).
   deferTo?: (id: string, whenMs: number) => void;
+  // Quiet-hours alert classification (quiet-hours-persistent-alerts): given an alert NAME, is its
+  // change PERSISTENT (a new feed item / a page-diff — still there at quiet-end) vs EDGE-triggered (a
+  // value/predicate/weather crossing that could revert overnight and be lost if the check is deferred)?
+  // A persistent alert is safe to defer to quiet-end like any schedule (nothing lost, no 3am buzz); an
+  // edge-triggered one stays EXEMPT so the crossing is still evaluated on cadence. Absent/false ->
+  // treat the alert as edge-triggered (the safe default: keep it exempt, as before this change).
+  alertQuietDeferrable?: (chatId: number, name: string) => boolean;
   // Failed-watch receipt (failed-watch-receipts): what to tell the user when a RECURRING schedule has
   // failed to fire this many consecutive times (a dead watch otherwise reads as 'no news'). Return the
   // message, or null to stay silent. index wires it for daily/weekly/interval. Optional.
@@ -444,7 +451,16 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // a genuinely long relative once ("in 2 days") still defers (its late-night instant is incidental).
         const SHORT_ONCE_MS = 3 * 3_600_000; // 3h: covers timers + "in a couple hours", not multi-day onces
         const isShortOnce = s.kind === "once" && !s.clockTime && (s.dueMs - s.created) <= SHORT_ONCE_MS;
-        if (deps.quietUntil && deps.deferTo && !isAlertCheck && !isClockOnce && !isShortOnce) {
+        // Quiet-hours + alerts (quiet-hours-persistent-alerts): the blanket alert-exemption was too broad.
+        // A PERSISTENT alert (a new feed item, a page-diff) shows a change that's still there at quiet-end,
+        // so deferring its SEND to morning loses nothing — yet the old code let it buzz the phone at 3am.
+        // Only an EDGE-triggered alert (value/predicate/weather crossing that can revert overnight) must
+        // stay exempt so the crossing is still evaluated on cadence. Classify via the dep; a persistent
+        // alert is treated like any other deferrable schedule below.
+        const alertName = isAlertCheck ? s.task.replace(/^alert:/, "").trim() : "";
+        const isPersistentAlert = isAlertCheck && (deps.alertQuietDeferrable?.(s.chatId, alertName) ?? false);
+        const quietExempt = (isAlertCheck && !isPersistentAlert) || isClockOnce || isShortOnce;
+        if (deps.quietUntil && deps.deferTo && !quietExempt) {
           const until = deps.quietUntil(s.chatId, deps.now());
           if (until > deps.now() && s.dueMs < until) {
             deps.deferTo(s.id, until);

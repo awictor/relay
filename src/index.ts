@@ -226,6 +226,15 @@ const scheduleRunner = makeScheduleRunner({
   // chat's tz. Off unless RELAY_QUIET_START/END set (default start===end 0 = no window).
   quietUntil: (chatId, now) => quietUntilMs(now, QUIET_START, QUIET_END, profiles.offsetMin(chatId) ?? tzOffsetMin()),
   deferTo: (id, whenMs) => { schedules.deferTo(id, whenMs); },
+  // Quiet-hours alert classification (quiet-hours-persistent-alerts): a feed (new-items) or page-diff
+  // watch shows a PERSISTENT change — safe to defer its send to quiet-end. A value/predicate/weather/
+  // watchlist alert is EDGE-triggered (a crossing can revert overnight), so it stays exempt (must run
+  // on cadence). Unknown alert -> not deferrable (safe default: keep exempt).
+  alertQuietDeferrable: (chatId, name) => {
+    const a = alerts.get(chatId, name);
+    if (!a) return false;
+    return !!(a.feed || a.feedSource || a.pageUrl);
+  },
   // m14 degrade-4: a failed ONE-SHOT reminder shouldn't vanish silently — tell the user, once,
   // with a friendly (non-leaking) line. A "daily" stays silent (it retries tomorrow; a misfiring
   // daily must not storm the chat with failure pings).

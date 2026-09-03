@@ -452,6 +452,46 @@ describe("makeScheduleRunner.tick", () => {
     expect(sent).toContain("🔔 btc: below 50k"); // a real crossing is worth the ping; it can't storm (edge-only)
   });
 
+  it("a PERSISTENT alert (feed/page) is deferred to quiet-end, not buzzed at 3am (quiet-hours-persistent-alerts)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    let alertChecks = 0;
+    const { store, runner } = harness(clock, {
+      send: async (_c, text) => { sent.push(text); },
+      quietUntil: () => NOW + 8 * 3_600_000, // deep in the quiet window
+      deferTo: (id, when) => { store.deferTo(id, when); },
+      alertCheck: async () => { alertChecks++; return { message: "🆕 new listing", commit: () => {} }; },
+      alertQuietDeferrable: () => true, // this alert's change persists (a feed/page-diff)
+    });
+    store.add(1, { kind: "daily", task: "alert:jobs", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    expect(alertChecks).toBe(0);           // the CHECK itself waits — nothing lost, the item is still there at 8am
+    expect(sent).toHaveLength(0);          // no 3am buzz
+    const a = store.list(1).find((s) => s.task === "alert:jobs")!;
+    expect(a.dueMs).toBe(NOW + 8 * 3_600_000); // deferred to quiet-end
+    // at quiet-end it runs + sends
+    clock.t = NOW + 8 * 3_600_000;
+    await runner.tick();
+    expect(sent).toContain("🆕 new listing");
+  });
+
+  it("an EDGE-triggered alert stays exempt even when a deferrable classifier is wired (crossing can revert)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    let alertChecks = 0;
+    const { store, runner } = harness(clock, {
+      send: async (_c, text) => { sent.push(text); },
+      quietUntil: () => NOW + 8 * 3_600_000,
+      deferTo: (id, when) => { store.deferTo(id, when); },
+      alertCheck: async () => { alertChecks++; return { message: "🔔 below 50k", commit: () => {} }; },
+      alertQuietDeferrable: () => false, // value/predicate/weather -> edge-triggered, NOT deferrable
+    });
+    store.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    expect(alertChecks).toBe(1);                 // still evaluated on cadence so the crossing isn't lost
+    expect(sent).toContain("🔔 below 50k");
+  });
+
   it("a non-alert proactive send is STILL deferred by quiet hours (regression guard)", async () => {
     const clock = { t: NOW };
     const sent: string[] = [];
