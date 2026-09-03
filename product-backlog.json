@@ -2786,7 +2786,7 @@
       "title": "photo/doc reply memory write isn't gated on delivery",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The text path was fixed (inbound-send-fail-swallowed) but the photo/document/photo-to-action branches call memorySet unconditionally after the send — a failed image/PDF answer is still recorded as delivered, so the next message is read as a follow-up to an answer the user never saw.",
       "how": "Gate the media-branch memorySet on the sendPhoto/sendDocument result (=== false skip), mirroring the text path."
     },
@@ -3921,6 +3921,10 @@
     {
       "item": "starter-automation-gallery",
       "note": "Tap-to-install starter automations (starter-automation-gallery). The recurring-automation engine (recipes/digests/alerts) was under-adopted because activation needed 'save X:' syntax; the /templates catalog existed but was text-only (type '/templates <id>'). Added one-tap install BUTTONS: new 'install' callback op (in|<id>) + installButtons() in callbacks.ts, a short `button` label + templateButtons() on each Template, /templates now sends the catalog WITH a tap-install keyboard (channels w/o inline buttons keep the text list + /templates <id>), and handleCallback routes an install tap through the same recipeSaveNamed path (slot-template hint + 'schedule it every morning' nudge in the confirmation). Reuses the existing RecipeStore — no new store. HELP updated. 7 new tests (install codec + buttons round-trip, templateButtons pairs, handler install-tap saves + unknown-graceful, catalog copy). suite 1891 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "media-memory-not-send-gated",
+      "note": "Extended the send-gated-memory fix to the media reply paths (media-memory-not-send-gated). The text path already skipped the memory write on a failed send (inbound-send-fail-swallowed), but the four media branches — QR-scan reply, photo-to-action, photo describe, document describe — called memorySet unconditionally after the send, so a failed image/PDF answer was still recorded as delivered + the next message read as a follow-up to an unseen reply. Each now captures the sendMessage result + writes memory only when !== false (console channel returning void still counts delivered). 2 new tests (photo + doc answer whose send fails -> memory NOT written). suite 1893 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [

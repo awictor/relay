@@ -607,8 +607,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           if (payload) {
             const isUrl = /^https?:\/\//i.test(payload.trim());
             const out = isUrl ? `That QR code links to:\n${payload.trim()}` : `That QR code contains:\n${payload.trim()}`;
-            await deps.sendMessage(msg.chatId, out);
-            deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[photo] ${caption}` }, { role: "assistant", content: out }]);
+            // Gate the memory write on delivery (media-memory-not-send-gated): a failed send means the
+            // user never saw the QR result, so don't record it as an answered turn (the next message
+            // would read as a follow-up to something never delivered). Mirrors the text path.
+            if (await deps.sendMessage(msg.chatId, out) !== false) deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[photo] ${caption}` }, { role: "assistant", content: out }]);
             return;
           }
           await deps.sendMessage(msg.chatId, "I couldn't find a QR code I could read in that image — try a clearer, closer photo of just the code.");
@@ -634,24 +636,26 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           const res = await runIt(task, { llm: deps.llm, context: deps.profileContext?.(msg.chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, weatherCoords: deps.weatherCoords?.(msg.chatId), weatherUnits: deps.weatherUnits?.(msg.chatId), ...(deps.recallAnswers ? { recall: (q: string) => deps.recallAnswers!(msg.chatId, q) } : {}), ...(deps.resolveContact ? { resolveContact: (n: string) => deps.resolveContact!(msg.chatId, n) } : {}) }, deps.memoryGet(msg.chatId));
           // Keep the untrimmed reply for "more" drilldown (media paths previously trimmed with no recovery).
           const parts = formatReplyParts(res.reply);
-          await deps.sendMessage(msg.chatId, parts.shown);
+          const okSend = await deps.sendMessage(msg.chatId, parts.shown);
           if (parts.full.length > parts.shown.length) lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, parts.shown) });
           if (res.photo && deps.sendPhoto) await deps.sendPhoto(msg.chatId, res.photo);
           deps.recordTurn({ steps: res.steps, tools: res.tools, elapsedMs: 0, ok: !res.degraded, ...(res.degraded ? { degraded: true } : {}) });
-          deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[photo] ${caption}` }, { role: "assistant", content: parts.shown }]);
+          // Gate the memory write on delivery (media-memory-not-send-gated): don't record an undelivered answer.
+          if (okSend !== false) deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[photo] ${caption}` }, { role: "assistant", content: parts.shown }]);
           return;
         }
         const answer = await deps.describeImage(msg.photoFileId, caption);
         // Keep the untrimmed describe for "more" too (photo/doc answers were trimmed with no recovery).
         const parts = formatReplyParts(answer);
         const out = parts.shown;
-        await deps.sendMessage(msg.chatId, out);
+        const okSend = await deps.sendMessage(msg.chatId, out);
         if (parts.full.length > parts.shown.length) lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, parts.shown) });
         // Persist the turn so a follow-up ("what about the second item?", "is that safe to eat?") has
         // context — the text + error paths already do this; these media success paths silently didn't,
-        // so the bot appeared to instantly forget the image it just described.
+        // so the bot appeared to instantly forget the image it just described. Gated on delivery
+        // (media-memory-not-send-gated): a failed send must not record an unseen answer.
         const q = caption ? caption : "[sent a photo]";
-        deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[photo] ${q}` }, { role: "assistant", content: out }]);
+        if (okSend !== false) deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[photo] ${q}` }, { role: "assistant", content: out }]);
       } catch (e) {
         await deps.sendMessage(msg.chatId, friendlyError(e instanceof Error ? e.message : String(e)));
       }
@@ -670,11 +674,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         // Keep the untrimmed answer for "more" (a long doc summary was trimmed with no tail recovery).
         const parts = formatReplyParts(answer);
         const out = parts.shown;
-        await deps.sendMessage(msg.chatId, out);
+        const okSend = await deps.sendMessage(msg.chatId, out);
         if (parts.full.length > parts.shown.length) lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, parts.shown) });
-        // Persist the turn so a follow-up about the document has context (see the photo branch).
+        // Persist the turn so a follow-up about the document has context (see the photo branch). Gated on
+        // delivery (media-memory-not-send-gated): don't record an answer the user never received.
         const q = msg.text?.trim() ? msg.text.trim() : "[sent a document]";
-        deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[document] ${q}` }, { role: "assistant", content: out }]);
+        if (okSend !== false) deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[document] ${q}` }, { role: "assistant", content: out }]);
       } catch (e) {
         await deps.sendMessage(msg.chatId, friendlyError(e instanceof Error ? e.message : String(e)));
       }

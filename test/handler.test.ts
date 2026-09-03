@@ -440,6 +440,24 @@ describe("createHandler", () => {
     expect(h[1]!.content).toMatch(/\$88/);
   });
 
+  it("a photo answer whose send FAILS is NOT persisted to memory (media-memory-not-send-gated)", async () => {
+    const { handle, mem } = harness({
+      describeImage: async () => "That's a receipt; total is $42.50.",
+      sendMessage: async () => false, // delivery fails
+    });
+    await handle({ chatId: 5, from: "u", text: "what is this?", messageId: 1, photoFileId: "F1" } as InboundMessage);
+    expect(mem.get(5)).toBeUndefined(); // undelivered answer not recorded
+  });
+
+  it("a document answer whose send FAILS is NOT persisted to memory (media-memory-not-send-gated)", async () => {
+    const { handle, mem } = harness({
+      describeDocument: async () => "It's an invoice for $88.",
+      sendMessage: async () => false,
+    });
+    await handle({ chatId: 6, from: "u", text: "", messageId: 1, documentFileId: "D1" } as InboundMessage);
+    expect(mem.get(6)).toBeUndefined();
+  });
+
   it("a photo with no describeImage dep gets a clear 'can't read images' note", async () => {
     const { handle, sent } = harness();
     await handle({ chatId: 5, from: "u", text: "", messageId: 1, photoFileId: "F1" } as InboundMessage);
