@@ -92,3 +92,38 @@ describe("runWorldClock", () => {
     expect(runWorldClock({ kind: "convert", time: "9am", from: "PT", to: "Narnia" }, NOW)).toBeNull();
   });
 });
+
+describe("world-clock DST correctness (world-clock-dst)", () => {
+  const JUL = Date.UTC(2025, 6, 1, 12, 0, 0);  // northern summer
+  const JAN = Date.UTC(2025, 0, 1, 12, 0, 0);  // northern winter
+  it("a city is resolved to its DST-correct offset at the query instant", () => {
+    // London: BST (+60) in July, GMT (0) in January — no longer the table's fixed 0 year-round.
+    expect(resolveZone("London", JUL)!.offsetMin).toBe(60);
+    expect(resolveZone("London", JAN)!.offsetMin).toBe(0);
+    // New York: EDT (-240) summer, EST (-300) winter.
+    expect(resolveZone("New York", JUL)!.offsetMin).toBe(-240);
+    expect(resolveZone("New York", JAN)!.offsetMin).toBe(-300);
+  });
+  it("a zone-resolved 'now' answer drops the standard-time disclaimer", () => {
+    const out = runWorldClock({ kind: "now", place: "London" }, JUL)!;
+    expect(out).toMatch(/UTC\+1/);              // BST
+    expect(out).not.toMatch(/standard time|daylight/i);
+  });
+  it("a typed abbreviation is taken as-is and KEEPS the disclaimer (PST != PDT)", () => {
+    expect(resolveZone("PST", JUL)!.offsetMin).toBe(-480); // as typed, not auto-corrected to PDT
+    const out = runWorldClock({ kind: "now", place: "PST" }, JUL)!;
+    expect(out).toMatch(/standard time/i);
+  });
+  it("convert: two city sides are DST-correct with no disclaimer; an abbrev side keeps it", () => {
+    // 12pm London (BST +60) -> Tokyo (+540) in July = 8pm same day. Both zone-resolved -> no note.
+    const cityCity = runWorldClock({ kind: "convert", time: "12pm", from: "London", to: "Tokyo" }, JUL)!;
+    expect(cityCity).not.toMatch(/standard time|daylight/i);
+    // An abbreviation side (EST) is standard-only -> keep the note.
+    const abbrevSide = runWorldClock({ kind: "convert", time: "9am", from: "EST", to: "London" }, JUL)!;
+    expect(abbrevSide).toMatch(/standard time|daylight/i);
+  });
+  it("a non-DST zone is identical year-round (no false correction)", () => {
+    expect(resolveZone("Tokyo", JUL)!.offsetMin).toBe(540);
+    expect(resolveZone("Phoenix", JUL)!.offsetMin).toBe(-420);
+  });
+});

@@ -5,7 +5,7 @@
 // reusing profile.ts's CITY_TZ table (via inferTzFromLocation) plus a tz-abbreviation map for "PT"/"EST".
 // Pure helpers (nowMs injected) exported + unit-tested. STANDARD (non-DST) offsets, same as the reminder
 // scheduler — a known, separately-tracked limitation (noted to the user by the tool, not silently wrong).
-import { inferTzFromLocation } from "./profile.js";
+import { inferTzFromLocation, inferZoneFromLocation, offsetForZoneAt } from "./profile.js";
 
 const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -32,28 +32,37 @@ const TZ_ABBR: Record<string, number> = {
   nzst: 720, nzdt: 780,
 };
 
-export interface Zone { offsetMin: number; label: string; }
+// dstExact = the offset is the ACTUAL offset at the query instant (resolved via an IANA zone), so no
+// daylight-saving disclaimer is needed. false = a standard-only offset (an explicit abbreviation the user
+// typed, or a city with no zone mapping) where the answer may be an hour off in DST months.
+export interface Zone { offsetMin: number; label: string; dstExact?: boolean; }
 
-/** Resolve a place/region/abbreviation to a {offsetMin, label}, or null. Tries a tz abbreviation first
- * (whole-string or trailing token — "9am PT" / "PST"), then profile's CITY_TZ via inferTzFromLocation.
- * label is a tidy UTC±H:MM the formatter can show. Exported for tests. */
-export function resolveZone(text: string): Zone | null {
+/** Resolve a place/region/abbreviation to a {offsetMin, label, dstExact}, or null. Tries a tz abbreviation
+ * first (whole-string or trailing token — "9am PT" / "PST"; taken AS TYPED, standard-only), then a city/
+ * region: with `atMs`, via its IANA zone for the DST-CORRECT offset at that instant (world-clock-dst),
+ * else the standard CITY_TZ table. label is a tidy UTC±H:MM. Exported for tests. */
+export function resolveZone(text: string, atMs?: number): Zone | null {
   const raw = String(text ?? "").trim();
   if (!raw) return null;
   const low = raw.toLowerCase().replace(/[^\p{L}\p{N}\s,+:-]/gu, " ").replace(/\s+/g, " ").trim();
-  // whole string is an abbrev ("pst", "utc")
+  // whole string is an abbrev ("pst", "utc") — the user named a SPECIFIC offset (PST≠PDT), honor it as-is.
   if (low in TZ_ABBR) return { offsetMin: TZ_ABBR[low]!, label: utcLabel(TZ_ABBR[low]!) };
   // trailing token an abbrev ("9am pt", "3 est") — check the LAST word
   const words = low.split(" ");
   const last = words[words.length - 1]!;
   if (last in TZ_ABBR) return { offsetMin: TZ_ABBR[last]!, label: utcLabel(TZ_ABBR[last]!) };
-  // explicit "utc+5" / "utc-8:30" / "gmt+1"
+  // explicit "utc+5" / "utc-8:30" / "gmt+1" — an exact numeric offset, DST-agnostic by definition.
   const m = low.match(/(?:utc|gmt)\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?/);
   if (m) {
     const off = (m[1] === "-" ? -1 : 1) * (parseInt(m[2]!, 10) * 60 + (m[3] ? parseInt(m[3]!, 10) : 0));
-    return { offsetMin: off, label: utcLabel(off) };
+    return { offsetMin: off, label: utcLabel(off), dstExact: true };
   }
-  // fall back to a city/region name
+  // A city/region name: prefer its IANA zone for the DST-correct offset at the query instant (world-clock-
+  // dst) so "time in London" in July is BST, not the table's GMT. Falls back to the standard table.
+  if (atMs !== undefined) {
+    const zone = inferZoneFromLocation(raw);
+    if (zone) { const off = offsetForZoneAt(zone, atMs); if (off !== null) return { offsetMin: off, label: utcLabel(off), dstExact: true }; }
+  }
   const off = inferTzFromLocation(raw);
   return off === null ? null : { offsetMin: off, label: utcLabel(off) };
 }
@@ -129,23 +138,29 @@ export function parseWorldClock(text: string): WorldClockRequest | null {
 /** Answer a parsed world-clock request from an injected nowMs, or null if a zone can't be resolved.
  * Exported for tests + the tool dispatch. */
 export function runWorldClock(req: WorldClockRequest, nowMs: number): string | null {
+  // The DST disclaimer is only shown when an offset is standard-only (an abbreviation, or a city with no
+  // IANA mapping) — a zone-resolved answer is exact at the query instant, so the old always-on note (which
+  // undercut a correct answer) is dropped in that case (world-clock-dst).
+  const DST_NOTE = " Note: I use standard time, so during daylight-saving months this may be an hour off.";
   if (req.kind === "now") {
-    const z = resolveZone(req.place);
+    const z = resolveZone(req.place, nowMs);
     if (!z) return null;
     const d = new Date(nowMs + z.offsetMin * 60_000);
     const place = req.place.replace(/\s+time$/i, "").trim();
-    return `In ${titleCase(place)} it's ${fmtHM(d.getUTCHours() * 60 + d.getUTCMinutes())}, ${DOW[d.getUTCDay()]} ${MON[d.getUTCMonth()]} ${d.getUTCDate()} (${z.label}). Note: I use standard time, so during daylight-saving months this may be an hour off.`;
+    return `In ${titleCase(place)} it's ${fmtHM(d.getUTCHours() * 60 + d.getUTCMinutes())}, ${DOW[d.getUTCDay()]} ${MON[d.getUTCMonth()]} ${d.getUTCDate()} (${z.label}).${z.dstExact ? "" : DST_NOTE}`;
   }
-  // convert
-  const from = resolveZone(req.from);
-  const to = resolveZone(req.to);
+  // convert: resolve both zones at the query instant so a city side is DST-correct (an abbreviation side
+  // stays as-typed). The disclaimer shows only if EITHER side is standard-only.
+  const from = resolveZone(req.from, nowMs);
+  const to = resolveZone(req.to, nowMs);
   const mins = parseClockTime(req.time);
   if (!from || !to || mins === null) return null;
   // Convert: a wall-clock time in `from` maps to UTC (mins - fromOffset), then to `to` (+ toOffset).
   const toMins = mins - from.offsetMin + to.offsetMin;
   const dayShift = Math.floor(toMins / 1440);
   const shiftNote = dayShift > 0 ? " (next day)" : dayShift < 0 ? " (previous day)" : "";
-  return `${fmtHM(mins)} ${from.label} is ${fmtHM(toMins)}${shiftNote} in ${titleCase(req.to.replace(/\s+time$/i, "").trim())} (${to.label}). Note: standard time — may shift an hour during daylight-saving months.`;
+  const exact = from.dstExact === true && to.dstExact === true;
+  return `${fmtHM(mins)} ${from.label} is ${fmtHM(toMins)}${shiftNote} in ${titleCase(req.to.replace(/\s+time$/i, "").trim())} (${to.label}).${exact ? "" : " Note: standard time — may shift an hour during daylight-saving months."}`;
 }
 
 function titleCase(s: string): string {

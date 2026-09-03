@@ -2894,9 +2894,36 @@
       "title": "First weather/near-me errand dead-ends to setup instead of a one-tap share",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A brand-new user's 'weather?'/'coffee near me' asks them to run /setlocation or share a pin from a buried tip, instead of offering an inline one-tap 'share location' button — a first-touch errand that bounces to setup reads as broken.",
       "how": "On a needsLocationContext ask with no saved location/coords, reply with a Telegram request_location keyboard button (one tap sends the pin, already handled by the location-pin path) alongside the 'or tell me your city' text."
+    },
+    {
+      "id": "world-clock-dst",
+      "title": "World-clock/get_time was standard-time-only (hour off in DST)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "runWorldClock used fixed standard offsets and appended 'may be an hour off during daylight-saving' to EVERY answer, so 'time in London' in summer was wrong (GMT not BST) and even correct answers carried a trust-eroding disclaimer.",
+      "how": "resolveZone(text, atMs) resolves a city/region via its IANA zone (offsetForZoneAt) for the DST-correct offset at the query instant; a typed abbreviation (PST/EST) stays as-is; the disclaimer shows only when an offset is standard-only. Tool descriptions updated."
+    },
+    {
+      "id": "suntimes-dst-check",
+      "title": "Verify sunrise/sunset + any other tz-derived tool for the same DST gap",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "get_time was standard-time-only; suntimes.ts + datecalc.ts + the agent's current-datetime line may share the same fixed-offset assumption and be an hour off in DST months for a named city.",
+      "how": "Audit suntimes/datecalc/status for CITY_TZ/fixed-offset use; route city-derived times through offsetForZoneAt(zone, atMs) like worldclock now does; add DST tests."
+    },
+    {
+      "id": "read-it-later-capture",
+      "title": "'save this' link -> summarize + recall over saved pages",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "A satisfied user has no way to build a personal corpus; 'save this <link>' + later 'what did I save about X' turns normal use into a knowledge base + switching-cost moat (parked audit-C finding).",
+      "how": "On 'save this <url>' scrape+summarize via the existing tools, store {url,summary,tags,t} in a notes-style store; 'what did I save about X' does full-text recall. Reuse notes.ts/lists.ts + scrape."
     }
   ],
   "history": [
@@ -4055,6 +4082,14 @@
     {
       "id": "recurring-reminder-dst-drift",
       "note": "A recurring daily/weekly/monthly/yearly now stores its IANA zone (inferred from the saved location) and recomputes the DST-correct offset at each occurrence via offsetForZoneAt, instead of freezing the offset stamped at creation. Before: a '7am daily' set in winter fired at 8am all summer (CST->CDT). Two-pass reschedule (provisional at frozen offset -> resolve zone offset there -> recompute once) since DST shifts are <=1h. restampTz stamps the zone too. Sandbox+unit verified: zone-stamped daily holds 7am local across the boundary, no-zone control drifts to 8am. +4 tests, 1917 green."
+    },
+    {
+      "id": "weather-needs-location-one-tap",
+      "note": "NO-CHANGE (already shipped): one-tap request_location button is wired end-to-end (telegram sendLocationRequest -> channel.requestLocation -> index -> handler L884 on a first location errand, plain-text fallback). Stale audit finding, verified + closed."
+    },
+    {
+      "id": "world-clock-dst",
+      "note": "get_time/runWorldClock now DST-correct: a city/region resolves via its IANA zone (offsetForZoneAt) at the query instant, so 'time in London' in July is BST not GMT; a typed abbreviation (PST/EST) is honored as-is; the always-on 'may be an hour off' disclaimer now shows only for standard-only offsets. Reuses the CITY_ZONE infra from the reminder-DST fix. Tool descriptions updated. +5 tests, 1922 green."
     }
   ],
   "audits": [
@@ -4309,6 +4344,9 @@
     },
     {
       "note": "Backlog down to owner-gated + low after shipping the DST fix. Seeded 2 parked findings: recurring-reminder-dst-drift (long-lived recurring needs per-fire zone recompute — the follow-on the new CITY_ZONE map enables), weather-needs-location-one-tap (audit-A first-errand friction)."
+    },
+    {
+      "note": "Agent spawn cap (200/200) hit this run — could not spawn the 3 audit agents. Verified weather-one-tap already shipped (stale), built world-clock-dst opportunistically (same DST-gap class as the reminder fix). Seeded suntimes-dst-check (same-class sweep) + read-it-later-capture (parked audit-C) as the refill."
     }
   ]
 }
