@@ -224,7 +224,9 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // advanced/failed the schedule — a late finish must NOT also send + complete, or the highest-trust
         // reminder ("take my meds") double-pings (mirrors the guard on the main/alert/digest paths).
         if (isCancelled()) { log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, dropped: "timed_out_late_finish" })}`); return; }
-        const echo = `⏰ Reminder: ${taskToRun}`;
+        // A sticky reminder (sticky-acknowledged-reminders) re-pings until acknowledged — tell the user
+        // how to stop it so the nag has an off switch. Plain reminders echo as before.
+        const echo = s.sticky ? `⏰ Reminder: ${taskToRun}\n(reply "done" when you've handled it and I'll stop)` : `⏰ Reminder: ${taskToRun}`;
         await deps.send(s.chatId, echo);
         deps.recordSend?.(s.chatId, echo);
         noteSend(s.chatId, deps.now());

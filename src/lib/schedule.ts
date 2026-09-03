@@ -22,6 +22,12 @@ export interface Schedule {
   intervalMs?: number; // for interval: gap between fires
   attempts?: number;   // failed fire attempts (once-reminder transient-retry); dropped after a cap
   reminderOnly?: boolean; // a pure personal to-do ("take meds"): echo the note at fire time, don't run the agent
+  sticky?: boolean;    // sticky-acknowledged-reminders: an interval reminder that keeps re-pinging UNTIL the
+                       // user replies "done"/"stop" (the biggest daily-habit hook — meds/water/standup). It
+                       // fires like an interval but self-caps after stickyMax fires so a forgotten one can't
+                       // nag forever, and an ack removes it outright.
+  stickyMax?: number;  // max total fires for a sticky reminder before it gives up on its own (anti-nag cap)
+  stickyFired?: number; // how many times this sticky reminder has fired so far (advanced by complete())
   clockTime?: boolean; // a "once" tied to a WALL-CLOCK time ("at 8am", "tomorrow 9:30", "on May 6") — as
                        // opposed to a relative "in 3 hours". Only clock-time onces get tz-restamped on a
                        // later /setlocation (once-reminder-tz-restamp); a relative once has no hour to shift.
@@ -46,12 +52,24 @@ export interface ParsedSchedule {
   weekdays?: number[];
   intervalMs?: number;
   reminderOnly?: boolean; // pure personal to-do: echo at fire time, don't run the agent
+  sticky?: boolean;       // re-ping until acknowledged (sticky-acknowledged-reminders)
+  stickyMax?: number;     // anti-nag cap on total fires
   clockTime?: boolean;    // a wall-clock "once" (at 8am / on May 6), eligible for tz-restamp
 }
 
 const MINUTE = 60_000;
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
+
+// A sticky reminder gives up on its own after this many total fires (anti-nag) even if never acknowledged,
+// so a forgotten "nag me every 15 min" can't ping indefinitely. Tunable via RELAY_STICKY_MAX_FIRES.
+export const DEFAULT_STICKY_MAX = Math.max(2, Number(process.env.RELAY_STICKY_MAX_FIRES) || 8);
+
+/** True if a WHOLE message is an acknowledgement that stops a sticky reminder ("done", "stop", "ok",
+ * "got it", "did it", "taken", "finished"). Kept tight so a normal reply isn't read as an ack. Exported. */
+export function isStickyAck(text: string): boolean {
+  return /^\s*(?:done|stop|ok|okay|got\s*it|did\s*it|i'?m\s+done|its?\s+done|finished|complete[d]?|taken|handled|👍|✅)\s*[!.]*\s*$/i.test(text);
+}
 
 // Strip a leading "remind me to"/"remind me"/"reminder:" so the stored task reads naturally.
 const REMINDER_PREFIX_RE = /^\s*(please\s+)?(remind me to|remind me|reminder:?|remember to)\s+/i;
@@ -207,6 +225,30 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     const task = cleanTask(raw, origClause);
     if (!task) return null;
     return { kind: "once", task, dueMs: now + ms, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+  }
+
+  // --- sticky (sticky-acknowledged-reminders): "keep reminding me to take my meds every 15 min (until I
+  // say done)", "nag me to stretch every 20 minutes", "remind me to drink water every 30 min until done".
+  // A sticky reminder re-pings on an interval UNTIL the user acknowledges ("done"/"stop"), self-capping
+  // after DEFAULT_STICKY_MAX fires so a forgotten one can't nag forever. It's an interval + reminderOnly
+  // + the sticky flag. Detected BEFORE the plain interval branch so "keep reminding"/"nag"/"until I say
+  // done" wins; a plain "every 15 min check the news" stays a normal interval. Requires a re-ping cue
+  // (keep/nag/until ... done) so a bare "every 15 min" isn't unexpectedly turned sticky. ---
+  const stickyCue = /\b(keep\s+reminding|nag\s+me)\b/i.test(lower) || /\buntil\s+(?:i\s+(?:say|reply|tell\s+you)\s+)?(?:done|stop|ok|okay|i'?m\s+done|it'?s\s+done)\b/i.test(lower);
+  const stickyInterval = lower.match(/\bevery\s+(\d+|other)\s*(min(?:ute)?s?|hours?|hrs?)\b/);
+  if (stickyCue && stickyInterval) {
+    const n = stickyInterval[1] === "other" ? 2 : parseInt(stickyInterval[1]!, 10);
+    const unit = stickyInterval[2]!;
+    const ms = /^h/.test(unit) ? n * HOUR : n * MINUTE;
+    if (n >= 1 && ms >= MINUTE) {
+      // Strip BOTH the cadence clause and the trailing "until I say done" phrase, plus the "keep/nag" lead,
+      // so the stored note reads as the bare to-do ("take my meds"), not "keep reminding ... until done".
+      let task = cleanTask(raw, stickyInterval[0]!);
+      task = task.replace(/\buntil\s+(?:i\s+(?:say|reply|tell\s+you)\s+)?(?:done|stop|ok|okay|i'?m\s+done|it'?s\s+done)\b.*$/i, "").trim();
+      task = task.replace(/^\s*(?:keep\s+reminding\s+me\s+(?:to\s+)?|nag\s+me\s+(?:to\s+)?|remind\s+me\s+(?:again\s+)?(?:to\s+)?)/i, "").trim();
+      task = task.replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, "").trim();
+      if (task) return { kind: "interval", task, dueMs: now + ms, intervalMs: ms, reminderOnly: true, sticky: true, stickyMax: DEFAULT_STICKY_MAX };
+    }
   }
 
   // --- interval: "every 2 hours", "every 30 min", "every 2 days", "every 2 weeks" (recurring gap) ---
@@ -542,7 +584,7 @@ export class ScheduleStore {
   /** Add a schedule for a chat. Returns the stored record, or null if the chat is at its cap. */
   add(chatId: number, p: ParsedSchedule, now: number): Schedule | null {
     if (this.items.filter((s) => s.chatId === chatId).length >= this.maxPerChat) return null;
-    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, weekdays: p.weekdays, intervalMs: p.intervalMs, ...(p.reminderOnly ? { reminderOnly: true } : {}), ...(p.clockTime ? { clockTime: true } : {}), created: now };
+    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, weekdays: p.weekdays, intervalMs: p.intervalMs, ...(p.reminderOnly ? { reminderOnly: true } : {}), ...(p.sticky ? { sticky: true, stickyMax: p.stickyMax ?? DEFAULT_STICKY_MAX, stickyFired: 0 } : {}), ...(p.clockTime ? { clockTime: true } : {}), created: now };
     this.items.push(s);
     this.persist();
     return s;
@@ -646,6 +688,24 @@ export class ScheduleStore {
     return removed;
   }
 
+  /** Acknowledge sticky reminders (sticky-acknowledged-reminders): remove this chat's sticky reminders so
+   * a "done"/"stop" reply stops the nagging. Returns the removed sticky reminders (their tasks let the
+   * caller confirm WHICH stopped). Removes only sticky ones — a normal "done" can't wipe real schedules. */
+  acknowledgeSticky(chatId: number): Schedule[] {
+    const acked = this.items.filter((s) => s.chatId === chatId && s.sticky);
+    if (acked.length) {
+      this.items = this.items.filter((s) => !(s.chatId === chatId && s.sticky));
+      this.persist();
+    }
+    return acked;
+  }
+
+  /** True if a chat has any active sticky reminder (so the handler only treats a bare "done" as an ack
+   * when there's actually something to acknowledge, not as a normal message). */
+  hasSticky(chatId: number): boolean {
+    return this.items.some((s) => s.chatId === chatId && s.sticky);
+  }
+
   /** Schedules due at/before now. */
   dueNow(now: number): Schedule[] {
     // Exclude a once whose fire already completed but whose removal-write may have failed
@@ -724,6 +784,16 @@ export class ScheduleStore {
       s.dueMs = nextWeeklyMs(now, hh!, mm!, s.weekdays, off);
       return this.persist();
     } else if (s.kind === "interval" && s.intervalMs) {
+      // A sticky reminder (sticky-acknowledged-reminders) counts its fires and gives up on its own once it
+      // hits stickyMax, so a never-acknowledged "nag me every 15 min" can't ping forever. Otherwise it
+      // advances like any interval; an explicit "done"/"stop" removes it early (acknowledgeSticky).
+      if (s.sticky) {
+        s.stickyFired = (s.stickyFired ?? 0) + 1;
+        if (s.stickyFired >= (s.stickyMax ?? DEFAULT_STICKY_MAX)) {
+          this.items = this.items.filter((x) => x.id !== id); // hit the cap: stop nagging + drop it
+          return this.persist();
+        }
+      }
       // Advance by whole intervals past now so a missed tick (downtime) doesn't fire a burst of backlog.
       const next = s.dueMs + Math.max(1, Math.ceil((now - s.dueMs) / s.intervalMs)) * s.intervalMs;
       s.dueMs = next > now ? next : now + s.intervalMs;

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSchedule, parseScheduleFor, splitScheduleCommand, parseSnoozeCommand, ScheduleStore, quietUntilMs, PAUSE_INDEFINITE } from "../src/lib/schedule.js";
+import { parseSchedule, parseScheduleFor, splitScheduleCommand, parseSnoozeCommand, ScheduleStore, quietUntilMs, PAUSE_INDEFINITE, isStickyAck, DEFAULT_STICKY_MAX } from "../src/lib/schedule.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -389,6 +389,33 @@ describe("parseSchedule — absolute", () => {
   });
 });
 
+describe("parseSchedule — sticky / acknowledged reminders (sticky-acknowledged-reminders)", () => {
+  it("'keep reminding me ... every N min' becomes a sticky reminderOnly interval", () => {
+    const s = parseSchedule("keep reminding me to take my meds every 15 minutes", NOW)!;
+    expect(s.kind).toBe("interval");
+    expect(s.intervalMs).toBe(15 * MIN);
+    expect(s.reminderOnly).toBe(true);
+    expect(s.sticky).toBe(true);
+    expect(s.stickyMax).toBe(DEFAULT_STICKY_MAX);
+    expect(s.task).toBe("take my meds"); // "keep reminding me to" + cadence stripped
+  });
+  it("'nag me to X every N min' and 'until I say done' are also sticky", () => {
+    expect(parseSchedule("nag me to stretch every 20 min", NOW)!.sticky).toBe(true);
+    const d = parseSchedule("remind me to drink water every 30 min until I say done", NOW)!;
+    expect(d.sticky).toBe(true);
+    expect(d.task).toBe("drink water"); // trailing "until I say done" stripped
+  });
+  it("a plain interval WITHOUT a re-ping cue stays a normal (non-sticky) interval", () => {
+    const s = parseSchedule("remind me to stretch every 2 hours", NOW)!;
+    expect(s.kind).toBe("interval");
+    expect(s.sticky).toBeUndefined(); // no keep/nag/until -> ordinary recurring reminder
+  });
+  it("isStickyAck matches bare acknowledgements only", () => {
+    for (const t of ["done", "Done!", "stop", "ok", "got it", "did it", "taken", "✅"]) expect(isStickyAck(t), t).toBe(true);
+    for (const t of ["done with the report tell me more", "stop the presses", "what's the weather", ""]) expect(isStickyAck(t), t).toBe(false);
+  });
+});
+
 function tmpFile() { const d = mkdtempSync(join(tmpdir(), "relay-sched-")); dirs.push(d); return join(d, "sched.json"); }
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
@@ -434,6 +461,33 @@ describe("ScheduleStore.complete persist (once-complete-ignores-persist)", () =>
     expect(s.complete(daily.id, NOW)).toBe(true);
     expect(s.list(1)).toHaveLength(1);
     expect(s.list(1)[0]!.dueMs).toBeGreaterThan(NOW);
+  });
+});
+
+describe("ScheduleStore — sticky reminders (sticky-acknowledged-reminders)", () => {
+  it("a sticky interval self-caps after stickyMax fires (anti-nag), then drops", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const r = s.add(1, { kind: "interval", task: "meds", dueMs: NOW - 1, intervalMs: 15 * MIN, reminderOnly: true, sticky: true, stickyMax: 3 }, NOW)!;
+    // Fires 1, 2 -> still alive + rescheduled forward; fire 3 hits the cap -> removed.
+    expect(s.complete(r.id, NOW)).toBe(true); expect(s.list(1)).toHaveLength(1);
+    expect(s.complete(r.id, NOW)).toBe(true); expect(s.list(1)).toHaveLength(1);
+    expect(s.complete(r.id, NOW)).toBe(true); expect(s.list(1)).toHaveLength(0); // capped out
+  });
+  it("acknowledgeSticky removes ONLY sticky reminders + reports their tasks; hasSticky reflects state", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "interval", task: "meds", dueMs: NOW, intervalMs: 15 * MIN, reminderOnly: true, sticky: true }, NOW);
+    s.add(1, { kind: "daily", task: "brief", dueMs: NOW, hourMin: "09:00", offsetMin: 0 }, NOW); // NOT sticky
+    expect(s.hasSticky(1)).toBe(true);
+    const acked = s.acknowledgeSticky(1);
+    expect(acked.map((x) => x.task)).toEqual(["meds"]);
+    expect(s.hasSticky(1)).toBe(false);
+    expect(s.list(1).map((x) => x.task)).toEqual(["brief"]); // the real daily survives
+  });
+  it("acknowledgeSticky on a chat with no sticky reminders removes nothing", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "daily", task: "brief", dueMs: NOW, hourMin: "09:00", offsetMin: 0 }, NOW);
+    expect(s.acknowledgeSticky(1)).toEqual([]);
+    expect(s.list(1)).toHaveLength(1);
   });
 });
 

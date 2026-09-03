@@ -204,6 +204,28 @@ describe("handler — schedule routing", () => {
     expect(calls()).toBe(0);
   });
 
+  it("a bare \"done\" acknowledges + stops a sticky reminder, no agent (sticky-acknowledged-reminders)", async () => {
+    const { handle, sent, calls } = harness({ stickyAck: () => ["take my meds"] });
+    await handle(msg("done"));
+    expect(sent[0]).toMatch(/stopped reminding you about "take my meds"/i);
+    expect(calls()).toBe(0); // handled before the agent
+  });
+
+  it("a \"done\" with no active sticky reminder falls through to the agent (not swallowed)", async () => {
+    const { handle, calls } = harness({ stickyAck: () => [] }); // nothing to ack
+    await handle(msg("done"));
+    expect(calls()).toBe(1); // reached the agent as a normal message
+  });
+
+  it("\"keep reminding me ... every 15 min\" confirms with the sticky wording", async () => {
+    const { handle, sent, calls } = harness({
+      scheduleAdd: () => ({ ok: true, kind: "interval", task: "take my meds", whenMs: 0, sticky: true }),
+    });
+    await handle(msg("keep reminding me to take my meds every 15 min"));
+    expect(sent[0]).toMatch(/keep reminding you.*done/i);
+    expect(calls()).toBe(0);
+  });
+
   it("/schedules lists pending tasks, no agent", async () => {
     const { handle, sent, calls } = harness();
     await handle(msg("/schedules"));

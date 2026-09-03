@@ -128,7 +128,7 @@ export interface HandlerDeps {
   describeDocument?: (fileId: string, caption: string, fileName?: string, mimeType?: string) => Promise<string>;
   // Scheduled/proactive tasks (m4 sched-3). All optional so older wiring stays valid; when
   // absent, a "remind me" message just falls through to the normal agent.
-  scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number; whenText?: string; noTz?: boolean; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" };
+  scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number; whenText?: string; noTz?: boolean; saved?: boolean; sticky?: boolean } | { ok: false; reason: "unparsed" | "capped" };
   // First-reminder tz (first-reminder-tz-ask): true when this message parses to a CLOCK-TIME schedule
   // AND the chat has no timezone set — so the handler asks "what city are you in?" (city→tz infer)
   // BEFORE scheduling, instead of scheduling wrong-at-UTC then warning. Optional.
@@ -141,6 +141,10 @@ export interface HandlerDeps {
   // Snooze (snooze-automations): pause/resume a schedule/alert/digest by name or id instead of the
   // destructive /cancel|/forget. Returns how many were paused/resumed. Optional.
   scheduleSnooze?: (chatId: number, text: string, now: number) => { action: "pause" | "resume"; count: number; which: string; untilText?: string } | null;
+  // Sticky reminders (sticky-acknowledged-reminders): a bare "done"/"stop" reply acknowledges + stops any
+  // re-pinging sticky reminder. Returns the tasks that were stopped (empty = the chat had none, so the
+  // handler treats the message as normal text). Optional; absent -> "done" is a normal message.
+  stickyAck?: (chatId: number, text: string) => string[] | null;
   // Saved recipes (m7 recipe-2). All optional so older wiring stays valid. recipeSave parses a
   // "save <name>: <task>" message (null if it isn't one); recipeResolve returns a saved task by
   // name (null if unknown); recipeList/recipeForget manage them.
@@ -733,6 +737,18 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // Snooze / resume (snooze-automations): "pause btc for 2 days" / "snooze morning digest" / "resume
     // btc" quiets a standing automation through travel or noise instead of destroying it with /cancel or
     // /forget. Runs BEFORE the schedule cue so "pause"/"snooze"/"resume" aren't misread as a new reminder.
+    // Sticky ack (sticky-acknowledged-reminders): a bare "done"/"stop" reply stops a re-pinging sticky
+    // reminder. Runs FIRST + only fires when the chat actually has a sticky reminder (stickyAck returns
+    // [] otherwise), so a normal "done"/"ok" reply isn't swallowed when nothing is nagging.
+    if (!isExplicitCommand && deps.stickyAck) {
+      const acked = deps.stickyAck(msg.chatId, msg.text);
+      if (acked && acked.length) {
+        const what = acked.length === 1 ? `"${acked[0]}"` : `${acked.length} reminders`;
+        await deps.sendMessage(msg.chatId, `Nice — stopped reminding you about ${what}. 👍`);
+        return;
+      }
+    }
+
     if (!isExplicitCommand && deps.scheduleSnooze) {
       const s = deps.scheduleSnooze(msg.chatId, msg.text, deps.now());
       if (s) {
@@ -750,7 +766,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       }
     }
 
-    const scheduleCue = /\b(remind me|every day|every morning|every evening|every night|daily|weekdays?|weekends?|tomorrow)\b|\bevery\s+(mon|tue|wed|thu|fri|sat|sun)|\bevery\s+(\d+|other)\s*(min|hour|hr|day|week|wk)|\bin \d+\s*(min|hour|day|week|wk)|\bin\s+(an?|half\s+an?|a\s+couple|a\s+few|several|one|two|three)\s+(min|hour|hr|day|week|wk)|\b(set\s+(?:an?\s+)?alarm|wake\s+me)\b|\bnext\s+(sunday|sun|monday|mon|tuesday|tues|tue|wednesday|weds|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat)\b|\b(?:on\s+)?(january|february|march|april|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\.|\b)\s+\d{1,2}\b|\bon\s+may\s+\d{1,2}\b|\bon\s+the\s+\d{1,2}(st|nd|rd|th)\b|\bat\s+\d{1,2}\s*(am|pm)\b|\bat\s+([01]?\d|2[0-3]):[0-5]\d\b/i;
+    const scheduleCue = /\b(remind me|keep reminding|nag me|every day|every morning|every evening|every night|daily|weekdays?|weekends?|tomorrow)\b|\bevery\s+(mon|tue|wed|thu|fri|sat|sun)|\bevery\s+(\d+|other)\s*(min|hour|hr|day|week|wk)|\bin \d+\s*(min|hour|day|week|wk)|\bin\s+(an?|half\s+an?|a\s+couple|a\s+few|several|one|two|three)\s+(min|hour|hr|day|week|wk)|\b(set\s+(?:an?\s+)?alarm|wake\s+me)\b|\bnext\s+(sunday|sun|monday|mon|tuesday|tues|tue|wednesday|weds|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat)\b|\b(?:on\s+)?(january|february|march|april|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\.|\b)\s+\d{1,2}\b|\bon\s+may\s+\d{1,2}\b|\bon\s+the\s+\d{1,2}(st|nd|rd|th)\b|\bat\s+\d{1,2}\s*(am|pm)\b|\bat\s+([01]?\d|2[0-3]):[0-5]\d\b/i;
     if (!isExplicitCommand && deps.scheduleAdd && scheduleCue.test(msg.text)) {
       // First-reminder tz (first-reminder-tz-ask): a clock-time schedule with no saved tz would fire
       // against UTC (a new user's "remind me at 7am" lands at 3am). Ask the city ONCE first (city→tz
@@ -764,7 +780,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       }
       const r = deps.scheduleAdd(msg.chatId, msg.text, deps.now());
       if (r.ok) {
-        const verb = r.kind === "once" ? "remind you" : r.kind === "daily" ? "do this daily" : r.kind === "weekly" ? "do this on the days you said" : "do this on that schedule";
+        const verb = r.sticky ? "keep reminding you (until you reply \"done\")" : r.kind === "once" ? "remind you" : r.kind === "daily" ? "do this daily" : r.kind === "weekly" ? "do this on the days you said" : "do this on that schedule";
         // Echo the resolved next-fire time so a wrong/absent timezone is caught before it fires late.
         const when = r.whenText ? ` Next: ${r.whenText}.` : "";
         // No timezone set + a clock-time schedule -> it fires against UTC (likely the user's night).

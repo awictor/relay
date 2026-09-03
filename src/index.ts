@@ -22,7 +22,7 @@ import { fetchFeedItems, resolveFeedSource, parseFollowCommand } from "./lib/fee
 import { formatReply, formatReplyParts } from "./lib/format-reply.js";
 import { friendlyError } from "./lib/failure.js";
 import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
-import { ScheduleStore, parseSchedule, parseSnoozeCommand, tzOffsetMin, quietUntilMs, PAUSE_INDEFINITE } from "./lib/schedule.js";
+import { ScheduleStore, parseSchedule, parseSnoozeCommand, tzOffsetMin, quietUntilMs, PAUSE_INDEFINITE, isStickyAck } from "./lib/schedule.js";
 import { formatWhen } from "./lib/format-when.js";
 import { formatDashboard, type DashboardData } from "./lib/dashboard.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
@@ -413,7 +413,7 @@ const handle = createHandler({
     // A relative "in N min/hours" reminder has no wall-clock dependency, so it's never flagged.
     const isClockTime = rec.kind === "daily" || rec.kind === "weekly" || /\bat\s+\d/i.test(text) || /\b(morning|evening|night|noon|midnight)\b/i.test(text);
     const noTz = isClockTime && profiles.offsetMin(chatId) === undefined && tzOffsetMin() === 0;
-    return { ok: true, kind: rec.kind, task: rec.task, whenMs: rec.dueMs, whenText, noTz, saved: schedules.lastSaveOk() };
+    return { ok: true, kind: rec.kind, task: rec.task, whenMs: rec.dueMs, whenText, noTz, saved: schedules.lastSaveOk(), ...(rec.sticky ? { sticky: true } : {}) };
   },
   // First-reminder tz (first-reminder-tz-ask): would this message schedule a CLOCK-TIME task with no
   // saved tz? If so the handler asks the city first (city→tz) rather than scheduling wrong-at-UTC.
@@ -487,6 +487,12 @@ const handle = createHandler({
     const count = schedules.pause(chatId, p.which, untilMs);
     const untilText = p.untilMs !== undefined ? formatWhen(untilMs, profiles.offsetMin(chatId) ?? tzOffsetMin(), now) : undefined;
     return { action: "pause", count, which: p.which, ...(untilText ? { untilText } : {}) };
+  },
+  // Sticky ack (sticky-acknowledged-reminders): a bare "done"/"stop" stops the chat's re-pinging sticky
+  // reminders. Returns [] when the chat has none (so the handler leaves a normal "done" alone).
+  stickyAck: (chatId, text) => {
+    if (!isStickyAck(text) || !schedules.hasSticky(chatId)) return [];
+    return schedules.acknowledgeSticky(chatId).map((s) => s.task);
   },
   recipeSave: (chatId, text) => {
     const p = parseRecipeCommand(text);
