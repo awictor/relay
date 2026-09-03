@@ -384,7 +384,14 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // exemption above: run the check on cadence so the crossing is seen. An alert only SENDS on a real
         // change (rare, and a user-requested event, not recurring noise), so letting it through can't
         // storm the quiet window the way a daily/digest would; missing the crossing is the worse failure.
-        if (deps.quietUntil && deps.deferTo && !isAlertCheck) {
+        // An explicit wall-clock "once" ("wake me at 6am", "remind me tomorrow 7:00") is EXEMPT from the
+        // quiet-hours defer (quiet-hours-once-alarm): the user named that exact instant on purpose, so
+        // pushing it to the window's end defeats an alarm / delays a time-critical reminder. Quiet hours
+        // exist to silence RECURRING noise (dailies/digests) + relative onces, not a promise pinned to a
+        // clock time. clockTime marks the wall-clock onces; a relative "in 20 min" once has no such flag
+        // and still defers (its instant is incidental, not chosen).
+        const isClockOnce = s.kind === "once" && s.clockTime === true;
+        if (deps.quietUntil && deps.deferTo && !isAlertCheck && !isClockOnce) {
           const until = deps.quietUntil(s.chatId, deps.now());
           if (until > deps.now() && s.dueMs < until) {
             deps.deferTo(s.id, until);

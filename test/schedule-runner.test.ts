@@ -316,6 +316,37 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.list(1)[0]!.dueMs).toBe(NOW + 8 * 3_600_000); // pushed to window end
   });
 
+  it("an explicit wall-clock 'once' alarm fires AT its time even inside quiet hours (quiet-hours-once-alarm)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    const { store, runner } = harness(clock, {
+      send: async (_c, text) => { sent.push(text); },
+      quietUntil: () => NOW + 8 * 3_600_000, // now is inside the quiet window
+      deferTo: (id, when) => { store.deferTo(id, when); },
+    });
+    // "wake me at 6am" — clockTime marks the user-chosen instant; deferring it to 8am defeats the alarm.
+    store.add(1, { kind: "once", task: "wake up", dueMs: NOW - 1, clockTime: true, reminderOnly: true }, NOW);
+    const n = await runner.tick();
+    expect(n).toBe(1);                     // fired despite quiet hours
+    expect(sent[0]).toMatch(/wake up/);    // the alarm rang on time
+    expect(store.list(1)).toHaveLength(0); // once delivered + dropped, not deferred
+  });
+
+  it("a RELATIVE 'once' (no clockTime) still defers in quiet hours — its instant is incidental", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    const { store, runner } = harness(clock, {
+      send: async (_c, text) => { sent.push(text); },
+      quietUntil: () => NOW + 8 * 3_600_000,
+      deferTo: (id, when) => { store.deferTo(id, when); },
+    });
+    store.add(1, { kind: "once", task: "check the thing", dueMs: NOW - 1 }, NOW); // no clockTime
+    const n = await runner.tick();
+    expect(n).toBe(0);                                          // deferred, not fired
+    expect(sent).toHaveLength(0);
+    expect(store.list(1)[0]!.dueMs).toBe(NOW + 8 * 3_600_000);  // pushed to window end
+  });
+
   it("an alert CHECK runs during quiet hours (not deferred) so an overnight crossing isn't lost (quiet-hours-defers-alert-check)", async () => {
     const clock = { t: NOW };
     const sent: string[] = [];
