@@ -1112,7 +1112,7 @@
       "title": "get_weather resolves an ambiguous city to the biggest same-name match",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "\"weather in Portland/Springfield\" returns the highest-population match, not the user; count=1 + results[0] with no disambiguation.",
       "how": "Fetch a few geocode candidates; if the top two are far apart / different regions, ask which, or prefer one near the user saved coords."
     },
@@ -1536,6 +1536,10 @@
     {
       "id": "multi-slot-recipes",
       "note": "applySlots no longer stuffs one arg into every slot: a recipe with DISTINCT slots (\"track {item} at {store}\") now fills by name=value pairs (item=milk store=HEB, quotes supported) or by position (comma then whitespace); single-slot + repeated-same-name behavior unchanged (back-compat). New slotNames helper. Makes parameterized recipes actually reusable. Help updated. 1037 tests green."
+    },
+    {
+      "id": "weather-ambiguous-city",
+      "note": "get_weather no longer always returns the biggest same-name city: geocode now fetches 5 candidates (parseGeocodeAll) and pickCandidate prefers the one within ~250km of the user saved coords, else the top match. Agent passes weatherCoords as near when a place is named. So \"weather in Portland\" for a Boston user resolves to Portland ME, not OR. parseGeocode kept as a back-compat shim. 1043 tests green."
     }
   ],
   "audits": [

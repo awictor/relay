@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { weatherDesc, parseGeocode, parseForecast, formatWeather, getWeather, geocodeUrl, forecastUrl } from "../src/lib/weather.js";
+import { weatherDesc, parseGeocode, parseGeocodeAll, pickCandidate, parseForecast, formatWeather, getWeather, geocodeUrl, forecastUrl } from "../src/lib/weather.js";
 
 describe("weatherDesc (geo-tool-cluster)", () => {
   it("maps WMO codes to short descriptions", () => {
@@ -55,6 +55,36 @@ describe("formatWeather", () => {
   });
 });
 
+describe("pickCandidate (weather-ambiguous-city)", () => {
+  // Two "Portland"s: OR (population top) and ME.
+  const cands = [
+    { lat: 45.52, lng: -122.68, place: "Portland, Oregon, US" },
+    { lat: 43.66, lng: -70.26, place: "Portland, Maine, US" },
+  ];
+  it("no user coords -> the top (population) result", () => {
+    expect(pickCandidate(cands)!.place).toMatch(/Oregon/);
+  });
+  it("prefers the candidate near the user's coords (within ~250km)", () => {
+    // User near Boston -> Portland ME (~150km) beats Portland OR (top result).
+    expect(pickCandidate(cands, { lat: 42.36, lng: -71.06 })!.place).toMatch(/Maine/);
+  });
+  it("falls back to top when no candidate is near", () => {
+    // User in London -> neither Portland is within 250km -> top (OR).
+    expect(pickCandidate(cands, { lat: 51.5, lng: -0.1 })!.place).toMatch(/Oregon/);
+  });
+  it("empty -> null", () => { expect(pickCandidate([])).toBeNull(); });
+});
+
+describe("parseGeocodeAll", () => {
+  it("returns all candidates in order", () => {
+    const body = JSON.stringify({ results: [
+      { latitude: 1, longitude: 2, name: "A", country: "X" },
+      { latitude: 3, longitude: 4, name: "B", country: "Y" },
+    ] });
+    expect(parseGeocodeAll(body).map((c) => c.place)).toEqual(["A, X", "B, Y"]);
+  });
+});
+
 describe("getWeather (injected fetch)", () => {
   it("geocodes a place then fetches the forecast", async () => {
     const calls: string[] = [];
@@ -83,5 +113,16 @@ describe("getWeather (injected fetch)", () => {
   it("null on unknown place / fetch failure", async () => {
     expect(await getWeather({ place: "Nowheresville" }, async () => JSON.stringify({ results: [] }))).toBeNull();
     expect(await getWeather({ place: "x" }, async () => { throw new Error("net"); })).toBeNull();
+  });
+  it("disambiguates a named city toward the user's region via `near` (weather-ambiguous-city)", async () => {
+    const fetchText = async (url: string) => {
+      if (url.includes("geocoding")) return JSON.stringify({ results: [
+        { latitude: 45.52, longitude: -122.68, name: "Portland", admin1: "Oregon", country: "US" },
+        { latitude: 43.66, longitude: -70.26, name: "Portland", admin1: "Maine", country: "US" },
+      ] });
+      return JSON.stringify({ current: { temperature_2m: 10, weather_code: 0 }, daily: { temperature_2m_max: [12], temperature_2m_min: [4], precipitation_probability_max: [0] } });
+    };
+    const w = await getWeather({ place: "Portland", near: { lat: 42.36, lng: -71.06 } }, fetchText); // near Boston
+    expect(w!.place).toMatch(/Maine/); // not the top (Oregon) result
   });
 });

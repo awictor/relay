@@ -276,7 +276,7 @@ export interface BrowserBackend {
   convertCurrency?(amount: number, from: string, to: string): Promise<import("./lib/fx.js").Conversion | null>;
   // Optional: current weather for a place or coords (geo-tool-cluster). Absent -> the get_weather tool
   // reports it's unavailable. Returns null on a bad place / fetch failure.
-  getWeather?(opts: { place?: string; lat?: number; lng?: number }): Promise<import("./lib/weather.js").WeatherResult | null>;
+  getWeather?(opts: { place?: string; lat?: number; lng?: number; near?: { lat: number; lng: number } }): Promise<import("./lib/weather.js").WeatherResult | null>;
   // Optional: find nearby places (near-me-poi). Absent -> the find_nearby tool reports it's
   // unavailable. Returns [] on a bad area / fetch failure.
   findNearby?(opts: { what: string; lat?: number; lng?: number; near?: string; units?: "metric" | "imperial" }): Promise<import("./lib/places.js").Place[]>;
@@ -641,8 +641,12 @@ export async function runAgent(
       if (call.name === "get_weather") {
         if (!backend.getWeather) { push("get_weather", "ERROR: weather isn't available."); continue; }
         const place = String(call.args.place ?? "").trim();
-        // No place given but the user's coords are known -> use them (near-me weather).
-        const opts = place ? { place } : (deps.weatherCoords ? { lat: deps.weatherCoords.lat, lng: deps.weatherCoords.lng } : {});
+        // No place given but the user's coords are known -> use them (near-me weather). A named place
+        // + known coords -> pass coords as `near` so an ambiguous city resolves to the user's region
+        // (weather-ambiguous-city).
+        const opts = place
+          ? { place, ...(deps.weatherCoords ? { near: deps.weatherCoords } : {}) }
+          : (deps.weatherCoords ? { lat: deps.weatherCoords.lat, lng: deps.weatherCoords.lng } : {});
         if (!place && !deps.weatherCoords) { push("get_weather", "No place given and no saved location — ask the user which city."); continue; }
         try {
           const w = await backend.getWeather(opts);
