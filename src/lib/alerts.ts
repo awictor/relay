@@ -108,14 +108,16 @@ const CROSS_SELL_RE = /\b(you (?:may|might) also|related|recommended|similar (?:
 
 /** Evaluate a condition against an observed value string. below/above use extractValue; in_stock
  * looks for stock language. Returns null when the value can't be assessed (so the caller holds). */
-export function conditionHolds(cond: AlertCondition, value: string): boolean | null {
+export function conditionHolds(cond: AlertCondition, value: string, hint?: string): boolean | null {
   if (cond.op === "in_stock") {
     if (OUT_OF_STOCK_RE.test(value)) return false;                 // negation wins
     if (IN_STOCK_STRONG_RE.test(value)) return true;               // explicit availability statement
     if (CTA_RE.test(value)) return CROSS_SELL_RE.test(value) ? null : true; // CTA only if no cross-sell framing
     return null; // ambiguous
   }
-  const v = extractValue(value);
+  // Pass the watched task as a hint so a multi-number reply ("S&P 5,900, Dow 42,000") compares the number
+  // nearest the watched entity, not the largest one (extractvalue-largest-magnitude).
+  const v = extractValue(value, hint);
   if (v === null || cond.operand === undefined) return null;
   return cond.op === "below" ? v < cond.operand : v > cond.operand;
 }
@@ -255,31 +257,83 @@ function magMult(sfx: string | undefined, allowBareMT: boolean): number {
   return MAG[key] ?? 1;
 }
 
-export function extractValue(s: string): number | null {
+// Words in a watched task that DON'T identify the entity (so the entity-proximity hint keys on the real
+// subject: "check the S&P 500 index" -> "s&p 500 index", not "check"/"the"). Kept small + generic.
+const HINT_STOP = new Set(["check", "the", "a", "an", "of", "price", "cost", "value", "current", "latest", "whats", "what", "is", "for", "on", "in", "at", "my", "to", "watch", "track", "level", "quote", "how", "much", "s"]);
+
+/** Positions (char offset) in `hay` where any salient token of `hint` occurs (lowercased). Used to bias
+ * value extraction toward the number NEAREST the watched entity in a multi-number reply. */
+function hintPositions(hay: string, hint: string): number[] {
+  const toks = hint.toLowerCase().replace(/[^a-z0-9%&. ]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !HINT_STOP.has(w));
+  const pos: number[] = [];
+  const low = hay.toLowerCase();
+  for (const tok of toks) {
+    let from = 0;
+    for (;;) { const i = low.indexOf(tok, from); if (i < 0) break; pos.push(i); from = i + tok.length; }
+  }
+  return pos;
+}
+
+/**
+ * The SALIENT numeric value a watched task is tracking, or null. See the block comment above for the
+ * ordering (currency-tag > decimal > largest-magnitude). `hint` (the watched task text) disambiguates a
+ * MULTI-number reply: "S&P 5,900, Dow 42,000" for a task about the S&P must track 5,900, not the biggest
+ * number (extractvalue-largest-magnitude) — so when >1 candidate survives the ordering AND the hint's
+ * entity words appear in the reply, pick the candidate NEAREST an entity mention rather than the largest.
+ * With no hint (or no entity match), behavior is unchanged (largest-magnitude fallback).
+ */
+export function extractValue(s: string, hint?: string): number | null {
   const t = s.replace(/,/g, "");
+  const hints = hint ? hintPositions(t, hint) : [];
+  // Numbers that appear IN the entity name ("S&P 500", "Nasdaq 100") are labels, not the value — a reply
+  // "S&P 500 is at 5,900" must not track 500. Collect the hint's numeric tokens to exclude such matches.
+  const hintNums = hint ? new Set((hint.match(/\d+(?:\.\d+)?/g) ?? []).map((n) => parseFloat(n))) : new Set<number>();
+  const nearestByHint = (cands: Array<{ v: number; at: number }>): number => {
+    // Drop candidates that are just the entity's label number (e.g. the "500" in "S&P 500"), unless that
+    // leaves nothing. Only when a hint is present.
+    const usable = hints.length ? (cands.filter((c) => !hintNums.has(c.v)).length ? cands.filter((c) => !hintNums.has(c.v)) : cands) : cands;
+    if (hints.length && usable.length > 1) {
+      // Financial phrasing is "<entity> <value>" ("Apple $230", "S&P 500 at 5,900"), so prefer the
+      // number that comes closest AFTER an entity mention. A candidate before every entity mention (it
+      // belongs to a different entity, "Nvidia $180, Apple ...") gets a large penalty. Ties -> earliest.
+      const score = (c: { at: number }) => {
+        const after = hints.filter((h) => c.at >= h).map((h) => c.at - h);
+        return after.length ? Math.min(...after) : Infinity;
+      };
+      let best = usable[0]!, bestD = Infinity;
+      for (const c of usable) { const d = score(c); if (d < bestD) { bestD = d; best = c; } }
+      // If no candidate follows an entity mention, fall back to absolute-nearest.
+      if (bestD === Infinity) {
+        for (const c of usable) { const d = Math.min(...hints.map((h) => Math.abs(h - c.at))); if (d < bestD) { bestD = d; best = c; } }
+      }
+      return best.v;
+    }
+    return usable.reduce((a, b) => (Math.abs(b.v) > Math.abs(a.v) ? b : a)).v;
+  };
   // currency-tagged first (symbol before, or code/word after) — scale a k/m/bn/billion suffix.
   const cur = [...t.matchAll(/(?:[$€£]\s?)(-?\d+(?:\.\d+)?)\s?(k|mm|mn|bn|b|m|t|thousand|million|billion|trillion)?\b|(-?\d+(?:\.\d+)?)\s?(k|mm|mn|bn|b|m|t|thousand|million|billion|trillion)?\s?(?:usd|eur|gbp|dollars?|euros?)/gi)];
   if (cur.length) {
-    const c = cur[0]!;
-    const num = c[1] ?? c[3]!;
-    const sfx = c[1] !== undefined ? c[2] : c[4];
-    return parseFloat(num) * magMult(sfx, true);
+    // Multiple currency amounts + a hint -> the one nearest the entity, else the first (prior behavior).
+    const cands = cur.map((c) => ({ v: parseFloat((c[1] ?? c[3]!)) * magMult(c[1] !== undefined ? c[2] : c[4], true), at: c.index ?? 0 }));
+    if (hints.length && cands.length > 1) return nearestByHint(cands);
+    return cands[0]!.v;
   }
   // Collect every number, flagging those immediately followed by % (a rate/change, not the value)
   // and scaling a trailing k/bn/billion/million/thousand magnitude suffix (bare m/t excluded here).
-  const all: number[] = [], nonPct: number[] = [];
+  const all: Array<{ v: number; at: number }> = [], nonPct: Array<{ v: number; at: number }> = [];
   for (const m of t.matchAll(/(-?\d+(?:\.\d+)?)\s?(k|bn|b|thousand|million|billion|trillion)?(\s?%)?/gi)) {
     if (!m[1]) continue;
-    const n = parseFloat(m[1]) * magMult(m[2], false);
-    all.push(n);
-    if (!m[3]) nonPct.push(n);
+    const entry = { v: parseFloat(m[1]) * magMult(m[2], false), at: m.index ?? 0 };
+    all.push(entry);
+    if (!m[3]) nonPct.push(entry);
   }
   if (!all.length) return null;
   // Prefer real (non-percent) numbers; fall back to percents only if that's all there is.
   const pool = nonPct.length ? nonPct : all;
-  const dec = pool.find((n) => !Number.isInteger(n));
-  if (dec !== undefined) return dec;
-  return pool.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a));
+  // A decimal is usually the price/rate — but with MULTIPLE decimals + a hint, pick the nearest entity.
+  const decs = pool.filter((n) => !Number.isInteger(n.v));
+  if (decs.length) return decs.length > 1 && hints.length ? nearestByHint(decs) : decs[0]!.v;
+  return nearestByHint(pool);
 }
 
 // Common lead-ins the agent varies run-to-run without the underlying answer changing
@@ -314,9 +368,9 @@ export function normalizeForCompare(s: string): string {
  * so pure phrasing drift on a "watch top HN story" alert doesn't ping every check — only a real
  * content change ("in stock" vs "sold out") fires. First run (no prev) is handled by the caller.
  */
-export function changed(prev: string, next: string, threshold?: number): boolean {
+export function changed(prev: string, next: string, threshold?: number, hint?: string): boolean {
   const a = prev.trim(), b = next.trim();
-  const pv = extractValue(a), nv = extractValue(b);
+  const pv = extractValue(a, hint), nv = extractValue(b, hint);
   if (pv !== null && nv !== null) {
     const delta = Math.abs(nv - pv);
     return threshold && threshold > 0 ? delta >= threshold : delta > 0;

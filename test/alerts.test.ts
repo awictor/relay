@@ -107,6 +107,26 @@ describe("extractValue (salient value, not first number)", () => {
     expect(extractValue("posted 3m ago, score is 4200")).toBe(4200); // "3m" = 3 min, not 3 million
     expect(extractValue("the reading is 500 units")).toBe(500);
   });
+
+  it("with a hint, picks the number nearest the watched entity, not the largest (extractvalue-largest-magnitude)", () => {
+    // "S&P 500 below 5000" watch: reply mentions the bigger Dow number too. Must track the S&P (5900).
+    expect(extractValue("The S&P 500 is at 5,900 while the Dow sits at 42,000", "S&P 500 index")).toBe(5900);
+    // Same reply, a Dow watch -> track the Dow.
+    expect(extractValue("The S&P 500 is at 5,900 while the Dow sits at 42,000", "Dow Jones")).toBe(42_000);
+    // Currency-tagged multi-number: hint steers to the watched one.
+    expect(extractValue("Nvidia $180, Apple $230", "Apple stock price")).toBe(230);
+  });
+
+  it("no hint (or unmatched hint) keeps the largest-magnitude fallback (no regression)", () => {
+    expect(extractValue("The S&P 500 is at 5,900 while the Dow sits at 42,000")).toBe(42_000); // largest
+    expect(extractValue("S&P 5900, Dow 42000", "gold spot")).toBe(42_000); // hint entity absent -> largest
+  });
+
+  it("a below-alert on the S&P fires correctly despite a larger Dow number in the reply (conditionHolds hint)", () => {
+    // Without the hint this compared 42,000 and never fired; with it, 5,900 < 6000 -> true.
+    expect(conditionHolds({ op: "below", operand: 6000 }, "S&P 500 at 5,900, Dow at 42,000", "S&P 500")).toBe(true);
+    expect(conditionHolds({ op: "below", operand: 6000 }, "S&P 500 at 5,900, Dow at 42,000", "Dow")).toBe(false); // Dow 42k not below 6k
+  });
 });
 
 describe("changed", () => {

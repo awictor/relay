@@ -116,7 +116,7 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // extractable value (feed watches have no scalar). Independent of whether we notify — the series is
   // for "how has X moved", not the alert trigger. Deferred nothing: safe to record now (a check happened).
   if (!alert.feed && deps.recordPoint) {
-    const num = extractValue(value);
+    const num = extractValue(value, alert.task);
     if (num !== null) deps.recordPoint(alert.chatId, alert.name, num, (deps.now ?? Date.now)());
   }
 
@@ -169,13 +169,13 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // true (was false/unknown last time), so "below 50k" pings once on the drop, not every check while
   // it stays below. On first run we seed silently unless it's already true.
   if (alert.condition) {
-    const nowHolds = conditionHolds(alert.condition, value);
+    const nowHolds = conditionHolds(alert.condition, value, alert.task);
     // Indeterminate reply ("price unavailable right now" — real, not degraded, but no comparable
     // value): DON'T store it as lastValue. Storing it made the next real check see prevHolds=null
     // and re-fire the edge ("🔔 below 50k") even though the value never left the below state. Keep
     // the last GOOD value as the baseline and stay silent this tick (mirrors the degraded guard).
     if (nowHolds === null) return { notify: false, message: null, value: alert.lastValue ?? value, commit: noop };
-    const prevHolds = firstRun || alert.lastValue === undefined ? null : conditionHolds(alert.condition, alert.lastValue);
+    const prevHolds = firstRun || alert.lastValue === undefined ? null : conditionHolds(alert.condition, alert.lastValue, alert.task);
     if (nowHolds === true && prevHolds !== true) {
       // Notify: DEFER the baseline advance to the caller's post-send commit, so a failed send leaves
       // prevHolds unchanged + the edge re-fires next check instead of being eaten.
@@ -192,11 +192,11 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // as lastValue — silently bypassing the threshold across the gap. Keep the last GOOD value + stay
   // silent this tick (mirrors the predicate-refire guard above + the degraded guard). First run with
   // no number still seeds (nothing to protect yet).
-  if (!firstRun && alert.threshold !== undefined && extractValue(value) === null) {
+  if (!firstRun && alert.threshold !== undefined && extractValue(value, alert.task) === null) {
     return { notify: false, message: null, value: alert.lastValue ?? value, commit: noop };
   }
 
-  const didChange = firstRun ? true : changed(alert.lastValue!, value, alert.threshold);
+  const didChange = firstRun ? true : changed(alert.lastValue!, value, alert.threshold, alert.task);
   // Capture the prior baseline STRING before any advance — setLast mutates alert.lastValue in place
   // (the store hands back the same object), so reading it after would see the NEW value and the delta
   // below would compute pv===nv (never renders). Snapshot now.
@@ -211,7 +211,7 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // self-contained answer the user doesn't have to go check. Non-numeric (or first-run) stays plain.
   let delta = "";
   if (!firstRun && prevValue !== undefined) {
-    const pv = extractValue(prevValue), nv = extractValue(value);
+    const pv = extractValue(prevValue, alert.task), nv = extractValue(value, alert.task);
     if (pv !== null && nv !== null && nv !== pv) {
       const d = nv - pv;
       const arrow = d > 0 ? "↑" : "↓";

@@ -23,7 +23,7 @@
       "title": "extractValue 'largest magnitude' tracks the wrong number in a multi-number reply",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "extractValue falls back to the largest-magnitude number when no decimal/currency tag wins, so 'S&P at 5,900, Dow at 42,000' tracks 42,000 — an 'S&P below 5000' alert silently compares the wrong index and never fires (or fires wrong). Confidently-wrong silent miss on the headline threshold feature (audit B#2).",
       "how": "Prefer the FIRST currency-tagged / salient number over the globally-largest; when multiple candidates exist, bias to the one nearest the watched entity's words if derivable, else the first plausible price rather than max magnitude. Add tests for multi-number replies."
     },
@@ -1745,6 +1745,10 @@
     {
       "id": "pause-all-freezes-once-reminders",
       "note": "Fixed a regression from the just-shipped snooze feature: 'snooze all' / 'pause <x>' with no duration set PAUSE_INDEFINITE on EVERY matched schedule including one-shot reminders, so 'remind me at 3pm' set before a trip was frozen forever until a manual resume — a silent black hole for the highest-trust item. ScheduleStore.pause now skips kind==='once' when the pause is INDEFINITE (snooze is for quieting recurring noise; a discrete promise shouldn't freeze forever). A TIMED snooze of a once is still allowed — the runner's clearExpiredPause auto-resumes it when the window elapses, so it fires later, not never. 2 tests (indefinite pause-all leaves a once live + still pauses the recurring; timed snooze of a once is allowed). call-tested: false (pure scheduler logic). 1132 tests green."
+    },
+    {
+      "id": "extractvalue-largest-magnitude-wrong",
+      "note": "Fixed a silent wrong-value miss on the headline threshold-alert feature: extractValue fell back to the LARGEST-magnitude number, so an 'S&P 500 below 6000' watch compared the Dow's 42,000 in a multi-index reply and never fired. Added an optional `hint` (the watched task) to extractValue/conditionHolds/changed, threaded from alert-runner (alert.task) at every call site. When >1 candidate survives the currency/decimal ordering AND the hint's entity words appear in the reply, it picks the number that comes closest AFTER an entity mention (financial phrasing is '<entity> <value>'), excludes numbers that are part of the entity's own name (the '500' in 'S&P 500'), and falls back to largest-magnitude with no/unmatched hint (existing behavior unchanged, all prior tests green). 3 tests (entity-nearest / no-hint regression / below-alert fires on the right index). call-tested: false (pure parse logic). 1135 tests green."
     }
   ],
   "audits": [
