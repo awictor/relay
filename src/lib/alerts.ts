@@ -447,7 +447,16 @@ export class AlertStore {
     const existing = this.items.find((x) => x.chatId === chatId && x.name === name);
     if (!existing && this.items.filter((x) => x.chatId === chatId).length >= this.maxPerChat) return null;
     if (existing) {
+      // Did the TRIGGER actually change? (task, numeric threshold, or predicate condition). A re-define
+      // that changes what we're watching for must reset the baseline so the NEW trigger edge-evaluates
+      // fresh (watch-redefine-baseline-reset) — else the stale lastValue makes prevHolds compute from the
+      // old value and an already-true predicate ('watch btc: bitcoin below 45000' when it's already below)
+      // is suppressed forever: the just-set alert is silently dead. The conversational-edit path
+      // (updateTrigger) already clears it; this is the define-overwrite path doing the same.
+      const condChanged = JSON.stringify(existing.condition) !== JSON.stringify(a.condition);
+      const triggerChanged = existing.task !== a.task || existing.threshold !== a.threshold || condChanged;
       existing.task = a.task; existing.threshold = a.threshold; existing.condition = a.condition; existing.then = a.then;
+      if (triggerChanged) existing.lastValue = undefined; // re-evaluate the new trigger from scratch
       // Switching an existing alert to/from a feed watch resets its baseline so the new mode seeds fresh.
       if (!!existing.feed !== !!a.feed) { existing.feed = a.feed; existing.seen = undefined; existing.lastValue = undefined; }
       // Re-stating a watchlist replaces its members (preserving each member's last value by label so an

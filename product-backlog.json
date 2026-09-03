@@ -14,7 +14,7 @@
       "title": "re-defining an alert via 'watch <name>: ...' doesn't reset the baseline, so it never fires",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "AlertStore.add() (the define-overwrite path) updates task/threshold/condition/then but only clears lastValue on a feed toggle — the conversational-edit path (updateTrigger) correctly clears it. So 'watch btc: bitcoin below 45000' on an existing btc alert keeps the stale baseline, prevHolds computes from the OLD value, and an already-true predicate is suppressed: the alert the user just set up is silently dead (audit 25 B#2).",
       "how": "In AlertStore.add(), when an existing alert's trigger (threshold/condition/task) actually changes, clear lastValue (+ series baseline as appropriate) so the new trigger edge-evaluates fresh — mirroring updateTrigger. Guard: don't reset on a pure no-op re-define. Test: redefine into an already-true predicate fires on the next check."
     },
@@ -1988,6 +1988,10 @@
     {
       "id": "tracking-page-shell-guard",
       "note": "Fixed a regression in the just-shipped track_package: it fed truncateForModel(r.content) to the model with only a !body.trim() empty check, skipping the formatPageForModel empty/paywall/JS-shell guard that scrape + read use. Carrier pages are heavily JS-rendered, so the common failure (a shell/cookie-wall stub) got summarized as an invented status instead of an honest 'couldn't read it'. Now uses formatPageForModel (near-empty <200 nonWs -> honest marker, paywall detection, truncation) + tells the model to relay 'couldn't read the page' when it sees the marker. 2 tests updated/added (real page summarizes + isn't flagged / JS-shell page returns the honest marker, not invented events). call-tested: false (offline unit; scrape needs live anvil). 1184 tests green."
+    },
+    {
+      "id": "watch-redefine-baseline-reset",
+      "note": "Re-defining an alert via 'watch btc: bitcoin below 45000' on an EXISTING btc alert kept the stale lastValue — the define-overwrite path (AlertStore.add) only cleared the baseline on a feed toggle, unlike the conversational-edit path (updateTrigger) which clears it. So prevHolds computed from the old value and an already-true predicate was suppressed: the alert the user just set up was silently dead. add() now detects a real trigger change (task, threshold, or condition — deep-compared) and clears lastValue so the new trigger edge-evaluates fresh; a no-op re-define (identical trigger) PRESERVES the baseline so cumulative sub-threshold drift isn't lost. 2 tests (redefine-to-predicate clears baseline / identical redefine keeps it). call-tested: false (pure store). 1186 tests green."
     }
   ],
   "audits": [

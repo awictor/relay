@@ -203,6 +203,26 @@ describe("AlertStore", () => {
     expect(r.lastValue).toBeUndefined();       // baseline reset so the NEW trigger evaluates fresh (alert-edit-check-now)
     expect(s.updateTrigger(1, "nope", { threshold: 5 })).toBeNull(); // unknown name
   });
+
+  it("re-defining an alert's TRIGGER via add() resets the baseline so the new trigger fires (watch-redefine-baseline-reset)", () => {
+    const s = new AlertStore({ file: tmpFile() });
+    s.add(1, { name: "btc", task: "price of bitcoin", threshold: 1000 }, NOW);
+    s.setLast(1, "btc", "$65,000");
+    // Re-define as a below-45000 predicate (a real trigger change). Stale $65k must NOT linger, or
+    // prevHolds computes from it and an already-below value is suppressed.
+    const r = s.add(1, { name: "btc", task: "price of bitcoin", condition: { op: "below", operand: 45000 } }, NOW)!;
+    expect(r.condition).toEqual({ op: "below", operand: 45000 });
+    expect(r.threshold).toBeUndefined();
+    expect(r.lastValue).toBeUndefined(); // baseline cleared -> new predicate edge-evaluates fresh
+  });
+
+  it("a no-op re-define (same trigger) PRESERVES the baseline (no needless re-fire)", () => {
+    const s = new AlertStore({ file: tmpFile() });
+    s.add(1, { name: "btc", task: "price of bitcoin", threshold: 1000 }, NOW);
+    s.setLast(1, "btc", "$65,000");
+    const r = s.add(1, { name: "btc", task: "price of bitcoin", threshold: 1000 }, NOW)!; // identical
+    expect(r.lastValue).toBe("$65,000"); // unchanged trigger -> baseline kept, cumulative drift intact
+  });
 });
 
 describe("parseAlertEdit (conversational retune, product-loop)", () => {
