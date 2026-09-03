@@ -6,6 +6,7 @@ import { formatReply } from "../src/lib/format-reply.js";
 import { NotesStore, parseRemember, parseForgetFact } from "../src/lib/notes.js";
 import { ListStore, parseListCommand, parseListExport, splitItems } from "../src/lib/lists.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "../src/lib/places-store.js";
+import { SavedStore, parseSavePage, parseSavedRecall } from "../src/lib/readlater.js";
 import { parseCityReply } from "../src/lib/profile.js";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
@@ -1883,5 +1884,51 @@ describe("first-reminder tz ask (first-reminder-tz-ask)", () => {
     await handle(msg("remind me to take meds in 10 min", 5));
     expect(sent[0]!.text).toMatch(/couldn't save it to disk/i);
     expect(sent[0]!.text).not.toMatch(/I'll remind you/i); // must NOT falsely confirm
+  });
+});
+
+describe("read-it-later routing (read-it-later-capture)", () => {
+  it("'save this <link>' summarizes + confirms; recall then serves from the store, no agent", async () => {
+    const store = new SavedStore({ file: join(mkdtempSync(join(tmpdir(), "h-saved-")), "s.json") });
+    let agentCalls = 0;
+    const { handle, sent } = harness({
+      // savePage summarizes via a mock (stands in for runAgent); recallSaved reads the store.
+      savePage: async (chatId, text) => {
+        const url = parseSavePage(text);
+        if (!url) return null;
+        agentCalls++;
+        const r = store.add(chatId, { url, title: "Fed holds rates", summary: "The bank kept rates steady this month." }, 0);
+        return { title: r.page.title, url, saved: r.saved, dup: r.dup };
+      },
+      recallSaved: (chatId, text) => {
+        const q = parseSavedRecall(text);
+        if (!q) return null;
+        const hits = store.search(chatId, q.topic, 8);
+        return hits.length ? `Saved:\n${hits.map((p) => `• ${p.title} — ${p.summary}\n  ${p.url}`).join("\n\n")}` : `Nothing saved matching "${q.topic}".`;
+      },
+      runAgentFn: async () => { agentCalls++; return { reply: "AGENT RAN", steps: 1, tools: [] }; },
+    });
+    await handle(msg("save this https://ex.com/fed", 7));
+    expect(sent[0]!.text).toMatch(/Saved "Fed holds rates" to your reading list/);
+    // recall is served from the store — the agent must NOT run for it.
+    const before = agentCalls;
+    await handle(msg("what did I save about the fed", 7));
+    expect(sent[1]!.text).toMatch(/Fed holds rates/);
+    expect(sent[1]!.text).toMatch(/rates steady/);
+    expect(agentCalls).toBe(before); // recall didn't invoke the agent
+  });
+  it("recall with nothing saved says so; a non-save/non-recall message falls through to the agent", async () => {
+    const store = new SavedStore({ file: join(mkdtempSync(join(tmpdir(), "h-saved2-")), "s.json") });
+    let agentRan = false;
+    const { handle, sent } = harness({
+      savePage: async (_c, text) => (parseSavePage(text) ? { title: "x", url: "https://x", saved: true, dup: false } : null),
+      recallSaved: (chatId, text) => { const q = parseSavedRecall(text); if (!q) return null; const h = store.search(chatId, q.topic); return h.length ? "hits" : `Nothing saved matching "${q.topic}".`; },
+      runAgentFn: async () => { agentRan = true; return { reply: "AGENT", steps: 1, tools: [] }; },
+    });
+    await handle(msg("my reading list", 8));
+    expect(sent[0]!.text).toMatch(/Nothing saved/);
+    expect(agentRan).toBe(false);
+    await handle(msg("what's the capital of France", 8));
+    expect(agentRan).toBe(true); // ordinary question still reaches the agent
   });
 });

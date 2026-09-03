@@ -37,6 +37,7 @@ import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summa
 import { parseChartRequest, renderChart } from "./lib/chart.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
+import { SavedStore, parseSavePage, parseSavedRecall, hostLabel } from "./lib/readlater.js";
 import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
 import { LogStore, parseLogCommand, parseLogQuery, sumSeries } from "./lib/logs.js";
@@ -130,6 +131,7 @@ const profiles = new ProfileStore({ file: paths.profile });
 const notes = new NotesStore({ file: paths.notes });
 const places = new PlacesStore({ file: paths.places });
 const logs = new LogStore({ file: paths.logs });
+const saved = new SavedStore({ file: paths.saved });
 const lists = new ListStore({ file: paths.lists });
 const contacts = new ContactStore({ file: paths.contacts });
 const answerLog = new AnswerLog({ file: paths.answers });
@@ -334,6 +336,41 @@ const handle = createHandler({
     return { removed: forgotten.length, all: false, forgotten, saved: forgotten.length === 0 || notes.lastSaveOk() };
   },
   notesList: (chatId) => notes.list(chatId).map((n) => n.text),
+  // Read-it-later (read-it-later-capture): "save this <link>" -> summarize the page via the agent + store
+  // it; "what did I save about X" / "my reading list" -> search the store. The summarize goes through the
+  // same runAgent path as a normal read (SSRF-guarded fetch, anvil when needed), so a save captures the
+  // real gist once for offline recall.
+  savePage: async (chatId, text) => {
+    const url = parseSavePage(text);
+    if (!url) return null;
+    let summary = "", title = "";
+    try {
+      const res = await runAgent(`Summarize the page at ${url} in 2-4 sentences: what it is + its key points. Start with a short title line "TITLE: <page title>".`,
+        { llm, context: profiles.contextLine(chatId, Date.now()) || undefined, ...agentEnvFor(chatId) }, []);
+      const body = formatReply(res.reply);
+      const tm = body.match(/^\s*TITLE:\s*(.+)$/im);
+      title = tm ? tm[1]!.trim() : "";
+      summary = body.replace(/^\s*TITLE:\s*.+$/im, "").trim() || body.trim();
+      if (res.degraded || !summary) return { error: `I couldn't read ${hostLabel(url)} to save it just now — the page didn't load. Try again in a bit.` };
+    } catch {
+      return { error: `I couldn't reach ${hostLabel(url)} to save it. Try again in a bit.` };
+    }
+    const r = saved.add(chatId, { url, title, summary }, Date.now());
+    return { title: r.page.title, url, saved: r.saved, dup: r.dup };
+  },
+  recallSaved: (chatId, text) => {
+    const q = parseSavedRecall(text);
+    if (!q) return null;
+    const hits = saved.search(chatId, q.topic, 8);
+    if (!hits.length) {
+      return q.topic
+        ? `Nothing saved matching "${q.topic}". Save a page with "save this <link>".`
+        : `You haven't saved anything yet. Send "save this <link>" and I'll summarize + file it for recall.`;
+    }
+    const head = q.topic ? `Saved pages about "${q.topic}":` : "Your recent saved pages:";
+    const body = hits.map((p) => `• ${p.title} — ${p.summary}\n  ${p.url}`).join("\n\n");
+    return `${head}\n${body}`;
+  },
   // Saved named places (saved-named-places): "my work is 500 5th Ave" / "save gym: ..." stores an alias
   // -> address; it's injected into the agent context so "weather at the gym"/"coffee near work" resolve
   // without re-asking the city. forget/list manage them. All null when the message isn't a place command.

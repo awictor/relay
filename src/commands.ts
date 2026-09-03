@@ -115,6 +115,8 @@ Track anything about yourself: "log weight 182", "spent $14 on lunch", "log mood
 
 Recall a past answer: "what was that sushi place you found?" or "resend the flights" — I search what I've told you before, no need to re-run it.
 
+Save pages to read later: "save this <link>" — I summarize the page + file it, then "what did I save about <topic>" or "my reading list" searches your saved pages anytime. Builds a personal, searchable library from what you send me.
+
 Sites I'm signed in for: /sites lists the hosts you've authorized me for (via cookies you configure) — I only read public pages otherwise.
 
 Start over anytime: /reset clears our conversation history.

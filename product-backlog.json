@@ -2921,9 +2921,27 @@
       "title": "'save this' link -> summarize + recall over saved pages",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A satisfied user has no way to build a personal corpus; 'save this <link>' + later 'what did I save about X' turns normal use into a knowledge base + switching-cost moat (parked audit-C finding).",
       "how": "On 'save this <url>' scrape+summarize via the existing tools, store {url,summary,tags,t} in a notes-style store; 'what did I save about X' does full-text recall. Reuse notes.ts/lists.ts + scrape."
+    },
+    {
+      "id": "saved-page-digest-integration",
+      "title": "Fold saved reading list into a digest / weekly recap",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "read-it-later now stores summarized pages, but they're only pulled on explicit recall; a satisfied user would value 'my weekly reading recap' or a digest member that surfaces what they saved but haven't revisited — deepens the retention hook.",
+      "how": "Add a digest-member/recipe source that lists recent saved pages (or unread-since-saved), reusing SavedStore.search + the existing digest-runner; optional 'mark read' via a callback."
+    },
+    {
+      "id": "agent-can-save-pages",
+      "title": "Let the agent itself save a page it just found",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "A user who says 'find me a good pasta recipe and save it' can't — save is only a top-level command; the agent has no save_page tool, so a found-then-save flow needs two manual turns.",
+      "how": "Add a save_page(url,title?,summary?) agent tool that writes to SavedStore (same store as the command path), so the agent can capture a result it just produced; guard against saving junk (require a real URL)."
     }
   ],
   "history": [
@@ -4094,6 +4112,10 @@
     {
       "id": "suntimes-dst-check",
       "note": "Swept the tz-derived tools for the DST gap. suntimes.ts (Open-Meteo timezone=auto, local ISO) + datecalc.ts (UTC-anchored day math, injected today) are DST-safe. Found + fixed the real one: the agent's live 'current time'/'today' line used the FROZEN profile tzOffsetMin (chatTzOffsetMin + agentEnvFor), so after a DST boundary it ran an hour off + wrong calendar day near midnight (current-datetime-dst-stale). Added ProfileStore.offsetMinAt(chatId, atMs): resolves the saved location's IANA zone -> DST-correct offset at now, frozen offset as fallback. Both live-datetime sites now use it. +1 test, 1923 green."
+    },
+    {
+      "id": "read-it-later-capture",
+      "note": "NEW FEATURE: 'save this <link>' scrapes+summarizes the page (via runAgent) + stores {url,title,summary,t} in a new SavedStore (mirrors NotesStore: atomic/corrupt-safe, per-chat cap 100, url de-dupe, lastSaveOk hedge). Recall via 'what did I save about X' / 'my reading list' / 'search my saved for X' — full-text whole-word scoring (title weighted 2x), no agent run. Handler routes recall-before-save; save gated on a save/bookmark/read-later verb + a URL so 'read this link' still fetches-now. New src/lib/readlater.ts, RELAY_SAVED_FILE path, HELP line. +12 tests (readlater unit + handler routing), 1935 green. Live summarize path needs anvil (DOWN) — store+parse+routing unit-verified offline with a mock summarizer."
     }
   ],
   "audits": [
@@ -4351,6 +4373,9 @@
     },
     {
       "note": "Agent spawn cap (200/200) hit this run — could not spawn the 3 audit agents. Verified weather-one-tap already shipped (stale), built world-clock-dst opportunistically (same DST-gap class as the reminder fix). Seeded suntimes-dst-check (same-class sweep) + read-it-later-capture (parked audit-C) as the refill."
+    },
+    {
+      "note": "Agent spawn cap still exhausted (200/200) — no 3-agent audit. Built read-it-later-capture (parked audit-C). Seeded 2 follow-ons it enables: saved-page-digest-integration, agent-can-save-pages."
     }
   ]
 }

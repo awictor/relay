@@ -154,6 +154,12 @@ export interface HandlerDeps {
   rememberFact?: (chatId: number, text: string) => { fact: string; evicted: string[]; saved?: boolean } | null;
   forgetFact?: (chatId: number, text: string) => { removed: number; all: boolean; forgotten: string[]; saved?: boolean } | null;
   notesList?: (chatId: number) => string[];
+  // Read-it-later (read-it-later-capture): savePage handles "save this <link>" — scrape+summarize the URL
+  // + store it — returning a confirmation (or null if it isn't a save command / had no URL); recallSaved
+  // handles "what did I save about X" / "my reading list" from the store, no agent run. Both optional so
+  // older wiring/tests are unaffected. savePage is async (it fetches the page to summarize).
+  savePage?: (chatId: number, text: string) => Promise<{ title: string; url: string; saved: boolean; dup: boolean } | { error: string } | null>;
+  recallSaved?: (chatId: number, text: string) => string | null;
   // Countdown (countdown-tracker): parse "countdown to X on <date>" / "days until X <date>" and schedule
   // milestone pings (a week out / day before / morning of), returning the immediate day-count. null when
   // it isn't a countdown command; { ok:false, reason:"past" } for an already-passed date. Optional.
@@ -926,6 +932,24 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       }
       await deps.sendMessage(msg.chatId, "I don't have a past answer matching that. Ask me fresh and I'll look it up.");
       return;
+    }
+
+    // Read-it-later (read-it-later-capture). Recall FIRST ("what did I save about X" / "my reading list")
+    // so it's served from the store with no agent run; then capture ("save this <link>") which scrapes +
+    // summarizes the page. Both are whole-message shapes that would otherwise hit the agent. Recall before
+    // capture so "what did I save" isn't mistaken for a save. Checked before the memory/scheduler/agent.
+    if (deps.recallSaved) {
+      const out = deps.recallSaved(msg.chatId, msg.text);
+      if (out) { await deps.sendMessage(msg.chatId, out); return; }
+    }
+    if (deps.savePage) {
+      const r = await deps.savePage(msg.chatId, msg.text);
+      if (r) {
+        if ("error" in r) { await deps.sendMessage(msg.chatId, r.error); return; }
+        const hedge = r.saved === false ? "\n\n⚠️ But I couldn't save it to disk — it may not survive a restart; try again." : "";
+        await deps.sendMessage(msg.chatId, `${r.dup ? "Updated" : "Saved"} "${r.title}" to your reading list. Ask "what did I save about …" or "my reading list" anytime.${hedge}`);
+        return;
+      }
     }
 
     // Long-term memory (remember-facts-store). "what do you know about me" -> recite the stored facts;
