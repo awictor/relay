@@ -2048,7 +2048,7 @@
       "title": "calc bare % modulo dead + min/max with 3+ args errors",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The bare-percent rewrite eats every literal % before the modulo op tokenizes (\"17 % 5\" -> malformed); toRpn tracks no function arity so \"max(1,2,3)\" leaves residue -> malformed. Both advertised.",
       "how": "Only rewrite % as percent when NOT between two numbers as an operator (or require \"mod\" and drop % from the advertised op list); track function arity in toRpn so min/max fold N args."
     },
@@ -2060,6 +2060,42 @@
       "status": "done",
       "why": "\"pharmacy near me\" at 9pm sends you to one that closed at 6 — Relay passes OSM opening_hours raw and never computes open/closed vs the user local time.",
       "how": "Parse OSM opening_hours vs the chat local time (coords/profile known); mark each place open/closed now + sort/filter open-first; note when hours are unknown."
+    },
+    {
+      "id": "sched-reminder-tail-trim",
+      "title": "scheduled recipe/reminder replies trim to 1200 chars, tail unrecoverable",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "schedule-runner passes the already-trimmed formatReply(res.reply) as both sent and full text, so a long scheduled/recipe answer arrives cut off and 'more' says 'that's the whole answer' — dropped content is gone. The digest path was fixed (fullText) but the plain scheduled-agent + recipe path wasn't.",
+      "how": "Use formatReplyParts to keep the untrimmed text and pass it as `full` to recordSend (mirror the digest fix) so chunkFrom can serve the tail on 'more'. Offline test: mock send + a >1200-char reply, assert 'more' returns the remainder."
+    },
+    {
+      "id": "quiet-hours-once-alarm",
+      "title": "quiet-hours defers explicit one-shot alarms/reminders past their exact time",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "schedule-runner applies the quiet-hours deferTo to every non-alert schedule including `once` clock-time tasks, so 'wake me at 6am' inside the quiet window is pushed to the window end and fires late — defeats an alarm.",
+      "how": "Exempt kind==='once' (at least clockTime ones) from the quiet-hours defer, mirroring the alert-check exemption already present. Offline test: mock clock + a once inside the quiet window fires at its time, not deferred."
+    },
+    {
+      "id": "date-calendar-math",
+      "title": "no date/calendar math (days-until, day-of-week, age, date diff)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "'how many days until Christmas', 'what day is July 4th', 'how old if born 1990', 'days between two dates' have no home — calc is arithmetic-only, so these fall to a slow browse or a hallucinated guess. Very high everyday frequency.",
+      "how": "Add a keyless deterministic date tool (parse common date phrases + relative like 'next friday'; compute diff/day-of-week/age) beside get_time/calculate. Pure, offline-testable. New TOOLS[] entry + dispatch + prompt line + HELP + sorted tool-list test."
+    },
+    {
+      "id": "sticky-acknowledged-reminders",
+      "title": "acknowledged / escalating reminders (re-ping until user replies done)",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "A reminder fires once and is easily missed; the biggest daily-habit hook (meds, water, standup) is a reminder that re-pings on an interval until acknowledged. Turns a one-off into a daily reason to open the chat.",
+      "how": "Add a 'sticky: re-fire every N min until 'done'/'stop', cap M times' flag to schedule.ts + a done/stop handler branch. Fully offline-testable with a mock clock. Reuses existing schedule fire plumbing."
     }
   ],
   "history": [
@@ -2866,6 +2902,10 @@
     {
       "item": "nearby-open-now",
       "note": "Added 'open now' to near-me. New src/lib/openhours.ts — a lightweight OSM opening_hours evaluator (isOpenNow: weekday ranges/lists + time windows + split windows + 24/7 + explicit closed; unknown on an exotic rule, never a wrong open/closed) + openTag. formatPlaces takes an optional {dow,mins} local time: tags each place open-now/closed-now (instead of raw hours) + lists OPEN places first. find_nearby dispatch computes the user's local day+minute from deps.nowMs+tzOffsetMin. So 'pharmacy near me' at 9pm no longer leads with one that closed at 6. Back-compat: no clock -> raw hours as before. 18 new tests, suite 1511 green, tsc clean. call-tested:false (pure offline eval + formatting)."
+    },
+    {
+      "item": "calc-modulo-and-variadic",
+      "note": "Fixed two dead calc paths. (1) A bare '%' BETWEEN two operands ('17 % 5', '17 % (2+3)') is now modulo — the percent-idiom rewrite only fires when '%' TRAILS a number ('20% of', '50 - 20%'), so it no longer eats the operator form into a malformed expr. (2) toRpn now counts function arity (seed 1 at '(', +1 per comma at that depth) and evalRpn folds it: min/max are variadic ('max(1,2,3)'->3), and fixed-arity fns (sqrt/loanpayment/...) throw a friendly 'takes N arguments' instead of silent residue. Also: normalizeExpr now strips only true thousands-commas (digit,comma,exactly-3-digits) so arg-separator commas survive for arity counting. 5 new calc tests, suite 1513 green, tsc clean. call-tested:false (pure offline evaluator)."
     }
   ],
   "audits": [
@@ -3036,6 +3076,9 @@
     },
     {
       "note": "AUDIT (backlog dry, only owner-gated). A/new-user: near-me 'open now' filter, flight search (flagship, fails), transit directions (silent driving fallback), local events, compose-cant-send. B/reliability (all in tools shipped THIS session): translate wrong-target-language (M,fixed — silent-wrong), suntimes refuses located user on evening/winter phrasings (S), units cup->oz cross-type reject (S), calc bare-% modulo dead + variadic min/max (M). C/power: multi-source auto-fallback on blocked pages, clarify-before-act, numbered quick-reply menus, foreground plan+checklist, projects/workspaces. Seeded: translate-wrong-target(built), suntimes-located-user-refused, units-cup-to-oz-crosstype, calc-modulo-and-variadic, nearby-open-now."
+    },
+    {
+      "note": "3-lens audit (calc-modulo shipped, backlog down to owner-gated confirm-to-act). NEW-USER lens: no date/calendar math, no keyless fact lookup (Wikipedia), no air-quality/UV, no holiday awareness. RELIABILITY lens: scheduled/recipe replies trim to 1200 with unrecoverable tail (digest path was fixed, plain path not); quiet-hours defers explicit `once` alarms past their time; fixed-offset TZ tables silently fire reminders 1hr off during DST. POWER lens: sticky/acknowledged reminders, weekly self-recap, compound AND/OR alerts, shareable recipe export codes, habit/streak tracking. Seeded 4 (2 reliability broken-path S, date-math S, sticky-reminders S); parked DST-fix (M) + fact-lookup/air-quality/holidays + recap/compound-alerts/share-codes/streaks as future candidates."
     }
   ]
 }

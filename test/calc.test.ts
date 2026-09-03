@@ -8,6 +8,11 @@ describe("calc — basic arithmetic + precedence", () => {
     expect(calc("2 ^ 3 ^ 2")).toBe(512); // right-assoc
     expect(calc("10 / 4")).toBe(2.5);
     expect(calc("17 mod 5")).toBe(2); // "%" is reserved for percentages; modulo is the word "mod"
+    // A bare "%" BETWEEN two operands is modulo too (calc-modulo-and-variadic): it's only a percentage
+    // when it TRAILS a number ("20% of", "50 - 20%").
+    expect(calc("17 % 5")).toBe(2);
+    expect(calc("17 % (2 + 3)")).toBe(2);
+    expect(calc("50 * 20%")).toBe(10); // trailing % still a percentage, not modulo
   });
   it("handles unary minus", () => {
     expect(calc("-5 + 3")).toBe(-2);
@@ -58,6 +63,15 @@ describe("calc — the bill-split + loan cases the audit flagged", () => {
     expect(calc("round(2.7)")).toBe(3);
     expect(calc("max(3, 9)")).toBe(9);
     expect(calc("min(3, 9)")).toBe(3);
+  });
+  it("min/max fold 3+ args (calc-modulo-and-variadic)", () => {
+    expect(calc("max(1, 2, 3)")).toBe(3);
+    expect(calc("min(5, 2, 8, 1)")).toBe(1);
+    expect(calc("max(1, 2, 3) + min(4, 5)")).toBe(7); // variadic + nested binary
+  });
+  it("wrong arity for a fixed-arity fn is a friendly error, not silent residue", () => {
+    expect(() => calc("sqrt(4, 9)")).toThrow(/1 argument/i);
+    expect(() => calc("loanpayment(1000, 5)")).toThrow(/3 argument/i);
   });
 });
 
