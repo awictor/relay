@@ -1913,7 +1913,7 @@
       "title": "Scheduled digest \"more\"/\"link\" pages the TRIMMED copy",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A long scheduled digest is trimmed before send but recordSend caches only the trimmed text, so \"more\" says \"nothing more to show\" (a lie) + \"link\" cannot return a URL from a cut line. Inbound /run digest stores the untrimmed parts.full and works — an asymmetry.",
       "how": "Thread the untrimmed composed digest text into recordSend on the scheduled path (schedule-runner), so the ping cache holds full + sent like the inbound path."
     },
@@ -1931,7 +1931,7 @@
       "title": "When-then: run a recipe/errand on an alert fire (not just notify)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Alerts fire + recipes run + one scheduler drives both, but they are wired only to NOTIFY; \"when BTC below 55k run my rebalance-check\" would convert every passive watch into IFTTT-style action — the biggest do-more unlock vs Instinct.",
       "how": "Extend alert def with an optional then-recipe; on fire, invoke the named recipe (reuse recipeResolve/runChain) + include/deliver its result. Guard against slotted recipes (needs a value)."
     }
@@ -2676,6 +2676,14 @@
     {
       "item": "calculator-tool",
       "note": "Added a calculate tool: new src/lib/calc.ts is a SAFE deterministic evaluator (no eval/Function) — tokenizer + shunting-yard to RPN + RPN eval, supporting + - * / mod ^, parens, unary minus, %-idioms ('20% of 47', 'X + 20%', 'X - 20% off', bare %), and functions sqrt/round/abs/floor/ceil/min/max/pow/loanpayment(principal,annualRatePct,years). Wired agent.ts (TOOLS, dispatch, prompt), pinned tool list, HELP; the ANSWER-DIRECTLY carve-out now steers anything past a trivial one-step sum (bill-splits, chained tips, loan payments) to the tool instead of unverified mental math. 16 new tests (precedence, unary, money/word ops, percent idioms, bill-split, loanpayment, friendly errors, no-eval safety). Suite 1440 green, tsc clean. call-tested:false (pure offline eval)."
+    },
+    {
+      "item": "when-then-recipe-on-alert",
+      "note": "NO-OP: already built (trigger-to-action-alerts). Alert carries an optional `then` recipe (parsed from 'watch X: ... then run <recipe>'); alert-runner withThen runs the named recipe on every fire path (value/predicate/feed/watchlist) via deps.runThen and appends its output to the ping; index wires runThen with slot/chain guards. Marked done without code change."
+    },
+    {
+      "item": "digest-drilldown-trims-tail",
+      "note": "Fixed scheduled-digest 'more'/'link' drilldown. recordSend cached the TRIMMED sent text as `full` (with sent=full.length), so 'more' said 'nothing more to show' + 'link' lost URLs on cut lines. recordSend dep now takes (chatId, full, sentLen); the scheduled path caches the UNTRIMMED composed digest + the trimmed send length (mirrors the inbound /run path). index recordSend updated. 1 new test (untrimmed digest cached, sent<full so a tail is pageable). Suite 1441 green, tsc clean."
     }
   ],
   "audits": [

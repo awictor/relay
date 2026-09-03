@@ -202,7 +202,7 @@ const scheduleRunner = makeScheduleRunner({
   // pageable state so a ping mid-conversation can't eat the answer's unshown tail (proactive-clobbers-
   // drilldown-cache). The ping is sent whole (untrimmed), so its paging offset starts at full length
   // ("more" after a ping only pages a still-unshown ANSWER tail); links/context still read the ping.
-  recordSend: (chatId, text) => { const e = lastResultStore.get(chatId); lastResultStore.set(chatId, { full: e?.full ?? "", sent: e?.sent ?? 0, ping: { full: text, sent: text.length } }); },
+  recordSend: (chatId, full, sentLen) => { const e = lastResultStore.get(chatId); lastResultStore.set(chatId, { full: e?.full ?? "", sent: e?.sent ?? 0, ping: { full, sent: sentLen ?? full.length } }); },
   // Quiet hours (quiet-hours): defer a proactive send that lands in the window to its end, in the
   // chat's tz. Off unless RELAY_QUIET_START/END set (default start===end 0 = no window).
   quietUntil: (chatId, now) => quietUntilMs(now, QUIET_START, QUIET_END, profiles.offsetMin(chatId) ?? tzOffsetMin()),

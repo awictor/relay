@@ -51,7 +51,10 @@ export interface ScheduleRunnerDeps {
   runChain?: (chatId: number, task: string) => Promise<string>;
   // Record a proactive send into the shared last-result cache so a user can reply "more"/"send the
   // link" to a digest/alert ping (proactive-ping-drilldown-cache). Optional.
-  recordSend?: (chatId: number, text: string) => void;
+  // Cache a proactive send for a "more"/"send the link" follow-up. `full` is the UNTRIMMED text; `sentLen`
+  // is how many chars actually went out (so "more" can page the dropped tail). Omit sentLen when the whole
+  // thing was sent. Passing the trimmed text as `full` broke drilldown on long digests (digest-drilldown-trims-tail).
+  recordSend?: (chatId: number, full: string, sentLen?: number) => void;
   // Quiet hours (quiet-hours): given a chat + now, return the epoch-ms to defer a proactive send to
   // (the end of the quiet window) if now is inside it, else 0/undefined = send now. A mis-timed
   // schedule/alert then lands at the window's end instead of waking the user at 3am. Optional.
@@ -142,6 +145,10 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     const recipeMatch = s.task.match(/^recipe:(.+)$/);
     let res: { reply: string; steps?: number; tools?: string[]; degraded?: boolean };
     let sendText: string | null;
+    // The UNTRIMMED text behind sendText, cached for a "more"/"link" follow-up so a long digest's dropped
+    // tail is recoverable (digest-drilldown-trims-tail). Set where a send might be trimmed; else the send
+    // is short and recordSend uses sendText as-is.
+    let fullText: string | undefined;
     // For an alert: advance the baseline ONLY after the send below succeeds (a failed send would
     // otherwise eat the crossing forever). Held here, called right after deps.send.
     let alertCommit: (() => void) | null = null;
@@ -174,6 +181,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       }
       res = { reply: composed };
       sendText = deps.formatReply(res.reply); // digest text already labeled; no reminder prefix
+      fullText = composed; // untrimmed source, so "more"/"link" can page the tail formatReply dropped
     } else {
       // A scheduled recipe carries "recipe:<name>" — resolve its CURRENT task by name at fire time
       // (so editing the recipe changes what fires, and a deleted recipe stops firing). A plain task
@@ -237,7 +245,9 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     if (isCancelled()) { log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, dropped: "timed_out_late_finish" })}`); return; }
     await deps.send(s.chatId, sendText!); // non-null here (alert-silent path returned early)
     alertCommit?.(); // send succeeded -> NOW advance the alert baseline (a throw above skips this)
-    deps.recordSend?.(s.chatId, sendText!); // cache for a "more"/"send the link" reply to this ping
+    // Cache the UNTRIMMED text + how much was actually sent, so "more"/"send the link" can page a long
+    // digest's dropped tail (digest-drilldown-trims-tail). fullText is set where a send may be trimmed.
+    deps.recordSend?.(s.chatId, fullText ?? sendText!, sendText!.length);
     noteSend(s.chatId, deps.now());
     // complete() returns whether the state reached disk. A false for a "once" means its delivered-mark
     // may not have persisted, so it could be re-read after a restart (once-complete-ignores-persist) —

@@ -215,11 +215,29 @@ describe("makeScheduleRunner.tick", () => {
     const store = new Map<number, { full: string; sent: number }>();
     const { store: sched, runner } = harness(clock, {
       runAgent: async () => ({ reply: "the news is X, see https://ex.com/a" }),
-      recordSend: (chatId, text) => store.set(chatId, { full: text, sent: text.length }),
+      recordSend: (chatId, full, sentLen) => store.set(chatId, { full, sent: sentLen ?? full.length }),
     });
     sched.add(1, { kind: "once", task: "news", dueMs: NOW - 1 }, NOW);
     await runner.tick();
     expect(store.get(1)!.full).toMatch(/the news is X/); // cached for a follow-up drilldown
+  });
+
+  it("caches the UNTRIMMED digest for drilldown, so 'more' can page the dropped tail (digest-drilldown-trims-tail)", async () => {
+    const clock = { t: NOW };
+    const store = new Map<number, { full: string; sent: number }>();
+    // A long digest whose formatReply trims to a short shown slice.
+    const longDigest = "📋 morning\n" + Array.from({ length: 40 }, (_, i) => `• line ${i} https://ex.com/${i}`).join("\n");
+    const { store: sched, runner } = harness(clock, {
+      digestRun: async () => longDigest,
+      formatReply: (t) => t.slice(0, 200), // simulate trimming
+      recordSend: (chatId, full, sentLen) => store.set(chatId, { full, sent: sentLen ?? full.length }),
+    });
+    sched.add(1, { kind: "daily", task: "digest:morning", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    const cached = store.get(1)!;
+    expect(cached.full).toBe(longDigest);          // FULL untrimmed text cached, not the 200-char slice
+    expect(cached.sent).toBe(200);                 // only 200 chars were actually sent
+    expect(cached.full.length).toBeGreaterThan(cached.sent); // -> "more" has a tail to page
   });
 
   it("defers a proactive send that lands in quiet hours to the window's end, no send (quiet-hours)", async () => {
