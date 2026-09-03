@@ -187,7 +187,10 @@ function cleanSnoozeName(s: string): string {
 }
 
 export function parseSchedule(text: string, now: number, offsetMin: number = tzOffsetMin()): ParsedSchedule | null {
-  const raw = text.trim();
+  // Normalize weekday-cadence synonyms to "weekday(s)" so the weekly branch handles them (weekday-reminder-
+  // cadence): "every workday at 8" / "every business day" / "on weekdays" all mean Mon-Fri. Done on the raw
+  // text so cleanTask (which strips the matched clause) still works. "weekend"/"weekends" already parse.
+  const raw = text.trim().replace(/\b(?:work\s?days?|business\s+days?)\b/gi, (m) => (/s\b/i.test(m) || /days\b/i.test(m) ? "weekdays" : "weekday"));
   const lower = raw.toLowerCase();
 
   // --- alarm (worded-duration-reminders): "set an alarm for 7am" / "wake me (up) at 6" — a headline

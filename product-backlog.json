@@ -2372,7 +2372,7 @@
       "title": "no \"every weekday at 9\" cadence — degrades to daily (fires weekends) or one weekday",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Reminders support once/daily/weekly/interval/monthly/yearly but not Mon-Fri, so 'remind me every weekday at 5 to log my timesheet' mis-schedules (daily fires Sat/Sun, or a single weekly day). 'weekday'/'weekdays'/'workdays' is the single most common recurring work cadence people say — a top first-week action.",
       "how": "parseSchedule ALREADY maps 'weekday'->[1,2,3,4,5] and 'weekend'->[0,6] in the weekly branch (weeklyClause). Verify it actually reaches a weekly schedule + fires only on those days (audit implies it degrades — check the cue/branch order). If already correct, this is a done-noop; else route 'every weekday at N' to a weekly with weekdays [1-5]. Offline test: 'every weekday at 9' -> weekly, weekdays [1,2,3,4,5]."
     },
@@ -3310,6 +3310,10 @@
     {
       "item": "alert-redefine-stale-fields",
       "note": "Fixed AlertStore.add overwrite branch leaving stale pageUrl/series/flapCount on a re-define. Root cause: it mutated a hand-picked field subset and never touched pageUrl/series/flapCount. So (a) re-defining a name AS a page-watch stored task=URL but pageUrl=undefined -> ran the LLM on a bare URL instead of page-diffing (confirmation said 'watching that page', did otherwise); (b) re-pointing a former page-watch to a value task kept the stale pageUrl -> diffed the OLD page forever; (c) 'watch price: bitcoin'->'silver' kept the old BTC series -> chart/trend showed a phantom crash. Now existing.pageUrl is synced from the command (undefined clears it), a pageUrl change counts as a trigger change, and a trigger change resets lastValue + series + flapCount so a re-pointed watch starts fresh. 2 new tests (page-watch set/clear round-trip; series dropped on re-point), suite 1647 green, tsc clean. call-tested:false (offline store)."
+    },
+    {
+      "item": "weekday-reminder-cadence",
+      "note": "Verified + closed the gap. The core 'every weekday at N' cadence ALREADY worked (parseSchedule maps weekday/weekdays -> weekly [1,2,3,4,5] with the right hour + reminderOnly — audit finding was mostly stale). Real gap: the synonyms 'workday'/'workdays'/'business day(s)' returned NULL. Fixed by normalizing them to 'weekday(s)' on the raw text at the top of parseSchedule (before parsing, so cleanTask still strips the clause), so 'every workday at 8' / 'every business day at 9' now -> weekly Mon-Fri. 'weekend(s)' already parsed. 2 new assertions (workday + business day synonyms), suite 1648 green, tsc clean. call-tested:false (offline parse)."
     }
   ],
   "audits": [

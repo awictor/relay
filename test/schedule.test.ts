@@ -282,6 +282,15 @@ describe("parseSchedule — recurring (weekly / interval)", () => {
     expect(s.weekdays).toEqual([1, 2, 3, 4, 5]);
     expect(s.hourMin).toBe("08:00");
   });
+  it("'every workday' / 'business day' are weekday synonyms -> weekly Mon-Fri (weekday-reminder-cadence)", () => {
+    const wd = parseSchedule("remind me every workday at 8 to file my report", NOW)!;
+    expect(wd.kind).toBe("weekly");
+    expect(wd.weekdays).toEqual([1, 2, 3, 4, 5]);
+    expect(wd.hourMin).toBe("08:00");
+    const bd = parseSchedule("every business day at 9 send the standup note", NOW)!;
+    expect(bd.kind).toBe("weekly");
+    expect(bd.weekdays).toEqual([1, 2, 3, 4, 5]);
+  });
   it("'weekends at 10am' -> weekly Sat+Sun", () => {
     const s = parseSchedule("weekends at 10am brunch spots near me", NOW)!;
     expect(s.kind).toBe("weekly");
