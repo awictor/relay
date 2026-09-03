@@ -17,7 +17,8 @@ import { createHandler } from "./handler.js";
 import { createShutdown, installSignalHandlers, installCrashHandlers } from "./shutdown.js";
 import { formatStatus, makeAnvilPinger } from "./lib/status.js";
 import { makeMetricsHeartbeat } from "./lib/metrics-heartbeat.js";
-import { runAgent } from "./agent.js";
+import { runAgent, defaultFetchText } from "./agent.js";
+import { fetchFeedItems, resolveFeedSource, parseFollowCommand } from "./lib/feeds.js";
 import { formatReply } from "./lib/format-reply.js";
 import { friendlyError } from "./lib/failure.js";
 import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
@@ -140,6 +141,7 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
     recordSeen: (c, n, keys) => alerts.recordSeen(c, n, keys),
     recordPoint: (c, n, v, t) => alerts.recordPoint(c, n, v, t),
     setMemberLasts: (c, n, updates) => alerts.setMemberLasts(c, n, updates),
+    fetchFeed: (src) => fetchFeedItems(src, defaultFetchText), // follow-feed-subscriptions: keyless direct fetch
     now: () => Date.now(),
     contextFor: (c) => profiles.contextLine(c, Date.now()),
     // Trigger-to-action (trigger-to-action-alerts): run the named recipe's CURRENT task on fire.
@@ -547,6 +549,25 @@ const handle = createHandler({
     // won't survive a restart / won't actually fire) — persist-bool-all-stores.
     const saved = alertSaved && (!sp || schedules.lastSaveOk());
     return { ok: true, name: rec.name, feed: rec.feed, then: rec.then, members: rec.members?.length, saved };
+  },
+  // Follow-feed subscriptions (follow-feed-subscriptions): "follow r/x / a blog / HN topic / a YT
+  // channel" -> a feed watch backed by a KEYLESS direct fetch (feedSource), auto-scheduled on the same
+  // cadence as alerts. Reuses the whole feed-watch new-item path; only the source differs. Returns null
+  // when the target can't be resolved to a keyless feed (handler then suggests the agent "watch ... for
+  // new items" form).
+  followFeed: (chatId, text, now) => {
+    const parsed = parseFollowCommand(text);
+    if (!parsed) return null;
+    const src = resolveFeedSource(parsed.target);
+    if (!src) return { ok: false, reason: "unresolved" };
+    const rec = alerts.add(chatId, { name: parsed.name, task: `follow ${src.label}`, feed: true, feedSource: src }, now);
+    if (!rec) return { ok: false, reason: "capped" };
+    schedules.removeByTask(chatId, `alert:${rec.name}`);
+    const alertSaved = alerts.lastSaveOk();
+    const sp = parseScheduleFor(ALERT_CADENCE, `alert:${rec.name}`, now, profiles.offsetMin(chatId));
+    if (sp) schedules.add(chatId, sp, now);
+    const saved = alertSaved && (!sp || schedules.lastSaveOk());
+    return { ok: true, name: rec.name, label: src.label, saved };
   },
   // Run one check right after define (product-loop) via the same path the scheduler uses.
   alertRunNow: (chatId, name) => alertCheck(chatId, name),

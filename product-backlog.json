@@ -1688,7 +1688,7 @@
       "title": "\"Follow X\" feed subscriptions (push new items)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Biggest retention lever + structurally distinct: alerts fire on value crossings, digests re-run recipes; neither pushes newly-published content. \"follow this blog/subreddit/HN topic/YouTube channel\".",
       "how": "Keyless RSS/Atom + Reddit .json + HN Firebase + YouTube channel feed; store last-seen ids per sub; ride schedule-runner + per-chat send-cap; ping only new entries (reuse feed-watch new-item keying)."
     },
@@ -2346,6 +2346,10 @@
     {
       "item": "background-errand-memory-clobber",
       "note": "Fixed: dispatchBackground snapshotted memory at dispatch (bgHistory) and on completion did memorySet([...bgHistory, errandTurn]) — overwriting every turn the user exchanged during the minutes-long detached run. Now re-reads current memory at completion (memoryGet) and appends the errand turn to THAT, so interim conversation survives. Verified no double-persist (dispatch site doesn't persist the errand turn). New regression test. Suite 1311 green, tsc clean."
+    },
+    {
+      "item": "follow-feed-subscriptions",
+      "note": "Shipped keyless feed subscriptions: \"follow r/x / a blog / HN topic / a YouTube channel\" pings only on NEW items. New src/lib/feeds.ts (resolveFeedSource + parseFeed RSS/Atom/Reddit/HN + fetchFeedItems + parseFollowCommand). Added Alert.feedSource; checkAlert fetches the source DIRECTLY (no flaky agent) and reuses the whole seen-set/new-item path; alert-runner fetchFeed dep wired to defaultFetchText (exported from agent.ts, SSRF-guarded). Handler 'follow' branch + index followFeed (auto-schedules on ALERT_CADENCE like watches) + HELP. Reddit uses .rss (json 403s from datacenter IPs). Live-verified HN/YouTube/Reddit-rss/RSS all 200. 23 new tests, suite 1334 green, tsc clean. call-tested:true (feed sources fetched live via ctx_execute)."
     }
   ],
   "audits": [
@@ -2468,6 +2472,9 @@
     },
     {
       "note": "AUDIT (backlog dry, only owner-gated confirm-to-act). A/new-user: imperial-default-worldwide, UTC reminders before location, no flight-status, no sports scores, no on-demand headlines. B/reliability: save-confirmations lie for 6/8 stores (completes the just-shipped notes+lists fix), background-errand memory clobber, one slow proactive task blocks all chats, quiet-hours defers alert CHECK (misses overnight crossings), corrupt-file silent total wipe. C/power: follow-feed subscriptions, snooze/quiet-hours replies, restock/text-presence watch, reply-to-proactive threading, read-later capture. Seeded: persist-bool-all-stores, metric-imperial-infer, first-reminder-tz-prompt, follow-feed-subscriptions, background-errand-memory-clobber. Building persist-bool-all-stores THIS run (completes the atomic-write fix)."
+    },
+    {
+      "note": "No 3-agent audit this run (backlog had actionable todos). first-reminder-tz-prompt marked done-noop prior run (already built). Built follow-feed-subscriptions from the standing queue."
     }
   ]
 }

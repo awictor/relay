@@ -18,6 +18,11 @@ export interface Alert {
   // whole list). A feed alert has neither threshold nor condition.
   feed?: boolean;
   seen?: string[];
+  // Follow-feed subscriptions (follow-feed-subscriptions): a KEYLESS feed source (RSS/Reddit/HN/YouTube)
+  // fetched DIRECTLY on each check instead of running the flaky agent. When set, the alert is a feed
+  // watch whose items come from feedSource.url via lib/feeds.ts — reuses the whole seen-set/new-item
+  // path below. Absent -> a normal (agent-driven) feed/value/predicate watch.
+  feedSource?: { kind: "rss" | "reddit" | "hn" | "youtube"; url: string; label: string };
   // Trigger-to-action (trigger-to-action-alerts): when this alert fires, ALSO run the saved recipe
   // named here and append its result to the notification — watch-and-DO, not just watch-and-notify
   // ("when new jobs appear, run my summarize-jobs recipe"). The recipe stays a normal read-only task
@@ -59,6 +64,7 @@ export interface ParsedAlert {
   threshold?: number;
   condition?: AlertCondition;
   feed?: boolean; // notify on a NEW list item, not on a value change
+  feedSource?: { kind: "rss" | "reddit" | "hn" | "youtube"; url: string; label: string }; // follow-feed-subscriptions
   then?: string;  // run this saved recipe when the alert fires (trigger-to-action-alerts)
   members?: Array<{ label: string; task: string }>; // watchlist: N sub-watches, one grouped ping
 }
@@ -466,6 +472,8 @@ export class AlertStore {
       if (triggerChanged) existing.lastValue = undefined; // re-evaluate the new trigger from scratch
       // Switching an existing alert to/from a feed watch resets its baseline so the new mode seeds fresh.
       if (!!existing.feed !== !!a.feed) { existing.feed = a.feed; existing.seen = undefined; existing.lastValue = undefined; }
+      // Re-following the same name can change the source (e.g. r/x -> a blog); reset seen so it reseeds.
+      if (JSON.stringify(existing.feedSource) !== JSON.stringify(a.feedSource)) { existing.feedSource = a.feedSource; existing.seen = undefined; existing.lastValue = undefined; }
       // Re-stating a watchlist replaces its members (preserving each member's last value by label so an
       // unchanged member doesn't re-fire), or clears them when it's no longer a watchlist.
       if (a.members) {
@@ -476,7 +484,7 @@ export class AlertStore {
       }
       this.persist(); return existing;
     }
-    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, feed: a.feed, then: a.then, members: a.members?.map((m) => ({ label: m.label, task: m.task })), created: now };
+    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, feed: a.feed, ...(a.feedSource ? { feedSource: a.feedSource } : {}), then: a.then, members: a.members?.map((m) => ({ label: m.label, task: m.task })), created: now };
     this.items.push(rec);
     this.persist();
     return rec;

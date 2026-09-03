@@ -53,6 +53,10 @@ export interface AlertRunnerDeps {
   // Watchlist (watchlists): record the members that changed this check (by label) so an unchanged
   // member doesn't re-fire. Called by the caller's post-send commit. Optional.
   setMemberLasts?: (chatId: number, name: string, updates: Array<{ label: string; value: string }>) => void;
+  // Follow-feed subscriptions (follow-feed-subscriptions): fetch a keyless feed source's item titles
+  // DIRECTLY (RSS/Reddit/HN/YouTube) instead of running the agent. Returns [] on any failure (the feed
+  // path then stays silent, never a false "new item"). Absent -> a feedSource alert falls back to agent.
+  fetchFeed?: (src: NonNullable<Alert["feedSource"]>) => Promise<string[]>;
 }
 
 /**
@@ -125,6 +129,37 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     const base = `🔔 ${alert.name} — ${changedLines.length} update${changedLines.length === 1 ? "" : "s"}:\n${shown.join("\n")}${more}`;
     const message = await withThen(base); // run the `then` recipe on a watchlist change too (watchlist-then-dropped)
     return { notify: true, message, value: "", commit };
+  }
+
+  // Follow-feed subscriptions (follow-feed-subscriptions): a keyless feed source is fetched DIRECTLY
+  // (RSS/Reddit/HN/YouTube) — no agent run — and pushed through the SAME new-item/seen-set logic as an
+  // agent-driven feed watch. A fetch that returns no items leaves the baseline untouched + stays silent
+  // (never a false "new" and never wiping the seen-set on a transient outage). Falls back to the agent
+  // path if fetchFeed isn't wired.
+  if (alert.feedSource && deps.fetchFeed) {
+    let items: string[];
+    try { items = await deps.fetchFeed(alert.feedSource); } catch { items = []; }
+    if (!items.length) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
+    const seen = new Set(alert.seen ?? []);
+    const freshByKey = new Map<string, string>();
+    for (const it of items) {
+      const k = feedItemKey(it);
+      if (!k || seen.has(k) || freshByKey.has(k)) continue;
+      freshByKey.set(k, it);
+    }
+    const allKeys = items.map(feedItemKey).filter(Boolean);
+    if (alert.seen === undefined) {
+      deps.recordSeen?.(alert.chatId, alert.name, allKeys);
+      deps.setLast(alert.chatId, alert.name, items[0] ?? ""); // mark checked (seen !== undefined next time)
+      return { notify: false, message: null, value: items[0] ?? "", commit: noop };
+    }
+    if (freshByKey.size === 0) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
+    const fresh = [...freshByKey.values()];
+    const shown = fresh.slice(0, 10);
+    const more = fresh.length > shown.length ? `\n…and ${fresh.length - shown.length} more` : "";
+    const header = fresh.length === 1 ? `🔔 ${alert.name}: 1 new` : `🔔 ${alert.name}: ${fresh.length} new`;
+    const message = await withThen(`${header}\n${shown.map((s) => `• ${s}`).join("\n")}${more}`);
+    return { notify: true, message, value: fresh[0] ?? "", commit: () => deps.recordSeen?.(alert.chatId, alert.name, [...freshByKey.keys()]) };
   }
 
   // The baseline advance for this value, run only by the caller (after a successful send on notify).

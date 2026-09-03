@@ -550,6 +550,24 @@ describe("createHandler", () => {
     expect(defined[0]).toMatch(/^watch bitcoin:/); // salient token, not "whats-the"
   });
 
+  it("'follow r/x' routes to followFeed, confirms, no agent (follow-feed-subscriptions)", async () => {
+    let followed = "";
+    let agentRan = false;
+    const { handle, sent } = harness({
+      followFeed: (_c, text) => { followed = text; return { ok: true, name: "r/programming", label: "r/programming" }; },
+      runAgentFn: async () => { agentRan = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("follow r/programming", 6));
+    expect(followed).toBe("follow r/programming");
+    expect(sent[0]!.text).toMatch(/Following r\/programming/);
+    expect(agentRan).toBe(false);
+  });
+  it("an unresolvable follow suggests the watch-for-new-items form", async () => {
+    const { handle, sent } = harness({ followFeed: () => ({ ok: false, reason: "unresolved" }) });
+    await handle(msg("follow my horoscope", 6));
+    expect(sent[0]!.text).toMatch(/subreddit|Hacker News|YouTube|for new items/i);
+  });
+
   it("'schedule that every morning' schedules the last task", async () => {
     const mem = new Map<number, LLMMessage[]>();
     mem.set(6, [{ role: "user", content: "top HN story" }, { role: "assistant", content: "Story X" }]);

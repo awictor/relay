@@ -406,3 +406,50 @@ describe("checkAlert — watchlists", () => {
     expect(committed).toEqual([]); // no fresh seeds, no change -> nothing written
   });
 });
+
+describe("checkAlert — follow-feed subscriptions (direct fetch, no agent)", () => {
+  const src = { kind: "rss" as const, url: "https://blog/feed", label: "blog" };
+  const feedAlert = (over: Partial<Alert> = {}): Alert => ({ chatId: 1, name: "blog", task: "follow blog", feed: true, feedSource: src, created: NOW, ...over });
+
+  function feedDeps(items: string[]) {
+    const seenWrites: string[][] = [];
+    let ranAgent = false;
+    return {
+      seenWrites,
+      ranAgent: () => ranAgent,
+      d: {
+        llm: {} as never,
+        runAgent: async () => { ranAgent = true; return { reply: "SHOULD NOT RUN" }; },
+        formatReply: (t: string) => t,
+        setLast: () => {},
+        recordSeen: (_c: number, _n: string, keys: string[]) => seenWrites.push(keys),
+        fetchFeed: async () => items,
+      },
+    };
+  }
+
+  it("first run seeds silently from the direct fetch, never touching the agent", async () => {
+    const { d, ranAgent, seenWrites } = feedDeps(["Post A", "Post B"]);
+    const r = await checkAlert(feedAlert({ seen: undefined }), d);
+    expect(r.notify).toBe(false);        // seed, no ping
+    expect(ranAgent()).toBe(false);      // keyless fetch, not the flaky agent
+    expect(seenWrites[0]!.length).toBe(2); // both items seeded as seen
+  });
+
+  it("notifies only about NEW items on a later check", async () => {
+    const seenA = normKey("Post A");
+    const { d } = feedDeps(["Post C", "Post A"]); // A already seen, C is new
+    const r = await checkAlert(feedAlert({ seen: [seenA] }), d);
+    expect(r.notify).toBe(true);
+    expect(r.message).toMatch(/1 new/);
+    expect(r.message).toMatch(/Post C/);
+    expect(r.message).not.toMatch(/Post A/); // the already-seen item isn't re-reported
+  });
+
+  it("stays silent (no baseline wipe) when the fetch returns nothing", async () => {
+    const { d } = feedDeps([]);
+    const r = await checkAlert(feedAlert({ seen: [normKey("Post A")] }), d);
+    expect(r.notify).toBe(false);
+    expect(r.message).toBeNull();
+  });
+});

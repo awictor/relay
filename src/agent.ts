@@ -440,7 +440,7 @@ async function defaultFetchJson(url: string): Promise<{ status: number; contentT
 // Plain guarded GET returning the body text (for the transcript fetch — YouTube watch page + caption
 // track, + the geo APIs). Uses safeFetch so every redirect hop is SSRF-re-validated (geo-ssrf-redirect),
 // matching scrape/fetch_json's discipline instead of a raw redirect:"follow". Size-capped, no creds.
-async function defaultFetchText(url: string): Promise<string> {
+export async function defaultFetchText(url: string): Promise<string> {
   const res = await safeFetch(url, {
     method: "GET",
     headers: { accept: "text/html,application/xml,application/json,*/*", "accept-language": "en", "user-agent": "relay-bot" },

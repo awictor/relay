@@ -168,6 +168,11 @@ export interface HandlerDeps {
   // Change-alerts (m10 alert-3): "watch <name>: <task>" defines + auto-schedules a check.
   // All optional. alertDefine parses + stores + schedules (default cadence); returns the cadence.
   alertDefine?: (chatId: number, text: string, now: number) => { ok: true; name: string; feed?: boolean; then?: string; members?: number; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" };
+  // Follow-feed subscriptions (follow-feed-subscriptions): "follow r/x / a blog / HN topic / a YT
+  // channel" -> a keyless feed watch that pings only on NEW items. null = not a follow command (falls
+  // through); { reason: "unresolved" } = a follow we couldn't map to a keyless feed (suggest the agent
+  // "watch ... for new items" form). Optional.
+  followFeed?: (chatId: number, text: string, now: number) => { ok: true; name: string; label: string; saved?: boolean } | { ok: false; reason: "unresolved" | "capped" } | null;
   // Run one check immediately on define (product-loop): baseline + notify if the predicate already
   // holds, instead of ~24h of silence until the first scheduled cadence check. Returns the notify
   // message or null (silent). Optional; absent -> define just schedules as before.
@@ -792,6 +797,23 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       }
       if (r.reason === "unknown") { await deps.sendMessage(msg.chatId, "I don't have an alert by that name — see /alerts."); return; }
       // unparsed: fall through to define / agent
+    }
+
+    // "follow <target>" -> a keyless feed subscription (follow-feed-subscriptions): pings only on NEW
+    // items from an RSS/Reddit/HN/YouTube source, fetched directly. Before the agent + schedule matcher.
+    if (deps.followFeed && /^\s*(?:follow|subscribe\s+to)\s+\S/i.test(msg.text)) {
+      const r = deps.followFeed(msg.chatId, msg.text, deps.now());
+      if (r && r.ok) {
+        if (r.saved === false) { await deps.sendMessage(msg.chatId, `I've set up following ${r.label} for now, but I couldn't save it to disk — it may be lost if I restart. Try again shortly.`); return; }
+        await deps.sendMessage(msg.chatId, `Following ${r.label} — I'll ping you only when a NEW item shows up. See /alerts; stop with "/forget-alert ${r.name}".`);
+        return;
+      }
+      if (r && !r.ok && r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the watch limit — /alerts then /forget-alert one first."); return; }
+      if (r && !r.ok && r.reason === "unresolved") {
+        await deps.sendMessage(msg.chatId, "I can follow a blog/site feed, a subreddit (r/name), a Hacker News topic (\"HN rust\"), or a YouTube channel link. For anything else, try \"watch <name>: <task> for new items\".");
+        return;
+      }
+      // null: not actually a follow command — fall through.
     }
 
     // "watch <name>: <task>" / "alert me <name>: <task>" -> define + auto-schedule a change-alert.

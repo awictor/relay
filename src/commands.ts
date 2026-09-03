@@ -54,6 +54,8 @@ Bundle into a briefing: "define digest morning: weather, hn, btc" then /run morn
 
 Watch for changes: "watch btc: price of bitcoin when it changes by 1000" — I only ping you when it moves. Or set a target: "watch btc: bitcoin below 50000", "watch eth: ethereum above 4000", "watch ps5: the PS5 back in stock" — I ping once when it crosses. /alerts lists them, /forget-alert <name> stops one. Retune one anytime: "change btc to below 45000" or "make ps5 fire under 200".
 
+Follow a feed: "follow r/programming", "follow HN rust", "follow this blog https://blog.example.com/feed", or "follow" a YouTube channel link — I ping you only when a NEW post/story/video shows up. /alerts lists them, /forget-alert <name> stops one.
+
 Watch for NEW items in a list: "watch jobs: remote react roles for new listings" or "watch deals: new deals on OLED TVs" — I ping you only when a NEW entry shows up (not on every check). Great for job boards, listings, restocks, releases.
 
 Watch, then DO: add "then run <recipe>" to any watch — "watch jobs: new remote roles for new listings then run summarize-jobs" — and when it fires I'll also run that saved recipe and include its result.
