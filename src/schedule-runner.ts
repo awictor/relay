@@ -289,7 +289,13 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // Quiet hours: a proactive send landing in the chat's quiet window is deferred to the window's
         // end (bump this schedule's dueMs there) rather than waking the user. Skips the deferral for a
         // schedule that's ALREADY due at/after the quiet-end (avoids a defer loop). Needs both deps.
-        if (deps.quietUntil && deps.deferTo) {
+        // An alert: check is EXEMPT (quiet-hours-defers-alert-check) — deferring the CHECK, not just the
+        // send, meant an edge-triggered watch ("below 50k") that crossed at 2am and reverted by the 8am
+        // quiet-end was evaluated only at 8am (reverted -> crossing lost forever). Mirrors the send-cap
+        // exemption above: run the check on cadence so the crossing is seen. An alert only SENDS on a real
+        // change (rare, and a user-requested event, not recurring noise), so letting it through can't
+        // storm the quiet window the way a daily/digest would; missing the crossing is the worse failure.
+        if (deps.quietUntil && deps.deferTo && !isAlertCheck) {
           const until = deps.quietUntil(s.chatId, deps.now());
           if (until > deps.now() && s.dueMs < until) {
             deps.deferTo(s.id, until);

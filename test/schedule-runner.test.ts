@@ -176,6 +176,35 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.list(1)[0]!.dueMs).toBe(NOW + 8 * 3_600_000); // pushed to window end
   });
 
+  it("an alert CHECK runs during quiet hours (not deferred) so an overnight crossing isn't lost (quiet-hours-defers-alert-check)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    let alertChecks = 0;
+    const { store, runner } = harness(clock, {
+      send: async (_c, text) => { sent.push(text); },
+      quietUntil: () => NOW + 8 * 3_600_000, // deep in the quiet window
+      deferTo: (id, when) => { store.deferTo(id, when); },
+      alertCheck: async () => { alertChecks++; return { message: "🔔 btc: below 50k", commit: () => {} }; },
+    });
+    store.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    expect(alertChecks).toBe(1); // the crossing was EVALUATED at 2am, not deferred to 8am (would revert)
+    expect(sent).toContain("🔔 btc: below 50k"); // a real crossing is worth the ping; it can't storm (edge-only)
+  });
+
+  it("a non-alert proactive send is STILL deferred by quiet hours (regression guard)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    const { store, runner } = harness(clock, {
+      send: async (_c, text) => { sent.push(text); },
+      quietUntil: () => NOW + 8 * 3_600_000,
+      deferTo: (id, when) => { store.deferTo(id, when); },
+    });
+    store.add(1, { kind: "daily", task: "digest:morning", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    expect(sent).toHaveLength(0); // recurring content still waits for the quiet window to end
+  });
+
   it("a daily task fires then reschedules forward (stays in the store)", async () => {
     const clock = { t: NOW };
     const { store, runner, sent } = harness(clock);

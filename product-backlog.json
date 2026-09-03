@@ -1745,6 +1745,60 @@
       "status": "done",
       "why": "START leads with HN/extract/screenshot/PDF, so a first-timer thinks it is a dev tool + never tries weather/remind/tip/near-me/scores; never told they can ask open questions or that sharing location unlocks weather/near-me.",
       "how": "Rewrite START to lead with everyday errands + \"just ask\" + the location unlock; keep power examples lower. Pure commands.ts copy."
+    },
+    {
+      "id": "quiet-hours-defers-alert-check",
+      "title": "Quiet-hours defers the alert CHECK, losing overnight crossings",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "A \"below 50k\" watch that crosses at 2am and reverts by the 8am quiet-end never fired — quiet-hours deferred the whole check, so the crossing was evaluated only at 8am (reverted).",
+      "how": "Exempt alert: checks from the quiet-hours defer, mirroring the send-cap exemption; the check runs on cadence, only sends on a real change."
+    },
+    {
+      "id": "once-complete-ignores-persist",
+      "title": "complete() ignores persist() bool -> once can double-fire after restart",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "On a full/unwritable disk a once reminder sends, is dropped only in memory, then re-fires after the next restart. Every other store hedges on lastSaveOk() but the proactive complete() path does not.",
+      "how": "Have complete() surface the persist result; on a failed persist after a once fire, log + optionally flag so the runner can avoid a duplicate (or at least record it)."
+    },
+    {
+      "id": "slow-task-starves-due-reminders",
+      "title": "One hung proactive task delays every other chat’s due reminders",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "tick() is strictly sequential (for..await fireOne) with no per-task wall-clock timeout; a stalled anvil/LLM makes all other due reminders land late or miss the tick.",
+      "how": "Wrap fireOne in a Promise.race timeout, or run due tasks via mapPool (as digest/watchlist already do), bounded so the anvil pool is safe."
+    },
+    {
+      "id": "corrupt-store-silent-wipe",
+      "title": "Corrupt store file silently wipes a chat’s automations",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "readJsonSafe backs up + returns null; the store loads empty so every reminder/alert/recipe/digest vanishes with only an operator log — user never told.",
+      "how": "Surface a user-facing \"your saved items couldn’t be loaded (backed up)\" notice, or refuse-to-serve that store until acknowledged, instead of silently starting empty."
+    },
+    {
+      "id": "sports-scores-tool",
+      "title": "No live sports scores (promised in prompt, unbacked)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "SYSTEM_PROMPT advertises \"who won the game\" but there is no tool; falls to a flaky scrape of JS scoreboards. Keyless ESPN scoreboard JSON exists.",
+      "how": "New src/lib/scores.ts hitting a keyless ESPN scoreboard endpoint; parse team+score+status; get_score tool + dispatch + prompt + help."
+    },
+    {
+      "id": "contacts-book-compose",
+      "title": "Contacts book so \"text mom\" drafts to a saved recipient",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "compose only works if the user re-types a raw email/number every time; \"text mom\" dead-ends asking for the address. Its highest-intent use silently fails.",
+      "how": "A small name->handle store (like notes/lists); compose resolves a saved contact by name; \"save mom’s number as ...\" to add. Feeds the deferred confirm-to-send."
     }
   ],
   "history": [
@@ -2415,6 +2469,10 @@
     {
       "item": "feed-dedup-title-only",
       "note": "Feed items now dedup on a STABLE id (link/guid/objectID) not just the title. parseFeed returns FeedItem[] {title,id?}: RSS/Atom via new parseXmlItems (guid/id element or link href), Reddit .json (name/permalink), HN Algolia (objectID). alert-runner feedSource path keys on id:<id> when present, else t:<normTitle>, so a recurring 'Daily Discussion Thread' or two same-titled posts no longer collapse to one seen key and get dropped forever. parseXmlTitles kept as a titles-only back-compat wrapper. fetchFeed dep + wiring updated to FeedItem[]. 6 new/updated tests (id parsing, same-title-distinct-id fires). Suite 1344 green, tsc clean."
+    },
+    {
+      "item": "quiet-hours-defers-alert-check",
+      "note": "Exempted alert: checks from the quiet-hours defer in schedule-runner tick(), mirroring the existing send-cap exemption. Deferring the CHECK (not just the send) meant an edge-triggered watch that crossed + reverted inside the quiet window was evaluated only at quiet-end and the crossing was lost forever. Now the check runs on cadence; it only SENDS on a real change (rare, user-requested, can't storm like a daily/digest). Non-alert sends (digest/daily/once) still defer. 2 new tests (alert-check-runs-in-quiet + non-alert-still-deferred regression). Suite 1346 green, tsc clean."
     }
   ],
   "audits": [
@@ -2546,6 +2604,9 @@
     },
     {
       "note": "No 3-agent audit this run (feed-dedup-title-only was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
+    },
+    {
+      "note": "AUDIT (backlog dry, only owner-gated). A/new-user: no sports scores (promised, unbacked), transit directions return a driving route, no flight status, compose draft-only surprise, no local showtimes/events. B/reliability: quiet-hours defers alert CHECK (overnight crossings lost), complete() ignores persist bool (once double-fire), sequential tick starves reminders, corrupt-store silent wipe. C/power: contacts book for compose, natural-language edit-automations-in-place, commitments tracker w/ proactive prep, group mode, escalating reminders. Seeded: quiet-hours-defers-alert-check(built), once-complete-ignores-persist, slow-task-starves-due-reminders, corrupt-store-silent-wipe, sports-scores-tool, contacts-book-compose."
     }
   ]
 }
