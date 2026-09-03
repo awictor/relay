@@ -8,6 +8,7 @@ import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Digest } from "./lib/digests.js";
 import { mapPool } from "./lib/pool.js";
 import { hasSlots, isChain } from "./lib/recipes.js";
+import { looksLikeErrorReply } from "./lib/alerts.js";
 import type { AgentEnv } from "./chain-runner.js";
 
 // Cap on how many member agents run at once (DEV-0140). Each member opens an anvil browser session;
@@ -71,7 +72,9 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
       // (digest-chain-member-literal). Falls back to runAgent when runChain isn't wired.
       if (isChain(rec.task) && deps.runChain) {
         const out = (await deps.runChain(digest.chatId, rec.task)).trim();
-        return out ? { line: `• ${name}: ${out}`, status: "real" } : { line: `• ${name}: (couldn't fetch)`, status: "failed" };
+        // An error-shaped chain output ("the page returned a 404") is a soft failure, not content
+        // (digest-error-as-content) — demote it so it's not shown as a real section + counts as failed.
+        return out && !looksLikeErrorReply(out) ? { line: `• ${name}: ${out}`, status: "real" } : { line: `• ${name}: (couldn't fetch)`, status: "failed" };
       }
       const res = await deps.runAgent(rec.task, { llm: deps.llm, context: deps.contextFor?.(digest.chatId) || undefined, ...deps.agentEnv?.(digest.chatId) }, []);
       // A degraded reply (agent ran out of steps / produced no answer, DEV-0176) is NOT briefing
@@ -79,6 +82,10 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
       // it exactly like a thrown error: the "(couldn't fetch)" fallback line (DEV-0177).
       if (res.degraded) return { line: `• ${name}: (couldn't fetch)`, status: "failed" };
       const body = deps.formatReply(res.reply).trim();
+      // An error-SHAPED body the model didn't flag as degraded ("couldn't load", "404") must NOT be shown
+      // as a real briefing section (digest-error-as-content) — it reads as fact and miscounts toward "real"
+      // content so the all-failed notice never fires. Demote it like a degraded reply.
+      if (!body || looksLikeErrorReply(body)) return { line: `• ${name}: (couldn't fetch)`, status: "failed" };
       return { line: `• ${name}: ${body}`, status: "real" };
     } catch {
       return { line: `• ${name}: (couldn't fetch)`, status: "failed" };

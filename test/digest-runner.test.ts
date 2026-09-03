@@ -95,6 +95,26 @@ describe("runDigest", () => {
     expect(out).toMatch(/temporary|try again/i);
   });
 
+  it("an error-SHAPED member reply is demoted to '(couldn't fetch)', not shown as content (digest-error-as-content)", async () => {
+    const out = await runDigest(digest(["weather", "btc"]), deps({
+      runAgent: async (task: string) => task === "btc price"
+        ? ({ reply: "the page returned a 404 error" }) // soft failure, NOT degraded
+        : ({ reply: "sunny, 72F" }),
+    }));
+    expect(out).toContain("• btc: (couldn't fetch)");   // demoted, not the error text
+    expect(out).not.toMatch(/404/);                      // the error string never reaches the briefing
+    expect(out).toContain("• weather: sunny, 72F");      // the real member still carries it
+  });
+
+  it("ALL members error-shaped (not degraded) -> the all-failed note, not a briefing of errors", async () => {
+    const out = await runDigest(digest(["weather", "hn"]), deps({
+      runAgent: async () => ({ reply: "couldn't load that right now" }), // error-shaped, not degraded
+    }));
+    expect(out).not.toBeNull();
+    expect(out).toMatch(/couldn't put your briefing together|couldn't build/i);
+    expect(out).not.toMatch(/couldn't load that right now/); // the raw error isn't shown as content
+  });
+
   it("all members DEGRADED (real recipes, no content) also sends the transient note, not silence", async () => {
     const out = await runDigest(digest(["weather", "hn"]), deps({ runAgent: async () => ({ reply: "", degraded: true }) }));
     expect(out).not.toBeNull();

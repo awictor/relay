@@ -2183,7 +2183,7 @@
       "title": "digest presents a soft-error reply as real briefing content",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "digest-runner only demotes a member to '(couldn't fetch)' when the agent throws or sets degraded. A non-degraded reply whose TEXT is a fetch failure ('btc: the page returned a 404') becomes a 'real' section verbatim, and the all-fail-vs-partial logic miscounts it as real content so the honest 'every source failed' notice never fires. User reads an error line as fact.",
       "how": "Gate the digest member line with looksLikeErrorReply (already in alerts.ts) the same way degraded is — demote to '(couldn't fetch)' + count it as a failure for the all-fail/partial tally. Offline test: an error-text member is demoted + a digest of all-error members emits the all-failed notice."
     },
@@ -3062,6 +3062,10 @@
     {
       "item": "error-reply-false-fires-alerts",
       "note": "Error-shaped agent replies no longer false-fire alerts or poison the baseline. looksLikeErrorReply was only used to skip the time-series point, NOT the trigger decision — so a soft failure like 'the page returned a 404' yielded extractValue()=404, satisfied a 'below 50000' predicate/threshold, pinged a FALSE alarm showing an error string, and on a threshold poisoned the baseline so the next check re-fired. Added a single guard right after value is computed (mirrors the degraded guard): looksLikeErrorReply(value) -> hold, keep last-good baseline, stay silent — covering condition/threshold/change/feed/series paths at once. Also guarded the watchlist member loop so an error-shaped member holds its baseline. 2 new tests (error-shaped reply holds baseline + doesn't fire; first-run seed test switched to a non-error numberless value), suite 1584 green, tsc clean. call-tested:false (offline runner tests)."
+    },
+    {
+      "item": "digest-error-as-content",
+      "note": "Digest no longer shows a soft-error reply as real briefing content. digest-runner only demoted a member to '(couldn't fetch)' on a thrown error or the degraded flag; a non-degraded reply whose TEXT is a fetch failure ('btc: the page returned a 404') became a 'real' section verbatim + miscounted toward real content so the honest all-failed notice never fired. Now the agent body AND the chain output are gated with looksLikeErrorReply (same guard the alert path uses) -> demoted to '(couldn't fetch)' + status 'failed'. So an error member shows the fallback line, and an all-error digest emits the 'couldn't build it this time' note instead of a briefing of error strings. 2 new tests (one error member demoted; all-error -> all-failed note), suite 1586 green, tsc clean. call-tested:false (offline runner tests)."
     }
   ],
   "audits": [
