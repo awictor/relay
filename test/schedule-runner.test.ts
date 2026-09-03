@@ -28,6 +28,66 @@ function harness(clock: { t: number }, over: Partial<Parameters<typeof makeSched
   return { store, runner, sent, ran };
 }
 
+describe("makeScheduleRunner — send-failure gating (send-never-throws-dead-commit-guard)", () => {
+  it("a FAILED send (send returns false) does NOT commit the alert baseline + does NOT complete — it re-fires", async () => {
+    const clock = { t: NOW };
+    const store = new ScheduleStore({ file: tmpFile() });
+    let committed = 0;
+    let sends = 0;
+    const runner = makeScheduleRunner({
+      store, llm: {} as never,
+      runAgent: async () => ({ reply: "x" }),
+      send: async () => { sends++; return false; }, // delivery fails every time
+      alertCheck: async () => ({ message: "🔔 btc crossed", commit: () => { committed++; }, softFail: false }),
+      formatReply: (t) => t, now: () => clock.t, periodMs: 0,
+    });
+    store.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    expect(sends).toBe(1);
+    expect(committed).toBe(0);            // baseline NOT advanced — the crossing isn't swallowed
+    // the daily advances (recurring) on the failed-send throw; a day later it re-checks (crossing
+    // re-evaluated) rather than being lost. Advance the clock so the rescheduled daily is due again.
+    clock.t += 25 * 3_600_000;
+    await runner.tick();
+    expect(sends).toBe(2);                // re-fired — the guard kept it live
+  });
+
+  it("a FAILED reminder send does NOT complete the once — it retries next tick", async () => {
+    const clock = { t: NOW };
+    const store = new ScheduleStore({ file: tmpFile() });
+    let ok = false;
+    const runner = makeScheduleRunner({
+      store, llm: {} as never,
+      runAgent: async () => ({ reply: "x" }),
+      send: async () => (ok ? true : false), // first send fails, later succeeds
+      formatReply: (t) => t, now: () => clock.t, periodMs: 0,
+    });
+    store.add(1, { kind: "once", task: "take meds", dueMs: NOW - 1, reminderOnly: true }, NOW);
+    await runner.tick();
+    expect(store.list(1)).toHaveLength(1); // NOT completed (send failed) — the promise survives
+    ok = true;
+    await runner.tick();
+    expect(store.list(1)).toHaveLength(0); // delivered on retry -> completed
+  });
+
+  it("a SUCCESSFUL send (returns true) commits + completes as before", async () => {
+    const clock = { t: NOW };
+    const store = new ScheduleStore({ file: tmpFile() });
+    let committed = 0;
+    const runner = makeScheduleRunner({
+      store, llm: {} as never,
+      runAgent: async () => ({ reply: "x" }),
+      send: async () => true,
+      alertCheck: async () => ({ message: "🔔 btc crossed", commit: () => { committed++; }, softFail: false }),
+      formatReply: (t) => t, now: () => clock.t, periodMs: 0,
+    });
+    store.add(1, { kind: "once", task: "alert:btc", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(committed).toBe(1);
+    expect(store.list(1)).toHaveLength(0);
+  });
+});
+
 describe("makeScheduleRunner — inline buttons (inline-tap-buttons)", () => {
   it("attaches Refresh/Snooze/Stop buttons to an alert ping and none to a plain reminder", async () => {
     const clock = { t: NOW };

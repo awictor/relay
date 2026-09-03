@@ -114,13 +114,16 @@ export function splitMessage(text: string, max: number = TELEGRAM_MAX): string[]
   return chunks;
 }
 
-/** Send a text reply to a chat. Best-effort; logs on failure. A message over Telegram's 4096-char
- * cap is split into sequential sends (with an "(i/n)" counter) instead of being silently truncated.
- * An optional inline keyboard (inline-tap-buttons) is attached to the LAST chunk only (so a split
- * long message shows the one-tap actions once, at the end, not repeated per chunk). */
-export async function sendMessage(chatId: number, text: string, keyboard?: InlineKeyboard): Promise<void> {
+/** Send a text reply to a chat. Best-effort (never throws — a failed inbound reply just logs), but
+ * RETURNS whether delivery succeeded (send-never-throws-dead-commit-guard): the proactive runner gates
+ * its baseline-commit / schedule-complete on this, so a 429/network/blocked send re-fires next check
+ * instead of the crossing being silently swallowed. true = every chunk sent; false = at least one
+ * chunk failed. A message over Telegram's 4096-char cap is split into sequential sends (with an "(i/n)"
+ * counter). An optional inline keyboard (inline-tap-buttons) is attached to the LAST chunk only. */
+export async function sendMessage(chatId: number, text: string, keyboard?: InlineKeyboard): Promise<boolean> {
   if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
   const parts = splitMessage(text, TELEGRAM_MAX - 8); // headroom for the " (i/n)" counter
+  let allOk = true;
   for (let i = 0; i < parts.length; i++) {
     const body = parts.length > 1 ? `${parts[i]} (${i + 1}/${parts.length})` : parts[i]!;
     const payload: Record<string, unknown> = { chat_id: chatId, text: body };
@@ -132,11 +135,13 @@ export async function sendMessage(chatId: number, text: string, keyboard?: Inlin
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(15000),
       });
-      if (!r.ok) console.error("telegram sendMessage failed:", r.status, (await r.text().catch(() => "")).slice(0, 200));
+      if (!r.ok) { allOk = false; console.error("telegram sendMessage failed:", r.status, (await r.text().catch(() => "")).slice(0, 200)); }
     } catch (e) {
+      allOk = false;
       console.error("telegram sendMessage error:", e instanceof Error ? e.message : String(e));
     }
   }
+  return allOk;
 }
 
 /** Acknowledge an inline-button tap (inline-tap-buttons) so Telegram clears the button's loading

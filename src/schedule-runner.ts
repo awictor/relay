@@ -25,6 +25,10 @@ export interface ScheduleRunnerDeps {
   // Send a proactive message. `keyboard` (inline-tap-buttons) attaches one-tap actions
   // (Refresh/Snooze/Stop on a watch, Run again on a digest/recipe); a channel without inline buttons
   // ignores it. Optional param so the failure/receipt sends (no buttons) call it unchanged.
+  // Returns whether delivery SUCCEEDED (send-never-throws-dead-commit-guard): false = a chunk failed to
+  // send. The runner gates commit()/complete() on this so a failed send re-fires next check instead of
+  // silently swallowing the crossing / dropping the reminder. A channel that returns void/undefined is
+  // treated as delivered (only an explicit `false` means failure), so older wiring stays valid.
   send: (chatId: number, text: string, keyboard?: InlineKeyboard) => Promise<unknown>;
   formatReply: (text: string) => string;
   // The untrimmed + phone-sized views of a reply (sched-reminder-tail-trim). The plain scheduled/recipe
@@ -306,7 +310,10 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // A sticky reminder (sticky-acknowledged-reminders) re-pings until acknowledged — tell the user
         // how to stop it so the nag has an off switch. Plain reminders echo as before.
         const echo = s.sticky ? `⏰ Reminder: ${taskToRun}\n(reply "done" when you've handled it and I'll stop)` : `⏰ Reminder: ${taskToRun}`;
-        await deps.send(s.chatId, echo); // throws on failure -> tick catch -> safeComplete(fired:false), no budget burn
+        // Gate on actual delivery (send-never-throws-dead-commit-guard): deps.send returns false on a
+        // failed send (it doesn't throw), so a dropped "take your meds" reminder must NOT complete —
+        // throw into the tick's catch so a once retries next tick (no budget burn) instead of vanishing.
+        if (await deps.send(s.chatId, echo) === false) throw new Error("reminder send failed — deferring complete so it retries");
         // The send landed: stamp this sticky as the most-recently-fired so a "done" ack scopes to it
         // (sticky-ack-scopes-to-one), and count the confirmed ping toward the anti-nag cap via complete().
         if (s.sticky) deps.store.markStickyFired(s.id, deps.now());
@@ -361,7 +368,13 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         if (pickRows) { deps.pickListStore.set(s.chatId, items); keyboard = [...(markerRows ?? []), ...pickRows]; }
       }
     }
-    await deps.send(s.chatId, sendText!, keyboard); // non-null here (alert-silent path returned early)
+    // Gate the baseline-commit + schedule-complete on ACTUAL delivery (send-never-throws-dead-commit-
+    // guard): deps.send returns false when a chunk failed to send (it's best-effort + doesn't throw), so
+    // a 429/network/blocked send must NOT advance the alert baseline (the crossing would be swallowed
+    // forever) NOR complete the schedule. Throw into the tick's catch so a once retries + a recurring
+    // advances-and-retries next cadence — restoring the "a failed send re-fires next check" guarantee.
+    const delivered = await deps.send(s.chatId, sendText!, keyboard); // non-null here (alert-silent path returned early)
+    if (delivered === false) throw new Error("send failed (not delivered) — deferring commit/complete so it re-fires");
     alertCommit?.(); // send succeeded -> NOW advance the alert baseline (a throw above skips this)
     // Cache the UNTRIMMED text + how much was actually sent, so "more"/"send the link" can page a long
     // digest's dropped tail (digest-drilldown-trims-tail). fullText is set where a send may be trimmed.

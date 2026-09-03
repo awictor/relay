@@ -2618,6 +2618,42 @@
       "status": "done",
       "why": "'directions to work', 'weather at the gym', 'coffee near home' re-ask the city each time; profile stores exactly ONE location.",
       "how": "A per-chat place-alias store (name -> coords/label); resolve an alias in directions/find_nearby/weather before geocoding. Sharpens every location errand + is the prerequisite for geofencing."
+    },
+    {
+      "id": "send-never-throws-dead-commit-guard",
+      "title": "failed proactive send silently swallows a crossing / drops a reminder",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "sendMessage catches all errors + resolves void, so the runner's 'commit baseline / complete only after a successful send' guards were dead code — a 429/network/blocked send advanced the alert baseline anyway (crossing lost forever) and completed a once (reminder dropped).",
+      "how": "sendMessage returns a delivered-boolean; the runner skips commit/complete + throws on a false return so it re-fires."
+    },
+    {
+      "id": "softfail-missing-feed-watchlist",
+      "title": "feed + watchlist alerts never emit softFail, so a dead one dies dark",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The silent-watch-death receipt only fires on softFail, which alert-runner sets on the value/page/weather paths but NOT the watchlist branch nor the two feed branches — a persistently-dead RSS/Reddit/HN feed or stock-basket watch looks armed forever with no receipt.",
+      "how": "Return softFail:true from the feedSource-empty / watchlist-all-members-failed paths in alert-runner (mirror the single-value degraded/error-reply guards) so the runner's soft-fail streak + receipt covers them too."
+    },
+    {
+      "id": "wikipedia-fast-fact",
+      "title": "quick 'who/what is X' facts are slow + unreliable (no keyless summary tool)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "'who is the CEO of OpenAI'/'how tall is Everest'/'what is a Roth IRA' waits 10-30s on web_search->scrape->summarize (sometimes wrong page), when a keyless Wikipedia REST summary answers in ~200ms with a citation. The most common text-a-bot first errand is the slowest path.",
+      "how": "A get_fact tool hitting en.wikipedia.org/api/rest_v1/page/summary/<title> (keyless GET, same fast-path shape as define/get_time); parse title/extract/url, format + cite. Fall back to web_search on a miss/disambiguation."
+    },
+    {
+      "id": "csv-export-tabular",
+      "title": "tabular results can't be exported ('send that as a spreadsheet')",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "to-csv.ts (rowsToCsv) is already built but wired to NO tool; a compare/extract/watchlist/list result is lost the moment the chat scrolls.",
+      "how": "Wire a to_csv tool (or an 'as a CSV' modifier on compare/extract) that turns rows into a .csv sent via the existing sendDocument path. Reuse rowsToCsv."
     }
   ],
   "history": [
@@ -3656,6 +3692,10 @@
     {
       "item": "saved-named-places",
       "note": "Saved named places (saved-named-places): the profile stored only ONE location, so 'coffee near work'/'weather at the gym'/'directions to mom's' re-asked the city each time. New src/lib/places-store.ts: PlacesStore (per-chat alias->address, atomic+corrupt-safe, cap 20, re-save updates in place, lastSaveOk hedge) + parseSavePlace ('my work is <addr>', 'save gym: <addr>', 'set home to <addr>', '<name> is at <addr>' — alias <=3 words + place-shaped address so 'my day is great' isn't captured) + parseForgetPlace + isListPlacesRequest. Wired: state-paths (RELAY_PLACES_FILE) + .env.example parity, index constructs it + injects places.contextLine into profileContext (so the LLM substitutes the alias for its address when calling weather/find_nearby/directions) + corrupt-store label + save/forget/list handler deps. Handler routes place-save BEFORE rememberFact (else 'remember my office is X' stored as a raw fact) + before scheduler/agent. HELP line. 11 new tests (parser save/forget/list incl no-false-capture; store save/resolve/overwrite/forget/persist/contextLine/per-chat; handler save+list+forget+precedence-over-remember+fallthrough). suite 1774 green, tsc clean. Offline; anvil-independent (aliases resolve via the agent, no new fetch)."
+    },
+    {
+      "item": "send-never-throws-dead-commit-guard",
+      "note": "Restored the failed-send re-fire guarantee (send-never-throws-dead-commit-guard). telegram sendMessage catches every error + resolved void, so the runner's carefully-built 'advance the alert baseline / complete the schedule ONLY after a successful send' guards were dead code in prod — a 429/network/blocked send committed the baseline anyway (an edge-triggered crossing swallowed forever) + completed a once (a 'take your meds' reminder silently dropped). sendMessage now RETURNS a delivered-boolean (still non-throwing for best-effort inbound replies; false = a chunk failed); the runner gates both the main proactive send (alertCommit + store.complete) and the reminderOnly send on it, throwing into the tick's catch on a false return so a once retries next tick + a recurring advances-and-retries next cadence. A channel returning void/undefined is treated as delivered (only explicit false = failure), so console/older wiring is unchanged. 4 new tests (failed alert send: no commit + re-fires; failed reminder: not completed, retries + delivers; successful send commits+completes). suite 1777 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
@@ -3871,6 +3911,9 @@
     },
     {
       "note": "Backlog dry (low/M + owner-gated) -> 3-agent audit. A(new-user): streaming/showtimes, price-without-links, near-me ratings, local events. B(reliability): silent-watch-death soft-fail [SEEDED+BUILT], bg-errand double-fire [SEEDED], in_stock cross-sell never fires [SEEDED], slow-digest timeout no-show. C(power): catch-me-up rollup, saved named places [SEEDED], reply-to-ping NL, geofence, read-it-later. Seeded: silent-watch-death(built), bg-errand-double-fire, instock-cross-sell-never-fires, saved-named-places."
+    },
+    {
+      "note": "Backlog dry (low/M+owner-gated) -> 3-agent audit. A(new-user): wikipedia fast-fact [SEEDED], nutrition/calorie lookup, movie/streaming where-to-watch, non-US holidays. B(reliability): send-never-throws dead commit-guard [SEEDED+BUILT], softFail-missing-on-feed/watchlist [SEEDED], partial-multichunk-send hole, per-chat map leak(infra). C(power): csv-export unused rowsToCsv [SEEDED], deliver-anywhere webhooks, event-triggered actions (alert->recipe, partly exists), deep-research brief. Seeded: send-never-throws(built), softfail-missing-feed-watchlist, wikipedia-fast-fact, csv-export-tabular."
     }
   ]
 }
