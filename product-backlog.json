@@ -1616,7 +1616,7 @@
       "title": "Keyless dictionary/define tool",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "\"define escrow\"/\"what does X mean\" is a top phone errand; today answers from model memory (no source) or a slow scrape.",
       "how": "New src/lib/dictionary.ts hitting dictionaryapi.dev (keyless, injected fetch like fx/quote/crypto); parse+format definition/phonetics/synonyms; add define tool to agent + prompt + dispatch pin + help."
     },
@@ -2256,6 +2256,10 @@
     {
       "item": "lists-remove-substring-collateral",
       "note": "Fixed list remove() collateral deletion: swapped raw substring (x.includes(q)) for notes.ts-style whole-word tiered scoring (3=exact wins alone, 2=all-words, 1=some-words). \"remove milk\" now removes only \"milk\", not \"almond milk\"/\"milk chocolate\". 3 new tests, suite 1261 green, tsc clean."
+    },
+    {
+      "item": "dictionary-tool",
+      "note": "Added define tool: new src/lib/dictionary.ts (defineUrl/parseDefinition/formatDefinition/lookupWord) hitting keyless dictionaryapi.dev, mirroring get_crypto. Wired agent.ts (TOOLS entry, backend.defineWord + defaultBackend, dispatch block, prompt line), agent-dispatch pinned tool list, HELP text. \"what does obsequious mean\"/\"define X\"/\"synonyms for X\" now instant + sourced instead of model-memory or slow scrape. 10 new tests, suite 1271 green, tsc clean. call-tested:false (dictionaryapi.dev origin returning 522 at build time — parser returns null on the HTML body -> graceful web_search fallback, verified offline against real response shape)."
     }
   ],
   "audits": [

@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calendar_event", "click", "compare", "compose", "convert_currency", "directions", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "type", "web_search"].sort()
+      ["browse", "calendar_event", "click", "compare", "compose", "convert_currency", "define", "directions", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "type", "web_search"].sort()
     );
   });
 
@@ -91,6 +91,27 @@ describe("runAgent dispatch", () => {
     ]);
     await runAgent("find", { llm, backend: b });
     expect(hits.some((h) => h.startsWith("discoverLinks:"))).toBe(true);
+  });
+
+  it("define -> backend.defineWord, reply carries the definition", async () => {
+    const { b, hits } = recordingBackend();
+    b.defineWord = async (w) => { hits.push(`defineWord:${w}`); return { word: w, phonetic: "/eks/", senses: [{ partOfSpeech: "noun", definitions: ["a test word"], synonyms: [] }], synonyms: ["trial"] }; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "define", args: { word: "escrow" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "ok" } } as ToolCall },
+    ]);
+    await runAgent("define escrow", { llm, backend: b });
+    expect(hits).toContain("defineWord:escrow");
+  });
+
+  it("define with no backend.defineWord reports unavailable, still reaches reply", async () => {
+    const { b } = recordingBackend(); // no defineWord set
+    const llm = new ScriptLLM([
+      { toolCall: { name: "define", args: { word: "escrow" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "ok" } } as ToolCall },
+    ]);
+    const out = await runAgent("define escrow", { llm, backend: b });
+    expect(out.reply).toBe("ok");
   });
 
   it("browse -> createSession + navigate; read -> readCurrent; session released", async () => {

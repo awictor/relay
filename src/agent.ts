@@ -16,6 +16,7 @@ import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
+import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -132,6 +133,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { coin: { type: "string", description: "Coin ticker or name, e.g. \"BTC\", \"bitcoin\", \"ethereum\", \"doge\"." } },
       required: ["coin"],
+    },
+  },
+  {
+    name: "define",
+    description: "Look up a word's definition, pronunciation, and synonyms (no key, instant). Use this — NOT web_search/scrape — for any \"what does X mean\", \"define X\", \"meaning of X\", \"synonyms for X\", \"how do you spell/pronounce X\" question. English words only. Pass the single word.",
+    parameters: {
+      type: "object",
+      properties: { word: { type: "string", description: "The single English word to define, e.g. \"obsequious\" or \"escrow\"." } },
+      required: ["word"],
     },
   },
   {
@@ -285,6 +295,7 @@ Tools:
 - "pdf" (url): render a page to a PDF and send it as a document. Use when the user wants to SAVE or KEEP a page ("save as PDF", "send me a PDF of X"). Then call reply with a short caption.
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
+- "define" (word): a word's definition, pronunciation, and synonyms. Use this — NOT web_search/scrape — for "what does X mean"/"define X"/"synonyms for X"/"how do you spell X". English words only; pass the single word.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
 - "random" (request): flip a coin / roll dice / random number / pick from options. Use this — NEVER invent a "random" value yourself — for "flip a coin", "roll a d20", "random number 1-100", "pick one: X or Y".
@@ -342,6 +353,9 @@ export interface BrowserBackend {
   // Optional: current crypto price for a coin ticker/name (crypto-quote-tool). Absent -> the get_crypto
   // tool reports it's unavailable. Returns null on an unknown coin / fetch failure.
   getCrypto?(coin: string): Promise<import("./lib/crypto.js").CryptoQuote | null>;
+  // Optional: define a word (dictionary-tool). Absent -> the define tool reports it's unavailable.
+  // Returns null on an unknown word / fetch failure.
+  defineWord?(word: string): Promise<import("./lib/dictionary.js").WordEntry | null>;
   // Optional: current weather for a place or coords (geo-tool-cluster). Absent -> the get_weather tool
   // reports it's unavailable. Returns null on a bad place / fetch failure.
   getWeather?(opts: { place?: string; lat?: number; lng?: number; near?: { lat: number; lng: number } }): Promise<import("./lib/weather.js").WeatherResult | null>;
@@ -445,6 +459,7 @@ const defaultBackend: BrowserBackend = {
   convertCurrency: (amount, from, to) => fxConvert(amount, from, to, defaultFetchText),
   getQuote: (symbol) => quoteFetch(symbol, defaultFetchText),
   getCrypto: (coin) => cryptoFetch(coin, defaultFetchText),
+  defineWord: (word) => dictFetch(word, defaultFetchText),
   getWeather: (opts) => fetchWeather(opts, defaultFetchText),
   findNearby: (opts) => fetchNearby(opts, defaultFetchTextPost),
   getDirections: (opts) => fetchDirections(opts, defaultFetchText),
@@ -742,6 +757,19 @@ export async function runAgent(
           push("get_crypto", `${formatCrypto(q)}. Report this to the user (the price + 24h change; note it's live/spot).`);
         } catch (e) {
           push("get_crypto", `ERROR getting crypto price: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "define") {
+        if (!backend.defineWord) { push("define", "ERROR: word definitions aren't available."); continue; }
+        const word = String(call.args.word ?? "").trim();
+        try {
+          const e = await backend.defineWord(word);
+          if (!e) { push("define", `No dictionary entry for "${word}" (unknown word, misspelling, or non-English). Check the spelling, or answer from your own knowledge if you're confident, or try web_search.`); continue; }
+          push("define", `${formatDefinition(e)}\n\nReport this definition to the user (include the pronunciation + a synonym or two if present).`);
+        } catch (e) {
+          push("define", `ERROR looking up definition: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }
