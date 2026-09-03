@@ -23,7 +23,7 @@
       "title": "watchlist member that fails its first check then recovers on a quiet tick never alerts",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "In the watchlist path, the all-unchanged tick returns commit:noop, discarding `updates` — so a member whose first check errored (last stays undefined) is never seeded, and the mem.last!==undefined guard then keeps it out of changedLines forever: a completely dead watch with no signal (audit B#1).",
       "how": "Always persist member seeds even on a no-notify tick (run the setMemberLasts commit for newly-seen members, or seed unconditionally), so a member that missed the first run gets a baseline and can fire once it changes."
     },
@@ -1797,6 +1797,10 @@
     {
       "id": "digest-chain-member-literal",
       "note": "A digest member recipe that's a '>>' chain ran the literal 'step a >> step b' as ONE confused agent task — the /run + scheduled-recipe paths already run chains via runChain, but digest-runner called runAgent(rec.task) directly, so a chained member silently poisoned the briefing with off-topic prose presented as real data. Added a runChain dep + isChain guard to digest-runner mirroring schedule-runner: a chain member runs as a sequential workflow, its final output becomes that section (empty -> the '(couldn't fetch)' fallback), falling back to runAgent when runChain isn't wired. Wired runChain into index's digestRunText (used by both /run and scheduled digests). 3 tests (chain member -> runChain not literal / no-runChain falls back to runAgent / empty chain -> fallback line). call-tested: false (offline unit; chain needs live LLM for a true e2e). 1145 tests green."
+    },
+    {
+      "id": "watchlist-member-never-seeds",
+      "note": "Fixed a dead-watch bug: a watchlist member whose FIRST check errored (last stays undefined) and then recovered on a later tick where no other member changed was never seeded — the runner returned commit:noop on the all-unchanged tick, discarding its update, and the `mem.last !== undefined` change-guard then kept it out of changedLines forever, so it silently never alerted again. On a no-notify tick the runner now seeds any member still missing a baseline immediately (committing only the fresh seeds, no send to gate on); an already-seeded unchanged member is not re-written. 2 tests (missed-first-check member gets seeded on a quiet tick + unchanged member not re-committed / fully-unchanged all-seeded watchlist writes nothing). call-tested: false (pure alert logic). 1147 tests green."
     }
   ],
   "audits": [

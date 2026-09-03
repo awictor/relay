@@ -97,7 +97,15 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     }
     const commit = () => deps.setMemberLasts?.(alert.chatId, alert.name, updates);
     if (firstRunWl) { commit(); return { notify: false, message: null, value: "", commit: noop }; } // seed silently
-    if (!changedLines.length) return { notify: false, message: null, value: "", commit: noop };
+    if (!changedLines.length) {
+      // No member changed -> nothing to send. BUT a member that had no baseline yet (never seeded — its
+      // first check errored, so it recovered on a later quiet tick) must be seeded NOW, or the
+      // `mem.last !== undefined` change-guard keeps it out of changedLines FOREVER: a dead watch with no
+      // signal (watchlist-member-never-seeds). Commit only the fresh seeds immediately (no send to gate).
+      const seeds = updates.filter((u) => alert.members!.find((m) => m.label === u.label)?.last === undefined);
+      if (seeds.length) deps.setMemberLasts?.(alert.chatId, alert.name, seeds);
+      return { notify: false, message: null, value: "", commit: noop };
+    }
     const shown = changedLines.slice(0, 10);
     const more = changedLines.length > shown.length ? `\n…and ${changedLines.length - shown.length} more` : "";
     const message = `🔔 ${alert.name} — ${changedLines.length} update${changedLines.length === 1 ? "" : "s"}:\n${shown.join("\n")}${more}`;

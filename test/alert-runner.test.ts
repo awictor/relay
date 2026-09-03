@@ -376,4 +376,22 @@ describe("checkAlert — watchlists", () => {
     expect(committed).toContainEqual({ label: "eth", value: "$4k" });
     expect(committed).not.toContainEqual({ label: "btc", value: "temporarily unavailable" }); // baseline kept
   });
+
+  it("a member that missed its first check gets SEEDED on a later quiet tick, not left dead (watchlist-member-never-seeds)", async () => {
+    // gold never seeded (last undefined — its first check errored); this tick it returns a value while
+    // btc is unchanged. No ping, but gold MUST be seeded now or it can never fire (the change-guard needs
+    // a baseline). Seed is committed immediately (no send to gate on).
+    const { d, committed } = wlDeps({ "btc price": "$60k", "gold price": "$2400" });
+    const r = await checkAlert(wl([{ label: "btc", task: "btc price", last: "$60k" }, { label: "gold", task: "gold price" /* last undefined */ }]), d);
+    expect(r.notify).toBe(false);                                  // nothing changed -> no ping
+    expect(committed).toContainEqual({ label: "gold", value: "$2400" }); // but gold got seeded NOW
+    expect(committed).not.toContainEqual({ label: "btc", value: "$60k" }); // unchanged, already-seeded member not re-committed
+  });
+
+  it("a fully-unchanged watchlist with all members seeded commits nothing (no needless writes)", async () => {
+    const { d, committed } = wlDeps({ "btc price": "$60k", "eth price": "$3k" });
+    const r = await checkAlert(wl([{ label: "btc", task: "btc price", last: "$60k" }, { label: "eth", task: "eth price", last: "$3k" }]), d);
+    expect(r.notify).toBe(false);
+    expect(committed).toEqual([]); // no fresh seeds, no change -> nothing written
+  });
 });
