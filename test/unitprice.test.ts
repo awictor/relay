@@ -76,6 +76,23 @@ describe("runUnitPrice", () => {
     // A comma in the QUANTITY too.
     expect(runUnitPrice("1,200g for $4 or 1.2kg for $9")).not.toBeNull();
   });
+  it("a 3-way compare picks the cheapest + reports savings vs the next-best (unitprice-three-way-and-percent-savings)", () => {
+    const out = runUnitPrice("12oz $3 or 20oz $4 or 32oz $5")!;
+    expect(out).toMatch(/Better buy \(\d+% cheaper than the next-best\)/); // % is vs runner-up, not silent
+    expect((out.match(/✅/g) || []).length).toBe(1);          // exactly one winner
+    expect(out).toMatch(/✅ \$5\.00 for 32oz/);                // biggest pack cheapest per unit
+  });
+  it("a dead tie reports 'same price' with no false winner (unitprice-three-way-and-percent-savings)", () => {
+    const out = runUnitPrice("2 for $10 or 2 for $10")!;
+    expect(out).toMatch(/[Ss]ame price/);
+    expect(out).not.toMatch(/0% cheaper/);      // never the misleading 0%
+    expect((out.match(/✅/g) || []).length).toBe(0); // no arbitrary winner
+  });
+  it("a 2-way compare keeps the plain '% cheaper' (no 'than the next-best')", () => {
+    const out = runUnitPrice("500g for $4 or 1kg for $9")!;
+    expect(out).toMatch(/Better buy \(\d+% cheaper\):/);
+    expect(out).not.toMatch(/next-best/);
+  });
   it("null for a non-compare request (falls through to the agent)", () => {
     expect(runUnitPrice("what's the price of bitcoin")).toBeNull();
   });

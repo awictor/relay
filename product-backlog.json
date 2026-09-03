@@ -2984,7 +2984,7 @@
       "title": "Unit-price: verify 3+ options + the % savings wording",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "the comparator handles N options but the phrasing/tests focus on 2; a 3-way compare's 'better buy (X% cheaper)' line compares only to the runner-up, which may read oddly with 3+.",
       "how": "Add 3-way tests; consider phrasing the savings vs the most-expensive or naming rank, so a 3-option compare reads clearly."
     },
@@ -4341,6 +4341,10 @@
     {
       "id": "save-page-confirm-dedupe-feedback",
       "note": "Agent save_page now distinguishes add vs update: SavedStore.add already returned dup (URL re-save updates in place), but the AgentEnv savePage result dropped it, so the agent always said 'Saved' even for a re-save. Threaded dup through the AgentEnv return + index wiring + the dispatch push, so the tool result says 'Updated \"X\" (already in the reading list — refreshed it)' on a dup — matching the command path's Updated/Saved. +1 test, 2008 green."
+    },
+    {
+      "id": "unitprice-three-way-and-percent-savings",
+      "note": "Unit-price 3-way compares read right now. The math was already correct (cheapest ✅) but: a 3+ option compare dropped the '% cheaper' entirely (only 2-way computed it), and a dead tie said '(0% cheaper)' + ✅-picked an arbitrary winner. Now: savings computed vs the RUNNER-UP ('X% cheaper than the next-best' for 3+, plain 'X% cheaper' for 2), and an all-equal tie says 'Same price either way — $Y per unit' with NO checkmark. +3 tests, 2011 green."
     }
   ],
   "audits": [
@@ -4652,6 +4656,9 @@
     },
     {
       "note": "Cleared a read-it-later low (save-page dedupe feedback). Backlog now: owner-gated confirm-to-act (high/L) + 2 lows (callback-edit low/M, unitprice-three-way low/S). Reliability/parse/safety/feed veins remain converged (3 fresh surfaces clean last run). The one high-impact lever left is owner-gated."
+    },
+    {
+      "note": "Cleared unitprice-three-way low. Backlog now: owner-gated confirm-to-act (high/L) + one low (callback-edit-in-place low/M). Product surface converged; the only high left needs the owner's confirm-before-acting decision."
     }
   ]
 }

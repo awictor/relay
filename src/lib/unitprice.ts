@@ -85,9 +85,20 @@ export function formatUnitPrice(r: { options: PriceOption[]; cheapest: number })
   };
   const win = options[cheapest]!;
   const others = options.filter((_, i) => i !== cheapest);
-  const cheaperBy = others.length === 1 && others[0]!.perBase > 0
-    ? ` (${Math.round((1 - win.perBase / others[0]!.perBase) * 100)}% cheaper)`
-    : "";
+  // Cheapest of the OTHERS (the runner-up), so a 3+ way compare still reports a savings vs the next-best,
+  // not just the 2-way case (unitprice-three-way-and-percent-savings).
+  const runnerUp = others.reduce<PriceOption | null>((best, o) => (best === null || o.perBase < best.perBase ? o : best), null);
+  // A dead TIE (every option is the same price per unit) has no better buy — saying "0% cheaper" + ✅-ing
+  // an arbitrary one misleads. Report the tie honestly instead.
+  const allTied = options.every((o) => Math.abs(o.perBase - win.perBase) < 1e-9);
+  if (allTied) {
+    const per = (win.perBase * factor).toFixed(2);
+    return `Same price either way — both work out to $${per} ${label}:\n${options.map((o, i) => "• " + line(o, i).slice(2)).join("\n")}`;
+  }
+  const pct = runnerUp && runnerUp.perBase > 0 ? Math.round((1 - win.perBase / runnerUp.perBase) * 100) : 0;
+  // "X% cheaper" vs the runner-up; name it as "than the next-best" only when there are 3+ so it's clear
+  // what the comparison is against.
+  const cheaperBy = pct > 0 ? ` (${pct}% cheaper${others.length > 1 ? " than the next-best" : ""})` : "";
   return `Better buy${cheaperBy}:\n${options.map(line).join("\n")}`;
 }
 
