@@ -54,6 +54,20 @@ const MUST_ALLOW: Array<[string, string]> = [
   ["Cancel", "a bare cancel/close-dialog button (no commit object)"],
   ["Close", "close a dialog/panel"],
   ["Send feedback", "not a money/message-commit the guard owns"],
+  // dangerous-action-more-verbs: benign lookalikes of the new catches that must NOT trip.
+  ["Apply filter", "apply + object, not apply now/for"],
+  ["Apply coupon", "applying a coupon code, not committing"],
+  ["Accept cookies", "a consent banner, not an agreement commit"],
+  ["Sign in", "auth, not signing a document"],
+  ["Sign up to read", "a signup gate, not a contract"],
+  ["Register to read", "a nav/paywall gate"],
+  ["See plan details", "reading plan info"],
+  ["Compare plans", "comparing, not changing"],
+  ["design plan", "'plan' as a noun in an unrelated phrase"],
+  ["assign a task", "'sign' inside 'assign'"],
+  ["Vote count", "reading a tally, not casting"],
+  ["report card", "'report' as an unrelated noun"],
+  ["update profile", "profile edit, not a commit object"],
 ];
 
 // Ambiguous VERB + committing OBJECT — genuinely dangerous collocations that MUST still catch.
@@ -67,6 +81,31 @@ const MUST_CATCH_CONTEXTUAL: Array<[string, string]> = [
   ["Confirm order", "confirm + order"],
   ["Confirm and pay", "confirm + pay"],
   ["Book now", "reservation commitment"],
+  // dangerous-action-more-verbs: commitment/publish/moderation/billing clicks the agent must not do.
+  ["Apply now", "job/loan application commit"],
+  ["Apply for this job", "application commit"],
+  ["Accept offer", "accepting an offer is a commit"],
+  ["Agree and continue", "agreeing to terms"],
+  ["Accept terms", "accept + terms"],
+  ["Enroll now", "enrollment commit"],
+  ["Register now", "registration commit (not 'register to read')"],
+  ["Reserve now", "reservation commit"],
+  ["Rent now", "rental commit"],
+  ["Remove all", "bulk delete"],
+  ["Delete everything", "bulk destroy"],
+  ["Unfriend", "social action on the user's behalf"],
+  ["Block user", "moderation action"],
+  ["Report as spam", "moderation report"],
+  ["Flag as spam", "moderation flag"],
+  ["Cash out", "money withdrawal"],
+  ["Post comment", "publishing content"],
+  ["Publish post", "publishing content"],
+  ["Leave a review", "publishing a review"],
+  ["Sign contract", "sign + contract"],
+  ["sign the lease", "sign + lease"],
+  ["Downgrade plan", "billing change"],
+  ["Send $50 to John", "money by amount"],
+  ["empty trash", "bulk destructive"],
 ];
 
 describe("dangerous-action adversarial sweep (m26)", () => {

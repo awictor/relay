@@ -54,16 +54,17 @@ export function checkRateLimit(chatId: number, now = Date.now()): { allowed: boo
 // m26 safety-audit-2 kept the committing synonyms (subscribe, bid, add to cart, donate); this split
 // (dangerous-action-false-refuse) narrows the ambiguous ones without weakening the genuine catches.
 export const DANGEROUS_ACTION_RE =
-  /\b(delete|logout|log out|sign out|subscribe|unsubscribe|close account|close my account|deactivate|submit|pay|purchase|buy|checkout|transfer|withdraw|approve|authorize|destroy|wipe|erase|bid|add to cart|donate|donation|place (?:order|bid)|complete (?:order|purchase|checkout))\b/i;
+  /\b(delete|logout|log out|sign out|subscribe|unsubscribe|close account|close my account|deactivate|submit|pay|purchase|buy|checkout|transfer|withdraw|approve|authorize|destroy|wipe|erase|bid|add to cart|donate|donation|publish|unfriend|unfollow|place (?:order|bid)|complete (?:order|purchase|checkout))\b/i;
 
 // A committing object that turns an ambiguous verb into a real commit. "order/booking/purchase/
-// payment/funds/money/subscription/account/reservation/card/transfer/donation".
-const COMMIT_OBJ = "(?:order|orders|booking|reservation|purchase|payment|funds|money|subscription|account|card|donation|transfer|bid|gift|item|items|cart)";
+// payment/funds/money/subscription/account/reservation/card/transfer/donation" + billing/agreement
+// nouns (plan/membership/contract/lease/agreement) so "cancel my plan"/"sign the lease" are caught.
+const COMMIT_OBJ = "(?:order|orders|booking|reservation|purchase|payment|funds|money|subscription|account|card|donation|transfer|bid|gift|item|items|cart|plan|plans|membership|contract|lease|agreement|policy)";
 // Ambiguous verb + a committing object (either order) — the genuinely dangerous phrasings, while a
 // read/nav collocation ("order status", "booking reference", "send search") is left alone.
 const CONTEXTUAL_RE = new RegExp(
   // <verb> ... <commit-object>:  "cancel my subscription", "remove payment card", "send money"
-  "\\b(?:cancel|remove|send|reset|change|update|edit|book|confirm|make|start|renew)\\s+(?:\\w+\\s+){0,3}?" + COMMIT_OBJ + "\\b"
+  "\\b(?:cancel|remove|send|reset|change|update|edit|book|confirm|make|start|renew|sign|downgrade|upgrade)\\s+(?:\\w+\\s+){0,3}?" + COMMIT_OBJ + "\\b"
   // <commit-object> ... <verb>:  "order — place", "subscription cancel" (rare, but symmetric)
   + "|\\b(?:place|confirm|complete|submit)\\s+(?:the\\s+|a\\s+|your\\s+)?" + COMMIT_OBJ
   // password/security-sensitive resets + factory reset (destructive even without a commit object)
@@ -78,7 +79,22 @@ const CONTEXTUAL_RE = new RegExp(
   // word "money" (dangerous-send-amount). Catches a $/€/£-prefixed or a number + currency word.
   + "|\\b(?:send|transfer|wire|pay|venmo|zelle|paypal)\\s+(?:\\w+\\s+){0,2}?(?:[$€£]\\s?\\d|\\d+(?:\\.\\d+)?\\s?(?:usd|eur|gbp|dollars?|euros?|pounds?|bucks?))"
   // "empty/clear (the) trash/cart/basket" — a destructive bulk action with no commit-object noun match.
-  + "|\\b(?:empty|clear)\\s+(?:the\\s+|my\\s+|your\\s+)?(?:trash|bin|cart|basket|inbox)\\b",
+  + "|\\b(?:empty|clear)\\s+(?:the\\s+|my\\s+|your\\s+)?(?:trash|bin|cart|basket|inbox)\\b"
+  // "apply/enroll/register/reserve/rent + now/for" — a commitment click. "apply now"/"apply for this job"/
+  // "enroll now"/"register now"/"reserve now"/"rent now". NOT "apply filter/coupon" (an object, not now/for)
+  // or "register to read" (a nav gate) — the now/for anchor keeps those out (dangerous-action-more-verbs).
+  + "|\\b(?:apply|enroll|enrol|register|reserve|rent)\\s+(?:now|for)\\b"
+  // "accept/agree + offer/terms/continue" — accepting an agreement is a commit ("accept offer", "agree and
+  // continue", "accept terms"). NOT "accept cookies" (a benign consent banner) — excluded explicitly.
+  + "|\\b(?:accept|agree)\\b(?!\\s+cookies)(?:\\s+(?:and|to|the|this|all)?\\s*)?(?:offer|terms|continue|conditions|agreement|contract)\\b"
+  + "|\\bagree\\s+and\\s+continue\\b"
+  // Destructive bulk: "delete/remove all/everything" (delete already STRONG, but "remove all" isn't).
+  + "|\\b(?:remove|delete)\\s+(?:all|everything)\\b"
+  // Social/moderation commits the agent must not click on the user's behalf: block/report/flag a user/
+  // person/account/post, cash out. "block user", "report this", "flag as spam", "cash out".
+  + "|\\bblock\\s+(?:user|this|@|\\w+)\\b|\\breport\\s+(?:as\\s+)?(?:user|post|comment|this|abuse|spam)\\b|\\bflag\\s+(?:as\\s+)?(?:spam|inappropriate|abuse)\\b|\\bcash\\s+out\\b"
+  // "post/publish/leave/submit + comment/review/rating/reply" — publishing content on the user's behalf.
+  + "|\\b(?:post|publish|leave|submit)\\s+(?:a\\s+|your\\s+|the\\s+)?(?:comment|review|rating|reply|post)\\b",
   "i",
 );
 

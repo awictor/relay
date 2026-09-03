@@ -3020,9 +3020,18 @@
       "title": "Sweep the dangerous-action guard for more money/destroy verbs",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "the send-amount fix covers the common payment phrasings, but adjacent commits may still slip: 'apply for', 'accept offer', 'agree and continue', 'delete all', 'unfriend/block', 'cash out', a bare 'send' to a @handle.",
       "how": "Adversarially probe isDangerousAction with a list of real commit/destroy button labels; add the misses to CONTEXTUAL_RE, re-verifying benign navigation isn't overblocked (keep the two-tier discipline)."
+    },
+    {
+      "id": "dangerous-action-runtime-gate-verify",
+      "title": "Confirm isDangerousAction actually gates the click/type dispatch at runtime",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "the guard's REGEX is now well-tested, but the loop's value depends on the agent's click/type/submit dispatch actually calling isDangerousAction on the target text + refusing — a wiring regression would silently disarm it with all unit tests still green.",
+      "how": "Trace the click/type tool dispatch in agent.ts; add an integration test that a scripted 'click Pay now' is refused (not dispatched to the backend) and a 'click Read more' proceeds, so the gate is proven wired, not just the regex."
     }
   ],
   "history": [
@@ -4225,6 +4234,10 @@
     {
       "id": "dangerous-send-amount",
       "note": "Self-audit (agent cap exhausted) swept chain-runner (containsUnnegated ok), telegram parseUpdates (ok), last-result chunkFrom/extractLinks (ok), safety.ts. Found the dangerous-action guard let 'Send $50 to John' / 'transfer £200' / 'pay 100 usd' / 'Venmo $20' + 'empty trash' / 'clear cart' through — a SAFETY false-negative (agent could autonomously click a real payment/destroy). Added money-amount + empty/clear-container branches to CONTEXTUAL_RE; no overblock of send-search/email/link, clear-filters, empty-state. +2 tests, 1958 green."
+    },
+    {
+      "id": "dangerous-action-more-verbs",
+      "note": "Adversarial-probed the dangerous-action guard: ~34 real commit/destroy button labels slipped through. Added catches for apply/enroll/register/reserve/rent + now/for (application/enrollment commits, not 'apply filter'/'register to read'), accept|agree + offer/terms/continue (not 'accept cookies'), remove|delete all/everything, block/report/flag a user/post + 'report as spam', cash out, post/publish/leave/submit + comment/review, sign|downgrade|upgrade + a commit object (plan/contract/lease/membership added to COMMIT_OBJ), + publish/unfriend/unfollow as strong verbs. Re-verified no overblock (sign in, apply filter/coupon, accept cookies, register to read, design plan, assign a task, vote count, report card, update profile). +36 adversarial test cases, 1995 green."
     }
   ],
   "audits": [
@@ -4503,6 +4516,9 @@
     },
     {
       "note": "Self-audit inline (agent cap 200/200). Swept chain-runner + telegram parse + last-result + safety. First 3 clean; safety guard had a HIGH-impact false-negative (money-send-by-amount + empty/clear-container). Fixed; seeded dangerous-action-more-verbs (adversarial guard sweep) + carried single-slot papercut."
+    },
+    {
+      "note": "Self-audit inline (agent cap 200/200). Adversarial dangerous-action sweep: guard missed ~34 real commit/destroy labels (application/enrollment, agreement-accept, bulk-delete, social/moderation, publish-content, billing sign/downgrade). Widened CONTEXTUAL_RE + COMMIT_OBJ + a few strong verbs, no overblock. Seeded dangerous-action-runtime-gate-verify (prove the regex is actually wired to the click dispatch) + carried single-slot papercut."
     }
   ]
 }
