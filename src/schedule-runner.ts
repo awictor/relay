@@ -8,6 +8,7 @@ import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Schedule, ScheduleStore } from "./lib/schedule.js";
 import { hasSlots, isChain } from "./lib/recipes.js";
 import type { AgentEnv } from "./chain-runner.js";
+import { buttonsForTask, type InlineKeyboard } from "./lib/callbacks.js";
 
 export interface ScheduleRunnerDeps {
   store: ScheduleStore;
@@ -20,7 +21,10 @@ export interface ScheduleRunnerDeps {
   // today"/daily weather reasons from the real date + the user's units, not the model's training date /
   // a hardcoded °F. Optional; absent = the inbound-parity fields are simply omitted.
   agentEnv?: (chatId: number) => AgentEnv;
-  send: (chatId: number, text: string) => Promise<unknown>;
+  // Send a proactive message. `keyboard` (inline-tap-buttons) attaches one-tap actions
+  // (Refresh/Snooze/Stop on a watch, Run again on a digest/recipe); a channel without inline buttons
+  // ignores it. Optional param so the failure/receipt sends (no buttons) call it unchanged.
+  send: (chatId: number, text: string, keyboard?: InlineKeyboard) => Promise<unknown>;
   formatReply: (text: string) => string;
   // The untrimmed + phone-sized views of a reply (sched-reminder-tail-trim). The plain scheduled/recipe
   // agent path used only formatReply (trimmed to 1200), passing the trimmed text as BOTH sent and full to
@@ -266,7 +270,10 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     // If this fire already timed out, the tick's catch has advanced/failed the schedule — a late finish
     // must NOT also send + complete (duplicate ping + double-advance). Drop the result silently.
     if (isCancelled()) { log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, dropped: "timed_out_late_finish" })}`); return; }
-    await deps.send(s.chatId, sendText!); // non-null here (alert-silent path returned early)
+    // Attach one-tap buttons for a watch/digest/recipe ping (inline-tap-buttons): Refresh/Snooze/Stop
+    // on an alert, Run again on a digest/recipe. A plain reminder (no marker) gets none. buttonsForTask
+    // reads the "alert:/digest:/recipe:<name>" marker; a channel without inline buttons ignores it.
+    await deps.send(s.chatId, sendText!, buttonsForTask(s.task)); // non-null here (alert-silent path returned early)
     alertCommit?.(); // send succeeded -> NOW advance the alert baseline (a throw above skips this)
     // Cache the UNTRIMMED text + how much was actually sent, so "more"/"send the link" can page a long
     // digest's dropped tail (digest-drilldown-trims-tail). fullText is set where a send may be trimmed.

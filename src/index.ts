@@ -55,7 +55,8 @@ const llm: LLMClient = LLM_PROVIDER === "claude" ? new ClaudeClient() : new Gemi
 
 // The transport Relay runs on (m5), chosen by RELAY_CHANNEL (telegram default | console).
 const channel: Channel = selectChannel(process.env.RELAY_CHANNEL);
-const sendMessage = (chatId: number, text: string) => channel.sendMessage(chatId, text);
+import type { InlineKeyboard } from "./lib/callbacks.js";
+const sendMessage = (chatId: number, text: string, keyboard?: InlineKeyboard) => channel.sendMessage(chatId, text, keyboard);
 const sendTyping = (chatId: number) => channel.sendTyping ? channel.sendTyping(chatId) : Promise.resolve();
 const sendPhoto = channel.sendPhoto ? channel.sendPhoto.bind(channel) : undefined;
 const sendDocument = channel.sendDocument ? channel.sendDocument.bind(channel) : undefined;
@@ -686,7 +687,22 @@ const handle = createHandler({
     if (removed && a) schedules.removeByTask(chatId, `alert:${a.name}`);
     return removed;
   },
-  sendMessage,
+  sendMessage: (chatId, text, keyboard) => channel.sendMessage(chatId, text, keyboard),
+  // Inline-button tap ack (inline-tap-buttons): telegram channel clears the spinner + shows a toast;
+  // console channel has no callbacks, so this is absent there.
+  answerCallback: channel.answerCallback ? (id, toast) => channel.answerCallback!(id, toast) : undefined,
+  // "Run again" on a scheduled-recipe ping (inline-tap-buttons): resolve + run the recipe's CURRENT
+  // task by name, chain-aware, mirroring the scheduler's runThen path. null when gone/slotted/degraded.
+  recipeRunByName: async (chatId, name) => {
+    const rec = recipes.get(chatId, name);
+    if (!rec || hasSlots(rec.task)) return null;
+    if (isChain(rec.task)) {
+      const chained = (await runChain(chatId, rec.task, { llm, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor })).final;
+      return chained?.trim() ? chained : null;
+    }
+    const out = await runAgent(rec.task, { llm, context: profiles.contextLine(chatId, Date.now()) || undefined, ...agentEnvFor(chatId) }, []);
+    return out.degraded ? null : formatReply(out.reply);
+  },
   sendPhoto,
   sendDocument,
   sendTyping,

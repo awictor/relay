@@ -2,6 +2,7 @@
 // so zero inbound infra). sendMessage for replies. One process, one bot.
 
 import { mapPool } from "./lib/pool.js";
+import type { InlineKeyboard } from "./lib/callbacks.js";
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const API = `https://api.telegram.org/bot${TOKEN}`;
@@ -29,6 +30,11 @@ export interface InboundMessage {
   location?: { latitude: number; longitude: number }; // set when the message is a shared location pin
                                                       // (the natural "near me" move). Handler saves it
                                                       // as the chat's coords + acks, so it's not dropped.
+  callback?: { data: string; callbackQueryId: string }; // set when the update is an inline-button tap
+                                                         // (inline-tap-buttons): `data` is the button's
+                                                         // callback_data; callbackQueryId acks the tap so
+                                                         // Telegram stops the button's loading spinner.
+                                                         // `text` is empty; the handler decodes `data`.
 }
 
 export function hasToken(): boolean {
@@ -109,23 +115,43 @@ export function splitMessage(text: string, max: number = TELEGRAM_MAX): string[]
 }
 
 /** Send a text reply to a chat. Best-effort; logs on failure. A message over Telegram's 4096-char
- * cap is split into sequential sends (with an "(i/n)" counter) instead of being silently truncated. */
-export async function sendMessage(chatId: number, text: string): Promise<void> {
+ * cap is split into sequential sends (with an "(i/n)" counter) instead of being silently truncated.
+ * An optional inline keyboard (inline-tap-buttons) is attached to the LAST chunk only (so a split
+ * long message shows the one-tap actions once, at the end, not repeated per chunk). */
+export async function sendMessage(chatId: number, text: string, keyboard?: InlineKeyboard): Promise<void> {
   if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
   const parts = splitMessage(text, TELEGRAM_MAX - 8); // headroom for the " (i/n)" counter
   for (let i = 0; i < parts.length; i++) {
     const body = parts.length > 1 ? `${parts[i]} (${i + 1}/${parts.length})` : parts[i]!;
+    const payload: Record<string, unknown> = { chat_id: chatId, text: body };
+    if (keyboard && i === parts.length - 1) payload.reply_markup = { inline_keyboard: keyboard };
     try {
       const r = await fetch(`${API}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text: body }),
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(15000),
       });
       if (!r.ok) console.error("telegram sendMessage failed:", r.status, (await r.text().catch(() => "")).slice(0, 200));
     } catch (e) {
       console.error("telegram sendMessage error:", e instanceof Error ? e.message : String(e));
     }
+  }
+}
+
+/** Acknowledge an inline-button tap (inline-tap-buttons) so Telegram clears the button's loading
+ * spinner; an optional short toast confirms the action. Best-effort; never throws. */
+export async function answerCallback(callbackQueryId: string, toast?: string): Promise<void> {
+  if (!TOKEN) return;
+  try {
+    await fetch(`${API}/answerCallbackQuery`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, ...(toast ? { text: toast.slice(0, 200) } : {}) }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    /* best-effort */
   }
 }
 
@@ -252,6 +278,14 @@ interface TgUpdate {
     location?: { latitude: number; longitude: number };                     // a shared location pin
     from?: { username?: string; first_name?: string };
   };
+  // Inline-button tap (inline-tap-buttons): Telegram delivers a callback_query, not a message. It
+  // carries the button's callback_data + the message it was attached to (for chat id).
+  callback_query?: {
+    id: string;
+    data?: string;
+    message?: { chat: { id: number }; message_id: number };
+    from?: { username?: string; first_name?: string; id?: number };
+  };
 }
 
 /**
@@ -268,6 +302,19 @@ export function parseUpdates(updates: TgUpdate[], offset: number): { messages: I
   let nextOffset = offset;
   for (const u of updates ?? []) {
     if (u.update_id + 1 > nextOffset) nextOffset = u.update_id + 1;
+    // Inline-button tap (inline-tap-buttons): a callback_query becomes a callback InboundMessage — no
+    // text, carrying the button's data + the query id (so the handler can ack the tap + route the
+    // action). chatId comes from the message the button was attached to; a query with neither data nor
+    // a chat is skipped (offset still advanced above so it can't redeliver).
+    const cq = u.callback_query;
+    if (cq) {
+      const chatId = cq.message?.chat.id;
+      if (chatId !== undefined && cq.data) {
+        const from = cq.from?.username || cq.from?.first_name || String(chatId);
+        messages.push({ chatId, text: "", from, messageId: cq.message?.message_id ?? 0, callback: { data: cq.data, callbackQueryId: cq.id } });
+      }
+      continue;
+    }
     const m = u.message;
     if (!m) continue;
     const from = m.from?.username || m.from?.first_name || String(m.chat.id);

@@ -2453,9 +2453,27 @@
       "title": "proactive pings are text-only — no one-tap Refresh/Snooze/Stop/Run-again buttons",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Every alert/digest/reminder/recipe result is a dead-end requiring the user to compose a reply; callback_query is completely unwired (telegram.ts has only request_location). Retention lives on recurring touchpoints, and each is friction. Flagged by the audit as the single biggest cheap retention win, resurfacing repeatedly. task-suggest already computes the next action but delivers it as retype-it text.",
       "how": "Wire Telegram inline keyboards (reply_markup) + a callback_query handler + a small payload registry, and attach one-tap actions (Refresh/Run again/Snooze/Stop watching/Show more, pick-a-result) to proactive sends + suggestion prose. Offline-testable by feeding injected callback deltas through the handler. Bigger surface (channel + handler) — scope carefully."
+    },
+    {
+      "id": "inline-result-picker",
+      "title": "multi-result pings dump a list — no one-tap pick",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "When a watch/errand returns several options (cheapest flights, new listings, restock sizes), the user gets a text wall and must retype to drill in. A one-tap pick button per result closes the loop the inline-tap-buttons plumbing now enables.",
+      "how": "Extend the callback codec with a 'pick' op carrying a compact result index/id; attach a numbered button row to list-shaped proactive/errand replies; on tap, expand that result (details/link/next action). Reuse the callbacks.ts codec + handler routing already built."
+    },
+    {
+      "id": "callback-edit-in-place",
+      "title": "button taps send a NEW message instead of updating the pinged one",
+      "impact": "low",
+      "effort": "M",
+      "status": "todo",
+      "why": "Tapping Refresh/Snooze/Stop posts a fresh message, so a chat accretes duplicate cards. editMessageText/editMessageReplyMarkup would update the original ping in place (e.g. grey out Stop after stopping), which feels native and keeps the thread clean.",
+      "how": "Add editMessageText/editMessageReplyMarkup to telegram.ts + the Channel; thread the tapped message_id (already parsed into callback) through the handler; for terminal actions (Stop) edit the original to a done state instead of sending a new line."
     }
   ],
   "history": [
@@ -3422,6 +3440,10 @@
     {
       "item": "weather-conditional-alert",
       "note": "Added weather-conditional alerts — the flagship proactive errand. 'watch umbrella: if it rains tomorrow' / 'watch cold: if it's below freezing tonight' / 'watch heat: if it gets above 95 today' now check the keyless Open-Meteo forecast on the alert cadence and ping ONCE (edge-triggered) when it's going to happen. New src/lib/weather-alert.ts: parseWeatherCondition (rain/snow/below/above/wind + today|tomorrow + 'in <place>'; 'below freezing'->32F), evalWeatherCondition (rain/snow via WMO code or precip>=50%, below/above vs the day's lo/hi in the threshold's units, wind via current windKph proxy; missing day -> hold), describeWeatherCondition. Wired: Alert.weather field + parseAlertCommand branch (gated on a weather/temp cue so a plain 'below 50000' stays a numeric watch) + AlertStore.add/overwrite persist+reset + alert-runner branch (edge-triggered via lastValue '1'/'0', holds on fetch fail) + index fetchWeather dep (named place or saved home coords) + alertDefine return + handler confirm + HELP. 20 new tests; live-probed Open-Meteo forecast (200, daily code/precip/hi/lo present) so call-tested:true for the source, runner+parse offline-tested. suite 1674 green, tsc clean."
+    },
+    {
+      "item": "inline-tap-buttons",
+      "note": "Wired Telegram inline keyboards end-to-end so proactive pings are one-tap, not text dead-ends. New src/lib/callbacks.ts: encode/decodeCallback (2-char opcode + name, omits a button rather than truncate past Telegram's 64-byte cap) + alert/digest/recipe keyboard builders + buttonsForTask (maps an alert:/digest:/recipe:<name> schedule marker to its keyboard). telegram.ts: parseUpdates now maps a callback_query to a callback InboundMessage (chatId from the attached message, advances offset even when skipped), sendMessage takes an optional inline keyboard (attached to the last chunk only), + answerCallback acks the tap. channel.ts threads keyboard + answerCallback (console ignores them). schedule-runner attaches buttonsForTask(s.task) to every alert/digest/recipe ping (plain reminders get none). handler routes a callback FIRST: rate-limited, acked, decoded -> alert Refresh (re-check now via alertRunNow, send result+buttons, commit), Snooze (pause 1 day), Stop (forget the watch), digest/recipe Run again (recipeRunByName mirrors the scheduler chain/slot path). index wires answerCallback + recipeRunByName. HELP + 19 new tests (codec/builders, callback routing, parseUpdates callback, runner button pass-through). suite 1693 green, tsc clean. Offline-tested (no new data source); anvil-independent."
     }
   ],
   "audits": [

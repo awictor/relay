@@ -20,12 +20,22 @@ import { isAnswerRecall, relativeAge } from "./lib/answer-log.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./lib/recipes.js";
 import { getTemplate, templateCatalog } from "./lib/templates.js";
 import { photoNeedsAgent, photoIsQrScan } from "./lib/photo-intent.js";
+import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, type InlineKeyboard } from "./lib/callbacks.js";
 
 export interface HandlerDeps {
   llm: LLMClient;
   memoryGet: (chatId: number) => LLMMessage[];
   memorySet: (chatId: number, history: LLMMessage[]) => void;
-  sendMessage: (chatId: number, text: string) => Promise<unknown>;
+  // Send text, optionally with a one-tap inline keyboard (inline-tap-buttons). The keyboard param is
+  // ignored by a channel that can't render buttons (console). Existing callers pass text only.
+  sendMessage: (chatId: number, text: string, keyboard?: InlineKeyboard) => Promise<unknown>;
+  // Acknowledge an inline-button tap (inline-tap-buttons) so the client clears its spinner + shows an
+  // optional toast. Optional; absent -> a callback tap is still routed, just without the spinner ack.
+  answerCallback?: (callbackQueryId: string, toast?: string) => Promise<unknown>;
+  // Re-run a saved recipe BY NAME (inline-tap-buttons "Run again" button), chain/slot-aware like the
+  // scheduled path. Returns the reply text, or null when the recipe is gone / slotted / degraded.
+  // Optional; absent -> a recipe "Run again" tap replies that it couldn't run.
+  recipeRunByName?: (chatId: number, name: string) => Promise<string | null>;
   // Send an image (screenshot tool, DEV-0027). Optional: when absent, a photo result is dropped
   // and only the text reply goes out (older wiring stays valid).
   sendPhoto?: (chatId: number, bytes: Uint8Array, caption?: string) => Promise<unknown>;
@@ -346,9 +356,71 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   }
   // Startup recovery (background-errand-persist): re-run an interrupted errand under its EXISTING id.
   handle.resumeErrand = (chatId: number, text: string, errandId: string): void => dispatchBackground(chatId, text, errandId);
+
+  // Route an inline-button tap (inline-tap-buttons). Returns a short toast string to flash on the
+  // button (or null for none). Decodes callback_data to an action, rate-limits, then does the bounded
+  // work: alert Refresh (re-check now, send if it fired), Snooze (pause the watch 1 day), Stop (forget
+  // the watch), digest/recipe Run again. A stale/unknown payload (old deploy) toasts a gentle note.
+  async function handleCallback(chatId: number, data: string): Promise<string | null> {
+    const action = decodeCallback(data);
+    if (!action) { await deps.sendMessage(chatId, "That button's no longer valid — it may be from an older message.").catch(() => {}); return "Expired"; }
+    const rl = deps.checkRateLimit(chatId);
+    if (!rl.allowed) return `Slow down — ${rl.retryAfterSec}s`;
+    try {
+      if (action.kind === "alert") {
+        if (action.action === "refresh") {
+          if (!deps.alertRunNow) { await deps.sendMessage(chatId, `I can't refresh "${action.name}" right now.`); return null; }
+          const r = await deps.alertRunNow(chatId, action.name);
+          if (r.message) { await deps.sendMessage(chatId, r.message, buildAlertKeyboard(action.name)); r.commit(); return "Refreshed"; }
+          r.commit();
+          await deps.sendMessage(chatId, `🔄 "${action.name}": no change since last check.`, buildAlertKeyboard(action.name));
+          return "No change";
+        }
+        if (action.action === "snooze") {
+          if (!deps.scheduleSnooze) return null;
+          const res = deps.scheduleSnooze(chatId, `snooze ${action.name} 1 day`, deps.now());
+          if (res && res.count > 0) { await deps.sendMessage(chatId, `💤 Snoozed "${action.name}" for 1 day${res.untilText ? ` (until ${res.untilText})` : ""}. Say "resume ${action.name}" to turn it back on sooner.`); return "Snoozed 1d"; }
+          await deps.sendMessage(chatId, `I couldn't snooze "${action.name}" — it may already be off.`);
+          return null;
+        }
+        // stop
+        if (!deps.alertForget) return null;
+        const removed = deps.alertForget(chatId, action.name);
+        await deps.sendMessage(chatId, removed ? `🔕 Stopped watching "${action.name}".` : `"${action.name}" wasn't an active watch.`);
+        return removed ? "Stopped" : null;
+      }
+      if (action.kind === "digest") {
+        if (!deps.digestRun) return null;
+        await deps.sendTyping(chatId).catch(() => {});
+        const text = await deps.digestRun(chatId, action.name);
+        await deps.sendMessage(chatId, text ?? `I couldn't run the "${action.name}" briefing — it may have been removed.`, text ? buildDigestKeyboard(action.name) : undefined);
+        return text ? "Done" : null;
+      }
+      // recipe run
+      if (!deps.recipeRunByName) return null;
+      await deps.sendTyping(chatId).catch(() => {});
+      const out = await deps.recipeRunByName(chatId, action.name);
+      await deps.sendMessage(chatId, out ?? `I couldn't run "${action.name}" — it may have been removed or needs a value.`, out ? buildRecipeKeyboard(action.name) : undefined);
+      return out ? "Done" : null;
+    } catch (e) {
+      await deps.sendMessage(chatId, friendlyError(e instanceof Error ? e.message : String(e))).catch(() => {});
+      return null;
+    }
+  }
   return handle;
 
   async function handleOne(msg: InboundMessage): Promise<void> {
+    // Inline-button tap (inline-tap-buttons): a callback carries an action encoded in callback_data,
+    // not free text. Ack the tap (clears the client spinner) + route the action, then return — it
+    // never falls through to command/agent handling. Handled FIRST so a tapped button on a proactive
+    // ping acts immediately. Bounded work only (no agent run except recipe "Run again", which reuses
+    // the same recipeRunByName the scheduler uses). Rate-limited like any turn so button-mashing can't spam.
+    if (msg.callback) {
+      log(`[in] ${msg.from}: [tap] ${msg.callback.data.slice(0, 40)}`);
+      const ackToast = await handleCallback(msg.chatId, msg.callback.data);
+      if (deps.answerCallback) await deps.answerCallback(msg.callback.callbackQueryId, ackToast ?? undefined).catch(() => {});
+      return;
+    }
     log(`[in] ${msg.from}: ${msg.photoFileId ? "[photo] " : ""}${msg.voiceFileId ? "[voice] " : ""}${msg.documentFileId ? "[doc] " : ""}${msg.location ? "[location] " : ""}${deps.redactText(msg.text).slice(0, 120)}`);
 
     // Corrupt-store notice (corrupt-store-silent-wipe): if any store failed to load at startup, tell the

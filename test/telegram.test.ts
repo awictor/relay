@@ -69,6 +69,21 @@ describe("parseUpdates — inbound delivery contract", () => {
     expect(messages[0]).toMatchObject({ chatId: 99, text: "summarize this", documentFileId: "d1", documentMime: "application/pdf" });
   });
 
+  it("maps an inline-button tap (callback_query) to a callback InboundMessage (inline-tap-buttons)", () => {
+    const tap = { update_id: 50, callback_query: { id: "q9", data: "ar|btc",
+      message: { message_id: 3, chat: { id: 88 } }, from: { username: "alex" } } } as Parameters<typeof parseUpdates>[0][0];
+    const { messages, nextOffset } = parseUpdates([tap], 0);
+    expect(messages[0]).toMatchObject({ chatId: 88, text: "", from: "alex", callback: { data: "ar|btc", callbackQueryId: "q9" } });
+    expect(nextOffset).toBe(51);
+  });
+
+  it("a callback_query with no data is skipped but still advances the offset", () => {
+    const tap = { update_id: 51, callback_query: { id: "q10", message: { chat: { id: 88 } } } } as Parameters<typeof parseUpdates>[0][0];
+    const { messages, nextOffset } = parseUpdates([tap], 0);
+    expect(messages).toHaveLength(0);
+    expect(nextOffset).toBe(52);
+  });
+
   it("from falls back username -> first_name -> chatId string", () => {
     const r1 = parseUpdates([textMsg(1, 42, "x", { username: "u", first_name: "F" })], 0);
     expect(r1.messages[0].from).toBe("u");

@@ -28,6 +28,32 @@ function harness(clock: { t: number }, over: Partial<Parameters<typeof makeSched
   return { store, runner, sent, ran };
 }
 
+describe("makeScheduleRunner — inline buttons (inline-tap-buttons)", () => {
+  it("attaches Refresh/Snooze/Stop buttons to an alert ping and none to a plain reminder", async () => {
+    const clock = { t: NOW };
+    const store = new ScheduleStore({ file: tmpFile() });
+    const sent: Array<{ text: string; keyboard: unknown }> = [];
+    const runner = makeScheduleRunner({
+      store, llm: {} as never,
+      runAgent: async (task) => ({ reply: `did:${task}` }),
+      send: async (_c, text, keyboard) => { sent.push({ text, keyboard }); },
+      formatReply: (t) => t, now: () => clock.t, periodMs: 0,
+      alertCheck: async () => ({ message: "🔔 btc crossed", commit: () => {} }),
+    });
+    store.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW - 1, hourMin: [9, 0] }, NOW - MIN);
+    store.add(1, { kind: "once", task: "take my meds", dueMs: NOW - 1, reminderOnly: true }, NOW - MIN);
+    await runner.tick();
+    const alertSend = sent.find((s) => /crossed/.test(s.text))!;
+    expect(alertSend).toBeTruthy();
+    // keyboard is [[{text, callback_data}...]] with a Refresh/Snooze/Stop row
+    const labels = (alertSend.keyboard as Array<Array<{ text: string }>>)[0]!.map((b) => b.text);
+    expect(labels.some((l) => /Refresh/.test(l))).toBe(true);
+    expect(labels.some((l) => /Stop/.test(l))).toBe(true);
+    const reminderSend = sent.find((s) => /take my meds/.test(s.text))!;
+    expect(reminderSend.keyboard).toBeUndefined();
+  });
+});
+
 describe("makeScheduleRunner.tick", () => {
   it("fires nothing when nothing is due", async () => {
     const clock = { t: NOW };

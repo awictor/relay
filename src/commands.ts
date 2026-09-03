@@ -94,6 +94,8 @@ See a watch's trend: "how has btc moved this week" or "btc trend" — I summariz
 
 Pause without deleting: "snooze btc 3 days", "pause my morning digest" (until you resume it), or "snooze all" quiets an automation through travel or noise — say "resume btc" to turn it back on. The setup stays intact; nothing fires while paused.
 
+Tap, don't type: when I ping you about a watch, briefing, or scheduled task, I attach one-tap buttons — 🔄 Refresh / 💤 Snooze 1d / 🔕 Stop on a watch, and 🔁 Run again on a briefing or recipe. No need to type a reply to act on it.
+
 See everything at once: /dashboard rolls up all your reminders, watches, digests, and recipes in one view — what fires next, what each watch last saw, and what's paused.
 
 Set your location: "/setlocation Austin, TX" (or just "I'm in London") so "weather" and "near me" work without repeating the city. I use metric or imperial based on the place (°C for Paris, °F for the US); add "(metric)" or "(imperial)" to force one, and "UTC-5" so daily reminders fire at YOUR local time. /profile shows what's stored; "/profile clear" forgets it.
