@@ -293,6 +293,15 @@ const handle = createHandler({
     const noTz = isClockTime && profiles.offsetMin(chatId) === undefined && tzOffsetMin() === 0;
     return { ok: true, kind: rec.kind, task: rec.task, whenMs: rec.dueMs, whenText, noTz };
   },
+  // First-reminder tz (first-reminder-tz-ask): would this message schedule a CLOCK-TIME task with no
+  // saved tz? If so the handler asks the city first (city→tz) rather than scheduling wrong-at-UTC.
+  scheduleNeedsTz: (chatId, text, now) => {
+    if (profiles.offsetMin(chatId) !== undefined || tzOffsetMin() !== 0) return false; // tz already known
+    const p = parseSchedule(text, now, profiles.offsetMin(chatId));
+    if (!p) return false;
+    const isClockTime = p.kind === "daily" || p.kind === "weekly" || /\bat\s+\d/i.test(text) || /\b(morning|evening|night|noon|midnight)\b/i.test(text);
+    return isClockTime;
+  },
   scheduleList: (chatId) => schedules.list(chatId).map((s) => ({ id: s.id, kind: s.kind, task: s.task, dueMs: s.dueMs })),
   scheduleCancel: (chatId, which) => {
     if (which.toLowerCase() === "all") {

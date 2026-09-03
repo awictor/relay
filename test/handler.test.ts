@@ -1205,3 +1205,41 @@ describe("/templates (starter-template-library)", () => {
     expect(sent[0]!.text).toMatch(/No template "nope"/);
   });
 });
+
+describe("first-reminder tz ask (first-reminder-tz-ask)", () => {
+  it("a clock-time reminder with no tz asks for the city first + stashes it, doesn't schedule yet", async () => {
+    const added: string[] = [];
+    const { handle, sent } = harness({
+      scheduleNeedsTz: () => true,
+      captureLocation: (_c, t) => (/austin/i.test(t) ? { location: "Austin", tzOffsetMin: -360 } : null),
+      scheduleAdd: (_c, text) => { added.push(text); return { ok: true, kind: "once", task: "meds", whenMs: 0 }; },
+    });
+    await handle(msg("remind me to take meds at 7am", 5));
+    expect(sent[0]!.text).toMatch(/what city are you in/i);
+    expect(added).toEqual([]); // not scheduled yet
+  });
+  it("the city reply saves tz then re-runs the stashed reminder (now scheduled)", async () => {
+    const added: string[] = [];
+    let asked = false;
+    const { handle, sent } = harness({
+      scheduleNeedsTz: () => !asked, // first call true (ask), after capture the re-run sees tz set -> false
+      captureLocation: (_c, t) => (/austin/i.test(t) ? (asked = true, { location: "Austin", tzOffsetMin: -360 }) : null),
+      scheduleAdd: (_c, text) => { added.push(text); return { ok: true, kind: "once", task: "take meds", whenMs: 0 }; },
+    });
+    await handle(msg("remind me to take meds at 7am", 5));
+    await handle(msg("Austin", 5));
+    expect(sent[1]!.text).toMatch(/saved Austin/i);
+    expect(added).toEqual(["remind me to take meds at 7am"]); // re-ran the stashed schedule after tz set
+  });
+  it("with a tz already set, schedules directly (no city ask)", async () => {
+    const added: string[] = [];
+    const { handle, sent } = harness({
+      scheduleNeedsTz: () => false,
+      captureLocation: () => null,
+      scheduleAdd: (_c, text) => { added.push(text); return { ok: true, kind: "daily", task: "brief", whenMs: 0, whenText: "9am" }; },
+    });
+    await handle(msg("every morning at 9am brief me", 5));
+    expect(sent.some((m) => /what city/i.test(m.text))).toBe(false);
+    expect(added).toHaveLength(1);
+  });
+});

@@ -1229,7 +1229,7 @@
       "title": "first timed reminder fires at UTC + cryptic UTC-offset fix",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A brand-new user \"remind me at 7am\" with no profile schedules at 7am UTC + is told to re-send /setlocation <city> UTC-5 (offset math they do not know); the canonical first errand silently misfires.",
       "how": "On a clock-time reminder with no tz set, ASK \"what city are you in?\" (stash the reminder, city->tz infer already exists) before scheduling, rather than scheduling-wrong-then-warning."
     },
@@ -1680,6 +1680,10 @@
     {
       "id": "chaining-reliability-cluster",
       "note": "Fixed 3 defects the refill audit found in just-shipped recipe-chaining: (1) a scheduled chained recipe ran the literal \"a >> b\" as one agent task — added a runChain dep to the schedule runner so it fires as a workflow; (2) no step cap -> MAX_CHAIN_STEPS=6 in parseChainSteps; (3) if-gate matched \"in stock\" inside \"out of stock\" -> containsUnnegated negation guard. 1075 tests green."
+    },
+    {
+      "id": "first-reminder-tz-ask",
+      "note": "A brand-new user's first \"remind me at 7am\" no longer misfires at UTC then hands them offset math. Added a scheduleNeedsTz dep (index.ts reuses the isClockTime/no-tz predicate WITHOUT scheduling); handler intercepts a clock-time reminder from a tz-less chat BEFORE scheduleAdd, stashes msg.text in pendingLocation, asks the city once; the existing city-capture path infers tz (inferTzFromLocation) + re-runs the stashed schedule, now firing at the right local hour. Falls through untouched when a tz is already known or capture isn't wired. 3 handler tests (asks+stashes / city reply re-runs / tz-set schedules directly). 1078 tests green."
     }
   ],
   "audits": [

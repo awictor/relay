@@ -108,6 +108,10 @@ export interface HandlerDeps {
   // Scheduled/proactive tasks (m4 sched-3). All optional so older wiring stays valid; when
   // absent, a "remind me" message just falls through to the normal agent.
   scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number; whenText?: string; noTz?: boolean } | { ok: false; reason: "unparsed" | "capped" };
+  // First-reminder tz (first-reminder-tz-ask): true when this message parses to a CLOCK-TIME schedule
+  // AND the chat has no timezone set — so the handler asks "what city are you in?" (city→tz infer)
+  // BEFORE scheduling, instead of scheduling wrong-at-UTC then warning. Optional.
+  scheduleNeedsTz?: (chatId: number, text: string, now: number) => boolean;
   scheduleList?: (chatId: number) => Array<{ id: string; kind: string; task: string; dueMs: number }>;
   scheduleCancel?: (chatId: number, which: string) => { removed: number };
   // Saved recipes (m7 recipe-2). All optional so older wiring stays valid. recipeSave parses a
@@ -591,6 +595,16 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // gate). A bare "at 5" (no am/pm, no colon) is still NOT cued — parseSchedule rejects it too.
     const scheduleCue = /\b(remind me|every day|every morning|every evening|every night|daily|weekdays?|weekends?|tomorrow)\b|\bevery\s+(mon|tue|wed|thu|fri|sat|sun)|\bevery\s+\d+\s*(min|hour|hr)|\bin \d+\s*(min|hour|day)|\bat\s+\d{1,2}\s*(am|pm)\b|\bat\s+([01]?\d|2[0-3]):[0-5]\d\b/i;
     if (!isExplicitCommand && deps.scheduleAdd && scheduleCue.test(msg.text)) {
+      // First-reminder tz (first-reminder-tz-ask): a clock-time schedule with no saved tz would fire
+      // against UTC (a new user's "remind me at 7am" lands at 3am). Ask the city ONCE first (city→tz
+      // infer) + stash this message; the reply saves the tz and re-runs it, scheduled at the right hour.
+      // Falls through if capture isn't wired or a city is already known.
+      if (deps.scheduleNeedsTz && deps.captureLocation && !pendingLocation.has(msg.chatId)
+          && deps.scheduleNeedsTz(msg.chatId, msg.text, deps.now())) {
+        pendingLocation.set(msg.chatId, msg.text);
+        await deps.sendMessage(msg.chatId, "Before I set that — what city are you in? I'll fire it at your local time (I only need this once).");
+        return;
+      }
       const r = deps.scheduleAdd(msg.chatId, msg.text, deps.now());
       if (r.ok) {
         const verb = r.kind === "once" ? "remind you" : r.kind === "daily" ? "do this daily" : r.kind === "weekly" ? "do this on the days you said" : "do this on that schedule";
