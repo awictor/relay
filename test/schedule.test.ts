@@ -453,6 +453,13 @@ describe("parseSnoozeCommand (snooze-automations)", () => {
     expect(parseSnoozeCommand("remind me to stretch in 10 min", NOW)).toBeNull();
     expect(parseSnoozeCommand("pause", NOW)).toBeNull(); // no target
   });
+  it("a zero/negative duration is rejected, NOT an indefinite pause (snooze-zero-duration-guard)", () => {
+    // 'for 0 hours' must not silently freeze btc forever — reject so the caller asks for a positive time.
+    expect(parseSnoozeCommand("snooze btc for 0 hours", NOW)).toBeNull();
+    expect(parseSnoozeCommand("pause btc 0 days", NOW)).toBeNull();
+    // and a positive duration on the same name still parses (the guard is only for <=0).
+    expect(parseSnoozeCommand("snooze btc for 2 hours", NOW)).toEqual({ action: "pause", which: "btc", untilMs: NOW + 2 * HR });
+  });
 });
 
 describe("ScheduleStore pause/resume (snooze-automations)", () => {

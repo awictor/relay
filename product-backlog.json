@@ -14,7 +14,7 @@
       "title": "'snooze btc for 0 hours' pauses forever instead of not at all",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "parseSnoozeCommand's duration regex matches 'for 0 hours' but the n>=1 guard leaves untilMs undefined + doesn't strip the duration, so 'which' becomes 'btc 0 hours' (no match) or falls through to an indefinite PAUSE_INDEFINITE — a fat-fingered short snooze silently goes dark forever (audit 24 B).",
       "how": "Treat a parsed duration of 0 (or negative) as an explicit no-op or reject it — don't fall through to the indefinite-pause branch. Strip the duration clause regardless of n so the name is clean, then either refuse (ask for a positive duration) or skip. Add a test."
     },
@@ -1944,6 +1944,10 @@
     {
       "id": "package-tracking-watcher",
       "note": "Added a track_package agent tool so 'where's my package 1Z999...' / 'track 9400...' resolves the carrier + reads the right tracking page instead of a logged-out flounder. New src/lib/tracking.ts: detectCarrier(number) by shape (UPS 1Z+16 / USPS 9x IMpb + SNN..US intl / FedEx 12-15-20 digit / DHL 10-digit + JJD), trackingUrl(carrier,number) -> the OFFICIAL public page, carrierName, parseTrackingRequest (pull the number from free text; an explicitly named carrier overrides shape). The dispatch drives anvil scrape on the built URL (a keyless GET 403s but real Chrome renders the status), truncateForModel's the page, and asks the model to summarize the latest status + ETA; unknown shape -> asks which carrier (never guesses). Wired into the tool surface + SYSTEM_PROMPT + help ('add \"watch\" to get pinged on a status change' — reuses the existing change-alert). 14 tests (detect x5 shapes / URL build / carrierName / parseTrackingRequest x3 / 2 agent dispatch: UPS scrape + unknown-carrier ask). call-tested: false (detection/URL pure-unit; the scrape needs live anvil, which is down). 1182 tests green."
+    },
+    {
+      "id": "snooze-zero-duration-guard",
+      "note": "Fixed a fat-finger black hole: 'snooze btc for 0 hours' / 'pause btc 0 days' — the duration regex matched but the old n>=1 guard left untilMs undefined AND didn't strip the clause, so the name became 'btc 0 hours' (no match) or fell through to an indefinite PAUSE_INDEFINITE, silently freezing btc forever. parseSnoozeCommand now ALWAYS strips the duration clause off the name and REJECTS a zero/negative duration (returns null) so it's a no-op, not an indefinite pause — the caller's non-snooze fall-through handles it; a positive duration on the same phrasing still parses. 1 test (0 hours + 0 days -> null / positive still parses). call-tested: false (pure parse). 1183 tests green."
     }
   ],
   "audits": [

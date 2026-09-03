@@ -133,9 +133,15 @@ export function parseSnoozeCommand(text: string, now: number): { action: "pause"
   let untilMs: number | undefined;
   if (dur) {
     const n = parseInt(dur[1]!, 10);
+    // Always STRIP the duration clause off the name (even when n===0) so "snooze btc for 0 hours" doesn't
+    // leave "btc 0 hours" as the name — and a zero/negative duration is a no-op, NOT an indefinite pause
+    // (snooze-zero-duration-guard): a fat-fingered "snooze btc 0 days" must not silently freeze btc
+    // forever. Reject the whole command so the caller can ask for a positive duration.
+    rest = rest.slice(0, dur.index).trim();
+    if (n <= 0) return null;
     const unit = dur[2]!.toLowerCase();
     const ms = /^w/.test(unit) ? n * 7 * DAY : /^d/.test(unit) ? n * DAY : /^h/.test(unit) ? n * HOUR : n * MINUTE;
-    if (n >= 1) { untilMs = now + ms; rest = rest.slice(0, dur.index).trim(); }
+    untilMs = now + ms;
   }
   const which = cleanSnoozeName(rest);
   if (!which) return null;
