@@ -261,9 +261,23 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     const bgHistory = deps.memoryGet(chatId);
     const startedAt = deps.now();
     bgInFlight.set(chatId, (bgInFlight.get(chatId) ?? 0) + 1);
+    // Progress ping (background-errand-progress-ping): a detached errand ACKs "on it" then runs for
+    // minutes with no signal — the LONGEST tasks were the only ones with zero mid-run reassurance, so a
+    // first-timer assumes it hung. Arm the same one-shot timer the sync + chain paths use; fire once if
+    // the errand outlasts progressDelayMs, cleared as soon as it settles. Disabled when the dep is absent.
+    const bgSetTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+    const bgClearTimer = deps.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
+    let bgProgress: unknown = null;
+    if (deps.progressDelayMs && deps.progressDelayMs > 0) {
+      bgProgress = bgSetTimer(() => {
+        void deps.sendMessage(chatId, "Still on it — this one's taking a bit, I'll text you the moment it's done.").catch(() => {});
+      }, deps.progressDelayMs);
+    }
+    const clearBgProgress = () => { if (bgProgress !== null) { bgClearTimer(bgProgress); bgProgress = null; } };
     void (async () => {
       try {
         const r = await runIt(errand, { llm: deps.llm, context: deps.profileContext?.(chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(chatId) ?? 0, weatherCoords: deps.weatherCoords?.(chatId), weatherUnits: deps.weatherUnits?.(chatId), maxSteps: BACKGROUND_MAX_STEPS }, bgHistory);
+        clearBgProgress();
         const parts = formatReplyParts(r.reply);
         const out = r.degraded ? `⚠️ Here's what I got (I couldn't fully finish):\n\n${parts.shown}` : `✅ Done with "${errand}":\n\n${parts.shown}`;
         // Deliver like a proactive ping: write the PING sub-slot (preserve any inbound answer's paging).
@@ -276,6 +290,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         await deps.sendMessage(chatId, out);
         deps.recordTurn({ steps: r.steps, tools: r.tools, elapsedMs: deps.now() - startedAt, ok: !r.degraded, degraded: r.degraded });
       } catch (e) {
+        clearBgProgress();
         const friendly = friendlyError(e instanceof Error ? e.message : String(e));
         deps.recordTurn({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: false });
         await deps.sendMessage(chatId, `That background errand ("${errand}") failed: ${friendly}`).catch(() => {});

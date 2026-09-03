@@ -23,7 +23,7 @@
       "title": "a long background errand goes silent for minutes with no 'still working' ping",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "dispatchBackground ACKs 'on it' then runs detached with NO progress ping, so the LONGEST tasks (the ones most likely to look hung) are the only ones with zero mid-run reassurance — a first-timer assumes it died and gives up (audit 24 A#1). The sync agent + chain paths already arm the progressDelayMs timer; the background path doesn't.",
       "how": "Arm the same one-shot progress timer in dispatchBackground (or its resumeErrand path): after progressDelayMs, send one 'still working on it' line, cleared when the errand settles. Reuse the handler's setTimer/clearTimer deps. Test: a background run that outlasts the delay sends the interim ping."
     },
@@ -1936,6 +1936,10 @@
     {
       "id": "matchByRef-word-boundary",
       "note": "Made snooze/pause surgical: matchByRef used label.includes(w) with no tiering, so 'pause news' could also freeze a reminder that merely mentioned 'news' — the user silences the wrong automation. Now tiered: an exact id/label wins outright; else a whole-word (\\bword\\b) match ('news' hits 'news'/'morning news', not 'call about the news story'); only if nothing matches on a word boundary does it fall back to a raw substring (keeping the btc->btcusd convenience). Regex-escaped the term. 3 tests (word-boundary beats unrelated substring / exact label beats longer label / substring fallback when no word hit). call-tested: false (pure store logic). 1169 tests green. NOTE: backlog was dry except owner-gated confirm-to-act, so instead of a fresh 3-agent audit (would duplicate audit 24's still-unbuilt findings) I refilled from audit 24's deferred set — seeded snooze-zero-duration-guard(S), background-errand-progress-ping(S), package-tracking-watcher(M)."
+    },
+    {
+      "id": "background-errand-progress-ping",
+      "note": "A detached 'get back to me' errand ACKed 'on it' then ran for minutes with NO progress signal — the LONGEST tasks (most likely to look hung) were the only ones with zero mid-run reassurance, so a first-timer assumes it died. Armed the same one-shot progress timer the sync agent + chain paths use in dispatchBackground: after progressDelayMs, send one 'Still on it — I'll text you the moment it's done', cleared as soon as the errand settles (success OR error path). Reuses the handler's setTimer/clearTimer deps; disabled when progressDelayMs is absent (console channel). 1 test (a background run outlasting the delay sends the interim ping + the final result still lands). call-tested: false (offline unit). 1170 tests green."
     }
   ],
   "audits": [

@@ -923,6 +923,25 @@ describe("background errands (async-background-errands)", () => {
     expect(sent[1]!.text).toMatch(/Found 5 flights/);
   });
 
+  it("arms a progress ping so a long background errand doesn't read as hung (background-errand-progress-ping)", async () => {
+    let armed = false;
+    let resolveRun: ((r: { reply: string; steps: number; tools: string[] }) => void) | null = null;
+    const { handle, sent } = harness({
+      enableBackgroundErrands: true,
+      progressDelayMs: 100,
+      setTimer: (fn: () => void) => { armed = true; fn(); return 1 as unknown; }, // fire immediately in the test
+      clearTimer: () => {},
+      runAgentFn: (_t) => new Promise((res) => { resolveRun = res; }),
+    });
+    await handle(msg("find the 5 cheapest flights to Lisbon and get back to me", 5));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(armed).toBe(true);
+    expect(sent.some((m) => /still on it/i.test(m.text))).toBe(true); // interim reassurance sent
+    resolveRun!({ reply: "done", steps: 12, tools: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sent.some((m) => /Done with/i.test(m.text))).toBe(true);   // final result still lands
+  });
+
   it("passes a raised step budget to the agent for the errand", async () => {
     let seenMax: number | undefined;
     const { handle } = harness({
