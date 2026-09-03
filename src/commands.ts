@@ -67,6 +67,8 @@ Schedule me: "remind me to X in 10 min", "every morning tell me Y", "every Monda
 
 Nagging reminders: "keep reminding me to take my meds every 15 min until I say done" (or "nag me to stretch every 20 min") → I re-ping until you reply "done" or "stop". Great for meds, water, standup.
 
+Timers: "set a timer for 20 minutes", "timer 10 min", "5 minute timer for the pasta" → I ping you when it's up.
+
 Quick start: /templates shows ready-made recipes (morning briefing, price watch, top news...) — install one in a tap, then /run it.
 
 Save recipes: "save <name>: <task>" stores a task you can re-run with /run <name>, or just "save that as <name>" right after I answer to keep the last task. /recipes lists them, /forget <name> removes one. Use a {slot} for a reusable recipe — "save track: price of {item}" then "/run track sneakers". Multiple slots take values by name or position — "save trip: {item} at {store}" then "/run trip item=milk store=HEB" (or "/run trip milk, HEB"). Chain steps with ">>" — "save plan: cheapest flight to {city} >> weather + top news there >> summarize" runs each step feeding the last, and "if <word>: <step>" only continues when the previous result contains that word.

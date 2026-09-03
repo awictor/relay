@@ -212,6 +212,34 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     }
   }
 
+  // --- timer (timer-support): "set a timer for 20 minutes", "timer 10 min", "timer for 1 hour", "start a
+  // 5 minute timer" — the single most common assistant errand, which the relative branch missed (it needs
+  // "in N min", and a bare "timer" has no task so it returned null). A timer is a one-shot reminder-only
+  // schedule that fires "⏰ Timer's up" after the duration. Normalize worded counts (a/an/half) first, like
+  // the relative branch. Handled before `relative` so "timer for 5 min" isn't left to fall through. ---
+  {
+    let tLower = lower.replace(/\bhalf\s+an?\s+hour\b/g, "30 minutes").replace(/\bhalf\s+a\s+day\b/g, "12 hours");
+    tLower = tLower.replace(/\b(?:an?|one)\s+(min(?:ute)?s?|hour|hr)\b/g, "1 $1")
+      .replace(/\b(?:a\s+couple(?:\s+of)?|two)\s+(min(?:ute)?s?|hours?|hrs?)\b/g, "2 $1")
+      .replace(/\b(?:a\s+few|several|three)\s+(min(?:ute)?s?|hours?|hrs?)\b/g, "3 $1");
+    // Match a "timer" keyword plus a duration, in either order: "timer for 20 minutes" / "20 minute timer".
+    const timer = tLower.match(/\b(?:set|start|make)?\s*(?:an?\s+)?timer\s+(?:for\s+)?(\d+)\s*(min(?:ute)?s?|hours?|hrs?|sec(?:ond)?s?)\b/)
+      ?? tLower.match(/\b(\d+)\s*(min(?:ute)?s?|hours?|hrs?|sec(?:ond)?s?)\s+timer\b/);
+    if (timer) {
+      const n = parseInt(timer[1]!, 10);
+      const unit = timer[2]!;
+      const ms = /^h/.test(unit) ? n * HOUR : /^s/.test(unit) ? Math.max(MINUTE, Math.round(n / 60) * MINUTE) : n * MINUTE;
+      if (n >= 1) {
+        // Keep any labeled purpose ("timer for 10 min for the pasta" -> "the pasta"), else a plain timer note.
+        const label = raw.replace(/\b(?:set|start|make)?\s*(?:an?\s+)?timer\s+(?:for\s+)?\d+\s*(?:min(?:ute)?s?|hours?|hrs?|sec(?:ond)?s?)\b/i, " ")
+          .replace(/\b\d+\s*(?:min(?:ute)?s?|hours?|hrs?|sec(?:ond)?s?)\s+timer\b/i, " ")
+          .replace(/^\s*(?:for|to)\s+/i, "").replace(/\s+/g, " ").replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, "").trim();
+        const task = label ? `timer: ${label}` : "timer's up ⏰";
+        return { kind: "once", task, dueMs: now + ms, reminderOnly: true };
+      }
+    }
+  }
+
   // --- relative: "in 10 minutes", "in 2 hours", "in 1 day", "in 3 weeks" ---
   // Worded quantities (worded-duration-reminders): "in an hour" / "in half an hour" / "in a couple days"
   // / "in a few minutes" have no digit, so the \d+ match below missed them and the bot re-asked "when?"

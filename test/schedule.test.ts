@@ -41,6 +41,20 @@ describe("parseSchedule — relative", () => {
     expect(new Date(w.dueMs).getUTCHours()).toBe(6);
     expect(parseSchedule("set an alarm for 9pm", NOW)!.dueMs && new Date(parseSchedule("set an alarm for 9pm", NOW)!.dueMs).getUTCHours()).toBe(21);
   });
+  it("timer phrasing schedules a one-shot reminder-only after the duration (timer-support)", () => {
+    const t = parseSchedule("set a timer for 20 minutes", NOW)!;
+    expect(t.kind).toBe("once");
+    expect(t.reminderOnly).toBe(true);
+    expect(t.dueMs - NOW).toBe(20 * MIN);
+    expect(t.task).toMatch(/timer/i);
+    // Bare "timer 10 min" + "N minute timer" + worded + hours + a labeled purpose.
+    expect(parseSchedule("timer 10 min", NOW)!.dueMs - NOW).toBe(10 * MIN);
+    expect(parseSchedule("5 minute timer", NOW)!.dueMs - NOW).toBe(5 * MIN);
+    expect(parseSchedule("set a timer for half an hour", NOW)!.dueMs - NOW).toBe(30 * MIN);
+    expect(parseSchedule("timer for 1 hour", NOW)!.dueMs - NOW).toBe(HR);
+    const pasta = parseSchedule("set a timer for 10 minutes for the pasta", NOW)!;
+    expect(pasta.task).toMatch(/pasta/);
+  });
   it("returns null for a non-schedule message", () => {
     expect(parseSchedule("what's the top HN story", NOW)).toBeNull();
     expect(parseSchedule("compare these two links", NOW)).toBeNull();

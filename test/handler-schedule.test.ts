@@ -42,6 +42,13 @@ describe("handler — schedule routing", () => {
     expect(calls()).toBe(0);
   });
 
+  it("\"set a timer for 20 minutes\" reaches scheduleAdd, not a silent agent browse (timer-support)", async () => {
+    const a = harness();
+    await a.handle(msg("set a timer for 20 minutes", 5));
+    expect(a.added).toHaveLength(1);
+    expect(a.calls()).toBe(0);
+  });
+
   it("\"every 2 days ...\" + \"in 3 weeks ...\" reach scheduleAdd (cue covers multi-day/week gaps)", async () => {
     const a = harness();
     await a.handle(msg("every 2 days water the plants", 5));
