@@ -228,7 +228,10 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     if (timer) {
       const n = parseInt(timer[1]!, 10);
       const unit = timer[2]!;
-      const ms = /^h/.test(unit) ? n * HOUR : /^s/.test(unit) ? Math.max(MINUTE, Math.round(n / 60) * MINUTE) : n * MINUTE;
+      // Seconds are honored EXACTLY (timer-seconds-honest): the old code rounded up to a whole minute
+      // ("20 seconds" -> 60s), a materially wrong duration confirmed as if correct. dueMs = now + n*1000;
+      // the timer fires on the next scheduler tick after it's due (≤ the tick interval late), not reshaped.
+      const ms = /^h/.test(unit) ? n * HOUR : /^s/.test(unit) ? n * 1000 : n * MINUTE;
       if (n >= 1) {
         // Keep any labeled purpose ("timer for 10 min for the pasta" -> "the pasta"), else a plain timer note.
         const label = raw.replace(/\b(?:set|start|make)?\s*(?:an?\s+)?timer\s+(?:for\s+)?\d+\s*(?:min(?:ute)?s?|hours?|hrs?|sec(?:ond)?s?)\b/i, " ")

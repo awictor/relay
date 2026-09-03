@@ -55,6 +55,11 @@ describe("parseSchedule — relative", () => {
     const pasta = parseSchedule("set a timer for 10 minutes for the pasta", NOW)!;
     expect(pasta.task).toMatch(/pasta/);
   });
+  it("a seconds timer is honored EXACTLY, not rounded up to a minute (timer-seconds-honest)", () => {
+    expect(parseSchedule("timer for 20 seconds", NOW)!.dueMs - NOW).toBe(20 * 1000);   // not 60s
+    expect(parseSchedule("set a timer for 90 seconds", NOW)!.dueMs - NOW).toBe(90 * 1000); // not 120s
+    expect(parseSchedule("30 second timer", NOW)!.dueMs - NOW).toBe(30 * 1000);
+  });
   it("returns null for a non-schedule message", () => {
     expect(parseSchedule("what's the top HN story", NOW)).toBeNull();
     expect(parseSchedule("compare these two links", NOW)).toBeNull();

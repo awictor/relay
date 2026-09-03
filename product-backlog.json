@@ -2300,7 +2300,7 @@
       "title": "seconds-granularity timers silently rounded up to a full minute",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'timer for 20 seconds' fires at 60s; 'timer for 90 seconds' at 120s. schedule.ts rounds sec -> Math.max(MINUTE, round(n/60)*MINUTE), a materially wrong duration confirmed as if correct. Short timers (egg, plank, steep) are among the most common.",
       "how": "Honor sub-minute timers honestly if the runner tick allows (or) tell the user 'my shortest timer is 1 minute' instead of silently reshaping. Prefer honest sub-minute if schedule tick granularity permits; else disclose. Offline test: 20s either fires ~20s or the confirm says it was rounded."
     },
@@ -3214,6 +3214,10 @@
     {
       "item": "page-diff-snapshot-cap + page-diff-flap-guard",
       "note": "Fixed 2 coupled regressions in the just-shipped watch-any-page. (1) SNAPSHOT CAP: the page snapshot was stored as lastValue with NO cap (unlike MAX_SERIES_POINTS/MAX_SEEN_KEYS) — a big page (long terms/search-results, hundreds of KB) inflated every atomic rewrite of the shared alerts file + could fail all persists. pageText now caps extracted text at 16KB. (2) FLAP FIREHOSE: a dynamic page (nonce/CSRF/timestamp/'N min ago') diffed as a change EVERY fetch, and alerts are exempt from the anti-spam cap + quiet-hours -> a 3am firehose. Two-layer fix: pageKey now compares stableText (masks long hex tokens, ISO timestamps, clock times, 'N ago', long digit runs) so a volatile-only re-render is NOT a change; plus a consecutive-change flap counter (bumpFlap/resetFlap) that auto-mutes the watch after PAGE_FLAP_CAP=3 straight real changes (pauses its schedule + sends ONE heads-up: 'that page looks dynamic, paused it, resume <name>'). 5 new tests (cap, token-mask, real-change-still-differs, flap auto-mute), .env.example RELAY_PAGE_FLAP_CAP added, suite 1630 green, tsc clean. call-tested:false (offline lib + runner)."
+    },
+    {
+      "item": "timer-seconds-honest",
+      "note": "Seconds timers are honored exactly now. 'timer for 20 seconds' rounded UP to 60s (Math.max(MINUTE, round(n/60)*MINUTE)) — a materially wrong duration confirmed as correct; '90 seconds' fired at 120s. Now sec -> n*1000 (dueMs = now + exact seconds); the timer fires on the next scheduler tick after it's due (<= the ~30s tick interval late), not reshaped. 1 new test (20s/90s/30s honored exactly), suite 1631 green, tsc clean. call-tested:false (offline parse)."
     }
   ],
   "audits": [
