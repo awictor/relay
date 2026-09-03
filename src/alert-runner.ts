@@ -182,12 +182,19 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     const firstRunWl = alert.members.every((m) => m.last === undefined);
     const updates: Array<{ label: string; value: string }> = [];
     const changedLines: string[] = [];
+    // Track whether we got ANY readable member this tick (silent-watch-death): if every member came back
+    // null (agent threw / degraded) or error-shaped, the whole watchlist is dead — flag softFail so the
+    // runner earns a failed-watch receipt instead of the basket looking armed forever. A single readable
+    // member is enough to count the check healthy.
+    let anyReadable = false;
     for (const { mem, value } of results) {
       if (value === null) continue; // couldn't read this member this tick — leave its baseline
       // An error-shaped member reply ("404", "couldn't load") is a soft failure — hold its baseline +
       // stay silent for it, mirroring the single-value guard (error-reply-false-fires-alerts). Otherwise a
-      // stray number in the error text could flag it changed + overwrite the last good value.
+      // stray number in the error text could flag it changed + overwrite the last good value. It also does
+      // NOT count toward watchlist health (silent-watch-death) — an all-error basket is a dead watch.
       if (looksLikeErrorReply(value)) continue;
+      anyReadable = true; // a real, non-error member value this tick -> the watchlist is alive
       // Numberless-reply guard (alert-numberless-flap): if this member's prior value tracked a NUMBER but
       // the new reply has none ("N/A", "price unavailable" — real, not degraded), don't flag it changed
       // and DON'T overwrite its baseline. Otherwise changed() falls back to text-diff, false-pings, and
@@ -209,7 +216,10 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
       // signal (watchlist-member-never-seeds). Commit only the fresh seeds immediately (no send to gate).
       const seeds = updates.filter((u) => alert.members!.find((m) => m.label === u.label)?.last === undefined);
       if (seeds.length) deps.setMemberLasts?.(alert.chatId, alert.name, seeds);
-      return { notify: false, message: null, value: "", commit: noop };
+      // If NO member was readable this tick (every one null/error), the whole basket is dead — flag
+      // softFail so a persistently-broken watchlist earns a receipt instead of looking armed forever
+      // (silent-watch-death). A single readable member (even if unchanged) = a healthy check.
+      return { notify: false, message: null, value: "", commit: noop, ...(anyReadable ? {} : { softFail: true }) };
     }
     const shown = changedLines.slice(0, 10);
     const more = changedLines.length > shown.length ? `\n…and ${changedLines.length - shown.length} more` : "";
@@ -225,8 +235,13 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // path if fetchFeed isn't wired.
   if (alert.feedSource && deps.fetchFeed) {
     let items: Array<{ title: string; id?: string }>;
-    try { items = await deps.fetchFeed(alert.feedSource); } catch { items = []; }
-    if (!items.length) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
+    let fetchFailed = false;
+    try { items = await deps.fetchFeed(alert.feedSource); } catch { items = []; fetchFailed = true; }
+    // No items = the source fetch threw, or returned nothing. Once the feed has been seeded (seen set),
+    // a persistently empty/failing source means a DEAD follow that looks armed forever — flag softFail so
+    // the runner's soft-fail streak earns a failed-watch receipt (silent-watch-death). Before the first
+    // seed there's no baseline yet, so an empty first check is just "not ready", not a fail.
+    if (!items.length) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop, ...(fetchFailed || alert.seen !== undefined ? { softFail: true } : {}) };
     // Dedup by a STABLE id (link/guid) when the source gives one, else the normalized title
     // (feed-dedup-title-only): keying on title alone dropped a recurring headline ("Daily Discussion")
     // or two same-titled posts forever. Prefix so an id-key can't collide with a title-key.

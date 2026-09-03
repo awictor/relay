@@ -498,6 +498,21 @@ describe("checkAlert — watchlists", () => {
     const r = await checkAlert(wl([{ label: "btc", task: "btc price", last: "$60k" }, { label: "eth", task: "eth price", last: "$3k" }]), d);
     expect(r.notify).toBe(false);
     expect(committed).toEqual([]); // no fresh seeds, no change -> nothing written
+    expect(r.softFail).toBeFalsy(); // members read fine, just unchanged -> healthy
+  });
+
+  it("a watchlist where EVERY member is unreadable this tick flags softFail (silent-watch-death)", async () => {
+    // Both members return an error-shaped reply -> none readable -> the basket is dead.
+    const { d } = wlDeps({ "btc price": "the page returned a 404 error", "eth price": "couldn't load the price right now" });
+    const r = await checkAlert(wl([{ label: "btc", task: "btc price", last: "$60k" }, { label: "eth", task: "eth price", last: "$3k" }]), d);
+    expect(r.notify).toBe(false);
+    expect(r.softFail).toBe(true);
+  });
+
+  it("a watchlist with ONE readable member (even unchanged) is healthy, not softFail", async () => {
+    const { d } = wlDeps({ "btc price": "$60k", "eth price": "the page returned a 404" }); // btc reads, eth errors
+    const r = await checkAlert(wl([{ label: "btc", task: "btc price", last: "$60k" }, { label: "eth", task: "eth price", last: "$3k" }]), d);
+    expect(r.softFail).toBeFalsy(); // one good read = the check is alive
   });
 });
 
@@ -558,11 +573,30 @@ describe("checkAlert — follow-feed subscriptions (direct fetch, no agent)", ()
     expect(r.message).toMatch(/Daily Discussion/);
   });
 
-  it("stays silent (no baseline wipe) when the fetch returns nothing", async () => {
+  it("stays silent (no baseline wipe) when the fetch returns nothing, and flags softFail on a seeded feed (silent-watch-death)", async () => {
     const { d } = feedDeps([]);
     const r = await checkAlert(feedAlert({ seen: [tk("Post A")] }), d);
     expect(r.notify).toBe(false);
     expect(r.message).toBeNull();
+    expect(r.softFail).toBe(true); // a dead source on an already-seeded follow -> earns a receipt
+  });
+
+  it("an empty FIRST check (not yet seeded) is NOT a softFail — just 'not ready'", async () => {
+    const { d } = feedDeps([]);
+    const r = await checkAlert(feedAlert({ seen: undefined }), d);
+    expect(r.notify).toBe(false);
+    expect(r.softFail).toBeFalsy(); // no baseline yet; empty != dead
+  });
+
+  it("a fetchFeed THROW flags softFail even before the first seed", async () => {
+    const d = {
+      llm: {} as never, runAgent: async () => ({ reply: "x" }), formatReply: (t: string) => t,
+      setLast: () => {}, recordSeen: () => {},
+      fetchFeed: async () => { throw new Error("feed down"); },
+    };
+    const r = await checkAlert(feedAlert({ seen: undefined }), d);
+    expect(r.notify).toBe(false);
+    expect(r.softFail).toBe(true);
   });
 
   it("records only the SHOWN items as seen when >10 are new, so the rest surface next check (feed-seen-swallows-overflow)", async () => {
