@@ -3086,6 +3086,15 @@
       "status": "done",
       "why": "follow now supports r/x, HN, YouTube /channel, GitHub releases, Reddit user, and any RSS URL — but HELP/START don't enumerate them, so a user won't discover 'follow github.com/owner/repo' or that a YouTube @handle needs the channel URL.",
       "how": "Add a follow-examples line to HELP + the START menu listing the supported source shapes + the YouTube channel-URL caveat."
+    },
+    {
+      "id": "countdown-holiday-label",
+      "title": "'days until Christmas' countdown labeled 'it' instead of the holiday",
+      "impact": "low",
+      "effort": "S",
+      "status": "done",
+      "why": "parseCountdown peels the trailing date phrase off the label; for a bare-holiday countdown ('days until Christmas') the holiday IS the whole phrase, so the label came out empty -> 'it', and the pings/confirmation read 'it is N days away' instead of naming the holiday.",
+      "how": "When the label is empty but the date phrase is a NAME (alphabetic, not a numeric/ISO date), use that phrase as the label. Christmas/Halloween/new year/thanksgiving now label correctly; a bare ISO date still falls back to 'it'."
     }
   ],
   "history": [
@@ -4316,6 +4325,10 @@
     {
       "id": "followable-sources-help",
       "note": "HELP + START now enumerate the followable sources so users discover them: subreddit, Reddit user, HN (+topic), GitHub repo releases, any RSS/blog, and a YouTube channel (with the caveat that an @handle link needs the channel URL). Surfaces the GitHub-releases + Reddit-user follows just added. Copy-only; 2004 green."
+    },
+    {
+      "id": "countdown-holiday-label",
+      "note": "Self-audit (agent cap 200/200): probed countdown + milestone math. Milestones (future-only, tz-shift, day-of) correct. Found parseCountdown labeled a bare-holiday countdown 'it' ('days until Christmas' -> label empty -> 'it') because the holiday was consumed as the date phrase. Now a named (alphabetic) date phrase doubles as the label when nothing else was given; numeric/ISO still -> 'it'. +1 test, 2005 green."
     }
   ],
   "audits": [
@@ -4615,6 +4628,9 @@
     },
     {
       "note": "Copy pass (agent cap 200/200, no bug this run): documented the expanded follow sources. Backlog now only low papercuts + owner-gated. Next run: self-audit a fresh surface (cookie-jar/channels, memory-store recall) for a medium+, or clear a low (chain-step-cap)."
+    },
+    {
+      "note": "Self-audit inline (agent cap 200/200): countdown parse/milestones. Milestone math clean; bare-holiday countdown mislabeled 'it' (fixed). Backlog now genuinely just low papercuts + owner-gated; the medium+ veins across parse/reliability/safety/feeds are swept."
     }
   ]
 }

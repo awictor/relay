@@ -159,13 +159,18 @@ export async function safeFetch(url: string, init: RequestInit & { signal?: Abor
       if (!loc) return res;
       res.body?.cancel();
       const nextUrl = new URL(loc, current); // resolve relative redirects
-      // Strip credentials on a CROSS-ORIGIN redirect (DEV-0385): headers are re-used on every hop, so a
-      // bearer token / cookie would otherwise leak to whatever host the upstream redirects to. Browsers
-      // drop Authorization across origins; match that. Same-origin keeps it.
+      // Strip credentials on a CROSS-ORIGIN redirect (DEV-0385/DEV-0403): headers are re-used on every
+      // hop, so any credential would otherwise leak to whatever host the upstream redirects to. Deleting
+      // only authorization+cookie missed header-based auth (X-API-Key, apikey, private-token, …). Fail
+      // closed: on a cross-origin hop, keep only a small safe-public allowlist. Same-origin keeps all.
       if (nextUrl.origin !== new URL(current).origin) {
-        const h = new Headers(init.headers);
-        h.delete("authorization");
-        h.delete("cookie");
+        const SAFE_CROSS_ORIGIN = new Set([
+          "accept", "accept-charset", "accept-encoding", "accept-language",
+          "content-type", "user-agent", "referer",
+        ]);
+        const src = new Headers(init.headers);
+        const h = new Headers();
+        for (const [k, v] of src) if (SAFE_CROSS_ORIGIN.has(k.toLowerCase())) h.set(k, v);
         init = { ...init, headers: h };
       }
       current = nextUrl.toString();

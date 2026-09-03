@@ -21,6 +21,17 @@ describe("parseCountdown", () => {
     const c = parseCountdown("countdown to the party on Jan 5", TODAY)!; // Jan already past this year
     expect(c.target.y).toBe(2027);
   });
+  it("labels a bare-holiday countdown with the holiday name, not 'it' (countdown-holiday-label)", () => {
+    // "days until Christmas" — the holiday IS both the label and the date anchor; it must read as
+    // "Christmas", not "it".
+    const xmas = parseCountdown("days until Christmas", TODAY)!;
+    expect(xmas.label).toBe("Christmas");
+    expect(xmas.target).toEqual({ y: 2026, m: 12, d: 25 });
+    expect(parseCountdown("countdown to Halloween", TODAY)!.label).toBe("Halloween");
+    expect(parseCountdown("countdown to thanksgiving", TODAY)!.label).toBe("thanksgiving");
+    // a bare numeric/ISO date has no name -> stays "it" (nothing to name it).
+    expect(parseCountdown("days until 2026-07-01", TODAY)!.label).toBe("it");
+  });
   it("null when there's no parseable date", () => {
     expect(parseCountdown("countdown to something someday", TODAY)).toBeNull();
     expect(parseCountdown("what's the weather", TODAY)).toBeNull();

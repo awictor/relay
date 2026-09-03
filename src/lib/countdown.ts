@@ -38,6 +38,13 @@ export function parseCountdown(text: string, today: Ymd): Countdown | null {
     labelPart = (labelPart! ?? "").trim();
   }
   let label = labelPart.replace(/\s+(?:on|by)$/i, "").replace(/^(?:my|the)\s+/i, "").replace(/[?.!,]+$/g, "").trim();
+  // "days until Christmas" / "countdown to Halloween": the date phrase IS the whole thing, so the label
+  // came out empty — but a NAMED target (a holiday, not a bare number/ISO/M-D date) should BE the label
+  // ("Christmas", not "it") so the ping reads right (countdown-holiday-label). Only when the date phrase
+  // is alphabetic (a name), never a numeric date where the words are just the date.
+  if (!label && /[a-z]/i.test(datePart) && !/^\d/.test(datePart.trim())) {
+    label = datePart.trim().replace(/^(?:on|by|the)\s+/i, "").replace(/[?.!,]+$/g, "").trim();
+  }
   if (!label) label = "it";
   const target = parseDate(datePart, today, true); // preferFuture: "Dec 20" means the next one
   if (!target) return null;
