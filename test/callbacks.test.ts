@@ -90,6 +90,17 @@ describe("keyboard builders", () => {
     for (const b of flat) expect(new TextEncoder().encode(b.callback_data).length).toBeLessThanOrEqual(CALLBACK_MAX_BYTES);
   });
 
+  it("no tap-to-try example dead-ends a cold user with no saved location (onboarding-weather-deadend)", () => {
+    // A bare "weather"/"near me" asks "which city?" for a user who hasn't shared a location — the
+    // onboarding buttons must each land an answer cold, so the weather example NAMES a city + nothing
+    // relies on a shared location.
+    for (const ex of TRY_EXAMPLES) {
+      const t = ex.text.toLowerCase();
+      if (/\bweather\b/.test(t)) expect(t).toMatch(/\b(in|at|near)\s+\w/); // weather must name a place
+      expect(t).not.toMatch(/\bnear me\b/);                                // nothing location-relative
+    }
+  });
+
   it("try decodes reject a non-integer index", () => {
     expect(decodeCallback("ty|x")).toBeNull();
     expect(decodeCallback("ty|0")).toEqual({ kind: "try", index: 0 });

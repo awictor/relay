@@ -57,8 +57,11 @@ const utf8Len = (s: string): number => new TextEncoder().encode(s).length;
 // A tap runs the text through the normal handler flow, so a brand-new user gets an instant first
 // success instead of reading the START wall and hand-typing. Keyless/instant errands only (no anvil
 // dependency) so the very first tap can't dead-end on a browser that isn't running.
+// EVERY example must land an answer for a COLD user with NO saved location (onboarding-weather-deadend):
+// a bare "weather" asks "which city?" — the one dead-end in an otherwise instant onboarding — so the
+// weather example NAMES a city, and no example depends on a shared location.
 export const TRY_EXAMPLES: Array<{ label: string; text: string }> = [
-  { label: "☀️ Weather", text: "weather" },
+  { label: "☀️ Weather", text: "weather in New York" },
   { label: "📖 Define a word", text: "what does serendipity mean" },
   { label: "💸 Tip split", text: "20% tip on $47 split 3 ways" },
   { label: "🎲 Flip a coin", text: "flip a coin" },

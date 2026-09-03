@@ -2741,7 +2741,7 @@
       "title": "the flagship '☀️ Weather' tap-to-try asks 'which city?' instead of answering",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The onboarding tap-to-try row exists to manufacture a first win, but a cold user (no saved location) taps the top button and gets 'What city are you in?' — the one dead-end in an otherwise instant onboarding.",
       "how": "Change the TRY_EXAMPLES weather entry to a city-bearing example ('weather in New York') or reorder a no-location example first, so the first tap always lands an answer."
     },
@@ -3843,6 +3843,10 @@
     {
       "item": "inbound-send-fail-swallowed",
       "note": "Closed the inbound half of the failed-send gap (inbound-send-fail-swallowed). sendMessage returns a delivered-boolean the PROACTIVE runner gates on, but the inbound handler ignored it — a 429/network/blocked (or a failed chunk of a long) reply left the user with nothing/truncated AND still wrote the assistant turn to memory as delivered, so the next turn's context claimed an answer the user never saw. The text-reply path now captures the delivered result (=== false only, so a console channel returning void still counts delivered); on a failed send it skips the memory write entirely (leaves the user turn out too so a re-ask starts clean) + logs a send_failed_not_delivered miss + records a not-ok turn. Photo/doc paths unchanged. 3 new tests (failed send -> no memory + ok:false; success -> 2-msg memory; void channel -> delivered). suite 1853 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "onboarding-weather-deadend",
+      "note": "Fixed the flagship onboarding tap-to-try dead-end (onboarding-weather-deadend). The '☀️ Weather' first-win button ran a bare 'weather', which asks a cold user (no shared location) 'What city are you in?' — the one dead-end in an otherwise instant onboarding. Changed TRY_EXAMPLES weather entry to 'weather in New York' so the first tap always lands an answer; no example now depends on a saved location. 1 new guard test (no example is a bare weather/near-me location-relative errand). suite 1854 green, tsc clean. Offline; anvil-independent (all try examples are keyless)."
     }
   ],
   "audits": [
