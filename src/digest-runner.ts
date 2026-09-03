@@ -7,7 +7,7 @@
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Digest } from "./lib/digests.js";
 import { mapPool } from "./lib/pool.js";
-import { hasSlots } from "./lib/recipes.js";
+import { hasSlots, isChain } from "./lib/recipes.js";
 
 // Cap on how many member agents run at once (DEV-0140). Each member opens an anvil browser session;
 // the self-hosted anvil has a bounded Chrome pool, so an unbounded fan-out (DEV-0139's Promise.all)
@@ -19,6 +19,10 @@ export interface DigestRunnerDeps {
   // Resolve a member recipe name -> its task (null if the recipe was deleted since define).
   resolveRecipe: (chatId: number, name: string) => { task: string } | null;
   runAgent: (userText: string, deps: { llm: LLMClient; context?: string }, history: LLMMessage[]) => Promise<{ reply: string; degraded?: boolean }>;
+  // A member recipe whose task is a ">>" chain must run as a sequential workflow, not as one literal
+  // agent task (digest-chain-member-literal) — same as the inbound /run + scheduled-recipe paths. When
+  // absent, a chain member falls back to runAgent (prior behavior). Returns the chain's final output.
+  runChain?: (chatId: number, task: string) => Promise<string>;
   formatReply: (text: string) => string;
   maxMembers?: number; // safety bound on how many recipes one digest runs (default 10)
   // Per-user profile context (product-loop) so a scheduled digest resolves the user's location.
@@ -47,6 +51,13 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
     // note instead so the composed briefing stays trustworthy.
     if (hasSlots(rec.task)) return `• ${name}: (skipped — needs a value; can't run in a digest)`;
     try {
+      // A chained recipe ("a >> b") is a sequential workflow, not one task — run it via runChain so the
+      // briefing shows the chain's final output, not a confused literal-"a >> b" agent run
+      // (digest-chain-member-literal). Falls back to runAgent when runChain isn't wired.
+      if (isChain(rec.task) && deps.runChain) {
+        const out = (await deps.runChain(digest.chatId, rec.task)).trim();
+        return out ? `• ${name}: ${out}` : `• ${name}: (couldn't fetch)`;
+      }
       const res = await deps.runAgent(rec.task, { llm: deps.llm, context: deps.contextFor?.(digest.chatId) || undefined }, []);
       // A degraded reply (agent ran out of steps / produced no answer, DEV-0176) is NOT briefing
       // content — showing its failure text as this member's section would read as real data. Treat

@@ -14,7 +14,7 @@
       "title": "a digest member that's a >> chain runs the literal chain string as one task",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "schedule-runner special-cases isChain(task)->runChain, but digest-runner calls runAgent(rec.task) directly with no isChain check, so a chained recipe inside a briefing runs 'step a >> step b' as one confused agent task and returns garbage presented as real data (audit B#3).",
       "how": "In digest-runner, when a member recipe's task isChain, run it via runChain (add the dep, mirror schedule-runner) instead of a single runAgent; take the chain's final output as that section."
     },
@@ -1793,6 +1793,10 @@
     {
       "id": "interval-days-weeks-reminders",
       "note": "Fixed a silent no-op on common recurring cadences: the interval regex only matched min/hours and the relative regex only min/hours/days, so 'water the plants every 2 days', 'newsletter every other week', 'renew the lease in 3 weeks' all fell through parseSchedule (returned null) and ran ONCE as a browse — the user thought a recurring reminder was set and it never fired. Extended the interval regex to days/weeks + 'other' (=2 weeks/days) and the relative regex to weeks; the interval kind already advances by whole gaps on complete, so no runner change. Widened the handler scheduleCue so 'every N days/weeks' / 'in N weeks' reach the parser instead of the one-shot agent path. 4 tests (every 2 days / every 1 week + every other week / in 3 weeks / handler-cue reaches scheduleAdd). call-tested: false (pure parse + cue). 1142 tests green."
+    },
+    {
+      "id": "digest-chain-member-literal",
+      "note": "A digest member recipe that's a '>>' chain ran the literal 'step a >> step b' as ONE confused agent task — the /run + scheduled-recipe paths already run chains via runChain, but digest-runner called runAgent(rec.task) directly, so a chained member silently poisoned the briefing with off-topic prose presented as real data. Added a runChain dep + isChain guard to digest-runner mirroring schedule-runner: a chain member runs as a sequential workflow, its final output becomes that section (empty -> the '(couldn't fetch)' fallback), falling back to runAgent when runChain isn't wired. Wired runChain into index's digestRunText (used by both /run and scheduled digests). 3 tests (chain member -> runChain not literal / no-runChain falls back to runAgent / empty chain -> fallback line). call-tested: false (offline unit; chain needs live LLM for a true e2e). 1145 tests green."
     }
   ],
   "audits": [

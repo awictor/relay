@@ -44,6 +44,38 @@ describe("runDigest", () => {
     expect(ran).toBe(true);
   });
 
+  it("a chained-recipe member runs via runChain, not as one literal task (digest-chain-member-literal)", async () => {
+    let chainTask = "", agentTasks: string[] = [];
+    const out = await runDigest(digest(["weather", "flow"]), deps({
+      resolveRecipe: (_c: number, name: string) =>
+        name === "weather" ? { task: "get the weather" } : name === "flow" ? { task: "step a >> step b" } : null,
+      runAgent: async (task: string) => { agentTasks.push(task); return { reply: `RESULT[${task}]` }; },
+      runChain: async (_c: number, task: string) => { chainTask = task; return "chained final"; },
+    }));
+    expect(chainTask).toBe("step a >> step b");       // ran the chain
+    expect(agentTasks).not.toContain("step a >> step b"); // NOT a literal single-task agent run
+    expect(out).toContain("• flow: chained final");
+    expect(out).toContain("• weather: RESULT[get the weather]"); // non-chain member unaffected
+  });
+
+  it("a chain member with no runChain wired falls back to runAgent (prior behavior)", async () => {
+    let ran = "";
+    const out = await runDigest(digest(["flow"]), deps({
+      resolveRecipe: (_c: number, name: string) => name === "flow" ? { task: "a >> b" } : null,
+      runAgent: async (task: string) => { ran = task; return { reply: "fallback" }; },
+    }));
+    expect(ran).toBe("a >> b");
+    expect(out).toContain("• flow: fallback");
+  });
+
+  it("a chain member whose chain returns empty becomes a fallback line", async () => {
+    const out = await runDigest(digest(["flow"]), deps({
+      resolveRecipe: (_c: number, name: string) => name === "flow" ? { task: "a >> b" } : null,
+      runChain: async () => "   ",
+    }));
+    expect(out).toContain("• flow: (couldn't fetch)");
+  });
+
   it("a failed member run becomes a fallback line, others still run", async () => {
     let n = 0;
     const out = await runDigest(digest(["weather", "hn"]), deps({
