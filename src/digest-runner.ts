@@ -9,6 +9,7 @@ import type { Digest } from "./lib/digests.js";
 import { mapPool } from "./lib/pool.js";
 import { hasSlots, isChain } from "./lib/recipes.js";
 import { looksLikeErrorReply } from "./lib/alerts.js";
+import { isReadingRecapMember } from "./lib/readlater.js";
 import type { AgentEnv } from "./chain-runner.js";
 
 // Cap on how many member agents run at once (DEV-0140). Each member opens an anvil browser session;
@@ -29,6 +30,11 @@ export interface DigestRunnerDeps {
   // absent, a chain member falls back to runAgent (prior behavior). Returns the chain's final output.
   runChain?: (chatId: number, task: string) => Promise<string>;
   formatReply: (text: string) => string;
+  // Reading-list recap (saved-page-digest-integration): a reserved member ("reading list"/"saved") folds
+  // the user's read-it-later saves into the briefing. Returns the recap text, or null when nothing's saved
+  // (treated as an empty member, not a failure). No agent/anvil — pure store read. Optional; absent -> a
+  // recap member falls through to resolveRecipe (and reads as "no such recipe" if there's no such recipe).
+  savedRecap?: (chatId: number) => string | null;
   maxMembers?: number; // safety bound on how many recipes one digest runs (default 10)
   // Per-user profile context (product-loop) so a scheduled digest resolves the user's location.
   contextFor?: (chatId: number) => string;
@@ -70,6 +76,13 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
   // gone-vs-failed split is what lets an ALL-fail digest tell a transient outage ("couldn't build it
   // this time") apart from a truly-dead one (stay silent) — digest-all-fail-silent-noshow.
   const built = await mapPool(members, DIGEST_CONCURRENCY, async (name): Promise<{ line: string; status: "real" | "gone" | "failed" }> => {
+    // Reserved reading-list recap member (saved-page-digest-integration): fold recent saves in, no agent.
+    // Nothing saved -> "gone" (an empty member, like a deleted recipe) so it doesn't count as content or a
+    // transient failure — a digest of ONLY an empty reading list stays silent, same as an all-deleted one.
+    if (deps.savedRecap && isReadingRecapMember(name)) {
+      const recap = deps.savedRecap(digest.chatId);
+      return recap ? { line: `• ${name}:\n${recap}`, status: "real" } : { line: `• ${name}: (nothing saved yet)`, status: "gone" };
+    }
     const rec = deps.resolveRecipe(digest.chatId, name);
     if (!rec) return { line: `• ${name}: (no such recipe anymore)`, status: "gone" };
     // A slotted recipe ("track price of {item}") has no per-fire value inside a digest, so running

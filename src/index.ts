@@ -37,7 +37,7 @@ import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summa
 import { parseChartRequest, renderChart } from "./lib/chart.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
-import { SavedStore, parseSavePage, parseSavedRecall, hostLabel } from "./lib/readlater.js";
+import { SavedStore, parseSavePage, parseSavedRecall, hostLabel, readingRecap } from "./lib/readlater.js";
 import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
 import { LogStore, parseLogCommand, parseLogQuery, sumSeries } from "./lib/logs.js";
@@ -163,6 +163,8 @@ const digestRunText = (chatId: number, name: string): Promise<DigestOutcome> => 
   const d = digests.get(chatId, name);
   if (!d) return Promise.resolve(null);
   return runDigest(d, { llm, resolveRecipe: (c, n) => { const r = recipes.get(c, n); return r ? { task: r.task } : null; }, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor,
+    // Reading-list recap member (saved-page-digest-integration): fold recent saves into the briefing.
+    savedRecap: (c) => readingRecap(saved.list(c)),
     // A chained-recipe member runs as a sequential workflow, not a literal task (digest-chain-member-literal).
     runChain: async (c, task) => (await runChain(c, task, { llm, runAgent, formatReply, contextFor: (cc) => profiles.contextLine(cc, Date.now()), agentEnv: agentEnvFor })).final });
 };

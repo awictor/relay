@@ -68,6 +68,25 @@ export function hostLabel(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url.slice(0, MAX_TITLE_LEN); }
 }
 
+// Reserved digest member names that mean "a recap of my saved reading list" rather than a recipe
+// (saved-page-digest-integration): "define digest morning: weather, reading list" folds recent saves into
+// the briefing. Matched case-insensitively against the normalized member name.
+const RECAP_MEMBER_NAMES = new Set(["reading list", "reading recap", "saved", "saved pages", "read later", "read-it-later"]);
+export function isReadingRecapMember(name: string): boolean {
+  return RECAP_MEMBER_NAMES.has(name.trim().toLowerCase());
+}
+
+/** A short recap of the most-recent saved pages for a digest section (saved-page-digest-integration), or
+ * null when nothing is saved (so the digest treats it as an empty member, not a failure). `limit` caps how
+ * many titles show. Titles + links only — the point is a nudge to revisit, not to re-dump every summary. */
+export function readingRecap(pages: SavedPage[], limit = 5): string | null {
+  if (!pages.length) return null;
+  const recent = [...pages].sort((a, b) => b.created - a.created).slice(0, limit);
+  const lines = recent.map((p) => `  - ${p.title} — ${p.url}`);
+  const more = pages.length > recent.length ? `\n  …and ${pages.length - recent.length} more (say "my reading list").` : "";
+  return `${recent.length} saved to revisit:\n${lines.join("\n")}${more}`;
+}
+
 export class SavedStore {
   private file: string;
   private items: ChatSaved[] = [];

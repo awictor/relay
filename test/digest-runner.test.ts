@@ -24,6 +24,30 @@ describe("runDigest", () => {
     expect(out).toContain("• hn: RESULT[top HN story]");
   });
 
+  it("a reserved 'reading list' member folds in the saved recap, no agent run (saved-page-digest-integration)", async () => {
+    let agentRan = false;
+    const out = await runDigest(digest(["weather", "reading list"]), deps({
+      runAgent: async (task: string) => { agentRan = task === "reading list" ? true : agentRan; return { reply: `RESULT[${task}]` }; },
+      savedRecap: () => "2 saved to revisit:\n  - Fed rates — https://a.com\n  - Rust 2.0 — https://b.com",
+    }));
+    expect(out).toContain("• weather: RESULT[get the weather]");
+    expect(out).toContain("• reading list:\n2 saved to revisit:");
+    expect(out).toContain("Fed rates — https://a.com");
+    expect(agentRan).toBe(false); // recap is a store read, never an agent/recipe run
+  });
+
+  it("a 'reading list' member with nothing saved reads as empty (not a failure), digest still sends its other members", async () => {
+    const out = await runDigest(digest(["weather", "saved"]), deps({ savedRecap: () => null }));
+    expect(out).toContain("• weather: RESULT[get the weather]");
+    expect(out).toContain("• saved: (nothing saved yet)");
+    expect(out).toMatch(/^📋 morning/); // weather is real content, so the briefing sends
+  });
+
+  it("a digest of ONLY an empty reading list stays silent (null), like an all-deleted digest", async () => {
+    const out = await runDigest(digest(["reading list"]), deps({ savedRecap: () => null }));
+    expect(out).toBeNull();
+  });
+
   it("an unknown member (recipe deleted) is noted, not fatal", async () => {
     const out = await runDigest(digest(["weather", "gone"]), deps());
     expect(out).toContain("• weather: RESULT[get the weather]");

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { parseSavePage, parseSavedRecall, hostLabel, SavedStore } from "../src/lib/readlater.js";
+import { parseSavePage, parseSavedRecall, hostLabel, SavedStore, readingRecap, isReadingRecapMember } from "../src/lib/readlater.js";
 
 const tmp = () => join(mkdtempSync(join(tmpdir(), "relay-saved-")), "s.json");
 const NOW = 1_700_000_000_000;
@@ -44,6 +44,29 @@ describe("hostLabel", () => {
     expect(hostLabel("https://www.nytimes.com/x/y")).toBe("nytimes.com");
     expect(hostLabel("http://example.org")).toBe("example.org");
     expect(hostLabel("not a url")).toBe("not a url");
+  });
+});
+
+describe("readingRecap + isReadingRecapMember (saved-page-digest-integration)", () => {
+  const NOW = 1_700_000_000_000;
+  const page = (n: number) => ({ url: `https://x.com/${n}`, title: `t${n}`, summary: "s", created: NOW + n });
+  it("recognizes the reserved recap member names, case-insensitive", () => {
+    for (const n of ["reading list", "Reading List", "saved", "saved pages", "read later", "reading recap"]) {
+      expect(isReadingRecapMember(n)).toBe(true);
+    }
+    expect(isReadingRecapMember("weather")).toBe(false);
+    expect(isReadingRecapMember("my recipes")).toBe(false);
+  });
+  it("recaps the most-recent saves (newest first), capped, with a '…more' tail", () => {
+    const pages = Array.from({ length: 8 }, (_, i) => page(i));
+    const out = readingRecap(pages, 5)!;
+    expect(out).toMatch(/^5 saved to revisit:/);   // count line reflects SHOWN (capped at 5)
+    expect(out).toContain("t7 — https://x.com/7"); // newest shown
+    expect(out).not.toContain("t2 — https://x.com/2"); // beyond the cap
+    expect(out).toMatch(/…and 3 more/);            // 8 - 5 = 3
+  });
+  it("returns null when nothing is saved", () => {
+    expect(readingRecap([])).toBeNull();
   });
 });
 

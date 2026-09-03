@@ -2930,7 +2930,7 @@
       "title": "Fold saved reading list into a digest / weekly recap",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "read-it-later now stores summarized pages, but they're only pulled on explicit recall; a satisfied user would value 'my weekly reading recap' or a digest member that surfaces what they saved but haven't revisited — deepens the retention hook.",
       "how": "Add a digest-member/recipe source that lists recent saved pages (or unread-since-saved), reusing SavedStore.search + the existing digest-runner; optional 'mark read' via a callback."
     },
@@ -2942,6 +2942,24 @@
       "status": "done",
       "why": "A user who says 'find me a good pasta recipe and save it' can't — save is only a top-level command; the agent has no save_page tool, so a found-then-save flow needs two manual turns.",
       "how": "Add a save_page(url,title?,summary?) agent tool that writes to SavedStore (same store as the command path), so the agent can capture a result it just produced; guard against saving junk (require a real URL)."
+    },
+    {
+      "id": "saved-page-unread-nudge",
+      "title": "Nudge saved pages the user never revisited",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "the reading-list recap surfaces recent saves but doesn't track whether the user actually re-opened one, so a saved-and-forgotten page never gets a second nudge — the read-it-later value leaks.",
+      "how": "Record a lastRecalledAt when a page appears in a recall/recap; add a 'saved but not revisited in N days' view + an optional weekly 'still want to read these?' proactive nudge, reusing SavedStore + the scheduler."
+    },
+    {
+      "id": "save-page-confirm-dedupe-feedback",
+      "title": "Tell the user when a save updated vs added a duplicate link",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "re-saving the same URL silently updates in place; the agent save_page path doesn't distinguish add vs update in its confirmation, so a user re-saving a link isn't told it was already there.",
+      "how": "Thread the SavedStore dup flag through the agent save_page tool result (the command path already says Updated/Saved) so the agent's confirmation matches."
     }
   ],
   "history": [
@@ -4120,6 +4138,10 @@
     {
       "id": "agent-can-save-pages",
       "note": "Added a save_page(url,title?,summary?) agent tool so the agent can file a page it JUST found into the user's read-it-later list — 'find a good pasta recipe and save it' now completes in one turn. Full tool-add: TOOLS[] entry + AgentEnv.savePage dep (chat-bound in agentEnvFor, writes to the same SavedStore as the command path) + dispatch case (rejects a non-http(s) URL so no junk/search-results get saved) + prompt-menu line + sorted dispatch-test list. +2 tests (saves url/title/summary no-browser; rejects non-URL), 1937 green."
+    },
+    {
+      "id": "saved-page-digest-integration",
+      "note": "A reserved digest member ('reading list'/'saved'/'reading recap'/'read later') now folds a recap of recent read-it-later saves into a briefing — 'define digest morning: weather, reading list'. digest-runner intercepts the recap member BEFORE resolveRecipe (new savedRecap dep, pure store read, no agent/anvil); nothing-saved reads as an empty 'gone' member so a digest of only an empty reading list stays silent like an all-deleted one. New readingRecap + isReadingRecapMember in readlater.ts; index wires savedRecap: readingRecap(saved.list). HELP updated. +6 tests, 1943 green."
     }
   ],
   "audits": [
@@ -4380,6 +4402,9 @@
     },
     {
       "note": "Agent spawn cap still exhausted (200/200) — no 3-agent audit. Built read-it-later-capture (parked audit-C). Seeded 2 follow-ons it enables: saved-page-digest-integration, agent-can-save-pages."
+    },
+    {
+      "note": "Agent spawn cap still exhausted (200/200) — no 3-agent audit. Built saved-page-digest-integration (completes read-it-later: capture via command + agent tool, recall, now digest recap). Seeded 2 follow-ons: saved-page-unread-nudge, save-page-confirm-dedupe-feedback."
     }
   ]
 }
