@@ -302,3 +302,36 @@ describe("runAgent compose (draft-to-send-composer)", () => {
     expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/no draft body/i);
   });
 });
+
+describe("runAgent find_nearby (near-me-poi)", () => {
+  function nb(over = {}) {
+    return {
+      scrape: async (url: string) => ({ title: "", content: "", url }),
+      createSession: async () => ({ id: "s" }), navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {}, readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {}, discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+      ...over,
+    };
+  }
+  it("finds places near the user's saved coords, no browser", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "find_nearby", args: { what: "coffee" } } },
+      { toolCall: { name: "reply", args: { text: "Nearest: Zen (0.3mi)." } } },
+    ]);
+    let seen: unknown = null;
+    const backend = nb({ findNearby: async (opts: unknown) => { seen = opts; return [{ name: "Zen", category: "cafe", distanceKm: 0.5 }]; } });
+    await runAgent("coffee near me", { llm, backend, weatherCoords: { lat: 30, lng: -97 }, weatherUnits: "imperial" });
+    expect(seen).toMatchObject({ what: "coffee", lat: 30, lng: -97 });
+    expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/Nearby coffee:\n• Zen/);
+  });
+  it("asks for an area when there's no location + no `near`", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "find_nearby", args: { what: "coffee" } } },
+      { toolCall: { name: "reply", args: { text: "Where are you?" } } },
+    ]);
+    const backend = nb({ findNearby: async () => [] });
+    await runAgent("coffee near me", { llm, backend });
+    expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/no saved location/i);
+  });
+});

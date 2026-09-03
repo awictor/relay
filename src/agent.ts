@@ -16,6 +16,7 @@ import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { getWeather as fetchWeather, formatWeather } from "./lib/weather.js";
 import { formatDraft, type Draft } from "./lib/compose.js";
+import { findNearby as fetchNearby, formatPlaces } from "./lib/places.js";
 
 // Does the user's task ask for a keepable file (csv-export-compare)? A compare/extract then attaches
 // a CSV document instead of only pasting a truncated JSON blob in chat.
@@ -133,6 +134,18 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "find_nearby",
+    description: "Find places near the user (or near a named area): coffee, restaurants, pharmacy, ATM, gas, grocery, etc. Use this — NOT web_search/scrape — for any \"X near me\", \"nearest Y\", \"coffee nearby\" question. Returns names + distance (+ hours/phone when known). Needs the user's location (a shared pin) OR a `near` area name.",
+    parameters: {
+      type: "object",
+      properties: {
+        what: { type: "string", description: "What to find, e.g. \"coffee\", \"nearest pharmacy\", \"gas station\"" },
+        near: { type: "string", description: "Area/place to search around, e.g. \"downtown Austin\". Omit to use the user's saved location." },
+      },
+      required: ["what"],
+    },
+  },
+  {
     name: "compose",
     description: "Draft an email or text message for the user to review and SEND THEMSELVES (you never send it). Use when the user asks you to \"write/draft the email to X\", \"reply to this\", \"text Y that ...\". You write the body (and subject for email); this returns a copy block + a one-tap mailto:/sms: link. This is how Relay helps with correspondence without logging in or sending.",
     parameters: {
@@ -186,6 +199,7 @@ Tools:
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "get_weather" (place?): current weather + today's high/low. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location.
+- "find_nearby" (what, near?): find places near the user (coffee, pharmacy, ATM, gas...). Use this — NOT web_search — for "X near me"/"nearest Y". Omit near to use the user's location.
 - "compose" (kind, to?, subject?, body): draft an email/text for the user to SEND THEMSELVES (you write the body; it returns a copy block + a mailto:/sms: link). Use for "write/draft/reply to..." asks. You never send — pass the returned draft to the user verbatim in reply.
 - "reply" (text): finish.
 
@@ -230,6 +244,9 @@ export interface BrowserBackend {
   // Optional: current weather for a place or coords (geo-tool-cluster). Absent -> the get_weather tool
   // reports it's unavailable. Returns null on a bad place / fetch failure.
   getWeather?(opts: { place?: string; lat?: number; lng?: number }): Promise<import("./lib/weather.js").WeatherResult | null>;
+  // Optional: find nearby places (near-me-poi). Absent -> the find_nearby tool reports it's
+  // unavailable. Returns [] on a bad area / fetch failure.
+  findNearby?(opts: { what: string; lat?: number; lng?: number; near?: string; units?: "metric" | "imperial" }): Promise<import("./lib/places.js").Place[]>;
 }
 
 const FETCH_JSON_MAX_BYTES = 200_000;
@@ -303,11 +320,28 @@ async function defaultFetchText(url: string): Promise<string> {
   return new TextDecoder().decode(buf.slice(0, TRANSCRIPT_MAX_BYTES));
 }
 
+// GET when no body, POST (form-encoded) when a body is given — Overpass wants the QL query POSTed.
+// Size-capped, no credentials. Used by findNearby (Nominatim GET + Overpass POST).
+async function defaultFetchTextPost(url: string, body?: string): Promise<string> {
+  const res = await fetch(url, {
+    method: body ? "POST" : "GET",
+    headers: body
+      ? { "content-type": "application/x-www-form-urlencoded", accept: "application/json", "user-agent": "relay-bot" }
+      : { accept: "application/json", "user-agent": "relay-bot" }, // Nominatim requires a UA
+    body: body ? `data=${encodeURIComponent(body)}` : undefined,
+    redirect: "follow",
+    signal: AbortSignal.timeout(20000),
+  });
+  const buf = await res.arrayBuffer();
+  return new TextDecoder().decode(buf.slice(0, FETCH_JSON_MAX_BYTES));
+}
+
 const defaultBackend: BrowserBackend = {
   scrape: (url) => anvil.scrape(url, { format: "text" }),
   videoTranscript: (url) => fetchYouTubeTranscript(url, defaultFetchText),
   convertCurrency: (amount, from, to) => fxConvert(amount, from, to, defaultFetchText),
   getWeather: (opts) => fetchWeather(opts, defaultFetchText),
+  findNearby: (opts) => fetchNearby(opts, defaultFetchTextPost),
   createSession: () => anvil.createSession().then((s) => ({ id: s.id })),
   navigate: (id, url) => anvil.navigate(id, url),
   click: (id, sel) => anvil.click(id, sel),
@@ -579,6 +613,25 @@ export async function runAgent(
           push("get_weather", `${formatWeather(w, deps.weatherUnits ?? "imperial")} Report this to the user.`);
         } catch (e) {
           push("get_weather", `ERROR getting weather: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "find_nearby") {
+        if (!backend.findNearby) { push("find_nearby", "ERROR: nearby search isn't available."); continue; }
+        const what = String(call.args.what ?? "").trim();
+        const near = String(call.args.near ?? "").trim();
+        if (!what) { push("find_nearby", "ERROR: say what to find (e.g. \"coffee\")."); continue; }
+        if (!near && !deps.weatherCoords) { push("find_nearby", "No area given and no saved location — ask the user where, or have them share their location."); continue; }
+        try {
+          const units = deps.weatherUnits ?? "imperial";
+          const opts = near
+            ? { what, near, units }
+            : { what, lat: deps.weatherCoords!.lat, lng: deps.weatherCoords!.lng, units };
+          const places = await backend.findNearby(opts);
+          push("find_nearby", `${formatPlaces(places, what, units)} Report this to the user.`);
+        } catch (e) {
+          push("find_nearby", `ERROR finding places: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

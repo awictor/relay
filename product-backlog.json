@@ -1094,7 +1094,7 @@
       "title": "\"near me\" / local place search has no backend (advertised, broken)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Onboarding + the location-pin ack promise \"near me\"; LOCATION_ERRAND_RE detects nearby/closest but there is no POI tool, so the first location errand flounders on a logged-out map scrape.",
       "how": "Nominatim geocode + Overpass around:<coords> query by category -> name/distance/opening_hours/phone; keyless. Reuse the weather fetchText pattern."
     },
@@ -1520,6 +1520,10 @@
     {
       "id": "csv-negative-number-guard",
       "note": "Fixed the CSV formula-injection guard (shipped 2 iters ago) that also quoted legitimate negative numbers (-5.2 -> '-5.2), breaking sort/sum in the exported sheet. Now a plain numeric cell is left untouched; a non-numeric =/+/-/@ lead is still guarded. Also flipped watchlist-member-label-collision this iteration. 997 tests green."
+    },
+    {
+      "id": "near-me-poi",
+      "note": "Added a find_nearby tool — \"coffee near me\"/\"nearest pharmacy\" (advertised but unbuilt) now returns real nearby places via keyless OSM: Nominatim geocodes a named area, Overpass around:<coords> returns POIs by category with distance + opening_hours + phone. New src/lib/places.ts (categoryFilters, haversineKm, overpassQuery, parseNominatim, parsePlaces, formatPlaces, findNearby w/ injected GET+POST fetch) + backend.findNearby + agent tool/dispatch/prompt; uses saved coords for near-me, honors unit pref (mi/km). Live-verified Nominatim+Overpass. 1012 tests green."
     }
   ],
   "audits": [
