@@ -752,12 +752,12 @@ export class ScheduleStore {
     if (s && s.attempts) { s.attempts = 0; this.persist(); }
   }
 
-  /** Re-stamp a chat's RECURRING schedules to a new tz offset (min east of UTC) and recompute their
-   * next fire so a daily/weekly reminder created before the user set their timezone stops firing at the
-   * wrong wall-clock hour (tz-restamp-on-setlocation). Only daily/weekly are re-stamped (they carry an
-   * hourMin to recompute from); interval is gap-based (tz-independent) and once is left alone — a
-   * relative "in 3 hours" once has no clock meaning to shift, and a clock "at 8am" once fires just once
-   * shortly anyway. Returns how many schedules were moved. */
+  /** Re-stamp a chat's schedules to a new tz offset (min east of UTC) and recompute their next fire so a
+   * reminder created before the user set their timezone stops firing at the wrong wall-clock hour
+   * (tz-restamp-on-setlocation). Re-stamped: daily/weekly (recomputed from hourMin) AND a FUTURE
+   * clock-time "once" ("remind me tomorrow at 8am" — shifted by the offset delta to hold its wall-clock
+   * time, once-reminder-tz-restamp). Left alone: interval (gap-based, tz-independent), a RELATIVE once
+   * ("in 3 hours" — no clock meaning), and a PAST clock once (about to fire). Returns how many moved. */
   restampTz(chatId: number, offsetMin: number, now: number): number {
     let moved = 0;
     for (const s of this.items) {

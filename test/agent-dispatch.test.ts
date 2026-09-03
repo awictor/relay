@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_news", "get_scores", "get_suntimes", "get_time", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_news", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "web_search"].sort()
     );
   });
 
@@ -274,6 +274,30 @@ describe("runAgent dispatch", () => {
     expect(r.photo).toBeInstanceOf(Uint8Array);
     expect(r.photo!.length).toBe(3);
     expect(r.reply).toBe("here it is");
+  });
+
+  it("make_qr -> backend.makeQr, returns the QR photo bytes (qr-code-tool)", async () => {
+    const { b, hits } = recordingBackend();
+    (b as { makeQr?: (p: string) => Promise<Uint8Array> }).makeQr = async (p) => { hits.push(`makeQr:${p}`); return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9]); };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "make_qr", args: { payload: "https://x.com" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "here's your QR" } } as ToolCall },
+    ]);
+    const r = await runAgent("qr for x.com", { llm, backend: b });
+    expect(hits).toContain("makeQr:https://x.com");
+    expect(r.photo).toBeInstanceOf(Uint8Array);
+    expect(r.reply).toBe("here's your QR");
+  });
+
+  it("make_qr with no backend.makeQr reports unavailable, no photo", async () => {
+    const { b } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "make_qr", args: { payload: "hi" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "ok" } } as ToolCall },
+    ]);
+    const r = await runAgent("qr", { llm, backend: b });
+    expect(r.photo).toBeUndefined();
+    expect(r.reply).toBe("ok");
   });
 
   it("pdf -> backend.pdf, returns doc bytes (DEV-0032)", async () => {

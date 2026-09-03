@@ -27,6 +27,7 @@ import { runConvert } from "./lib/units-convert.js";
 import { parseMealRequest, getMeals, formatMealIdeas, formatFullMeal } from "./lib/meals.js";
 import { getSunTimes as sunFetch, formatSunTimes, sunPlace } from "./lib/suntimes.js";
 import { getAirQuality as airFetch, formatAirQuality, airPlace, isUvRequest } from "./lib/airquality.js";
+import { renderQr, parseQrRequest } from "./lib/qr.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -363,6 +364,11 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: "object", properties: { url: { type: "string", description: "A YouTube video URL (watch/youtu.be/shorts)" } }, required: ["url"] },
   },
   {
+    name: "make_qr",
+    description: "Generate a QR code IMAGE for a link, text, or wifi string and send it to the user (keyless, instant). Use this — NOT a browse — for \"make a QR code for <link>\", \"QR for my wifi\", \"qr code for this text\". Pass the exact payload to encode (a URL, plain text, or a WIFI:...; string). After calling this, still call reply with a short caption.",
+    parameters: { type: "object", properties: { payload: { type: "string", description: "The exact text/URL to encode in the QR code, e.g. \"https://mysite.com\" or \"WIFI:S:home;T:WPA;P:pass;;\"." } }, required: ["payload"] },
+  },
+  {
     name: "screenshot",
     description: "Capture a web page as an IMAGE and send it to the user. Use when the user wants to SEE a page (\"show me\", \"screenshot\", \"what does X look like\") rather than read its text. After calling this, still call reply with a short caption.",
     parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to capture" } }, required: ["url"] },
@@ -392,6 +398,7 @@ Tools:
 - "compare" (urls, fields): fetch several pages and extract the same fields from each; returns a JSON array. Use when the user wants to compare data points across multiple links.
 - "web_search" (query): plain-language web search, NO url needed — use this FIRST for any open question where the user hasn't named a site or link ("who won...", "cheapest...", "best... near me", "what is..."). Returns top {title,url,snippet}; then scrape/extract the most relevant url.
 - "search" (url): open a specific search/listing page and get candidate result links back. Use when you already know the site — build its search URL, call search, then extract/compare across the returned links.
+- "make_qr" (payload): generate a QR code IMAGE for a link/text/wifi string + send it. Use for "make a QR for <link>", "QR for my wifi", "qr code for this text". Pass the exact payload to encode. Then call reply with a short caption.
 - "screenshot" (url): capture a page as an IMAGE and send it. Use when the user wants to SEE a page ("show me", "screenshot", "what does X look like"), not read its text. Then call reply with a short caption.
 - "pdf" (url): render a page to a PDF and send it as a document. Use when the user wants to SAVE or KEEP a page ("save as PDF", "send me a PDF of X"). Then call reply with a short caption.
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
@@ -454,6 +461,9 @@ export interface BrowserBackend {
   screenshot?(url: string): Promise<Uint8Array>;
   // Optional: render a URL to PDF bytes (DEV-0032). Absent -> pdf tool reports unavailable.
   pdf?(url: string): Promise<Uint8Array>;
+  // Optional: render a QR code for a payload to PNG bytes (qr-code-tool). Absent -> make_qr reports
+  // unavailable. Returns null when the payload is empty/too long or the render fails.
+  makeQr?(payload: string): Promise<Uint8Array | null>;
   // Optional: fetch a YouTube video's caption transcript as plain text (video-transcript-summary).
   // Absent -> the transcript tool reports it's unavailable. Returns null when the video has no
   // captions / isn't a YouTube URL.
@@ -607,6 +617,7 @@ const defaultBackend: BrowserBackend = {
   getWeather: (opts) => fetchWeather(opts, defaultFetchText),
   getSunTimes: (opts) => sunFetch(opts, defaultFetchText),
   getAirQuality: (opts) => airFetch(opts, defaultFetchText),
+  makeQr: (payload) => renderQr(payload, defaultFetchBytes),
   findNearby: (opts) => fetchNearby(opts, defaultFetchTextPost),
   getDirections: (opts) => fetchDirections(opts, defaultFetchText),
   createSession: () => anvil.createSession().then((s) => ({ id: s.id })),
@@ -759,6 +770,21 @@ export async function runAgent(
           push("transcript", `TRANSCRIPT of ${url}:\n${truncateForModel(r.text)}\n\nSummarize/answer from this; it's what was said in the video.`);
         } catch (e) {
           push("transcript", `ERROR fetching transcript for ${url}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "make_qr") {
+        if (!backend.makeQr) { push("make_qr", "ERROR: QR generation isn't available."); continue; }
+        const payload = String(call.args.payload ?? "").trim();
+        if (!payload) { push("make_qr", "ERROR: no payload to encode — ask the user what the QR should contain (a link, text, or wifi string)."); continue; }
+        try {
+          const png = await backend.makeQr(payload);
+          if (!png) { push("make_qr", `Couldn't generate a QR for that (empty, too long, or the renderer failed). Payloads must be under ~900 chars.`); continue; }
+          photo = png;
+          push("make_qr", `Generated a QR code for "${payload.slice(0, 60)}" (${png.length} bytes). It will be sent to the user; now call reply with a short caption.`);
+        } catch (e) {
+          push("make_qr", `ERROR generating QR: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

@@ -2147,7 +2147,7 @@
       "title": "a wall-clock \"once\" set before location fires at the wrong hour, never re-stamped",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "restampTz recomputes daily/weekly on setlocation but EXCLUDES `once` (comment claims a clock once 'fires just once shortly anyway' — false for 'remind me tomorrow at 8am'). Its dueMs was baked as an absolute instant at offset 0, so after the user sets US-Eastern it still fires at 8am UTC = 3am local, with no warning. Distinct from the parked DST issue — a create-before-location ordering bug.",
       "how": "In restampTz, also re-stamp clockTime `once` schedules whose dueMs is future: shift the UTC instant by the offset delta (same math as the daily/weekly branch) so it keeps the intended wall-clock time. clockTime already flags these. Offline test: create a clock once at offset 0, restamp to -300, assert dueMs shifts to hold local 8am."
     },
@@ -2156,7 +2156,7 @@
       "title": "no QR-code generation (\"make a QR for this link / my wifi\")",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'make a QR code for this link' floods into a floundering browse or refusal, though the sendPhoto image channel is already wired. High-delight, instant proof the bot does real work.",
       "how": "Add a keyless QR tool: build a chart/QR image URL (quickchart.io/qr or api.qrserver.com — already keyless img sources) or generate offline; return the PNG via the existing chart/sendPhoto path. New TOOLS[] entry + dispatch + prompt + HELP + sorted tool-list test. Offline-test the URL/payload builder."
     },
@@ -3010,6 +3010,14 @@
     {
       "item": "delete-persist-hedge",
       "note": "Destructive commands no longer claim success when the disk write failed. The SAVE path hedged ('couldn't save to disk') but the DELETE path dropped persist()'s bool, so 'cancel my 3pm reminder' / 'forget I'm allergic to peanuts' / '/profile clear' / 'remove milk from my list' / 'forget mom's contact' confirmed cleanly even on a failed write — and the data resurrected on restart (a cancelled reminder re-fires, a deleted privacy fact keeps getting injected into answers). Added lastSaveOk() to NotesStore + ListsStore (contacts/schedule/profile already had it), plumbed the persist bool through forgetFact/forgetContact/profileClear/scheduleCancel (return saved) + listCommand remove/clear, and the handler now appends a hedge ('I couldn't save that change — it may come back if I restart, try again') when saved===false. 4 new tests (store lastSaveOk-on-failed-delete + handler hedges for forget-fact / profile-clear / schedule-cancel), suite 1572 green, tsc clean. call-tested:false (offline store + handler tests, unwritable-store trick)."
+    },
+    {
+      "item": "clocktime-once-restamp",
+      "note": "STALE audit finding — the fix already shipped (once-reminder-tz-restamp): restampTz already re-stamps a FUTURE clock-time `once` by the offset delta (schedule.ts branch `s.kind==='once' && s.clockTime && s.dueMs>now`), with tests (restamps a future clock once preserving wall-clock hour; leaves a relative once + a past clock once alone). The audit agent misread the OUTDATED docstring which still said 'once is left alone'. Real defect fixed: rewrote the restampTz docstring to match the code (daily/weekly + future clock-time once are re-stamped; interval/relative-once/past-once left alone). No behavior change; suite already green."
+    },
+    {
+      "item": "qr-code-tool",
+      "note": "Added a keyless make_qr agent tool. New src/lib/qr.ts: parseQrRequest (pulls the payload after 'qr code for/of/:' or a bare 'qr <payload>', strips quotes/please, rejects a lone connective or >900-char payload), qrUrl (keyless api.qrserver.com, no signup), renderQr (fetch + PNG-signature validation, null on non-PNG/throw). Wired like screenshot: TOOLS[] entry + BrowserBackend.makeQr method + defaultBackend (renderQr+defaultFetchBytes) + dispatch sets the outgoing `photo` bytes + prompt line + HELP + sorted tool-list test. So 'make a QR code for <link>' / 'QR for my wifi' texts back a scannable image instead of a floundering browse. 10 new tests (8 lib + 2 dispatch); live-probed api.qrserver.com (200, image/png, valid PNG sig) so call-tested:true for the renderer, agent wiring offline-tested."
     }
   ],
   "audits": [
