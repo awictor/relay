@@ -392,7 +392,12 @@ export class ScheduleStore {
    * until `untilMs` (PAUSE_INDEFINITE for no end). The runner skips a paused schedule without firing or
    * completing it, and auto-clears the flag once now passes untilMs. Returns how many were paused. */
   pause(chatId: number, which: string, untilMs: number): number {
-    const matches = this.matchByRef(chatId, which);
+    // A "once" reminder is a discrete promise ("remind me at 3pm"). An INDEFINITE pause (from "snooze
+    // all" / "pause <x>" with no duration) would freeze it FOREVER — a silent black hole for the highest-
+    // trust item (pause-all-freezes-once-reminders). Snooze is for quieting RECURRING noise, so skip a
+    // once on an indefinite pause. A TIMED snooze of a once is fine: the runner auto-resumes it when the
+    // window elapses (clearExpiredPause), so it still fires — just later. Returns how many were paused.
+    const matches = this.matchByRef(chatId, which).filter((s) => !(s.kind === "once" && untilMs === PAUSE_INDEFINITE));
     for (const s of matches) s.pausedUntil = untilMs;
     if (matches.length) this.persist();
     return matches.length;

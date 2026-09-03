@@ -442,6 +442,23 @@ describe("ScheduleStore pause/resume (snooze-automations)", () => {
     expect(s.pause(1, "all", PAUSE_INDEFINITE)).toBe(2);
     expect(s.list(2)[0]!.pausedUntil).toBeUndefined();
   });
+  it("an indefinite 'pause all' does NOT freeze a once reminder (pause-all-freezes-once-reminders)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "daily", task: "weather", dueMs: NOW + HR, hourMin: "09:00" }, NOW);
+    s.add(1, { kind: "once", task: "take meds", dueMs: NOW + 3 * HR }, NOW);
+    // Only the recurring daily is paused; the one-shot promise stays live.
+    expect(s.pause(1, "all", PAUSE_INDEFINITE)).toBe(1);
+    const once = s.list(1).find((x) => x.kind === "once")!;
+    expect(once.pausedUntil).toBeUndefined(); // NOT frozen forever
+    const daily = s.list(1).find((x) => x.kind === "daily")!;
+    expect(daily.pausedUntil).toBe(PAUSE_INDEFINITE);
+  });
+  it("a TIMED snooze of a once reminder IS allowed (it auto-resumes when the window elapses)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "once", task: "take meds", dueMs: NOW + 3 * HR }, NOW);
+    expect(s.pause(1, "all", NOW + DAY)).toBe(1); // timed pause, not indefinite -> once is pausable
+    expect(s.list(1)[0]!.pausedUntil).toBe(NOW + DAY);
+  });
   it("resume clears the pause + pulls a stale recurring dueMs forward to now", () => {
     const s = new ScheduleStore({ file: tmpFile() });
     const rec = s.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW - HR, hourMin: "09:00" }, NOW)!; // already overdue

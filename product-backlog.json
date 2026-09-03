@@ -32,7 +32,7 @@
       "title": "'pause all' / indefinite pause silently freezes one-shot reminders forever",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "snooze-automations' matchByRef('all') + an indefinite pause matches once reminders too, so 'remind me at 3pm' set before a trip never fires until a manual resume — a discrete promise silently killed by a pause meant for recurring noise (audit B#6, a regression in the just-shipped snooze).",
       "how": "In pause(), when which==='all' (or an indefinite pause), skip kind==='once' schedules (or cap their pause so they still fire) — pausing is for recurring automations; a one-shot promise shouldn't be frozen indefinitely. Test that 'snooze all' leaves a once reminder live."
     }
@@ -1741,6 +1741,10 @@
     {
       "id": "weather-multi-day",
       "note": "Fixed a confidently-wrong first-errand: get_weather used forecast_days=1 while the prompt told the agent to ALWAYS use it for any forecast question, so 'will it rain tomorrow?' returned TODAY's numbers. Bumped Open-Meteo to forecast_days=7 + daily weather_code; parseForecast now builds a days[] array (each day its own code/hi/lo/precip, today/current kept for back-compat). Added a 'when' tool param + resolveWhen (tomorrow/this weekend/named weekday/this week -> day indices, derives todayDow from days[0].date, no clock) + formatDay/formatWeatherWhen; the dispatch reports the requested future day(s), falling back to the current line for a today/now question. 8 tests + LIVE call-tested against Open-Meteo (7-day array w/ per-day codes + dates). 1130 tests green."
+    },
+    {
+      "id": "pause-all-freezes-once-reminders",
+      "note": "Fixed a regression from the just-shipped snooze feature: 'snooze all' / 'pause <x>' with no duration set PAUSE_INDEFINITE on EVERY matched schedule including one-shot reminders, so 'remind me at 3pm' set before a trip was frozen forever until a manual resume — a silent black hole for the highest-trust item. ScheduleStore.pause now skips kind==='once' when the pause is INDEFINITE (snooze is for quieting recurring noise; a discrete promise shouldn't freeze forever). A TIMED snooze of a once is still allowed — the runner's clearExpiredPause auto-resumes it when the window elapses, so it fires later, not never. 2 tests (indefinite pause-all leaves a once live + still pauses the recurring; timed snooze of a once is allowed). call-tested: false (pure scheduler logic). 1132 tests green."
     }
   ],
   "audits": [
