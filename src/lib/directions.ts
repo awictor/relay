@@ -20,6 +20,25 @@ export function routeMode(text: string): Route["mode"] {
   return "driving";
 }
 
+/** True if the user asked for PUBLIC-TRANSIT directions (transit-honest-not-driving). OSRM has no
+ * transit profile, so we must NOT silently return a car ETA labeled "drive" for these — instead the
+ * caller hands back a Google Maps transit link + an honest note. Matches subway/bus/train/tram/metro/
+ * "by transit"/"public transport", but NOT a bare "how do I get to X" (that's the default drive). */
+export function wantsTransit(text: string): boolean {
+  return /\b(transit|public\s+transport(?:ation)?|subway|metro|underground|the\s+tube|bus|train|tram|streetcar|light\s*rail|by\s+(?:rail|train|bus|subway|metro))\b/i.test(String(text ?? ""));
+}
+
+/** A tappable Google Maps directions link in TRANSIT mode between two place labels (transit-honest-not-
+ * driving). Coords used for an endpoint when present (exact), else the label. No OSRM (it can't route
+ * transit) — Maps owns the schedule/route data. Exported. */
+export function transitMapsLink(opts: { to: string; from?: string; fromLat?: number; fromLng?: number; toLat?: number; toLng?: number }): string {
+  const orig = typeof opts.fromLat === "number" && typeof opts.fromLng === "number"
+    ? `${opts.fromLat}%2C${opts.fromLng}` : opts.from ? encodeURIComponent(opts.from) : encodeURIComponent("My Location");
+  const dest = typeof opts.toLat === "number" && typeof opts.toLng === "number"
+    ? `${opts.toLat}%2C${opts.toLng}` : encodeURIComponent(opts.to);
+  return `https://www.google.com/maps/dir/?api=1&origin=${orig}&destination=${dest}&travelmode=transit`;
+}
+
 /** Parse an OSRM route response -> {distanceKm, durationMin} (from routes[0]), or null. */
 export function parseOsrm(body: string): { distanceKm: number; durationMin: number } | null {
   try {

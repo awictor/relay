@@ -2543,7 +2543,7 @@
       "title": "transit directions silently answered as a car ETA",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'how long downtown by subway/bus/train' returns an OSRM car ETA labeled 'drive' — a confidently wrong answer, violating the no-silent-wrong-answer principle.",
       "how": "directions.ts routeMode() maps transit->driving with no note; detect transit intent and either say so + hand back a Google Maps transit link, or label the estimate honestly as driving-only."
     },
@@ -3583,6 +3583,10 @@
     {
       "item": "relative-once-quiet-defer",
       "note": "Fixed a relative 'remind me in N hours' set at night silently firing hours late (relative-once-quiet-defer). The quiet-hours short-once exemption used a 3h window, so 'remind me in 4 hours' at 11pm was deferred to the 7am quiet-end — a deliberate near-term instant silently broken. Raised the window to 18h (env-tunable RELAY_SHORT_ONCE_MS) so ANY same-day 'in N hours' relative once fires on time, while a genuinely long 'in 2 days' once (time-of-day incidental, measured in days) still defers. clockTime alarms already exempt; recurring dailies/digests still defer. .env.example parity added. 1 new test ('in 4 hours' fires in quiet hours); existing long-once-defers + short-timer-fires guards unchanged. suite 1736 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "transit-answered-as-driving",
+      "note": "Stopped answering transit asks with a car ETA (transit-honest-not-driving). routeMode silently mapped transit->driving, so 'how long downtown by subway/bus/train' returned an OSRM CAR duration labeled 'drive' — a confidently-wrong answer. directions.ts: added wantsTransit() (subway/metro/bus/train/tram/tube/'by transit'/'public transport', NOT a bare 'how do I get to X') + transitMapsLink() (a Google Maps travelmode=transit link, coords when known else labels). agent.ts directions dispatch: a transit ask (and no explicit driving/walking/cycling mode override) now returns the Maps transit link + an honest 'I can't compute transit times myself' note instead of an OSRM route; offers a driving/walking estimate as fallback. Tool desc updated. 3 new tests (wantsTransit detects/ignores, transitMapsLink coords+labels+My-Location). suite 1739 green, tsc clean. Offline; anvil-independent (Maps link, no fetch)."
     }
   ],
   "audits": [

@@ -1,11 +1,37 @@
 import { describe, it, expect } from "vitest";
-import { osrmUrl, routeMode, parseOsrm, formatRoute, getDirections } from "../src/lib/directions.js";
+import { osrmUrl, routeMode, parseOsrm, formatRoute, getDirections, wantsTransit, transitMapsLink } from "../src/lib/directions.js";
 
 describe("routeMode (directions-eta)", () => {
   it("picks a mode from phrasing, default driving", () => {
     expect(routeMode("how long to walk to the park")).toBe("walking");
     expect(routeMode("bike to work")).toBe("cycling");
     expect(routeMode("how far is the airport")).toBe("driving");
+  });
+});
+
+describe("wantsTransit (transit-honest-not-driving)", () => {
+  it("detects public-transit asks", () => {
+    for (const q of ["how long to downtown by subway", "bus to the airport", "train to Boston",
+      "directions by transit", "metro to the museum", "take the tube to Camden", "public transport to X"]) {
+      expect(wantsTransit(q)).toBe(true);
+    }
+  });
+  it("does NOT fire on a plain drive/walk/how-do-I-get ask", () => {
+    for (const q of ["how far is the airport", "directions to the park", "how do I get to downtown", "walk to work"]) {
+      expect(wantsTransit(q)).toBe(false);
+    }
+  });
+});
+
+describe("transitMapsLink", () => {
+  it("builds a travelmode=transit Maps link, coords when present else labels", () => {
+    expect(transitMapsLink({ to: "Downtown", from: "Home" }))
+      .toBe("https://www.google.com/maps/dir/?api=1&origin=Home&destination=Downtown&travelmode=transit");
+    const withCoords = transitMapsLink({ to: "Museum", fromLat: 40.7, fromLng: -74 });
+    expect(withCoords).toContain("origin=40.7%2C-74");
+    expect(withCoords).toContain("travelmode=transit");
+    // No from + no coords -> "My Location" origin.
+    expect(transitMapsLink({ to: "X" })).toContain("origin=My%20Location");
   });
 });
 

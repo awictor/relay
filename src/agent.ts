@@ -36,7 +36,7 @@ import { relativeAge } from "./lib/answer-log.js";
 import { getWeather as fetchWeather, formatWeather, formatWeatherWhen, formatWeatherHourly } from "./lib/weather.js";
 import { formatDraft, type Draft } from "./lib/compose.js";
 import { findNearby as fetchNearby, formatPlaces } from "./lib/places.js";
-import { getDirections as fetchDirections, formatRoute, routeMode } from "./lib/directions.js";
+import { getDirections as fetchDirections, formatRoute, routeMode, wantsTransit, transitMapsLink } from "./lib/directions.js";
 import { resolveUnits } from "./lib/units.js";
 import { formatCalendar, type CalEvent } from "./lib/calendar.js";
 
@@ -337,7 +337,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "directions",
-    description: "Distance + travel time between two places. Use this — NOT web_search/scrape — for \"how far is X\", \"directions to Y\", \"how long to drive to Z\". Omit `from` to start from the user's location. Modes: driving (default), walking, cycling.",
+    description: "Distance + travel time between two places. Use this — NOT web_search/scrape — for \"how far is X\", \"directions to Y\", \"how long to drive to Z\", and transit asks (\"how long by subway/bus/train\"). Omit `from` to start from the user's location. Modes: driving (default), walking, cycling. For a public-transit ask it returns a Google Maps transit link (it can't compute transit times itself).",
     parameters: {
       type: "object",
       properties: {
@@ -1273,6 +1273,15 @@ export async function runAgent(
         const to = String(call.args.to ?? "").trim();
         const from = String(call.args.from ?? "").trim();
         if (!to) { push("directions", "ERROR: no destination given."); continue; }
+        // Public-transit ask (transit-honest-not-driving): OSRM has no transit profile, so returning its
+        // CAR ETA labeled "drive" is a confidently-wrong answer. Instead hand back a Google Maps transit
+        // link (Maps owns schedule/route data) + an honest note that we can't compute transit time. Uses
+        // the user's coords as the origin when no `from` is named. Checked BEFORE the OSRM route below.
+        if (wantsTransit(userText) && !["driving", "walking", "cycling"].includes(String(call.args.mode))) {
+          const link = transitMapsLink({ to, ...(from ? { from } : deps.weatherCoords ? { fromLat: deps.weatherCoords.lat, fromLng: deps.weatherCoords.lng } : {}) });
+          push("directions", `I can't compute public-transit times myself (my routing is driving/walking/cycling only), but here's a live transit route on Google Maps:\n${link}\n\nGive the user this link + tell them honestly you can't do transit ETAs, and offer a driving/walking estimate instead if useful.`);
+          continue;
+        }
         if (!from && !deps.weatherCoords) { push("directions", "No start given and no saved location — ask where they're starting from."); continue; }
         // Infer from the destination (or origin) place name's country (metric-imperial-infer); no
         // recognizable country -> user pref / imperial default.
