@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runChain } from "../src/chain-runner.js";
+import { runChain, containsUnnegated } from "../src/chain-runner.js";
 
 // Mock agent: replies per-step from a scripted map keyed by the step text; records the context it saw.
 function deps(replies: Record<string, string>, seen?: Array<{ task: string; context?: string }>) {
@@ -63,5 +63,21 @@ describe("runChain (recipe-chaining)", () => {
     const r = await runChain(1, "just do it", deps({ "just do it": "done" }));
     expect(r.final).toBe("done");
     expect(r.steps).toHaveLength(1);
+  });
+
+  it("if-gate does NOT fire on a negated match (out of stock ≠ in stock)", async () => {
+    const stop = await runChain(1, "check >> if in stock: buy", deps({ check: "Sorry, it's out of stock right now", buy: "bought" }));
+    expect(stop.stoppedEarly).toBe(true); // "in stock" inside "out of stock" must NOT satisfy the gate
+    const go = await runChain(1, "check >> if in stock: buy", deps({ check: "Good news, it's in stock!", buy: "bought" }));
+    expect(go.final).toBe("bought");
+  });
+});
+
+describe("containsUnnegated (if-gate)", () => {
+  it("true for an un-negated occurrence, false when negated", () => {
+    expect(containsUnnegated("it is in stock", "in stock")).toBe(true);
+    expect(containsUnnegated("out of stock", "stock")).toBe(false); // "out of" negates
+    expect(containsUnnegated("not available", "available")).toBe(false);
+    expect(containsUnnegated("currently unavailable but the part is available elsewhere", "available")).toBe(true);
   });
 });

@@ -151,6 +151,7 @@ const scheduleRunner = makeScheduleRunner({
   digestRun: (chatId, name) => digestRunText(chatId, name), // scheduled digests (m9)
   alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
   recipeResolveTask: (chatId, name) => { const r = recipes.get(chatId, name); return r ? r.task : null; }, // scheduled recipes: resolve current task at fire time
+  runChain: async (chatId, task) => (await runChain(chatId, task, { llm, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()) })).final, // scheduled chained recipe = sequential workflow
   // Proactive ping -> its OWN slot (drilldown + follow-up context), preserving the inbound answer's
   // pageable state so a ping mid-conversation can't eat the answer's unshown tail (proactive-clobbers-
   // drilldown-cache). The ping is sent whole (untrimmed), so its paging offset starts at full length

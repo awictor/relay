@@ -74,6 +74,20 @@ describe("makeScheduleRunner.tick", () => {
     expect(sent[0]!.text).not.toMatch(/recipe:btc/);
   });
 
+  it("a scheduled CHAINED recipe runs via runChain, not as one literal task (recipe-chaining)", async () => {
+    const clock = { t: NOW };
+    let chained = "";
+    const { store, runner, sent, ran } = harness(clock, {
+      recipeResolveTask: () => "step a >> step b",
+      runChain: async (_c, task) => { chained = task; return "chained result"; },
+    });
+    store.add(1, { kind: "once", task: "recipe:flow", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(chained).toBe("step a >> step b"); // ran the chain
+    expect(ran).toEqual([]);                    // NOT a single literal agent task
+    expect(sent[0]!.text).toMatch(/chained result/);
+  });
+
   it("a scheduled recipe edited to add a {slot} skips firing (no literal-slot garbage) (scheduled-recipe-slot-refire)", async () => {
     const clock = { t: NOW };
     const { store, runner, sent, ran } = harness(clock, {

@@ -179,4 +179,8 @@ describe("parseChainSteps / isChain (recipe-chaining)", () => {
     expect(isChain("a >> b")).toBe(true);
     expect(isChain("plain")).toBe(false);
   });
+  it("caps chain length (each step is a full agent run)", () => {
+    const many = Array.from({ length: 12 }, (_, i) => `step ${i}`).join(" >> ");
+    expect(parseChainSteps(many)).toHaveLength(6); // MAX_CHAIN_STEPS
+  });
 });

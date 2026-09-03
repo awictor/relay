@@ -6,7 +6,7 @@
 
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Schedule, ScheduleStore } from "./lib/schedule.js";
-import { hasSlots } from "./lib/recipes.js";
+import { hasSlots, isChain } from "./lib/recipes.js";
 
 export interface ScheduleRunnerDeps {
   store: ScheduleStore;
@@ -40,6 +40,10 @@ export interface ScheduleRunnerDeps {
   // name (null if it was deleted) and run it as the agent task — so editing the recipe changes what
   // fires + forgetting it stops it (a stable marker, unlike storing the raw task). Optional.
   recipeResolveTask?: (chatId: number, name: string) => string | null;
+  // Recipe chaining (recipe-chaining): run a ">>"-chained recipe task as a sequential workflow, same as
+  // the inbound /run path — so a SCHEDULED chained recipe doesn't fire the literal "step1 >> step2" as
+  // one confused agent task. Returns the final output. Optional; absent -> a chain runs as one task.
+  runChain?: (chatId: number, task: string) => Promise<string>;
   // Record a proactive send into the shared last-result cache so a user can reply "more"/"send the
   // link" to a digest/alert ping (proactive-ping-drilldown-cache). Optional.
   recordSend?: (chatId: number, text: string) => void;
@@ -174,7 +178,14 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
         return;
       }
-      res = await deps.runAgent(taskToRun, { llm: deps.llm, context: deps.contextFor?.(s.chatId) || undefined }, []);
+      // A chained recipe task ("step >> step") runs as a sequential workflow, matching the inbound /run
+      // path (recipe-chaining) — not the literal string as one agent task. runChain already formats.
+      if (recipeMatch && deps.runChain && isChain(taskToRun)) {
+        const chained = await deps.runChain(s.chatId, taskToRun);
+        res = { reply: chained };
+      } else {
+        res = await deps.runAgent(taskToRun, { llm: deps.llm, context: deps.contextFor?.(s.chatId) || undefined }, []);
+      }
       const body = deps.formatReply(res.reply);
       // A degraded reply (agent ran out of steps / no answer, DEV-0176) is a soft failure, not a real
       // proactive result. Marking the unprompted message as partial keeps a flaky daily from pushing a

@@ -101,8 +101,11 @@ export function parseRunWithArgs(text: string): { name: string; args: string } |
 // (case-insensitive), else the chain STOPS (a cheap conditional gate). Returns the ordered steps (the
 // {text, ifContains?} shape); a task with no ">>" yields a single step (a plain recipe). Exported for tests.
 export interface ChainStep { text: string; ifContains?: string }
+// Cap chain length: each step is a full agent + browser run, so an unbounded chain (or a runaway one)
+// would fan out into that many sequential runs on a single command. Extra steps past the cap are dropped.
+export const MAX_CHAIN_STEPS = 6;
 export function parseChainSteps(task: string): ChainStep[] {
-  return task.split(/\s*>>\s*/).map((raw) => raw.trim()).filter(Boolean).map((s) => {
+  return task.split(/\s*>>\s*/).map((raw) => raw.trim()).filter(Boolean).slice(0, MAX_CHAIN_STEPS).map((s) => {
     const m = s.match(/^if\s+([^:]+?)\s*:\s*(.+)$/i);
     return m ? { text: m[2]!.trim(), ifContains: m[1]!.trim().toLowerCase() } : { text: s };
   });

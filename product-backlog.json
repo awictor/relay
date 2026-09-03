@@ -587,12 +587,12 @@
     },
     {
       "id": "confirm-to-act",
-      "title": "Confirm-to-act: one committing click via a text 'yes'",
+      "title": "confirm-to-act one-shot approval (the acting gap)",
       "impact": "high",
       "effort": "L",
-      "status": "deferred",
-      "why": "safety.ts flat-refuses EVERY committing action + the prompt says 'tell the user instead', so Relay is structurally read-only — it can't finish the errands (submit/reserve/order) that beat Instinct, even for a trusting user (audit 16 C#1).",
-      "how": "DEFERRED (owner decision, not autonomously loop-safe): this makes the bot perform real irreversible/outward actions (submit/pay/order) — it needs a cross-turn persisted browser session (anvil sessions are per-turn today), a durable pending-action store, and an explicit product+safety sign-off on relaxing the DANGEROUS_ACTION refusal default. The loop should NOT ship autonomous committing actions without that review. Revisit when the owner opts in + session-persistence lands (see 'persistent named browser sessions')."
+      "status": "todo",
+      "why": "Relay is read-only; Instinct core is DOING. A per-chat pending-action flow (agent previews the exact single gated click + target, executes only on explicit YES, expires else) turns reader into doer without abandoning safety. OWNER-GATED though — confirm scope before building.",
+      "how": "Owner-gated: stash a proposed committing action; on YES run exactly that one click in the held anvil session; timeout/NO discards. Needs owner sign-off (it deliberately crosses the DANGEROUS guard)."
     },
     {
       "id": "cta-stock-false-fire",
@@ -1196,6 +1196,60 @@
       "status": "done",
       "why": "The proactive retention flywheel (recipes/digests/alerts) never starts for a cold user — auto-suggest only fires on a REPEAT. A curated one-tap template pack seeds the first saved automation.",
       "how": "Static catalog (morning briefing, price watch, job-feed watch...) installed by name into the existing RecipeStore/DigestStore. Offline-testable."
+    },
+    {
+      "id": "chaining-reliability-cluster",
+      "title": "scheduled chain ran literal; no step cap; if-gate negation match",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "Audit of just-shipped recipe-chaining found: a SCHEDULED chained recipe fired the literal \"step1 >> step2\" as ONE agent task (scheduler never called runChain) — silent daily wrong behavior; chains had no step cap (50 >> = 50 agent runs on one message); the if-gate matched its keyword as a bare substring so \"if in stock\" passed on \"out of stock\".",
+      "how": "runChain dep on the schedule runner (chains fire as workflows); MAX_CHAIN_STEPS=6 cap in parseChainSteps; containsUnnegated for the if-gate."
+    },
+    {
+      "id": "chain-progress-partial",
+      "title": "chain: no progress ping + intermediate output sent as final",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "A multi-step chain awaits inline holding the per-chat lock with no \"still working\" ping (reads as a hang, wedges the queue); and a step that degrades/fails silently returns the PRIOR step output as if it were the complete answer.",
+      "how": "Arm the progress-ping timer on the chain branch; when runChain stoppedEarly, prefix the result with a \"couldn t finish all steps\" note instead of passing it as final."
+    },
+    {
+      "id": "stock-quote-tool",
+      "title": "no live stock/equity quote tool",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "\"whats Tesla at?\"/\"AAPL price\" degrades to a slow flaky web_search+scrape; currency has a fast dedicated tool, stocks do not.",
+      "how": "A get_quote tool over a keyless quote API (e.g. Stooq CSV or Yahoo quote JSON) via fetch_json; instant symbol->price."
+    },
+    {
+      "id": "first-reminder-tz-ask",
+      "title": "first timed reminder fires at UTC + cryptic UTC-offset fix",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "A brand-new user \"remind me at 7am\" with no profile schedules at 7am UTC + is told to re-send /setlocation <city> UTC-5 (offset math they do not know); the canonical first errand silently misfires.",
+      "how": "On a clock-time reminder with no tz set, ASK \"what city are you in?\" (stash the reminder, city->tz infer already exists) before scheduling, rather than scheduling-wrong-then-warning."
+    },
+    {
+      "id": "unified-dashboard",
+      "title": "unified /dashboard of all automations",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "Schedules/recipes/digests/alerts are 4 separate list commands; a user loses track + stops adding. One rollup (next-fire, last-value/trend, status) is the retention surface.",
+      "how": "Aggregate the existing stores into one /dashboard view; pure read."
+    },
+    {
+      "id": "snooze-automations",
+      "title": "pause/snooze an automation instead of deleting it",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "Only off-switch is /forget|/cancel which destroys the setup, so users delete configs they would keep through travel/noise.",
+      "how": "A pausedUntil flag on schedule/alert; runner skips while paused; \"snooze btc 3 days\" / \"resume btc\"."
     }
   ],
   "history": [
@@ -1622,6 +1676,10 @@
     {
       "id": "geo-ssrf-redirect",
       "note": "Routed the geo/transcript/fetch_json default fetch helpers (defaultFetchText/defaultFetchTextPost/defaultFetchJson) through safeFetch (redirect:manual + isUrlSafe per hop) instead of a raw redirect:follow, matching scrape s SSRF discipline — a 3xx to an internal host is now re-validated on every hop. Consistency hardening; safeFetch already unit-tested. 1071 tests green."
+    },
+    {
+      "id": "chaining-reliability-cluster",
+      "note": "Fixed 3 defects the refill audit found in just-shipped recipe-chaining: (1) a scheduled chained recipe ran the literal \"a >> b\" as one agent task — added a runChain dep to the schedule runner so it fires as a workflow; (2) no step cap -> MAX_CHAIN_STEPS=6 in parseChainSteps; (3) if-gate matched \"in stock\" inside \"out of stock\" -> containsUnnegated negation guard. 1075 tests green."
     }
   ],
   "audits": [
@@ -1705,6 +1763,9 @@
     },
     {
       "note": "Backlog dry after compose-invalid-recipient -> 3-agent audit. A(new-user): everything is draft-or-refuse (acting gap, owner-gated), package tracking, wrong-hour first reminder (mostly fixed), no per-user login (owner-gated), imperial default for metric users. B(reliability): calendar_event bad-date CRASH (BUILT fix), geo tools ignore user coords for disambiguation, find_nearby fixed-radius false-negative, geo SSRF redirect inconsistency. C(power): conditional recipe chaining, template library, shareable recipes, generalized change-only, unified /dashboard. Built the calendar crash fix (broken just-shipped path); seeded the rest."
+    },
+    {
+      "note": "Backlog dry after geo-ssrf-redirect -> 3-agent audit. A(new-user): no stock/flight-status tool, package tracking, first-reminder tz-blind, action-asks return drafts (expectation). B(reliability): scheduled chain ran literal (BUILT), no chain step cap (BUILT), if-gate negation (BUILT), chain no-progress-ping + partial-as-final, chain inline lock. C(power): confirm-to-act (owner-gated), unified /dashboard, change-only on any recipe, shareable recipes, snooze. Built the chaining-reliability cluster (broken just-shipped path); seeded the rest."
     }
   ]
 }

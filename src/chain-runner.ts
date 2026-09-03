@@ -14,6 +14,20 @@ export interface ChainRunnerDeps {
   contextFor?: (chatId: number) => string; // per-user profile context (location/units/facts)
 }
 
+// True if `hay` contains `needle` NOT immediately preceded by a negation ("not"/"no"/"out of"/"n't").
+// So an "if in stock" gate doesn't pass on "out of stock". Exported for tests.
+export function containsUnnegated(hay: string, needle: string): boolean {
+  const h = hay.toLowerCase(), n = needle.toLowerCase();
+  let from = 0;
+  for (;;) {
+    const i = h.indexOf(n, from);
+    if (i < 0) return false;
+    const before = h.slice(Math.max(0, i - 12), i);
+    if (!/(?:\bnot\b|\bno\b|\bout of\b|n['’]t)\s*$/.test(before)) return true; // an un-negated occurrence
+    from = i + n.length;
+  }
+}
+
 export interface ChainResult {
   final: string;                 // the last step's output — the answer to relay to the user
   steps: Array<{ task: string; output: string; skipped?: boolean }>;
@@ -35,8 +49,10 @@ export async function runChain(chatId: number, task: string, deps: ChainRunnerDe
   let prev = "";
   for (let i = 0; i < steps.length; i++) {
     const step: ChainStep = steps[i]!;
-    // Conditional gate: skip-and-stop when the prior output doesn't contain the keyword.
-    if (step.ifContains && !prev.toLowerCase().includes(step.ifContains)) {
+    // Conditional gate: skip-and-stop when the prior output doesn't contain the keyword. Guard against
+    // a negated match ("in stock" inside "out of stock", "available" inside "not available") so the gate
+    // doesn't fire on the OPPOSITE condition (recipe-chaining if-gate).
+    if (step.ifContains && !containsUnnegated(prev, step.ifContains)) {
       trace.push({ task: step.text, output: "", skipped: true });
       return { final: prev, steps: trace, stoppedEarly: true };
     }
