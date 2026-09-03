@@ -2858,9 +2858,27 @@
       "title": "6k-char page truncation answered from the top slice as fact",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "truncateForModel caps a fetched page at ~6000 chars + appends a hedge marker, but nothing forces the model to heed it, so a long listing/article yields a confident partial answer with an authoritative 'Source:' line while a price/score lower down is missed.",
       "how": "Strengthen the truncation marker into an explicit instruction the model must surface ('I only saw the top of this page') OR chunk-and-scan when the answer isn't in the first slice; at minimum tag the reply as partial so it isn't shown as complete."
+    },
+    {
+      "id": "change-watch-tracks-wrong-number",
+      "title": "Alert extractValue mis-picks the number on a multi-figure reply",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "extractValue is a positional heuristic; a watch reply like 'AAPL $230, up 2%, volume 50M' can track 2 or 50 instead of 230, so the user gets a false 'changed' ping, a missed crossing, or a receipt showing the wrong figures — corrupting the core watch-and-notify promise.",
+      "how": "Bias extractValue toward the figure that matches the alert's own units/currency + the tracked task text (prefer a $-prefixed or task-keyword-adjacent number over a bare % / volume); add tests for multi-figure replies."
+    },
+    {
+      "id": "reminder-wrong-timezone-until-offset-set",
+      "title": "Reminders fire in the wrong timezone until a manual UTC offset is set",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "'remind me at 7am' fires at the server's zone (e.g. 3am) until the user knows to append 'UTC-5' to /setlocation; a silently-wrong reminder on day one destroys trust and the code itself flags the 3am surprise.",
+      "how": "Infer the tz offset from the user's saved city/location (a keyless offline city->tz table or the existing geo context) so a set location implies its timezone; keep the explicit UTC-n override as a manual win."
     }
   ],
   "history": [
@@ -4003,6 +4021,10 @@
     {
       "id": "post-send-timeout-double-ping",
       "note": "A scheduled fire whose SEND outlives the 90s ceiling (long multi-chunk send) no longer double-pings. Added an in-flight `firing` guard (cleared on true settle via .finally on the raw fireOne promise) so an overlapping tick can't re-fire a once whose send is still landing, + a post-send isCancelled() re-check: on a delivered-after-timeout send, mark a once complete (delivered) so the catch's retry can't re-send, commit the alert baseline (crossing landed), and skip the double recordSend/complete. +1 test (send stalls past timeout, 2nd tick skips, one delivery). 1903 green."
+    },
+    {
+      "id": "long-page-truncation-answered-as-fact",
+      "note": "Added truncateWindow (head+tail, drop middle) for PAGE content in formatPageForModel — a long article/listing/scoreboard's key fact (total/conclusion/score/stock status) sits at the END, which head-only truncateForModel dropped silently, so the agent answered confidently from the top slice with an authoritative Source line. Now keeps top + bottom (~35% tail) with a loud 'you see TOP and BOTTOM only, do NOT state as complete' marker. JSON/transcript/extract stay head-only (structure front-loaded). +5 tests, 1908 green."
     }
   ],
   "audits": [
@@ -4251,6 +4273,9 @@
     },
     {
       "note": "Backlog dry (only owner-gated + low). 3-agent audit: A(new-user)=bare-greeting-skips-menu, tz-guess-from-city, weather-needs-location one-tap; B(reliability)=no-threshold-watch-firehose, extractValue mis-picks number, corrupt-notice-lost-if-send-fails, post-send-timeout double-ping, 6k truncation answered as fact; C(power)=per-user credentialed browsing, SMTP send, form autofill vault, schedule-a-chain, read-it-later. Seeded top 3 non-owner: no-threshold-watch-firehose(built), bare-greeting-skips-menu, corrupt-notice-lost-if-send-fails."
+    },
+    {
+      "note": "Backlog down to owner-gated + low after shipping long-page-truncation. Seeded 2 parked high-impact reliability findings from prior audit-B (not re-run this iteration): change-watch-tracks-wrong-number (extractValue mis-picks a figure), reminder-wrong-timezone-until-offset-set (tz not inferred from city)."
     }
   ]
 }

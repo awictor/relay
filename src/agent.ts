@@ -606,6 +606,25 @@ export function truncateForModel(text: string, max = 6000): string {
   return `${s.slice(0, max)}\n\n[…truncated ${dropped} more characters — this is only the first ${max}. If the answer isn't above, say the page was long and you saw only the top, or fetch a more specific URL/section.]`;
 }
 
+/** Cap PAGE CONTENT for the model, but keep a HEAD **and a TAIL** and drop the middle — the head-only
+ * truncateForModel silently loses the END of a page, which is exactly where a listing's total, an
+ * article's conclusion, a scoreboard's final, or a product's stock/price status live (long-page-
+ * truncation-answered-as-fact). Splitting the budget top+bottom means those end-of-page facts survive,
+ * and a LOUD marker at the cut tells the model the MIDDLE is gone so it can't pass off a partial read as
+ * complete. Head-only tools (JSON/transcript/extract, where structure is front-loaded) keep
+ * truncateForModel — splitting them would corrupt parsing. Exported for tests. */
+export function truncateWindow(text: string, max = 6000): string {
+  const s = String(text ?? "");
+  if (s.length <= max) return s;
+  // Bias toward the head (context/lede) but keep a real tail (~35%) for end-of-page facts.
+  const tailLen = Math.floor(max * 0.35);
+  const headLen = max - tailLen;
+  const dropped = s.length - max;
+  const head = s.slice(0, headLen);
+  const tail = s.slice(s.length - tailLen);
+  return `${head}\n\n[⚠️ …${dropped} characters from the MIDDLE of this page were cut — you are seeing the TOP and the BOTTOM only, not the middle. Do NOT state this as the complete page. If the specific answer (a total, price, score, date, or status) isn't in either section shown, tell the user the page was long and you saw only its start and end, or fetch a more specific URL/section.…]\n\n${tail}`;
+}
+
 // Format a scrape/read page result for the model, OR — when the page came back nearly empty (a login
 // wall, a JS-only shell that didn't render, or a block) — return an explicit marker so the agent
 // retries (screenshot / different source / search) or says so honestly instead of answering from
@@ -623,7 +642,10 @@ export function formatPageForModel(title: string, url: string, content: string):
   if (nonWs < 1500 && looksPaywalled(content)) {
     return `[The page at ${url} looks paywalled / subscriber-only — I can see a subscribe/register prompt but not the full article. Don't summarize this stub as the article; tell the user it's behind a paywall and offer to find a free source or the gist from elsewhere (web_search the headline).]`;
   }
-  return `TITLE: ${title || url}\n\n${truncateForModel(content)}`;
+  // Head+tail window (not head-only): a long article/listing/scoreboard's key fact often sits at the
+  // END (total, conclusion, final score, stock status), which head-only truncation dropped silently
+  // (long-page-truncation-answered-as-fact).
+  return `TITLE: ${title || url}\n\n${truncateWindow(content)}`;
 }
 
 // Paywall / metered-access language. Matches the common subscribe-wall stubs (NYT/WSJ/Economist/
