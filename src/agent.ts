@@ -8,7 +8,7 @@
 // dangerous-action guard (safety.ts).
 
 import * as anvil from "./anvil.js";
-import { isUrlSafe } from "./lib/url-validator.js";
+import { isUrlSafe, safeFetch } from "./lib/url-validator.js";
 import { intEnv } from "./lib/env.js";
 import { isDangerousAction } from "./safety.js";
 import { fetchYouTubeTranscript } from "./lib/youtube.js";
@@ -328,13 +328,13 @@ export function looksPaywalled(content: string): boolean {
   return PAYWALL_RE.test(String(content ?? ""));
 }
 
-// Default fetchJson: a plain guarded GET. SSRF is checked by the caller; here we cap
-// size, require a JSON content-type, and never forward credentials/cookies.
+// Default fetchJson: a guarded GET via safeFetch so each redirect hop is SSRF-re-validated (the caller
+// checks the initial URL; a 3xx to an internal host would otherwise slip past). Caps size, reads the
+// content-type, never forwards credentials/cookies.
 async function defaultFetchJson(url: string): Promise<{ status: number; contentType: string; text: string }> {
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     method: "GET",
     headers: { accept: "application/json" },
-    redirect: "follow",
     signal: AbortSignal.timeout(10000),
   });
   const contentType = res.headers.get("content-type") ?? "";
@@ -344,12 +344,12 @@ async function defaultFetchJson(url: string): Promise<{ status: number; contentT
 }
 
 // Plain guarded GET returning the body text (for the transcript fetch — YouTube watch page + caption
-// track). Size-capped, no credentials. SSRF is checked by the caller before this runs.
+// track, + the geo APIs). Uses safeFetch so every redirect hop is SSRF-re-validated (geo-ssrf-redirect),
+// matching scrape/fetch_json's discipline instead of a raw redirect:"follow". Size-capped, no creds.
 async function defaultFetchText(url: string): Promise<string> {
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     method: "GET",
     headers: { accept: "text/html,application/xml,application/json,*/*", "accept-language": "en", "user-agent": "relay-bot" },
-    redirect: "follow",
     signal: AbortSignal.timeout(10000),
   });
   const buf = await res.arrayBuffer();
@@ -357,15 +357,14 @@ async function defaultFetchText(url: string): Promise<string> {
 }
 
 // GET when no body, POST (form-encoded) when a body is given — Overpass wants the QL query POSTed.
-// Size-capped, no credentials. Used by findNearby (Nominatim GET + Overpass POST).
+// safeFetch re-validates each redirect hop (geo-ssrf-redirect). Size-capped, no credentials.
 async function defaultFetchTextPost(url: string, body?: string): Promise<string> {
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     method: body ? "POST" : "GET",
     headers: body
       ? { "content-type": "application/x-www-form-urlencoded", accept: "application/json", "user-agent": "relay-bot" }
       : { accept: "application/json", "user-agent": "relay-bot" }, // Nominatim requires a UA
     body: body ? `data=${encodeURIComponent(body)}` : undefined,
-    redirect: "follow",
     signal: AbortSignal.timeout(20000),
   });
   const buf = await res.arrayBuffer();

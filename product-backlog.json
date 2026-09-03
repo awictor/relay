@@ -1175,7 +1175,7 @@
       "title": "geo fetch helpers follow redirects without SSRF re-validation",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "defaultFetchText/Post use raw fetch redirect:follow, unlike scrape/fetch_json which re-check each hop via safeFetch. Hosts are hardcoded so low risk, but inconsistent with the SSRF discipline.",
       "how": "Route the geo GET/POST through safeFetch (redirect:manual + isUrlSafe per hop), or at least block non-https + private-IP redirects."
     },
@@ -1618,6 +1618,10 @@
     {
       "id": "starter-template-library",
       "note": "Added /templates — a cold user browses a curated catalog (morning briefing chain, price watch, top news, HN, job watch, commute) and installs one in a tap (/templates morning), seeding the first saved recipe so the recipe/digest/schedule retention flywheel actually starts. Static TEMPLATES + getTemplate/templateCatalog in lib/templates.ts; handler /templates branch installs via recipeSaveNamed; added to KNOWN_COMMANDS + the Telegram menu + help. 1071 tests green."
+    },
+    {
+      "id": "geo-ssrf-redirect",
+      "note": "Routed the geo/transcript/fetch_json default fetch helpers (defaultFetchText/defaultFetchTextPost/defaultFetchJson) through safeFetch (redirect:manual + isUrlSafe per hop) instead of a raw redirect:follow, matching scrape s SSRF discipline — a 3xx to an internal host is now re-validated on every hop. Consistency hardening; safeFetch already unit-tested. 1071 tests green."
     }
   ],
   "audits": [
