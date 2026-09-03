@@ -728,6 +728,41 @@ describe("ScheduleStore.restampTz (tz-restamp-on-setlocation)", () => {
   });
 });
 
+describe("recurring reschedule stays DST-correct via a stored zone (recurring-reminder-dst-drift)", () => {
+  const JAN = Date.UTC(2025, 0, 10, 12, 0, 0); // winter (Chicago on CST, -360)
+  const JUL = Date.UTC(2025, 6, 10, 12, 0, 0); // summer (Chicago on CDT, -300)
+  const localHour = (ms: number, zone: string) =>
+    new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "2-digit", hour12: false }).format(new Date(ms));
+  it("a zone-stamped daily reschedules to the SAME local hour across a DST boundary", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    // Created in winter at 7am Chicago, offset stamped CST (-360) + the IANA zone.
+    const d = s.add(1, { kind: "daily", task: "meds", dueMs: JAN, hourMin: "7:0", offsetMin: -360, zone: "America/Chicago" }, JAN)!;
+    // Fire (complete) in July: the reschedule must use CDT (-300), landing 7am local, not 8am.
+    s.complete(d.id, JUL);
+    expect(localHour(s.list(1)[0]!.dueMs, "America/Chicago")).toBe("07");
+  });
+  it("WITHOUT a zone, the frozen offset drifts an hour across the boundary (the bug)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const d = s.add(1, { kind: "daily", task: "meds", dueMs: JAN, hourMin: "7:0", offsetMin: -360 }, JAN)!; // no zone
+    s.complete(d.id, JUL);
+    expect(localHour(s.list(1)[0]!.dueMs, "America/Chicago")).toBe("08"); // fires an hour late in summer
+  });
+  it("restampTz stamps the zone so a later reschedule is DST-correct", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const d = s.add(1, { kind: "daily", task: "meds", dueMs: JAN, hourMin: "7:0", offsetMin: 0 }, JAN)!;
+    s.restampTz(1, -360, JAN, "America/Chicago"); // user sets Chicago in winter
+    expect(s.list(1)[0]!.zone).toBe("America/Chicago");
+    s.complete(d.id, JUL); // months later, across the DST boundary
+    expect(localHour(s.list(1)[0]!.dueMs, "America/Chicago")).toBe("07");
+  });
+  it("a non-DST zone (Phoenix) reschedules identically year-round", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const d = s.add(1, { kind: "daily", task: "x", dueMs: JAN, hourMin: "7:0", offsetMin: -420, zone: "America/Phoenix" }, JAN)!;
+    s.complete(d.id, JUL);
+    expect(localHour(s.list(1)[0]!.dueMs, "America/Phoenix")).toBe("07");
+  });
+});
+
 describe("ScheduleStore", () => {
   it("add/list/dueNow/complete for a once task", () => {
     const s = new ScheduleStore({ file: tmpFile() });

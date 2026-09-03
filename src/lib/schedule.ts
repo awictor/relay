@@ -5,6 +5,7 @@
 // parse + due-check are deterministic and unit-testable.
 
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
+import { offsetForZoneAt } from "./profile.js";
 
 // once = fire + drop; daily = re-fire every day at hourMin; weekly = re-fire on the given weekdays at
 // hourMin ("every monday", "weekdays at 8"); interval = re-fire every intervalMs ("every 2 hours").
@@ -21,6 +22,9 @@ export interface Schedule {
   dueMs: number;       // next fire time (epoch ms)
   hourMin?: string;    // "HH:MM" local, for daily/weekly reschedule
   offsetMin?: number;  // tz offset (min east of UTC) the hourMin is measured in, for daily/weekly reschedule
+  zone?: string;       // IANA zone id (e.g. "America/Chicago") when known, so a RECURRING reschedule can
+                       // recompute the DST-correct offset at each occurrence instead of freezing the offset
+                       // stamped at creation (recurring-reminder-dst-drift). offsetMin stays the fallback.
   weekdays?: number[]; // for weekly: days-of-week to fire on (0=Sun..6=Sat), in the user's zone
   dayOfMonth?: number; // for monthly/yearly: day-of-month to fire on (1-31), in the user's zone
   month?: number;      // for yearly: month to fire in (0-11, JS convention), in the user's zone
@@ -56,6 +60,7 @@ export interface ParsedSchedule {
   dueMs: number;
   hourMin?: string;
   offsetMin?: number;  // tz offset used to compute dueMs, carried so reschedule stays in the user's zone
+  zone?: string;       // IANA zone id for DST-correct recurring reschedule (recurring-reminder-dst-drift)
   weekdays?: number[];
   dayOfMonth?: number; // monthly/yearly day-of-month (1-31)
   month?: number;      // yearly month (0-11)
@@ -721,7 +726,7 @@ export class ScheduleStore {
   /** Add a schedule for a chat. Returns the stored record, or null if the chat is at its cap. */
   add(chatId: number, p: ParsedSchedule, now: number): Schedule | null {
     if (this.items.filter((s) => s.chatId === chatId).length >= this.maxPerChat) return null;
-    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, weekdays: p.weekdays, ...(p.dayOfMonth !== undefined ? { dayOfMonth: p.dayOfMonth } : {}), ...(p.month !== undefined ? { month: p.month } : {}), intervalMs: p.intervalMs, ...(p.reminderOnly ? { reminderOnly: true } : {}), ...(p.sticky ? { sticky: true, stickyMax: p.stickyMax ?? DEFAULT_STICKY_MAX, stickyFired: 0 } : {}), ...(p.clockTime ? { clockTime: true } : {}), created: now };
+    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, ...(p.zone ? { zone: p.zone } : {}), weekdays: p.weekdays, ...(p.dayOfMonth !== undefined ? { dayOfMonth: p.dayOfMonth } : {}), ...(p.month !== undefined ? { month: p.month } : {}), intervalMs: p.intervalMs, ...(p.reminderOnly ? { reminderOnly: true } : {}), ...(p.sticky ? { sticky: true, stickyMax: p.stickyMax ?? DEFAULT_STICKY_MAX, stickyFired: 0 } : {}), ...(p.clockTime ? { clockTime: true } : {}), created: now };
     this.items.push(s);
     this.persist();
     return s;
@@ -903,30 +908,32 @@ export class ScheduleStore {
    * clock-time "once" ("remind me tomorrow at 8am" — shifted by the offset delta to hold its wall-clock
    * time, once-reminder-tz-restamp). Left alone: interval (gap-based, tz-independent), a RELATIVE once
    * ("in 3 hours" — no clock meaning), and a PAST clock once (about to fire). Returns how many moved. */
-  restampTz(chatId: number, offsetMin: number, now: number): number {
+  restampTz(chatId: number, offsetMin: number, now: number, zone?: string): number {
     let moved = 0;
     for (const s of this.items) {
       if (s.chatId !== chatId) continue;
-      if ((s.offsetMin ?? 0) === offsetMin) continue;
+      if ((s.offsetMin ?? 0) === offsetMin && (s.zone ?? undefined) === zone) continue;
+      // Stamp the IANA zone so future reschedules stay DST-correct (recurring-reminder-dst-drift), and
+      // recompute THIS re-stamp at the zone offset valid at each occurrence's instant.
       if (s.kind === "daily" && s.hourMin) {
         const [hh, mm] = s.hourMin.split(":").map((n) => parseInt(n, 10));
-        s.offsetMin = offsetMin;
-        s.dueMs = nextDailyMs(now, hh!, mm!, offsetMin);
+        s.offsetMin = offsetMin; if (zone) s.zone = zone;
+        s.dueMs = this.rescheduleWithZone(s, (off) => nextDailyMs(now, hh!, mm!, off));
         moved++;
       } else if (s.kind === "weekly" && s.hourMin && s.weekdays?.length) {
         const [hh, mm] = s.hourMin.split(":").map((n) => parseInt(n, 10));
-        s.offsetMin = offsetMin;
-        s.dueMs = nextWeeklyMs(now, hh!, mm!, s.weekdays, offsetMin);
+        s.offsetMin = offsetMin; if (zone) s.zone = zone;
+        s.dueMs = this.rescheduleWithZone(s, (off) => nextWeeklyMs(now, hh!, mm!, s.weekdays!, off));
         moved++;
       } else if (s.kind === "monthly" && s.hourMin && s.dayOfMonth !== undefined) {
         const [hh, mm] = s.hourMin.split(":").map((n) => parseInt(n, 10));
-        s.offsetMin = offsetMin;
-        s.dueMs = nextMonthlyMs(now, s.dayOfMonth, hh!, mm!, offsetMin); // clamp, don't skip short months
+        s.offsetMin = offsetMin; if (zone) s.zone = zone;
+        s.dueMs = this.rescheduleWithZone(s, (off) => nextMonthlyMs(now, s.dayOfMonth!, hh!, mm!, off)); // clamp, don't skip short months
         moved++;
       } else if (s.kind === "yearly" && s.hourMin && s.dayOfMonth !== undefined && s.month !== undefined) {
         const [hh, mm] = s.hourMin.split(":").map((n) => parseInt(n, 10));
-        s.offsetMin = offsetMin;
-        s.dueMs = nextYearlyMs(now, s.month, s.dayOfMonth, hh!, mm!, offsetMin); // clamp Feb 29 in non-leap years
+        s.offsetMin = offsetMin; if (zone) s.zone = zone;
+        s.dueMs = this.rescheduleWithZone(s, (off) => nextYearlyMs(now, s.month!, s.dayOfMonth!, hh!, mm!, off)); // clamp Feb 29 in non-leap years
         moved++;
       } else if (s.kind === "once" && s.clockTime && s.dueMs > now) {
         // A FUTURE clock-time once (once-reminder-tz-restamp): "remind me tomorrow at 8am" set before the
@@ -944,6 +951,29 @@ export class ScheduleStore {
     return moved;
   }
 
+  // The tz offset to reschedule a recurring occurrence in, DST-correct (recurring-reminder-dst-drift).
+  // A stored offsetMin is frozen at creation, so after a DST boundary a "7am daily" fires an hour off for
+  // the season. When the schedule carries an IANA zone, resolve the offset AT the fire instant. Chicken-
+  // egg (the next instant depends on the offset, which depends on the instant): compute a provisional next
+  // with the frozen offset, resolve the zone offset THERE, and if it differs, recompute once with it. One
+  // correction is enough — DST shifts are ≤1h, far smaller than the daily/weekly/monthly gap, so the
+  // corrected instant can't land on the far side of another boundary. Falls back to the frozen offset when
+  // no zone / Intl can't resolve it.
+  private zoneOffsetAt(s: Schedule, provisionalMs: number): number {
+    const frozen = s.offsetMin ?? tzOffsetMin();
+    if (!s.zone) return frozen;
+    const at = offsetForZoneAt(s.zone, provisionalMs);
+    return at ?? frozen;
+  }
+  // Recompute next dueMs for a recurring schedule via `calc(offset)`, correcting once for DST so the
+  // provisional offset (frozen) is replaced by the zone offset at the provisional instant.
+  private rescheduleWithZone(s: Schedule, calc: (offsetMin: number) => number): number {
+    const frozen = s.offsetMin ?? tzOffsetMin();
+    const provisional = calc(frozen);
+    const zoneOff = this.zoneOffsetAt(s, provisional);
+    return zoneOff === frozen ? provisional : calc(zoneOff);
+  }
+
   /** After firing: drop a "once", or advance a recurring schedule to its next occurrence. Returns
    * whether the state reached disk — the caller can't undo a send, but a `false` means a once might be
    * re-read after a restart, so it's worth logging (once-complete-ignores-persist). */
@@ -953,20 +983,21 @@ export class ScheduleStore {
     const [hh, mm] = (s.hourMin ?? "9:0").split(":").map((n) => parseInt(n, 10));
     // Reschedule in the SAME zone the schedule was created in (per-chat offset stamped at add time),
     // falling back to the global default for schedules created before offsets existed.
-    const off = s.offsetMin ?? tzOffsetMin();
+    // Reschedule in the schedule's own zone. A stored IANA zone recomputes the DST-correct offset at the
+    // next occurrence (recurring-reminder-dst-drift); else the frozen offsetMin (or global default).
     if (s.kind === "daily" && s.hourMin) {
-      s.dueMs = nextDailyMs(now, hh!, mm!, off);
+      s.dueMs = this.rescheduleWithZone(s, (off) => nextDailyMs(now, hh!, mm!, off));
       return this.persist();
     } else if (s.kind === "weekly" && s.hourMin && s.weekdays?.length) {
-      s.dueMs = nextWeeklyMs(now, hh!, mm!, s.weekdays, off);
+      s.dueMs = this.rescheduleWithZone(s, (off) => nextWeeklyMs(now, hh!, mm!, s.weekdays!, off));
       return this.persist();
     } else if (s.kind === "monthly" && s.dayOfMonth !== undefined) {
       // Next day-of-month after now, CLAMPED to short-month end (never skips — monthly-short-month-skip).
-      s.dueMs = nextMonthlyMs(now, s.dayOfMonth, hh!, mm!, off);
+      s.dueMs = this.rescheduleWithZone(s, (off) => nextMonthlyMs(now, s.dayOfMonth!, hh!, mm!, off));
       return this.persist();
     } else if (s.kind === "yearly" && s.dayOfMonth !== undefined && s.month !== undefined) {
       // Next month+day after now, clamping Feb 29 to Feb 28 in non-leap years (yearly-feb29-wrong-day).
-      s.dueMs = nextYearlyMs(now, s.month, s.dayOfMonth, hh!, mm!, off);
+      s.dueMs = this.rescheduleWithZone(s, (off) => nextYearlyMs(now, s.month!, s.dayOfMonth!, hh!, mm!, off));
       return this.persist();
     } else if (s.kind === "interval" && s.intervalMs) {
       // A sticky reminder (sticky-acknowledged-reminders) counts its fires and gives up on its own once it

@@ -2885,7 +2885,7 @@
       "title": "A long-lived recurring reminder drifts an hour across a DST boundary",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A daily/weekly stores a fixed offsetMin at creation; when the clock crosses a DST boundary the stored offset is now an hour wrong, so a '7am' daily fires at 6am (or 8am) for the rest of the season until re-set. The new city->IANA zone map lets the fire recompute the correct offset per occurrence.",
       "how": "Store the IANA zone (not just offsetMin) on a schedule when inferred; in nextDaily/Weekly/Monthly recompute the offset via offsetForZoneAt(zone, targetMs) so each occurrence lands at the right wall-clock hour regardless of DST. Keep offsetMin as the fallback when no zone is known."
     },
@@ -4051,6 +4051,10 @@
     {
       "id": "reminder-wrong-timezone-until-offset-set",
       "note": "Base city->tz inference was already built + fully wired (parseSetLocation/parseCityReply -> profile offset -> every schedule path). Sandbox-probing confirmed the real remaining wrong-hour bug was DST: CITY_TZ bakes STANDARD offsets so an inferred zone fired an hour off Mar-Nov (US/EU). Added CITY_ZONE (city->IANA) + offsetForZoneAt (DST-correct via Intl longOffset, full ICU) + inferTzFromLocation(loc, atMs) that computes the season-correct offset at set-time; parseSetLocation/parseCityReply take atMs (index passes Date.now()). Standard table stays the no-instant fallback. +4 tests, 1913 green."
+    },
+    {
+      "id": "recurring-reminder-dst-drift",
+      "note": "A recurring daily/weekly/monthly/yearly now stores its IANA zone (inferred from the saved location) and recomputes the DST-correct offset at each occurrence via offsetForZoneAt, instead of freezing the offset stamped at creation. Before: a '7am daily' set in winter fired at 8am all summer (CST->CDT). Two-pass reschedule (provisional at frozen offset -> resolve zone offset there -> recompute once) since DST shifts are <=1h. restampTz stamps the zone too. Sandbox+unit verified: zone-stamped daily holds 7am local across the boundary, no-zone control drifts to 8am. +4 tests, 1917 green."
     }
   ],
   "audits": [

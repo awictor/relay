@@ -336,6 +336,13 @@ export class ProfileStore {
   /** The chat's tz offset (min east of UTC) if set, else undefined so callers fall back to global. */
   offsetMin(chatId: number): number | undefined { return this.get(chatId)?.tzOffsetMin; }
 
+  /** The chat's IANA zone (inferred from its saved location) if resolvable, else undefined. Lets a
+   * recurring schedule store the zone so its reschedule stays DST-correct (recurring-reminder-dst-drift). */
+  zone(chatId: number): string | undefined {
+    const loc = this.get(chatId)?.location;
+    return loc ? (inferZoneFromLocation(loc) ?? undefined) : undefined;
+  }
+
   /** Forget a chat's stored profile (location/units/tz). Returns true if there was one to clear. */
   clear(chatId: number): boolean {
     const before = this.items.length;

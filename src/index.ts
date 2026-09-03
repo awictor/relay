@@ -306,7 +306,7 @@ const handle = createHandler({
     const rec = profiles.set(chatId, p);
     // Re-stamp recurring reminders to the new tz so a daily/weekly created before the user set their
     // timezone stops firing at the wrong hour (tz-restamp-on-setlocation). Only when a tz was given.
-    const restamped = rec.tzOffsetMin !== undefined ? schedules.restampTz(chatId, rec.tzOffsetMin, Date.now()) : 0;
+    const restamped = rec.tzOffsetMin !== undefined ? schedules.restampTz(chatId, rec.tzOffsetMin, Date.now(), profiles.zone(chatId)) : 0;
     return { location: rec.location!, units: rec.units, tzOffsetMin: rec.tzOffsetMin, restamped, saved: profiles.lastSaveOk() };
   },
   // Agent context = profile (location/units/tz) + remembered facts (remember-facts-store), so every
@@ -480,7 +480,7 @@ const handle = createHandler({
     const c = parseCityReply(text, Date.now()); // DST-correct inferred offset at "now" (reminder-wrong-timezone-dst)
     if (!c) return null;
     const rec = profiles.set(chatId, { location: c.location, ...(c.tzOffsetMin !== undefined ? { tzOffsetMin: c.tzOffsetMin } : {}) });
-    if (c.tzOffsetMin !== undefined) schedules.restampTz(chatId, c.tzOffsetMin, Date.now());
+    if (c.tzOffsetMin !== undefined) schedules.restampTz(chatId, c.tzOffsetMin, Date.now(), profiles.zone(chatId));
     return { location: rec.location!, tzOffsetMin: rec.tzOffsetMin, saved: profiles.lastSaveOk() };
   },
   suggestSaves: true, // offer to save a repeated ask as a recipe (product-loop retention nudge)
@@ -541,6 +541,8 @@ const handle = createHandler({
     // not the deploy host's UTC. Falls back to the global RELAY_TZ_OFFSET_MIN when unset.
     const p = parseSchedule(text, now, profiles.offsetMin(chatId));
     if (!p) return { ok: false, reason: "unparsed" };
+    const zone = profiles.zone(chatId); // stamp the IANA zone so a recurring reschedule stays DST-correct
+    if (zone) p.zone = zone;
     const rec = schedules.add(chatId, p, now);
     if (!rec) return { ok: false, reason: "capped" };
     // Resolved next-fire time in the chat's own zone, so a wrong/absent tz is visible before it fires.
