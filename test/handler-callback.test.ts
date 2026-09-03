@@ -212,6 +212,23 @@ describe("handler — inline-button callbacks", () => {
     expect(acked[0]).toMatch(/Expired/);
   });
 
+  it("an install tap saves the starter recipe (starter-automation-gallery)", async () => {
+    const saved: Array<{ name: string; task: string }> = [];
+    const { handle, sent, acked } = harness({
+      recipeSaveNamed: (_c, name, task) => { saved.push({ name, task }); return { ok: true, name }; },
+    });
+    await handle(tap(encodeCallback({ kind: "install", id: "morning" })!));
+    expect(saved[0]!.name).toBe("morning");
+    expect(sent[0]!.text).toMatch(/Installed "morning"/);
+    expect(acked[0]).toMatch(/Installed/);
+  });
+
+  it("an install tap for an unknown template is handled gracefully", async () => {
+    const { handle, sent } = harness({ recipeSaveNamed: () => ({ ok: true, name: "x" }) });
+    await handle(tap(encodeCallback({ kind: "install", id: "bogus" })!));
+    expect(sent[0]!.text).toMatch(/isn't available/i);
+  });
+
   it("rate-limited tap does not act", async () => {
     let refreshed = false;
     const { handle, acked } = harness({

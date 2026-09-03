@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   encodeCallback, decodeCallback, alertButtons, digestButtons, recipeButtons, buttonsForTask, pickButtons,
-  tryButtons, actButtons, TRY_EXAMPLES, CALLBACK_MAX_BYTES,
+  tryButtons, actButtons, installButtons, TRY_EXAMPLES, CALLBACK_MAX_BYTES,
 } from "../src/lib/callbacks.js";
 
 describe("callback codec", () => {
@@ -120,6 +120,21 @@ describe("keyboard builders", () => {
     const withWatch = actButtons(true)!;
     expect(withWatch[0]!.some((b) => /Watch this/.test(b.text))).toBe(true);
     expect(decodeCallback(withWatch[0]!.find((b) => /Watch/.test(b.text))!.callback_data)).toEqual({ kind: "act", mode: "watch" });
+  });
+
+  it("install op carries the template id + round-trips (starter-automation-gallery)", () => {
+    const data = encodeCallback({ kind: "install", id: "morning" })!;
+    expect(decodeCallback(data)).toEqual({ kind: "install", id: "morning" });
+    expect(decodeCallback("in|")).toBeNull(); // empty id
+  });
+
+  it("installButtons: one per template, 2 per row, round-trips to the id", () => {
+    const kb = installButtons([{ id: "morning", label: "☀️ Morning" }, { id: "price", label: "💲 Price" }, { id: "news", label: "📰 News" }]);
+    const flat = kb.flat();
+    expect(flat).toHaveLength(3);
+    expect(kb[0]!.length).toBe(2);
+    expect(decodeCallback(flat[0]!.callback_data)).toEqual({ kind: "install", id: "morning" });
+    for (const b of flat) expect(new TextEncoder().encode(b.callback_data).length).toBeLessThanOrEqual(CALLBACK_MAX_BYTES);
   });
 
   it("buttonsForTask maps the schedule marker to the right keyboard", () => {

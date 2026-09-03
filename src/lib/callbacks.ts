@@ -32,7 +32,10 @@ export type CallbackAction =
   // beyond the mode — the handler resolves the actual task text from the chat's cached last answer, so
   // the callback_data stays tiny regardless of how long the task was. "daily" = every-morning schedule;
   // "watch" = a value/change watch.
-  | { kind: "act"; mode: "daily" | "watch" };
+  | { kind: "act"; mode: "daily" | "watch" }
+  // Install a starter automation from the /templates gallery with one tap (starter-automation-gallery).
+  // Carries the template id (short + stable), which the handler resolves to a recipe + installs.
+  | { kind: "install"; id: string };
 
 // Opcode <-> action for the NAME-carrying actions. 2-char ops keep the payload short so long-ish
 // names still fit the 64-byte cap. The pick action (index-carrying) uses opcode "pk" handled separately.
@@ -50,6 +53,7 @@ const PICK_OP = "pk";
 const TRY_OP = "ty";
 const ACT_DAILY = "ad";
 const ACT_WATCH = "aw";
+const INSTALL_OP = "in";
 
 const utf8Len = (s: string): number => new TextEncoder().encode(s).length;
 
@@ -79,6 +83,8 @@ export function encodeCallback(a: CallbackAction): string | null {
     // act carries no payload (the task is resolved from the chat's cached last answer) — a bare opcode.
     : a.kind === "act"
     ? (a.mode === "daily" ? ACT_DAILY : ACT_WATCH)
+    : a.kind === "install"
+    ? `${INSTALL_OP}|${a.id}`
     : (() => { const op = OP_FOR.get(`${a.kind}:${a.action}`); return op ? `${op}|${a.name}` : null; })();
   if (data === null) return null;
   return utf8Len(data) <= CALLBACK_MAX_BYTES ? data : null;
@@ -103,6 +109,9 @@ export function decodeCallback(data: string | undefined | null): CallbackAction 
   if (op === TRY_OP) {
     if (!/^\d+$/.test(rest)) return null;
     return { kind: "try", index: Number(rest) };
+  }
+  if (op === INSTALL_OP) {
+    return rest ? { kind: "install", id: rest } : null;
   }
   const spec = OP[op];
   if (!spec || !rest) return null;
@@ -177,6 +186,22 @@ export function actButtons(offerWatch: boolean): InlineKeyboard | undefined {
     if (watch) row.push({ text: "🔔 Watch this", callback_data: watch });
   }
   return row.length ? [row] : undefined;
+}
+
+/** Buttons for the /templates starter-automation gallery (starter-automation-gallery): one button per
+ * template, each carrying its id, so a cold user installs a recurring automation in a tap instead of
+ * typing "/templates <id>". Two per row for readable labels. `items` is {id,label}[]; a label that
+ * overflows the 64-byte cap is dropped (the text catalog still lists it). */
+export function installButtons(items: Array<{ id: string; label: string }>): InlineKeyboard {
+  const kb: InlineKeyboard = [];
+  for (const it of items) {
+    const data = encodeCallback({ kind: "install", id: it.id });
+    if (!data) continue;
+    const btn = { text: it.label, callback_data: data };
+    if (kb.length && kb[kb.length - 1]!.length < 2) kb[kb.length - 1]!.push(btn);
+    else kb.push([btn]);
+  }
+  return kb;
 }
 
 /** Given a proactive schedule's task marker ("alert:<name>" / "digest:<name>" / "recipe:<name>"),

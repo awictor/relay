@@ -1775,7 +1775,7 @@ describe("/templates (starter-template-library)", () => {
   it("lists the catalog with no argument", async () => {
     const { handle, sent } = harness({ recipeSaveNamed: () => ({ ok: true, name: "x" }) });
     await handle(msg("/templates", 5));
-    expect(sent[0]!.text).toMatch(/install one with/i);
+    expect(sent[0]!.text).toMatch(/tap one to install/i);
     expect(sent[0]!.text).toMatch(/morning —/);
   });
   it("installs a template under its recipe name via recipeSaveNamed", async () => {

@@ -18,9 +18,9 @@ import { needsLocationContext } from "./lib/profile.js";
 import { isBackgroundErrand, stripDispatchPhrasing, BACKGROUND_MAX_STEPS } from "./lib/background.js";
 import { isAnswerRecall, relativeAge } from "./lib/answer-log.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./lib/recipes.js";
-import { getTemplate, templateCatalog } from "./lib/templates.js";
+import { getTemplate, templateCatalog, templateButtons } from "./lib/templates.js";
 import { photoNeedsAgent, photoIsQrScan } from "./lib/photo-intent.js";
-import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, tryButtons as buildTryButtons, actButtons, TRY_EXAMPLES, type InlineKeyboard } from "./lib/callbacks.js";
+import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, tryButtons as buildTryButtons, actButtons, installButtons, TRY_EXAMPLES, type InlineKeyboard } from "./lib/callbacks.js";
 import { parseResultList, firstUrl, type ResultItem } from "./lib/result-list.js";
 import { rowsToCsv } from "./lib/to-csv.js";
 
@@ -471,6 +471,19 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           : `watch ${watchSlug(task)}: ${task} when it changes`;
         await handleOne({ chatId, from: "tap", text: synthetic, messageId: 0 } as InboundMessage);
         return action.mode === "daily" ? "Every morning" : "Watching";
+      }
+      if (action.kind === "install") {
+        // Tap-to-install a starter automation (starter-automation-gallery): resolve the template + save
+        // it as a recipe via the same path /templates <id> uses. A slotted template ({item}) installs
+        // fine but needs a value at run time — the confirmation tells them how.
+        if (!deps.recipeSaveNamed) { await deps.sendMessage(chatId, "I can't install that right now."); return null; }
+        const tpl = getTemplate(action.id);
+        if (!tpl) { await deps.sendMessage(chatId, "That automation isn't available anymore."); return "Expired"; }
+        const res = deps.recipeSaveNamed(chatId, tpl.recipeName, tpl.task);
+        if (!res.ok) { await deps.sendMessage(chatId, "You've hit the recipe limit — /forget one first."); return null; }
+        const slotHint = /\{[a-z0-9_]+\}/i.test(tpl.task) ? ` (fill the {value} — e.g. /run ${tpl.recipeName} <value>)` : "";
+        await deps.sendMessage(chatId, `✅ Installed "${tpl.recipeName}". Run it with /run ${tpl.recipeName}${slotHint}, or "schedule ${tpl.recipeName} every morning" to get it daily.`);
+        return "Installed";
       }
       if (action.kind === "try") {
         // Onboarding tap-to-try (onboarding-tap-to-try): run the canned example as if the user typed it,
@@ -1231,7 +1244,9 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // user gets a working automation in one tap without learning the "save X:" syntax. No agent run.
     if (first === "/templates" && deps.recipeSaveNamed) {
       const arg = msg.text.trim().split(/\s+/).slice(1).join(" ").trim();
-      if (!arg) { await deps.sendMessage(msg.chatId, templateCatalog()); return; }
+      // Tap-to-install gallery (starter-automation-gallery): show the catalog WITH one-tap install
+      // buttons (channels without inline buttons just see the text list + can /templates <id>).
+      if (!arg) { await deps.sendMessage(msg.chatId, templateCatalog(), deps.answerCallback ? installButtons(templateButtons()) : undefined); return; }
       const tpl = getTemplate(arg);
       if (!tpl) { await deps.sendMessage(msg.chatId, `No template "${arg}". Send /templates for the list.`); return; }
       const r = deps.recipeSaveNamed(msg.chatId, tpl.recipeName, tpl.task);

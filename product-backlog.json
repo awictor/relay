@@ -2804,7 +2804,7 @@
       "title": "the recurring-automation engine is under-adopted (no tap-to-install)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Recipes/digests/alerts/watchlists are deep but activation needs 'save X:'/'digest morning: ...' syntax users never discover; onboarding tap-to-try only fires ONE-SHOT errands. Retention is gated on setting up >=1 recurring automation.",
       "how": "An /automations (or onboarding) row of ~10 curated recurring automations ('Daily weather + top news', 'Watch a product price', 'Job feed', 'Morning briefing') that a tap installs into the existing recipe/alert/digest stores — a new 'install' callback op reusing callbacks.ts + a static list like TRY_EXAMPLES."
     }
@@ -3917,6 +3917,10 @@
     {
       "item": "immediate-alert-commit-not-send-gated",
       "note": "Extended the send-gated-commit invariant to the four INBOUND immediate-alert-check sites (immediate-alert-commit-not-send-gated). alert define, conversational edit, 'watch that', and the Refresh button each did 'await sendMessage(ping); commit()' unconditionally — but sendMessage returns false on a failed send (best-effort, doesn't throw), so a 429/network drop advanced the alert baseline anyway, eating the crossing (the watch looked armed but wouldn't re-fire until it crossed again). Now each message-path commit is gated on (await sendMessage(...)) !== false, mirroring the scheduler's already-correct gating; the silent path (no message) still commits (nothing to lose). 2 new tests (refresh send-fail -> no commit; define send-fail -> no commit). suite 1886 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "starter-automation-gallery",
+      "note": "Tap-to-install starter automations (starter-automation-gallery). The recurring-automation engine (recipes/digests/alerts) was under-adopted because activation needed 'save X:' syntax; the /templates catalog existed but was text-only (type '/templates <id>'). Added one-tap install BUTTONS: new 'install' callback op (in|<id>) + installButtons() in callbacks.ts, a short `button` label + templateButtons() on each Template, /templates now sends the catalog WITH a tap-install keyboard (channels w/o inline buttons keep the text list + /templates <id>), and handleCallback routes an install tap through the same recipeSaveNamed path (slot-template hint + 'schedule it every morning' nudge in the confirmation). Reuses the existing RecipeStore — no new store. HELP updated. 7 new tests (install codec + buttons round-trip, templateButtons pairs, handler install-tap saves + unknown-graceful, catalog copy). suite 1891 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
@@ -4156,6 +4160,9 @@
     },
     {
       "note": "Backlog dry (low/M+owner-gated) -> 3-agent audit. A(new-user): location-pin-sets-no-tz, help-is-a-wall, voice-out(L), local-showtimes/events. B(reliability): immediate-alert-commit-not-send-gated [SEEDED+BUILT], media-memory-not-send-gated [SEEDED], scheduled-chain-partial-unflagged [SEEDED], extractValue percent-only false-fire. C(power): starter-automation gallery [SEEDED], bundle-and-upgrade nudge, automations cockpit, auto-brief from history, shareable recipes. Seeded: immediate-alert-commit(built), media-memory-not-send-gated, scheduled-chain-partial-unflagged, starter-automation-gallery."
+    },
+    {
+      "note": "No audit this run — built from the prior queue (starter-automation-gallery). Remaining: media-memory-not-send-gated(medium/S), scheduled-chain-partial-unflagged(medium/M), callback-edit-in-place(low), confirm-to-act(owner-gated)."
     }
   ]
 }
