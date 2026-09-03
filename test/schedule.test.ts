@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSchedule, parseScheduleFor, splitScheduleCommand, ScheduleStore, quietUntilMs } from "../src/lib/schedule.js";
+import { parseSchedule, parseScheduleFor, splitScheduleCommand, parseSnoozeCommand, ScheduleStore, quietUntilMs, PAUSE_INDEFINITE } from "../src/lib/schedule.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -394,5 +394,75 @@ describe("ScheduleStore", () => {
     expect(s.add(1, { kind: "once", task: "a", dueMs: NOW + MIN }, NOW)).toBeTruthy();
     expect(s.add(1, { kind: "once", task: "b", dueMs: NOW + MIN }, NOW)).toBeTruthy();
     expect(s.add(1, { kind: "once", task: "c", dueMs: NOW + MIN }, NOW)).toBeNull(); // capped
+  });
+});
+
+describe("parseSnoozeCommand (snooze-automations)", () => {
+  it("parses a timed pause with a duration", () => {
+    expect(parseSnoozeCommand("snooze btc 3 days", NOW)).toEqual({ action: "pause", which: "btc", untilMs: NOW + 3 * DAY });
+    expect(parseSnoozeCommand("pause btc for 2 hours", NOW)).toEqual({ action: "pause", which: "btc", untilMs: NOW + 2 * HR });
+    expect(parseSnoozeCommand("mute my morning digest 1 week", NOW)).toEqual({ action: "pause", which: "morning digest", untilMs: NOW + 7 * DAY });
+  });
+  it("parses an indefinite pause (no duration -> no untilMs)", () => {
+    expect(parseSnoozeCommand("pause btc", NOW)).toEqual({ action: "pause", which: "btc" });
+    expect(parseSnoozeCommand("snooze all", NOW)).toEqual({ action: "pause", which: "all" });
+  });
+  it("parses resume / unpause / unmute", () => {
+    expect(parseSnoozeCommand("resume btc", NOW)).toEqual({ action: "resume", which: "btc" });
+    expect(parseSnoozeCommand("unpause my morning digest", NOW)).toEqual({ action: "resume", which: "morning digest" });
+    expect(parseSnoozeCommand("unmute btc", NOW)).toEqual({ action: "resume", which: "btc" });
+  });
+  it("returns null for a non-snooze message", () => {
+    expect(parseSnoozeCommand("what's the weather", NOW)).toBeNull();
+    expect(parseSnoozeCommand("remind me to stretch in 10 min", NOW)).toBeNull();
+    expect(parseSnoozeCommand("pause", NOW)).toBeNull(); // no target
+  });
+});
+
+describe("ScheduleStore pause/resume (snooze-automations)", () => {
+  it("pause by task substring sets pausedUntil; the runner skip is now < pausedUntil", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "daily", task: "price of bitcoin", dueMs: NOW + HR, hourMin: "09:00" }, NOW);
+    expect(s.pause(1, "bitcoin", NOW + 3 * DAY)).toBe(1);
+    expect(s.list(1)[0]!.pausedUntil).toBe(NOW + 3 * DAY);
+  });
+  it("pause matches an alert:/digest: marker by its name", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW + HR, hourMin: "09:00" }, NOW);
+    s.add(1, { kind: "daily", task: "digest:morning brief", dueMs: NOW + HR, hourMin: "07:00" }, NOW);
+    expect(s.pause(1, "btc", PAUSE_INDEFINITE)).toBe(1);
+    expect(s.pause(1, "morning brief", PAUSE_INDEFINITE)).toBe(1);
+    expect(s.list(1).filter((x) => x.pausedUntil !== undefined)).toHaveLength(2);
+  });
+  it("pause all pauses every schedule for the chat", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "daily", task: "a", dueMs: NOW + HR, hourMin: "09:00" }, NOW);
+    s.add(1, { kind: "daily", task: "b", dueMs: NOW + HR, hourMin: "09:00" }, NOW);
+    s.add(2, { kind: "daily", task: "c", dueMs: NOW + HR, hourMin: "09:00" }, NOW); // other chat untouched
+    expect(s.pause(1, "all", PAUSE_INDEFINITE)).toBe(2);
+    expect(s.list(2)[0]!.pausedUntil).toBeUndefined();
+  });
+  it("resume clears the pause + pulls a stale recurring dueMs forward to now", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const rec = s.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW - HR, hourMin: "09:00" }, NOW)!; // already overdue
+    s.pause(1, "btc", NOW + 3 * DAY);
+    expect(s.resume(1, "btc", NOW)).toBe(1);
+    const after = s.list(1)[0]!;
+    expect(after.pausedUntil).toBeUndefined();
+    expect(after.dueMs).toBe(NOW); // stale recurring due pulled forward, fires next tick (no backlog storm)
+    expect(rec.id).toBeTruthy();
+  });
+  it("resume matches nothing (count 0) when the name is unknown", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW + HR, hourMin: "09:00" }, NOW);
+    expect(s.resume(1, "nonesuch", NOW)).toBe(0);
+  });
+  it("clearExpiredPause clears an elapsed pause, keeps an active one", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const rec = s.add(1, { kind: "daily", task: "a", dueMs: NOW + HR, hourMin: "09:00" }, NOW)!;
+    s.pause(1, "a", NOW + HR);
+    expect(s.clearExpiredPause(rec.id, NOW)).toBe(false);          // still active
+    expect(s.clearExpiredPause(rec.id, NOW + 2 * HR)).toBe(true);  // elapsed -> cleared
+    expect(s.list(1)[0]!.pausedUntil).toBeUndefined();
   });
 });

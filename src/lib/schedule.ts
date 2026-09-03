@@ -22,8 +22,14 @@ export interface Schedule {
   intervalMs?: number; // for interval: gap between fires
   attempts?: number;   // failed fire attempts (once-reminder transient-retry); dropped after a cap
   reminderOnly?: boolean; // a pure personal to-do ("take meds"): echo the note at fire time, don't run the agent
+  pausedUntil?: number; // snooze (snooze-automations): while now < this, the runner skips it WITHOUT firing
+                        // or completing; auto-clears when it passes. Number.MAX_SAFE_INTEGER = indefinite.
   created: number;
 }
+
+// A pause with no duration ("pause btc") is indefinite until an explicit resume — stored as a far-future
+// instant so the same "now < pausedUntil" runner check handles both timed snoozes and indefinite pauses.
+export const PAUSE_INDEFINITE = Number.MAX_SAFE_INTEGER;
 
 export interface ParsedSchedule {
   kind: ScheduleKind;
@@ -105,6 +111,39 @@ export function splitScheduleCommand(text: string, now: number): { name: string;
     if (p && p.task === "__recipe__") return { name, clause, explicitRecipe };
   }
   return null;
+}
+
+/**
+ * Parse a pause/snooze or resume command (snooze-automations). Returns {action, which, untilMs?} or
+ * null. Lets a user quiet an automation through travel/noise instead of destroying it with /cancel:
+ *   "snooze btc 3 days"  "pause btc for 2 hours"  "pause btc"  "mute my morning digest 1 week"
+ *   "resume btc"  "unpause btc"  "unmute morning digest"
+ * `which` is the trailing name/id (or "all"); untilMs is now + the parsed duration, absent for an
+ * indefinite pause (caller uses PAUSE_INDEFINITE). Duration grammar reuses min/hour/day/week.
+ */
+export function parseSnoozeCommand(text: string, now: number): { action: "pause" | "resume"; which: string; untilMs?: number } | null {
+  const t = text.trim();
+  const resume = t.match(/^\s*(?:resume|unpause|unmute|un-?snooze)\s+(?:my\s+)?(.+?)\s*$/i);
+  if (resume) { const which = cleanSnoozeName(resume[1]!); return which ? { action: "resume", which } : null; }
+  const pause = t.match(/^\s*(?:snooze|pause|mute)\s+(?:my\s+)?(.+?)\s*$/i);
+  if (!pause) return null;
+  let rest = pause[1]!.trim();
+  // A trailing duration: "for 3 days" / "3 days" / "2 hours" / "1 week" / "90 min". Strip it off the name.
+  const dur = rest.match(/(?:\s+for)?\s+(\d+)\s*(min(?:ute)?s?|hours?|hrs?|days?|weeks?|wks?)\s*$/i);
+  let untilMs: number | undefined;
+  if (dur) {
+    const n = parseInt(dur[1]!, 10);
+    const unit = dur[2]!.toLowerCase();
+    const ms = /^w/.test(unit) ? n * 7 * DAY : /^d/.test(unit) ? n * DAY : /^h/.test(unit) ? n * HOUR : n * MINUTE;
+    if (n >= 1) { untilMs = now + ms; rest = rest.slice(0, dur.index).trim(); }
+  }
+  const which = cleanSnoozeName(rest);
+  if (!which) return null;
+  return untilMs !== undefined ? { action: "pause", which, untilMs } : { action: "pause", which };
+}
+
+function cleanSnoozeName(s: string): string {
+  return s.trim().replace(/^["']|["']$/g, "").replace(/^(?:the|my)\s+/i, "").replace(/\s+/g, " ").toLowerCase().slice(0, 60);
 }
 
 export function parseSchedule(text: string, now: number, offsetMin: number = tzOffsetMin()): ParsedSchedule | null {
@@ -346,6 +385,56 @@ export class ScheduleStore {
     s.dueMs = whenMs;
     this.persist();
     return true;
+  }
+
+  /** Snooze (snooze-automations): pause every schedule for a chat that MATCHES `which` (an id, a marker
+   * name — alert:/digest:/recipe: — or a substring of a reminder's task; "all" matches every schedule)
+   * until `untilMs` (PAUSE_INDEFINITE for no end). The runner skips a paused schedule without firing or
+   * completing it, and auto-clears the flag once now passes untilMs. Returns how many were paused. */
+  pause(chatId: number, which: string, untilMs: number): number {
+    const matches = this.matchByRef(chatId, which);
+    for (const s of matches) s.pausedUntil = untilMs;
+    if (matches.length) this.persist();
+    return matches.length;
+  }
+
+  /** Resume (snooze-automations): clear the pause on every matching schedule so the runner fires it
+   * again. A resumed recurring schedule whose next fire is now in the past is pulled forward to now so
+   * it fires promptly on the next tick rather than storming a backlog. Returns how many were resumed. */
+  resume(chatId: number, which: string, now: number): number {
+    const matches = this.matchByRef(chatId, which).filter((s) => s.pausedUntil !== undefined);
+    for (const s of matches) {
+      s.pausedUntil = undefined;
+      if (s.kind !== "once" && s.dueMs < now) s.dueMs = now;
+    }
+    if (matches.length) this.persist();
+    return matches.length;
+  }
+
+  /** Clear a schedule's pause flag if it has EXPIRED (now past pausedUntil) — a timed snooze auto-resumes
+   * without an explicit command, so the runner calls this before firing to tidy the stale flag. No-op if
+   * absent or still active. Returns true if it cleared one. */
+  clearExpiredPause(id: string, now: number): boolean {
+    const s = this.items.find((x) => x.id === id);
+    if (!s || s.pausedUntil === undefined || now < s.pausedUntil) return false;
+    s.pausedUntil = undefined;
+    this.persist();
+    return true;
+  }
+
+  /** Find a chat's schedules by a loose reference: "all", an exact id, an alert:/digest:/recipe: marker
+   * name (case-insensitive), or a substring of the (marker-stripped) task. Shared by pause/resume. */
+  private matchByRef(chatId: number, which: string): Schedule[] {
+    const mine = this.items.filter((s) => s.chatId === chatId);
+    const w = which.trim().toLowerCase();
+    if (!w) return [];
+    if (w === "all") return mine;
+    return mine.filter((s) => {
+      if (s.id.toLowerCase() === w) return true;
+      const marker = s.task.match(/^(?:alert|digest|recipe):(.+)$/i);
+      const label = (marker ? marker[1]! : s.task).toLowerCase();
+      return label === w || label.includes(w);
+    });
   }
 
   /** Remove every schedule for a chat whose task exactly matches `task`. Returns how many were

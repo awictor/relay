@@ -1247,7 +1247,7 @@
       "title": "pause/snooze an automation instead of deleting it",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Only off-switch is /forget|/cancel which destroys the setup, so users delete configs they would keep through travel/noise.",
       "how": "A pausedUntil flag on schedule/alert; runner skips while paused; \"snooze btc 3 days\" / \"resume btc\"."
     }
@@ -1692,6 +1692,10 @@
     {
       "id": "stock-quote-tool",
       "note": "Added a get_quote agent tool so 'what's Tesla at?' / 'AAPL price' answers instantly instead of degrading to a slow, flaky web_search+scrape (currency already had a fast tool; stocks didn't). New src/lib/quote.ts hits the keyless Yahoo Finance chart JSON (no signup) via the injected safeFetch-backed fetchText; returns price + currency ($/£/etc) + a ▲/▼ day-change% + as-of UTC time. Handles bare US tickers, dotted foreign listings (VOD.L, SHOP.TO), and indices (^GSPC); unknown symbol -> null -> the tool tells the agent to fall back to web_search. Wired into the BrowserBackend interface + defaultBackend + SYSTEM_PROMPT + tool surface. Chose Yahoo over the planned Stooq CSV after a live probe: Stooq 404s datacenter IPs, Yahoo returns clean JSON (+currency +prevClose for free). 17 tests (quote unit + 2 agent dispatch). LIVE call-tested: AAPL/TSLA/VOD.L/^GSPC real prices, ZZZZZ->null. 1098 tests green."
+    },
+    {
+      "id": "snooze-automations",
+      "note": "Users could only turn off an automation with the DESTRUCTIVE /cancel|/forget, so they deleted configs they'd have kept through travel/noise. Added a non-destructive pause/resume: 'snooze btc 3 days' / 'pause my morning digest' / 'snooze all' / 'resume btc'. Every proactive thing (reminders, dailies, alerts, digests, recipes) is a Schedule record — reminders directly, alerts/digests/recipes as alert:/digest:/recipe: markers — so ONE pausedUntil flag on Schedule + a single runner skip covers all of them. New parseSnoozeCommand (duration grammar: min/hour/day/week; indefinite=PAUSE_INDEFINITE) + ScheduleStore.pause/resume/matchByRef/clearExpiredPause. matchByRef resolves an id, a marker name, or a task substring; 'all' hits every schedule. The runner skips a paused schedule WITHOUT firing or completing (so it resumes on its original schedule), and auto-clears an elapsed timed snooze; resume() pulls a stale recurring dueMs forward to now so it fires next tick without a backlog storm. Handler branch runs before the schedule cue so 'pause/snooze/resume' aren't misread as new reminders; help text + wiring added. 17 tests (parser / store pause+resume+expire / runner skip+auto-resume / handler routing). call-tested: false (offline unit; no live keys needed — pure scheduler logic). 1115 tests green."
     }
   ],
   "audits": [

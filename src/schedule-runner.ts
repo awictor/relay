@@ -230,6 +230,17 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     try {
       const due = deps.store.dueNow(deps.now());
       for (const s of due) {
+        // Snooze (snooze-automations): a paused schedule is skipped WITHOUT firing or completing while
+        // now < pausedUntil, so the setup survives travel/noise intact. Once the pause passes, the store
+        // clears it lazily on the next resume; here we just skip. A recurring schedule that stayed due
+        // through its pause fires on the next tick after resume (resume() pulls a stale dueMs to now).
+        if (s.pausedUntil !== undefined) {
+          if (deps.now() < s.pausedUntil) {
+            log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, skipped: "paused" })}`);
+            continue;
+          }
+          deps.store.clearExpiredPause?.(s.id, deps.now()); // timed snooze elapsed -> auto-resume + tidy flag
+        }
         // Anti-spam: if this chat is over its hourly cap, don't send now. A DAILY occurrence is
         // dropped (advance to tomorrow) — it re-fires on its own and must not storm. But a "once"
         // reminder is an explicit, single promise ("remind me to take my meds at 3pm"); completing

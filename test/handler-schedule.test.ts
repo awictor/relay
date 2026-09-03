@@ -232,3 +232,42 @@ describe("handler — schedule routing", () => {
     expect(calls()).toBe(1);
   });
 });
+
+describe("handler — snooze/resume routing (snooze-automations)", () => {
+  it("\"pause btc for 2 days\" routes to scheduleSnooze + confirms, no agent, no scheduleAdd", async () => {
+    const added: Array<{ chatId: number; text: string }> = [];
+    const { handle, sent, calls } = harness({
+      scheduleAdd: (chatId, text) => { added.push({ chatId, text }); return { ok: true, kind: "once", task: "x", whenMs: 0 }; },
+      scheduleSnooze: (_c, _t) => ({ action: "pause", count: 1, which: "btc", untilText: "Tue 9am" }),
+    });
+    await handle(msg("pause btc for 2 days", 5));
+    expect(sent[0]).toMatch(/Paused "btc" until Tue 9am/);
+    expect(added).toHaveLength(0); // NOT misread as a new reminder
+    expect(calls()).toBe(0);
+  });
+
+  it("\"resume btc\" confirms the resume", async () => {
+    const { handle, sent } = harness({ scheduleSnooze: () => ({ action: "resume", count: 1, which: "btc" }) });
+    await handle(msg("resume btc", 5));
+    expect(sent[0]).toMatch(/Resumed "btc"/);
+  });
+
+  it("an unknown name (count 0) tells the user it couldn't find it", async () => {
+    const { handle, sent } = harness({ scheduleSnooze: () => ({ action: "pause", count: 0, which: "nonesuch" }) });
+    await handle(msg("snooze nonesuch", 5));
+    expect(sent[0]).toMatch(/couldn't find "nonesuch"/i);
+  });
+
+  it("an indefinite pause says 'until you resume it'", async () => {
+    const { handle, sent } = harness({ scheduleSnooze: () => ({ action: "pause", count: 1, which: "morning digest" }) });
+    await handle(msg("pause my morning digest", 5));
+    expect(sent[0]).toMatch(/until you resume it/);
+  });
+
+  it("a non-snooze message falls through (scheduleSnooze returns null)", async () => {
+    const { handle, added, calls } = harness({ scheduleSnooze: () => null });
+    await handle(msg("remind me to stretch in 10 min", 5));
+    expect(added).toHaveLength(1); // still scheduled normally
+    expect(calls()).toBe(0);
+  });
+});

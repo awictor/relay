@@ -114,6 +114,9 @@ export interface HandlerDeps {
   scheduleNeedsTz?: (chatId: number, text: string, now: number) => boolean;
   scheduleList?: (chatId: number) => Array<{ id: string; kind: string; task: string; dueMs: number }>;
   scheduleCancel?: (chatId: number, which: string) => { removed: number };
+  // Snooze (snooze-automations): pause/resume a schedule/alert/digest by name or id instead of the
+  // destructive /cancel|/forget. Returns how many were paused/resumed. Optional.
+  scheduleSnooze?: (chatId: number, text: string, now: number) => { action: "pause" | "resume"; count: number; which: string; untilText?: string } | null;
   // Saved recipes (m7 recipe-2). All optional so older wiring stays valid. recipeSave parses a
   // "save <name>: <task>" message (null if it isn't one); recipeResolve returns a saved task by
   // name (null if unknown); recipeList/recipeForget manage them.
@@ -596,6 +599,26 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // "at 6pm" / "at 14:30" / any "tomorrow ..." — else "text me the headlines at 6pm" / "tomorrow at
     // 9am send X" never reach the parser and silently run once (same invariant break as the recurring
     // gate). A bare "at 5" (no am/pm, no colon) is still NOT cued — parseSchedule rejects it too.
+    // Snooze / resume (snooze-automations): "pause btc for 2 days" / "snooze morning digest" / "resume
+    // btc" quiets a standing automation through travel or noise instead of destroying it with /cancel or
+    // /forget. Runs BEFORE the schedule cue so "pause"/"snooze"/"resume" aren't misread as a new reminder.
+    if (!isExplicitCommand && deps.scheduleSnooze) {
+      const s = deps.scheduleSnooze(msg.chatId, msg.text, deps.now());
+      if (s) {
+        if (s.count === 0) {
+          await deps.sendMessage(msg.chatId, `I couldn't find "${s.which}" to ${s.action}. See /schedules and /alerts for the names.`);
+        } else if (s.action === "pause") {
+          const scope = s.which === "all" ? "all your automations" : `"${s.which}"`;
+          const until = s.untilText ? ` until ${s.untilText}` : " until you resume it";
+          await deps.sendMessage(msg.chatId, `Paused ${scope}${until}. Nothing fires meanwhile — say "resume ${s.which}" to turn it back on.`);
+        } else {
+          const scope = s.which === "all" ? "all your automations" : `"${s.which}"`;
+          await deps.sendMessage(msg.chatId, `Resumed ${scope} — back on its normal schedule.`);
+        }
+        return;
+      }
+    }
+
     const scheduleCue = /\b(remind me|every day|every morning|every evening|every night|daily|weekdays?|weekends?|tomorrow)\b|\bevery\s+(mon|tue|wed|thu|fri|sat|sun)|\bevery\s+\d+\s*(min|hour|hr)|\bin \d+\s*(min|hour|day)|\bat\s+\d{1,2}\s*(am|pm)\b|\bat\s+([01]?\d|2[0-3]):[0-5]\d\b/i;
     if (!isExplicitCommand && deps.scheduleAdd && scheduleCue.test(msg.text)) {
       // First-reminder tz (first-reminder-tz-ask): a clock-time schedule with no saved tz would fire

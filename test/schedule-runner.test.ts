@@ -61,6 +61,29 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.list(7)).toHaveLength(0);         // once -> gone
   });
 
+  it("a paused schedule is skipped without firing or completing (snooze-automations)", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent, ran } = harness(clock);
+    store.add(3, { kind: "daily", task: "weather", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    store.pause(3, "weather", NOW + 3 * 86_400_000); // paused 3 days out
+    const n = await runner.tick();
+    expect(n).toBe(0);
+    expect(ran).toEqual([]);                       // agent never invoked while paused
+    expect(sent).toHaveLength(0);
+    expect(store.list(3)[0]!.dueMs).toBe(NOW - 1); // NOT advanced — resumes on its original schedule
+  });
+
+  it("an elapsed pause auto-resumes: the schedule fires + the stale flag clears (snooze-automations)", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent, ran } = harness(clock);
+    store.add(3, { kind: "once", task: "stretch", dueMs: NOW - 1 }, NOW);
+    store.pause(3, "stretch", NOW - 100); // pause already elapsed
+    const n = await runner.tick();
+    expect(n).toBe(1);
+    expect(ran).toEqual(["stretch"]);              // fired once the pause window passed
+    expect(sent).toHaveLength(1);
+  });
+
   it("a 'recipe:<name>' schedule resolves the recipe's CURRENT task at fire time (recipe-schedule-stable-marker)", async () => {
     const clock = { t: NOW };
     const tasks: Record<string, string> = { btc: "check bitcoin price" };

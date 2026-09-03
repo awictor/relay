@@ -21,7 +21,7 @@ import { runAgent } from "./agent.js";
 import { formatReply } from "./lib/format-reply.js";
 import { friendlyError } from "./lib/failure.js";
 import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
-import { ScheduleStore, parseSchedule, tzOffsetMin, quietUntilMs } from "./lib/schedule.js";
+import { ScheduleStore, parseSchedule, parseSnoozeCommand, tzOffsetMin, quietUntilMs, PAUSE_INDEFINITE } from "./lib/schedule.js";
 import { formatWhen } from "./lib/format-when.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots } from "./lib/recipes.js";
@@ -310,6 +310,18 @@ const handle = createHandler({
       return { removed: n };
     }
     return { removed: schedules.remove(which, chatId) ? 1 : 0 };
+  },
+  // Snooze (snooze-automations): pause/resume a schedule/alert/digest by name or id, non-destructively.
+  scheduleSnooze: (chatId, text, now) => {
+    const p = parseSnoozeCommand(text, now);
+    if (!p) return null;
+    if (p.action === "resume") {
+      return { action: "resume", count: schedules.resume(chatId, p.which, now), which: p.which };
+    }
+    const untilMs = p.untilMs ?? PAUSE_INDEFINITE;
+    const count = schedules.pause(chatId, p.which, untilMs);
+    const untilText = p.untilMs !== undefined ? formatWhen(untilMs, profiles.offsetMin(chatId) ?? tzOffsetMin(), now) : undefined;
+    return { action: "pause", count, which: p.which, ...(untilText ? { untilText } : {}) };
   },
   recipeSave: (chatId, text) => {
     const p = parseRecipeCommand(text);

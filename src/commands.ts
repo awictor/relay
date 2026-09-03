@@ -56,6 +56,8 @@ Watch a whole list at once: separate items with semicolons — "watch markets: b
 
 See a watch's trend: "how has btc moved this week" or "btc trend" — I chart the value from my logged checks (first→last, high/low), no re-fetch.
 
+Pause without deleting: "snooze btc 3 days", "pause my morning digest" (until you resume it), or "snooze all" quiets an automation through travel or noise — say "resume btc" to turn it back on. The setup stays intact; nothing fires while paused.
+
 Set your location: "/setlocation Austin, TX" (or just "I'm in London") so "weather" and "near me" work without repeating the city. Add "(metric)" or "(imperial)" for units, and "UTC-5" so daily reminders fire at YOUR local time. /profile shows what's stored; "/profile clear" forgets it.
 
 Remember things about you: "remember I'm vegetarian", "remember my wife's birthday is June 3" — I'll factor them into every answer. Ask "what do you know about me" to see them; "forget that I'm vegetarian" or "forget everything you know" to clear.
