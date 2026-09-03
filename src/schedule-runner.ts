@@ -126,6 +126,12 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   // it's delivered ANYWAY (once-reminder-cap-starvation). An explicit promise slipping this far past
   // its time is worse than one extra send over the anti-spam cap. Default 15 min.
   const ONCE_CAP_GRACE_MS = Math.max(0, Number(process.env.RELAY_ONCE_CAP_GRACE_MS) || 15 * 60_000);
+  // A relative "once" set to fire within this horizon is treated as a DELIBERATE near-term instant and
+  // is EXEMPT from the quiet-hours defer (relative-once-quiet-defer): "remind me in 4 hours" / "timer
+  // for 20 min" must fire on time, not get pushed to quiet-end. 18h covers any same-day "in N hours"
+  // relative once while still deferring a genuinely long "in 2 days" one (its late-night time is
+  // incidental, measured in days). Env-tunable.
+  const SHORT_ONCE_MS = Math.max(0, Number(process.env.RELAY_SHORT_ONCE_MS) || 18 * 3_600_000);
   // Per-task wall-clock ceiling for one fireOne (slow-task-starves-due-reminders). tick() runs due tasks
   // SEQUENTIALLY, so a single hung anvil/LLM run (the agent has step caps + per-fetch timeouts but no
   // overall bound) would block every OTHER chat's due reminder behind it. Race each fireOne against this
@@ -445,11 +451,14 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // clock time. clockTime marks the wall-clock onces; a relative "in 20 min" once has no such flag
         // and still defers (its instant is incidental, not chosen).
         const isClockOnce = s.kind === "once" && s.clockTime === true;
-        // A SHORT-HORIZON once (a timer, or "remind me in 20 min") is ALSO exempt (timer-quiet-hours-defer):
-        // its fire instant is deliberate + near-term, so deferring "timer for 20 minutes" set at 11pm to the
-        // 7am quiet-end silently breaks it by hours. Gauge by how soon it was set to fire (dueMs - created);
-        // a genuinely long relative once ("in 2 days") still defers (its late-night instant is incidental).
-        const SHORT_ONCE_MS = 3 * 3_600_000; // 3h: covers timers + "in a couple hours", not multi-day onces
+        // A SHORT-HORIZON once (a timer, or "remind me in N hours") is ALSO exempt (timer-quiet-hours-defer
+        // / relative-once-quiet-defer): its fire instant is DELIBERATE + near-term, so deferring "timer for
+        // 20 minutes" or "remind me in 4 hours" set at 11pm to the 7am quiet-end silently breaks it by
+        // hours. Gauge by how soon it was set to fire (dueMs - created). A relative once measured in HOURS
+        // means the user chose that exact gap on purpose (hour-granularity) — it must fire on time even in
+        // quiet hours. Only a genuinely LONG relative once ("in 2 days") still defers: it's measured in
+        // days, so its resulting late-night time-of-day is incidental, not chosen. Window covers all
+        // same-day relative onces; env-tunable (SHORT_ONCE_MS).
         const isShortOnce = s.kind === "once" && !s.clockTime && (s.dueMs - s.created) <= SHORT_ONCE_MS;
         // Quiet-hours + alerts (quiet-hours-persistent-alerts): the blanket alert-exemption was too broad.
         // A PERSISTENT alert (a new feed item, a page-diff) shows a change that's still there at quiet-end,

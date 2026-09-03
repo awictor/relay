@@ -436,6 +436,21 @@ describe("makeScheduleRunner.tick", () => {
     expect(sent[0]).toMatch(/timer/i);
   });
 
+  it("a relative 'remind me in 4 hours' set at night fires on time, not deferred to quiet-end (relative-once-quiet-defer)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    const { store, runner } = harness(clock, {
+      send: async (_c, text) => { sent.push(text); },
+      quietUntil: () => NOW + 3 * 3_600_000, // now is inside the quiet window (ends in 3h)
+      deferTo: (id, when) => { store.deferTo(id, when); },
+    });
+    // "remind me in 4 hours" set 4h ago, now due — hour-granularity relative once = a deliberate gap.
+    store.add(1, { kind: "once", task: "take the pizza out 🍕", dueMs: NOW - 1, reminderOnly: true }, NOW - 4 * 3_600_000);
+    const n = await runner.tick();
+    expect(n).toBe(1);                 // fired on time despite quiet hours (NOT pushed to quiet-end)
+    expect(sent[0]).toMatch(/pizza/i);
+  });
+
   it("an alert CHECK runs during quiet hours (not deferred) so an overnight crossing isn't lost (quiet-hours-defers-alert-check)", async () => {
     const clock = { t: NOW };
     const sent: string[] = [];

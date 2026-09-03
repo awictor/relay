@@ -2552,7 +2552,7 @@
       "title": "a 3-24h 'remind me in N hours' set at night is deferred to quiet-end, firing hours late",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'remind me in 4 hours' at 11pm lands at 7am (quiet-end) not 3am — a deliberate duration silently broken; isShortOnce only exempts onces due within 3h.",
       "how": "schedule-runner: a relative once (no clockTime) of ANY horizon names a deliberate instant — exempt it from the quiet-hours defer (or raise the short-once window), like a clock-time alarm; a recurring daily/digest still defers."
     },
@@ -3579,6 +3579,10 @@
     {
       "item": "tap-to-watch-on-answers",
       "note": "One-tap 'make this recurring' buttons on fresh answers (tap-to-watch-on-answers) — the retention flywheel the text save-nudge only described. A clean inbound text answer that's a plausible standing errand now gets 🔁 Every morning (+ 🔔 Watch this for a price/number answer). Added an 'act' callback op (bare opcodes ad/aw, no payload — the task is resolved from a per-chat lastTask cache) + actButtons(offerWatch) in callbacks.ts; handler caches the answer's task, gates the offer via canOfferAutomation (skips command/automation/follow-up/trivial messages) + answerIsWatchable (money or a price-ask returning a number), and on tap synthesizes 'every morning <task>' or 'watch <slug>: <task> when it changes' (watchSlug derives a short name) and runs it through handleOne — same schedule/alert routing, no new backend, every existing guard applies. One-shot (consumes the cached task so a double-tap can't stack two). Stale tap -> honest note. Pick-list answers keep their 1/2/3 buttons (act only when not a list). HELP updated. 6 new tests (act codec + buttons, gating helpers, answer-attaches + Every-morning schedules + Watch-this defines + stale). suite 1735 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "relative-once-quiet-defer",
+      "note": "Fixed a relative 'remind me in N hours' set at night silently firing hours late (relative-once-quiet-defer). The quiet-hours short-once exemption used a 3h window, so 'remind me in 4 hours' at 11pm was deferred to the 7am quiet-end — a deliberate near-term instant silently broken. Raised the window to 18h (env-tunable RELAY_SHORT_ONCE_MS) so ANY same-day 'in N hours' relative once fires on time, while a genuinely long 'in 2 days' once (time-of-day incidental, measured in days) still defers. clockTime alarms already exempt; recurring dailies/digests still defer. .env.example parity added. 1 new test ('in 4 hours' fires in quiet hours); existing long-once-defers + short-timer-fires guards unchanged. suite 1736 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
