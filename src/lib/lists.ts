@@ -101,13 +101,32 @@ export class ListStore {
     return { added, list: [...l.items] };
   }
 
-  /** Remove an item by whole-word-ish case-insensitive match (substring fallback). Returns removed items. */
+  /** Remove list item(s) matching `item` by WHOLE-WORD relevance, NOT raw substring — so "remove milk"
+   * doesn't also nuke "almond milk" / "milk chocolate" (lists-remove-substring-collateral; notes.ts was
+   * already hardened the same way). Removes only the BEST tier: an exact (normalized) match wins alone;
+   * else items containing ALL the query's words as whole words; else (only if neither) items sharing
+   * SOME query words. Returns the removed items so the caller can show exactly what went. */
   remove(chatId: number, name: string, item: string): string[] {
     const l = this.getList(chatId, name);
     if (!l) return [];
-    const q = item.trim().toLowerCase();
-    const removed = l.items.filter((x) => x.toLowerCase() === q || x.toLowerCase().includes(q));
-    if (removed.length) { l.items = l.items.filter((x) => !removed.includes(x)); this.persist(); }
+    const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+    const q = norm(item);
+    if (!q) return [];
+    const qWords = q.split(" ").filter(Boolean);
+    const score = (x: string): number => {
+      const xn = norm(x);
+      if (xn === q) return 3;
+      const words = new Set(xn.split(" "));
+      const hits = qWords.filter((w) => words.has(w)).length;
+      if (hits === 0) return 0;
+      return hits === qWords.length ? 2 : 1;
+    };
+    const scored = l.items.map((x) => ({ x, s: score(x) }));
+    const best = Math.max(0, ...scored.map((e) => e.s));
+    if (best === 0) return [];
+    const removed = scored.filter((e) => e.s === best).map((e) => e.x);
+    l.items = l.items.filter((x) => !removed.includes(x));
+    this.persist();
     return removed;
   }
 

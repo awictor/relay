@@ -1601,6 +1601,51 @@
       "status": "done",
       "why": "Only off-switch is /forget|/cancel which destroys the setup, so users delete configs they would keep through travel/noise.",
       "how": "A pausedUntil flag on schedule/alert; runner skips while paused; \"snooze btc 3 days\" / \"resume btc\"."
+    },
+    {
+      "id": "lists-remove-substring-collateral",
+      "title": "List remove() substring match deletes neighbors",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "\"remove milk\" also nuked \"almond milk\"/\"milk chocolate\" — silent collateral loss on a store the user reads back.",
+      "how": "Port notes.ts whole-word tiered matchScore into lists.ts remove()."
+    },
+    {
+      "id": "dictionary-tool",
+      "title": "Keyless dictionary/define tool",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "\"define escrow\"/\"what does X mean\" is a top phone errand; today answers from model memory (no source) or a slow scrape.",
+      "how": "New src/lib/dictionary.ts hitting dictionaryapi.dev (keyless, injected fetch like fx/quote/crypto); parse+format definition/phonetics/synonyms; add define tool to agent + prompt + dispatch pin + help."
+    },
+    {
+      "id": "world-clock-tz",
+      "title": "Time-in-city / timezone conversion",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "\"what time is it in Tokyo\"/\"9am PT in London\" before a call; agent guesses (often wrong) since datetime injection only covers the user own zone.",
+      "how": "Deterministic IANA-offset math in a new lib (reuse profile CITY_TZ + DST-aware if feasible); a get_time/convert_time tool or handler branch; format both zones."
+    },
+    {
+      "id": "inbound-document-handling",
+      "title": "Handle forwarded PDF/CSV/image documents",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Voice notes + photos are ingested but Telegram document attachments are not — a glaring asymmetry; \"deal with this bill/statement\" is a daily errand.",
+      "how": "Wire Telegram document fileId download into the same treat-as-task path as photos; feed to existing pdf/extract/multimodal tooling."
+    },
+    {
+      "id": "lists-remove-atomic-write-failure",
+      "title": "atomicWriteJson swallows write failures → false confirms",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "On a full/unwritable disk Relay says \"saved\"/\"reminder set\" but nothing persisted; user never told, data vanishes on restart.",
+      "how": "atomicWriteJson return success bool; callers surface a soft warning when a persist fails (schedule/notes/lists/profile/alerts)."
     }
   ],
   "history": [
@@ -2207,6 +2252,10 @@
     {
       "item": "personal-notes-lists-store",
       "note": "Named lists shipped: new src/lib/lists.ts (parseListCommand add/remove/show/clear + ListStore, atomic per-chat+name, caps 20 lists/100 items, case-insensitive dedupe + substring remove). Wired handler.listCommand branch before scheduler/agent, index.ts store + rendered replies (reads full list back on every mutation), RELAY_LISTS_FILE state path, .env.example + HELP text. Facts (remember X) confirmed already covered by notes.ts — this fills the NAMED-LIST gap. 22 new tests, full suite 1259 green, tsc clean."
+    },
+    {
+      "item": "lists-remove-substring-collateral",
+      "note": "Fixed list remove() collateral deletion: swapped raw substring (x.includes(q)) for notes.ts-style whole-word tiered scoring (3=exact wins alone, 2=all-words, 1=some-words). \"remove milk\" now removes only \"milk\", not \"almond milk\"/\"milk chocolate\". 3 new tests, suite 1261 green, tsc clean."
     }
   ],
   "audits": [
@@ -2320,6 +2369,9 @@
     },
     {
       "note": "Backlog dry after geo-ssrf-redirect -> 3-agent audit. A(new-user): no stock/flight-status tool, package tracking, first-reminder tz-blind, action-asks return drafts (expectation). B(reliability): scheduled chain ran literal (BUILT), no chain step cap (BUILT), if-gate negation (BUILT), chain no-progress-ping + partial-as-final, chain inline lock. C(power): confirm-to-act (owner-gated), unified /dashboard, change-only on any recipe, shareable recipes, snooze. Built the chaining-reliability cluster (broken just-shipped path); seeded the rest."
+    },
+    {
+      "note": "AUDIT (backlog dry, only owner-gated confirm-to-act left). A/new-user: HN-heavy onboarding copy, no dictionary, no world-clock, no sports/flight status. B/reliability: DST-blind reminders (L), lists remove() substring collateral (S, in code I just shipped), atomicWriteJson silent write failures (M), ambiguous-city tz, feed-watch reword false-new. C/power: confirm-to-act committing actions (owner-gated), autofill vault, inbound document handling, self-service login. Seeded: dictionary-tool, world-clock-tz, inbound-document-handling, lists-remove-atomic-write-failure. Built THIS run: lists-remove-substring-collateral."
     }
   ]
 }

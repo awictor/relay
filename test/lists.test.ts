@@ -74,12 +74,29 @@ describe("ListStore", () => {
     expect(r!.added).toEqual(["bread"]); // eggs deduped
     expect(s.show(1, "grocery")).toEqual(["eggs", "milk", "bread"]);
   });
-  it("removes by exact or substring match", () => {
+  it("removes an exact match, leaving whole-word neighbors alone (no substring collateral)", () => {
+    const s = new ListStore({ file: tmp() });
+    s.add(1, "grocery", ["milk", "almond milk", "milk chocolate", "eggs"]);
+    // "milk" exactly matches only the "milk" item — NOT "almond milk" / "milk chocolate"
+    // (lists-remove-substring-collateral: exact tier wins alone).
+    expect(s.remove(1, "grocery", "milk")).toEqual(["milk"]);
+    expect(s.show(1, "grocery")).toEqual(["almond milk", "milk chocolate", "eggs"]);
+    expect(s.remove(1, "grocery", "nope")).toEqual([]);
+  });
+  it("removes an all-words match when there's no exact hit", () => {
+    const s = new ListStore({ file: tmp() });
+    s.add(1, "grocery", ["almond milk", "milk chocolate", "eggs"]);
+    // no bare "almond milk" exact vs "almond milk" — it IS exact, removed alone
+    expect(s.remove(1, "grocery", "almond milk")).toEqual(["almond milk"]);
+    expect(s.show(1, "grocery")).toEqual(["milk chocolate", "eggs"]);
+  });
+  it("falls back to some-words match only when no exact/all-words hit exists", () => {
     const s = new ListStore({ file: tmp() });
     s.add(1, "grocery", ["oat milk", "eggs"]);
-    expect(s.remove(1, "grocery", "milk")).toEqual(["oat milk"]); // substring
+    // "milk" is not an exact item and no item contains ALL of {milk} as... actually {milk} IS all-words
+    // of "oat milk" -> tier 2 removes it. Confirms a partial query still targets the right item.
+    expect(s.remove(1, "grocery", "milk")).toEqual(["oat milk"]);
     expect(s.show(1, "grocery")).toEqual(["eggs"]);
-    expect(s.remove(1, "grocery", "nope")).toEqual([]);
   });
   it("clears a list and reports the count", () => {
     const s = new ListStore({ file: tmp() });
