@@ -68,6 +68,11 @@ export class DigestStore {
   private lastWriteOk = true;
   /** Did the most recent write to disk succeed? */
   lastSaveOk(): boolean { return this.lastWriteOk; }
+  // Members dropped by the per-digest cap on the LAST add() (digest-recipe-cap-silent-drop). Read right
+  // after add() (no await between) so the caller can warn "kept the first N, dropped X" instead of the
+  // tail silently vanishing. Empty when nothing was capped.
+  private lastDropped: string[] = [];
+  lastDroppedForCap(): string[] { return this.lastDropped; }
   private persist(): boolean {
     return (this.lastWriteOk = atomicWriteJson(this.file, { v: 1, items: this.items }));
   }
@@ -80,10 +85,14 @@ export class DigestStore {
     // would otherwise run the same recipe twice, duplicate its briefing section, and burn a second
     // bounded anvil session per dup. A Set keyed on the normalized name collapses repeats to the first.
     const seen = new Set<string>();
-    const members = d.members
+    const deduped = d.members
       .map(normalizeName)
-      .filter((m) => m && !seen.has(m) && (seen.add(m), true))
-      .slice(0, this.maxMembers);
+      .filter((m) => m && !seen.has(m) && (seen.add(m), true));
+    const members = deduped.slice(0, this.maxMembers);
+    // Members dropped BECAUSE the digest is full (not dedupe) — surfaced so a user defining a huge digest
+    // is told the tail didn't fit instead of it silently vanishing (digest-recipe-cap-silent-drop). Reset
+    // each add; read via lastDroppedForCap() right after, like lastSaveOk().
+    this.lastDropped = deduped.slice(this.maxMembers);
     if (members.length === 0) return null;
     const existing = this.items.find((x) => x.chatId === chatId && x.name === name);
     if (!existing && this.items.filter((x) => x.chatId === chatId).length >= this.maxPerChat) return null;

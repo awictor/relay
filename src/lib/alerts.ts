@@ -84,6 +84,8 @@ export interface ParsedAlert {
   feedSource?: { kind: "rss" | "reddit" | "hn" | "youtube"; url: string; label: string }; // follow-feed-subscriptions
   then?: string;  // run this saved recipe when the alert fires (trigger-to-action-alerts)
   members?: Array<{ label: string; task: string }>; // watchlist: N sub-watches, one grouped ping
+  droppedMembers?: string[]; // watchlist sub-watches past MAX_WATCHLIST_MEMBERS — surfaced so the tail
+                             // isn't silently dropped when a user lists more than the cap (digest-recipe-cap-silent-drop)
 }
 
 /** Derive a short human label for a watchlist member from its task (first few salient words). */
@@ -277,9 +279,13 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
       seen.set(base, n);
       return { label: n > 1 ? `${base} (${n})` : base, task: p };
     });
+    // Sub-watches past the cap are surfaced (not silently sliced) so the user knows the tail didn't make
+    // the basket (digest-recipe-cap-silent-drop).
+    const droppedMembers = parts.slice(MAX_WATCHLIST_MEMBERS);
     // Carry a `then` recipe through the watchlist branch (watchlist-then-dropped) — the thenClause was
     // stripped above, so 'watch mk: btc; eth then run summary' should still run the recipe on a change.
-    return then ? { name, task, members, then } : { name, task, members };
+    const base = droppedMembers.length ? { name, task, members, droppedMembers } : { name, task, members };
+    return then ? { ...base, then } : base;
   }
 
   // Watch-any-page (watch-any-page-diff): a task that is essentially a bare URL means "ping when THIS

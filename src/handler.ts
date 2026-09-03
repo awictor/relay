@@ -273,7 +273,7 @@ export interface HandlerDeps {
   recipeSchedule?: (chatId: number, name: string, whenClause: string, now: number) =>
     { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" | "needsarg" };
   // Digests (m9 digest-3): bundle recipes into one briefing. All optional.
-  digestDefine?: (chatId: number, text: string) => { ok: true; name: string; members: number; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" };
+  digestDefine?: (chatId: number, text: string) => { ok: true; name: string; members: number; saved?: boolean; dropped?: string[] } | { ok: false; reason: "unparsed" | "capped" };
   digestList?: (chatId: number) => Array<{ name: string; members: string[]; schedule?: string }>;
   digestForget?: (chatId: number, name: string) => boolean;
   // Is <name> a digest for this chat? (so /run + schedule dispatch digest vs recipe).
@@ -284,7 +284,7 @@ export interface HandlerDeps {
     { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" };
   // Change-alerts (m10 alert-3): "watch <name>: <task>" defines + auto-schedules a check.
   // All optional. alertDefine parses + stores + schedules (default cadence); returns the cadence.
-  alertDefine?: (chatId: number, text: string, now: number) => { ok: true; name: string; feed?: boolean; then?: string; members?: number; pageUrl?: string; weather?: string; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" };
+  alertDefine?: (chatId: number, text: string, now: number) => { ok: true; name: string; feed?: boolean; then?: string; members?: number; droppedMembers?: string[]; pageUrl?: string; weather?: string; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" };
   // Follow-feed subscriptions (follow-feed-subscriptions): "follow r/x / a blog / HN topic / a YT
   // channel" -> a keyless feed watch that pings only on NEW items. null = not a follow command (falls
   // through); { reason: "unresolved" } = a follow we couldn't map to a keyless feed (suggest the agent
@@ -1406,8 +1406,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           return;
         }
         const thenNote = r.then ? ` Then I'll run your "${r.then}" recipe and include its result.` : "";
+        // Watchlist sub-watches past the cap (digest-recipe-cap-silent-drop): name the ones that didn't fit.
+        const dropNote = r.droppedMembers && r.droppedMembers.length
+          ? ` (A watchlist holds up to ${r.members}, so I left out: ${r.droppedMembers.map((m) => `"${m}"`).join(", ")}.)`
+          : "";
         await deps.sendMessage(msg.chatId, (r.members
-          ? `Watching "${r.name}" — ${r.members} items in one list; I'll send a single update with only the ones that change.`
+          ? `Watching "${r.name}" — ${r.members} items in one list; I'll send a single update with only the ones that change.${dropNote}`
           : r.weather
           ? `Watching the forecast for "${r.name}" — I'll message you if there's ${r.weather}.`
           : r.pageUrl
@@ -1454,7 +1458,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       const r = deps.digestDefine(msg.chatId, msg.text);
       if (r.ok) {
         if (r.saved === false) { await deps.sendMessage(msg.chatId, `I've got digest "${r.name}" for now, but I couldn't save it to disk — it may be lost if I restart. Try again shortly.`); return; }
-        await deps.sendMessage(msg.chatId, `Saved digest "${r.name}" (${r.members} recipe${r.members === 1 ? "" : "s"}). Run it with /run ${r.name}.`); return;
+        // Members dropped by the per-digest cap (digest-recipe-cap-silent-drop): tell the user which
+        // didn't fit rather than silently keeping only the first N.
+        const dropNote = r.dropped && r.dropped.length
+          ? ` I kept the first ${r.members} and left out: ${r.dropped.map((m) => `"${m}"`).join(", ")} (a digest holds up to ${r.members} recipes).`
+          : "";
+        await deps.sendMessage(msg.chatId, `Saved digest "${r.name}" (${r.members} recipe${r.members === 1 ? "" : "s"}).${dropNote} Run it with /run ${r.name}.`); return;
       }
       if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the digest limit — /forget-digest one first."); return; }
       // unparsed: fall through

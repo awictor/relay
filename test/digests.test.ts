@@ -27,6 +27,7 @@ describe("DigestStore", () => {
     const s = new DigestStore({ file: tmpFile(), maxMembers: 2 });
     const rec = s.add(1, { name: "morning", members: ["a", "b", "c"] }, NOW)!;
     expect(rec.members).toEqual(["a", "b"]); // capped to 2
+    expect(s.lastDroppedForCap()).toEqual(["c"]); // the over-cap member is reported, not silently dropped
     expect(s.get(1, "MORNING")!.name).toBe("morning"); // case-insensitive
     expect(s.list(1)).toHaveLength(1);
     expect(s.remove(1, "morning")).toBe(true);

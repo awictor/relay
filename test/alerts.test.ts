@@ -564,9 +564,13 @@ describe("watchlists", () => {
   it("a single task (no semicolon) is NOT a watchlist", () => {
     expect(parseAlertCommand("watch btc: price of bitcoin")!.members).toBeUndefined();
   });
-  it("caps members", () => {
+  it("caps members + REPORTS the dropped ones, not a silent slice (digest-recipe-cap-silent-drop)", () => {
     const tasks = Array.from({ length: 12 }, (_, i) => `item ${i}`).join("; ");
-    expect(parseAlertCommand(`watch big: ${tasks}`)!.members).toHaveLength(8);
+    const p = parseAlertCommand(`watch big: ${tasks}`)!;
+    expect(p.members).toHaveLength(8);
+    expect(p.droppedMembers).toEqual(["item 8", "item 9", "item 10", "item 11"]); // the over-cap tail
+    // within the cap -> no droppedMembers field
+    expect(parseAlertCommand("watch mk: btc price; eth price")!.droppedMembers).toBeUndefined();
   });
   it("store persists members + setMemberLasts records per-member value, replace preserves last by label", () => {
     const s = new AlertStore({ file: tmpFile() });

@@ -3047,9 +3047,18 @@
       "title": "Audit digest/recipe/alert member caps for the same silent-drop class",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "lists had a silent over-cap drop; a digest caps members (maxMembers/slice), a watchlist caps sub-watches (MAX_WATCHLIST_MEMBERS slice), a recipe chain may cap steps — each may silently drop the tail without telling the user, the same trust bug just fixed for lists.",
       "how": "Probe DigestStore.add member slice, AlertStore watchlist member slice, and any recipe/chain step cap; where the definition exceeds the cap, surface 'kept the first N, dropped X' instead of a silent slice."
+    },
+    {
+      "id": "chain-step-cap-silent-drop",
+      "title": "Chain recipe silently truncates past MAX_CHAIN_STEPS (6)",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "parseChainSteps slices at 6 steps with no signal, so a 'a >> b >> ... >> h' recipe silently drops steps 7+; a power user building a long workflow loses the tail without knowing (same class as the digest/watchlist/list caps just fixed, lower frequency).",
+      "how": "Surface the dropped step count when a chain definition exceeds MAX_CHAIN_STEPS (on save/define), e.g. 'kept the first 6 steps, dropped 2' — reusing the cap-report pattern."
     }
   ],
   "history": [
@@ -4264,6 +4273,10 @@
     {
       "id": "memory-store-eviction-audit",
       "note": "Swept every per-chat store for silent data loss. NotesStore (evicted[] returned + handler warns), SavedStore (evicted[] + oldest-drop, lastSaveOk hedge), Contacts/Places/new-List cap (return null -> handler says 'hit the limit'), all persist paths (lastSaveOk hedges) — CLEAN. Found ONE real silent loss: ListStore.add dropped items over MAX_ITEMS_PER_LIST (100) via a bare `continue`, indistinguishable from a dedupe, so the handler said 'Added N' / 'Already on your list' while quietly losing the rest (lists-cap-silent-drop). Now returns `capped[]`; the handler tells the user which items didn't fit + that the list is full. +4 tests (store capped/dedupe-distinct + unit), 2000 green."
+    },
+    {
+      "id": "digest-recipe-cap-silent-drop",
+      "note": "Swept the automation-builder member caps for the silent-drop class (after the lists fix). Digest members over maxMembers + watchlist sub-watches over MAX_WATCHLIST_MEMBERS (8) were both sliced silently — a user defining a big digest/watchlist lost the tail with no notice. DigestStore.add now records the dropped members (lastDroppedForCap(), like lastSaveOk); parseAlertCommand sets droppedMembers on ParsedAlert. Both handlers name what didn't fit ('kept the first N, left out X'). Chain-step cap (6) has the same silent slice but is lower-frequency -> seeded as a follow-on. +2 tests, 2000 green."
     }
   ],
   "audits": [
@@ -4551,6 +4564,9 @@
     },
     {
       "note": "Self-audit inline (agent cap 200/200): swept memory/notes/saved/lists/contacts/places stores for silent eviction + persist-failure UX. All CLEAN except ListStore.add, which silently dropped over-cap items as if deduped. Fixed (capped[] + handler warning). Seeded digest-recipe-cap-silent-drop to sweep the SAME class in digest/watchlist/chain member caps."
+    },
+    {
+      "note": "Self-audit inline (agent cap 200/200): swept digest/watchlist/chain member caps. Digest + watchlist silently sliced past the cap (fixed: surface dropped members in both). Chain-step cap same class, lower freq -> seeded chain-step-cap-silent-drop. Cap-drop trust class now covered across lists/digests/watchlists."
     }
   ]
 }

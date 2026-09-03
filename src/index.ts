@@ -829,7 +829,8 @@ const handle = createHandler({
     if (!p) return { ok: false, reason: "unparsed" };
     const rec = digests.add(chatId, p, Date.now());
     if (!rec) return { ok: false, reason: "capped" };
-    return { ok: true, name: rec.name, members: rec.members.length, saved: digests.lastSaveOk() };
+    const dropped = digests.lastDroppedForCap(); // members past the per-digest cap (digest-recipe-cap-silent-drop)
+    return { ok: true, name: rec.name, members: rec.members.length, saved: digests.lastSaveOk(), ...(dropped.length ? { dropped } : {}) };
   },
   digestList: (chatId) => digests.list(chatId).map((d) => ({ name: d.name, members: d.members, schedule: d.schedule })),
   digestForget: (chatId, name) => {
@@ -882,7 +883,7 @@ const handle = createHandler({
     // saved = both the alert row AND its cadence schedule reached disk (either failing means the watch
     // won't survive a restart / won't actually fire) — persist-bool-all-stores.
     const saved = alertSaved && (!sp || schedules.lastSaveOk());
-    return { ok: true, name: rec.name, feed: rec.feed, then: rec.then, members: rec.members?.length, ...(rec.pageUrl ? { pageUrl: rec.pageUrl } : {}), ...(rec.weather ? { weather: describeWeatherCondition(rec.weather) } : {}), saved };
+    return { ok: true, name: rec.name, feed: rec.feed, then: rec.then, members: rec.members?.length, ...(p.droppedMembers?.length ? { droppedMembers: p.droppedMembers } : {}), ...(rec.pageUrl ? { pageUrl: rec.pageUrl } : {}), ...(rec.weather ? { weather: describeWeatherCondition(rec.weather) } : {}), saved };
   },
   // Follow-feed subscriptions (follow-feed-subscriptions): "follow r/x / a blog / HN topic / a YT
   // channel" -> a feed watch backed by a KEYLESS direct fetch (feedSource), auto-scheduled on the same
