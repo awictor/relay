@@ -102,6 +102,18 @@ describe("NotesStore", () => {
     expect(s.clear(1)).toBe(2);
     expect(s.list(1)).toHaveLength(0);
   });
+  it("lastSaveOk reports false when a forget/clear write fails (delete-persist-hedge)", () => {
+    const { writeFileSync } = require("fs");
+    const d = mkdtempSync(join(tmpdir(), "relay-nfail-")); dirs.push(d);
+    const asFile = join(d, "afile"); writeFileSync(asFile, "x"); // parent-is-a-file -> writes fail
+    const s = new NotesStore({ file: join(asFile, "cant.json") });
+    s.forget(1, "anything"); // no match -> no write attempted -> stays true
+    expect(s.lastSaveOk()).toBe(true);
+    // Seed in memory (add's write also fails, but the fact is in memory), then a real delete writes + fails.
+    s.add(1, "I'm vegetarian", NOW);
+    expect(s.forget(1, "vegetarian")).toEqual(["I'm vegetarian"]); // removed in memory
+    expect(s.lastSaveOk()).toBe(false);                            // ...but the persist failed
+  });
   it("caps notes per chat, dropping the oldest", () => {
     const s = new NotesStore({ file: tmp() });
     for (let i = 0; i < 35; i++) s.add(1, `fact ${i}`, NOW + i);

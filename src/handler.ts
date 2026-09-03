@@ -51,7 +51,7 @@ export interface HandlerDeps {
   // /profile (product-loop): echo the stored location/units/tz so a typo'd "UTC-5" or wrong city is
   // visible, not silently wrong on every weather/reminder. profileClear forgets it. Both optional.
   profileView?: (chatId: number) => string | null; // human-readable summary, or null if nothing set
-  profileClear?: (chatId: number) => boolean;       // true if there was a profile to clear
+  profileClear?: (chatId: number) => { had: boolean; saved: boolean }; // had: a profile existed; saved: the clear persisted (delete-persist-hedge)
   // First-run location capture (first-location-capture): hasLocation tells the handler whether this
   // chat has a saved home location; captureLocation parses a bare "which city?" reply + stores it
   // (returns the saved location, or null if the reply isn't a place). When both are present, the first
@@ -81,7 +81,7 @@ export interface HandlerDeps {
   // compose can address a draft; forgetContact deletes one; contactList lists them. All optional.
   saveContact?: (chatId: number, text: string) => { name: string; email?: string; phone?: string; saved: boolean } | null;
   resolveContact?: (chatId: number, name: string) => { name: string; email?: string; phone?: string } | null;
-  forgetContact?: (chatId: number, text: string) => { name: string } | null;
+  forgetContact?: (chatId: number, text: string) => { name: string; saved?: boolean } | null;
   contactList?: (chatId: number) => Array<{ name: string; email?: string; phone?: string }>;
   // Watch time series (watch-time-series): answer "how has <watch> moved this week" from the alert's
   // recorded points, no agent run. Returns a one-line trend summary, or null when there's no such
@@ -97,7 +97,7 @@ export interface HandlerDeps {
   // about me" recall. profileContext already carries facts into the agent via the wired contextLine.
   // All optional so older wiring/tests are unaffected.
   rememberFact?: (chatId: number, text: string) => { fact: string; evicted: string[]; saved?: boolean } | null;
-  forgetFact?: (chatId: number, text: string) => { removed: number; all: boolean; forgotten: string[] } | null;
+  forgetFact?: (chatId: number, text: string) => { removed: number; all: boolean; forgotten: string[]; saved?: boolean } | null;
   notesList?: (chatId: number) => string[];
   // Named lists (personal-notes-lists-store): a durable, editable collection the user reads back +
   // checks off ("add eggs to my grocery list", "what's on my list"). Distinct from remembered FACTS
@@ -137,7 +137,7 @@ export interface HandlerDeps {
   // Unified dashboard (unified-dashboard): one rollup of every automation (schedules/alerts/digests/
   // recipes) with next-fire + last-value + paused status. Returns a ready-to-send string. Optional.
   dashboardView?: (chatId: number) => string;
-  scheduleCancel?: (chatId: number, which: string) => { removed: number };
+  scheduleCancel?: (chatId: number, which: string) => { removed: number; saved?: boolean };
   // Snooze (snooze-automations): pause/resume a schedule/alert/digest by name or id instead of the
   // destructive /cancel|/forget. Returns how many were paused/resumed. Optional.
   scheduleSnooze?: (chatId: number, text: string, now: number) => { action: "pause" | "resume"; count: number; which: string; untilText?: string } | null;
@@ -507,8 +507,11 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     if (first === "/profile" && (deps.profileView || deps.profileClear)) {
       const rest = msg.text.trim().split(/\s+/).slice(1).join(" ").toLowerCase();
       if (/^(clear|reset|forget)$/.test(rest) && deps.profileClear) {
-        const had = deps.profileClear(msg.chatId);
-        await deps.sendMessage(msg.chatId, had ? "Cleared your saved location/units/timezone." : "Nothing saved to clear.");
+        const { had, saved } = deps.profileClear(msg.chatId);
+        // A failed persist means the location/tz comes back on restart (and keeps skewing weather/reminders)
+        // — hedge so the user retries (delete-persist-hedge).
+        const hedge = had && !saved ? ` ⚠️ But I couldn't save that to disk — it may come back if I restart; try again in a moment.` : "";
+        await deps.sendMessage(msg.chatId, had ? `Cleared your saved location/units/timezone.${hedge}` : "Nothing saved to clear.");
         return;
       }
       const view = deps.profileView?.(msg.chatId) ?? null;
@@ -616,9 +619,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         // Name exactly what was deleted so a mismatched forget is visible + correctable (a whole-word
         // match can still catch more than intended — showing it beats silent collateral loss).
         const named = r.forgotten.length ? `:\n${r.forgotten.map((f) => `• ${f}`).join("\n")}` : ".";
+        // A failed disk write on a forget means the fact comes back on restart — and a resurrected privacy
+        // request keeps getting injected into answers. Hedge so the user knows to retry (delete-persist-hedge).
+        const hedge = r.saved === false ? `\n\n⚠️ But I couldn't save that change to disk — it may come back if I restart. Please try again in a moment.` : "";
         await deps.sendMessage(msg.chatId, r.all
-          ? (r.removed ? `Done — cleared all ${r.removed} thing${r.removed === 1 ? "" : "s"} I remembered about you.` : "I didn't have anything saved to forget.")
-          : (r.removed ? `Forgot ${r.removed} thing${r.removed === 1 ? "" : "s"}${named}` : "I couldn't find anything matching that to forget — try \"what do you know about me\"."));
+          ? (r.removed ? `Done — cleared all ${r.removed} thing${r.removed === 1 ? "" : "s"} I remembered about you.${hedge}` : "I didn't have anything saved to forget.")
+          : (r.removed ? `Forgot ${r.removed} thing${r.removed === 1 ? "" : "s"}${named}${hedge}` : "I couldn't find anything matching that to forget — try \"what do you know about me\"."));
         return;
       }
     }
@@ -663,7 +669,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     }
     if (deps.forgetContact) {
       const r = deps.forgetContact(msg.chatId, msg.text);
-      if (r) { await deps.sendMessage(msg.chatId, `Forgot ${r.name}'s contact.`); return; }
+      if (r) {
+        const hedge = r.saved === false ? ` ⚠️ But I couldn't save that to disk — it may come back if I restart; try again in a moment.` : "";
+        await deps.sendMessage(msg.chatId, `Forgot ${r.name}'s contact.${hedge}`); return;
+      }
     }
     if (deps.saveContact) {
       const r = deps.saveContact(msg.chatId, msg.text);
@@ -693,8 +702,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // /cancel <id|all>: remove scheduled task(s). No agent run.
     if (first === "/cancel" && deps.scheduleCancel) {
       const which = msg.text.trim().split(/\s+/).slice(1).join(" ").trim() || "all";
-      const { removed } = deps.scheduleCancel(msg.chatId, which);
-      await deps.sendMessage(msg.chatId, removed > 0 ? `Cancelled ${removed} task${removed === 1 ? "" : "s"}.` : "Nothing matched — check /schedules for the id.");
+      const { removed, saved } = deps.scheduleCancel(msg.chatId, which);
+      // A failed persist means the cancelled reminder re-fires after a restart — hedge (delete-persist-hedge).
+      const hedge = removed > 0 && saved === false ? ` ⚠️ But I couldn't save that to disk — it may re-fire if I restart; try again in a moment.` : "";
+      await deps.sendMessage(msg.chatId, removed > 0 ? `Cancelled ${removed} task${removed === 1 ? "" : "s"}.${hedge}` : "Nothing matched — check /schedules for the id.");
       return;
     }
 

@@ -351,10 +351,16 @@ describe("createHandler", () => {
 
   it("/profile clear forgets it, no agent", async () => {
     let cleared = 0;
-    const { handle, sent } = harness({ profileClear: () => { cleared++; return true; } });
+    const { handle, sent } = harness({ profileClear: () => { cleared++; return { had: true, saved: true }; } });
     await handle(msg("/profile clear", 5));
     expect(cleared).toBe(1);
     expect(sent[0]!.text).toMatch(/[Cc]leared/);
+  });
+
+  it("/profile clear whose disk write failed hedges instead of a clean 'cleared' (delete-persist-hedge)", async () => {
+    const { handle, sent } = harness({ profileClear: () => ({ had: true, saved: false }) });
+    await handle(msg("/profile clear", 5));
+    expect(sent[0]!.text).toMatch(/couldn't save|come back|try again/i);
   });
 
   it("appends a save-nudge when a task repeats a prior one (auto-suggest-save)", async () => {
@@ -915,6 +921,15 @@ describe("long-term memory (remember-facts-store)", () => {
     // "remember to call mom" is a to-do, not a fact — parseRemember returns null so it reaches the agent.
     await handle(msg("remember to call mom", 5));
     expect(notes.list(5)).toHaveLength(0); // not stored as a fact
+  });
+
+  it("a forget whose disk write failed hedges instead of a clean 'Forgot' (delete-persist-hedge)", async () => {
+    const { handle, sent } = harness({
+      forgetFact: () => ({ removed: 1, all: false, forgotten: ["I'm allergic to peanuts"], saved: false }),
+    });
+    await handle(msg("forget that I'm allergic to peanuts", 5));
+    expect(sent[0]!.text).toMatch(/Forgot/);
+    expect(sent[0]!.text).toMatch(/couldn't save|come back|try again/i); // the hedge
   });
 });
 

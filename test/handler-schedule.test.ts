@@ -240,6 +240,13 @@ describe("handler — schedule routing", () => {
     expect(sent[0]).toMatch(/No scheduled tasks/i);
   });
 
+  it("/cancel whose disk write failed hedges instead of a clean 'Cancelled' (delete-persist-hedge)", async () => {
+    const { handle, sent } = harness({ scheduleCancel: () => ({ removed: 1, saved: false }) });
+    await handle(msg("/cancel s1"));
+    expect(sent[0]).toMatch(/Cancelled 1/);
+    expect(sent[0]).toMatch(/couldn't save|re-fire|try again/i); // the hedge
+  });
+
   it("/cancel all removes everything", async () => {
     const { handle, sent } = harness();
     await handle(msg("/cancel all"));

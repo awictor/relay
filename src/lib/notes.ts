@@ -65,7 +65,13 @@ export class NotesStore {
       this.items = obj.items.filter((c) => c && typeof c.chatId === "number" && Array.isArray(c.notes));
     }
   }
-  private persist(): boolean { return atomicWriteJson(this.file, { v: 1, items: this.items }); }
+  // Whether the LAST write reached disk. Read right after a delete/clear (no await between) so a
+  // "forgot it"/"cleared" confirmation can hedge when the persist failed (delete-persist-hedge): an
+  // unhedged failed delete resurrects a fact (or a whole privacy wipe) on restart — worse than a failed
+  // save, since the user believes it's gone. Defaults true so a read before any write isn't a false alarm.
+  private lastWriteOk = true;
+  lastSaveOk(): boolean { return this.lastWriteOk; }
+  private persist(): boolean { return (this.lastWriteOk = atomicWriteJson(this.file, { v: 1, items: this.items })); }
 
   private forChat(chatId: number): ChatNotes {
     let c = this.items.find((x) => x.chatId === chatId);

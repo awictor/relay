@@ -256,15 +256,20 @@ const handle = createHandler({
 
   // /profile view + clear (product-loop): echo the stored profile so a wrong city/tz is visible.
   profileView: (chatId) => { const l = profiles.contextLine(chatId); return l ? l.charAt(0).toUpperCase() + l.slice(1) : null; },
-  profileClear: (chatId) => profiles.clear(chatId),
+  // saved: whether the clear reached disk (delete-persist-hedge) — a failed write brings the saved
+  // location/tz back on restart, so the handler hedges. saved is moot when there was nothing to clear.
+  profileClear: (chatId) => { const had = profiles.clear(chatId); return { had, saved: !had || profiles.lastSaveOk() }; },
   // Long-term memory (remember-facts-store): parse+store "remember X", forget matching facts, list them.
   rememberFact: (chatId, text) => { const f = parseRemember(text); if (!f) return null; const r = notes.add(chatId, f, Date.now()); return { fact: f, evicted: r.evicted, saved: r.saved }; },
   forgetFact: (chatId, text) => {
     const p = parseForgetFact(text);
     if (!p) return null;
-    if ("all" in p) return { removed: notes.clear(chatId), all: true, forgotten: [] };
+    // Report whether the delete reached disk (delete-persist-hedge): an unhedged failed forget resurrects
+    // the fact on restart — and it keeps getting injected into every answer, so a privacy request silently
+    // reverts. saved is meaningful only when something was actually removed.
+    if ("all" in p) { const removed = notes.clear(chatId); return { removed, all: true, forgotten: [], saved: removed === 0 || notes.lastSaveOk() }; }
     const forgotten = notes.forget(chatId, p.term);
-    return { removed: forgotten.length, all: false, forgotten };
+    return { removed: forgotten.length, all: false, forgotten, saved: forgotten.length === 0 || notes.lastSaveOk() };
   },
   notesList: (chatId) => notes.list(chatId).map((n) => n.text),
   // Contacts book (contacts-book-compose): save/resolve/forget/list a name -> email/phone.
@@ -282,7 +287,9 @@ const handle = createHandler({
   forgetContact: (chatId, text) => {
     const name = parseForgetContact(text);
     if (!name) return null;
-    return contacts.forget(chatId, name) ? { name } : null;
+    // saved reflects whether the removal persisted (delete-persist-hedge) — a failed write brings the
+    // contact back on restart, so the handler hedges instead of a clean "forgot it".
+    return contacts.forget(chatId, name) ? { name, saved: contacts.lastSaveOk() } : null;
   },
   contactList: (chatId) => contacts.list(chatId).map((c) => ({ name: c.name, ...(c.email ? { email: c.email } : {}), ...(c.phone ? { phone: c.phone } : {}) })),
   // Named lists (personal-notes-lists-store): parse a list op + render the reply. Null falls through
@@ -306,14 +313,20 @@ const handle = createHandler({
       const warn = r.saved ? "" : `\n\n⚠️ Heads up — I couldn't save that to disk, so it may be lost if I restart. Try again in a moment.`;
       return `Added ${what} to your ${label}. Now:\n${render(r.list)}${warn}`;
     }
+    // A failed disk write on a delete brings the item back on restart, contradicting the confirmation —
+    // hedge it (delete-persist-hedge), mirroring the add path's warn.
+    const persistWarn = `\n\n⚠️ Heads up — I couldn't save that change to disk, so it may come back if I restart. Try again in a moment.`;
     if (cmd.op === "remove") {
       const removed = lists.remove(chatId, cmd.list, cmd.item);
       if (!removed.length) return `I couldn't find "${cmd.item}" on your ${label}. It has:\n${render(lists.show(chatId, cmd.list))}`;
-      return `Removed ${removed.map((i) => `"${i}"`).join(", ")} from your ${label}. Now:\n${render(lists.show(chatId, cmd.list))}`;
+      const warn = lists.lastSaveOk() ? "" : persistWarn;
+      return `Removed ${removed.map((i) => `"${i}"`).join(", ")} from your ${label}. Now:\n${render(lists.show(chatId, cmd.list))}${warn}`;
     }
     if (cmd.op === "clear") {
       const n = lists.clear(chatId, cmd.list);
-      return n ? `Cleared your ${label} (${n} item${n === 1 ? "" : "s"}).` : `Your ${label} was already empty.`;
+      if (!n) return `Your ${label} was already empty.`;
+      const warn = lists.lastSaveOk() ? "" : persistWarn;
+      return `Cleared your ${label} (${n} item${n === 1 ? "" : "s"}).${warn}`;
     }
     // show
     const items = lists.show(chatId, cmd.list);
@@ -469,12 +482,15 @@ const handle = createHandler({
     return formatDashboard(data);
   },
   scheduleCancel: (chatId, which) => {
+    // saved reflects whether the removal reached disk (delete-persist-hedge): a failed write means the
+    // cancelled reminder re-fires after a restart, so the handler hedges instead of a clean "cancelled".
     if (which.toLowerCase() === "all") {
       const all = schedules.list(chatId);
       let n = 0; for (const s of all) if (schedules.remove(s.id, chatId)) n++;
-      return { removed: n };
+      return { removed: n, saved: n === 0 || schedules.lastSaveOk() };
     }
-    return { removed: schedules.remove(which, chatId) ? 1 : 0 };
+    const removed = schedules.remove(which, chatId) ? 1 : 0;
+    return { removed, saved: removed === 0 || schedules.lastSaveOk() };
   },
   // Snooze (snooze-automations): pause/resume a schedule/alert/digest by name or id, non-destructively.
   scheduleSnooze: (chatId, text, now) => {

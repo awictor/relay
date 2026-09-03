@@ -71,7 +71,12 @@ export class ListStore {
     const obj = readJsonSafe<{ items?: ChatLists[] }>(this.file);
     if (obj && Array.isArray(obj.items)) this.items = obj.items.filter((c) => c && typeof c.chatId === "number" && Array.isArray(c.lists));
   }
-  private persist(): boolean { return atomicWriteJson(this.file, { v: 1, items: this.items }); }
+  // Whether the LAST write reached disk — read right after remove/clear so a "removed"/"cleared"
+  // confirmation can hedge a failed persist (delete-persist-hedge): an unhedged failed delete brings the
+  // item back on restart, contradicting what the user was told. Defaults true (a read before any write).
+  private lastWriteOk = true;
+  lastSaveOk(): boolean { return this.lastWriteOk; }
+  private persist(): boolean { return (this.lastWriteOk = atomicWriteJson(this.file, { v: 1, items: this.items })); }
   private forChat(chatId: number): ChatLists {
     let c = this.items.find((x) => x.chatId === chatId);
     if (!c) { c = { chatId, lists: [] }; this.items.push(c); }

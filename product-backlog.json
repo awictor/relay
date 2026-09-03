@@ -2138,7 +2138,7 @@
       "title": "cancel/forget/remove/clear confirm success even when the disk write failed",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The SAVE path hedges ('couldn't save to disk') via atomicWriteJson's bool + lastSaveOk, but the DELETE path doesn't: schedule.remove/notes.forget+clear/lists.remove+clear/contacts.forget all drop persist()'s return. So 'cancel my 3pm reminder' / 'forget I'm allergic to peanuts' / 'forget everything about me' get a clean confirm, but on a failed write the data resurrects on restart — a cancelled reminder fires again, a deleted privacy fact keeps getting injected into answers. Worse than a failed save because the user believes it's done.",
       "how": "Plumb the persist bool through the destructive paths (return removed+saved, mirror the add-side pattern) so the handler hedges ('I removed it for now but couldn't save the change to disk — try again'). Cover schedule cancel, forgetFact/clear, list remove/clear, contact forget. Offline-testable with an unwritable store (parent-is-a-file trick already used in tests)."
     },
@@ -3006,6 +3006,10 @@
     {
       "item": "air-quality-uv",
       "note": "Added a keyless get_air_quality tool. New src/lib/airquality.ts (near-clone of suntimes.ts): Open-Meteo air-quality API returns US AQI + PM2.5/PM10/ozone + current UV in ONE call, at the same lat/lng weather resolves + stores per-chat. isAirRequest/isUvRequest/airPlace detectors, aqiCategory (EPA bands) + uvRisk mappers, parseAirQuality, formatAirQuality (leads with UV for a 'sunscreen' ask, AQI otherwise, 'wear sunscreen' nudge when UV>=3). Wired: TOOLS[] entry + dispatch (threads saved coords like get_suntimes) + BrowserBackend.getAirQuality method + defaultBackend + prompt line + HELP + sorted tool-list test. 13 new tests; live-probed the Open-Meteo AQI URL (200, us_aqi/pm2_5/uv_index present) so call-tested:true for the data source, agent wiring offline-tested. Previously 'is it smoky'/'need sunscreen' fell to a flaky scrape."
+    },
+    {
+      "item": "delete-persist-hedge",
+      "note": "Destructive commands no longer claim success when the disk write failed. The SAVE path hedged ('couldn't save to disk') but the DELETE path dropped persist()'s bool, so 'cancel my 3pm reminder' / 'forget I'm allergic to peanuts' / '/profile clear' / 'remove milk from my list' / 'forget mom's contact' confirmed cleanly even on a failed write — and the data resurrected on restart (a cancelled reminder re-fires, a deleted privacy fact keeps getting injected into answers). Added lastSaveOk() to NotesStore + ListsStore (contacts/schedule/profile already had it), plumbed the persist bool through forgetFact/forgetContact/profileClear/scheduleCancel (return saved) + listCommand remove/clear, and the handler now appends a hedge ('I couldn't save that change — it may come back if I restart, try again') when saved===false. 4 new tests (store lastSaveOk-on-failed-delete + handler hedges for forget-fact / profile-clear / schedule-cancel), suite 1572 green, tsc clean. call-tested:false (offline store + handler tests, unwritable-store trick)."
     }
   ],
   "audits": [
