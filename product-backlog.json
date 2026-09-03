@@ -23,7 +23,7 @@
       "title": "pasted text ('summarize this' / 'proofread this') nudged toward web_search instead of just doing it",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A user pastes an email/paragraph + 'make this shorter'/'fix the grammar'/'tldr' — the tool-oriented SYSTEM_PROMPT nudges the agent toward web_search/scrape instead of operating on the text already in the message, so a zero-latency errand becomes a slow/confused turn (audit 29 A#4).",
       "how": "A SYSTEM_PROMPT rule: if the user's message CONTAINS the text to work on (summarize/shorten/rewrite/proofread/translate this <text>), process it directly with NO tool call. Light + prompt-only; verify with an offline agent test that a paste-and-summarize does a bare reply, not a web_search."
     },
@@ -2200,6 +2200,10 @@
     {
       "id": "random-decision-helper",
       "note": "Added a random/decision tool so a classic first-errand opener ('flip a coin', 'roll a d20', 'random number 1-100', 'pick one: tacos or sushi') gets a sub-second genuinely-random answer instead of a slow browse or an LLM-faked value. New src/lib/random.ts: parseRandomRequest (coin/dice 'NdM'/number-range/'up to'/'pick between/or/and' — anchored so 'a coin costs a dollar' isn't hijacked) + runRandom (RNG injected for deterministic tests). A `random` agent tool runs Math.random app-side + instructs the model to relay the EXACT result, never invent/re-roll. Wired into tool surface + SYSTEM_PROMPT + help. 17 tests (parse coin/dice/number/pick/no-hijack + splitOptions + seeded runRandom + 2 agent dispatch). call-tested: false (Math.random is app-side, deterministic under a seed in tests). 1240 tests green."
+    },
+    {
+      "id": "pasted-text-process",
+      "note": "A pasted email/paragraph + 'make this shorter'/'proofread'/'tl;dr'/'rewrite this'/'translate this' was nudged by the tool-oriented SYSTEM_PROMPT toward web_search/scrape — a zero-latency errand turned slow/confused. Added a prompt carve-out to the ANSWER-DIRECTLY section: when the message CONTAINS the text to work on, process it with NO tool; never web_search/scrape for in-message text. Prompt-only (the live LLM chooses the behavior). Guarded via a SYSTEM_PROMPT-content test (pasted-text phrasing + 'never web_search or scrape for text' present) alongside the existing prompt-sync suite. 1 test. call-tested: false (prompt-only). 1241 tests green."
     }
   ],
   "audits": [

@@ -32,6 +32,12 @@ describe("SYSTEM_PROMPT ↔ TOOLS sync (DEV-0074)", () => {
     expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/time-sensitive|live|current/);
   });
 
+  it("carries the pasted-text carve-out — operate on in-message text without a tool (pasted-text-process)", () => {
+    expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/pasted text|text to work on|text.*already in the message/);
+    expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/summarize this|make this shorter|proofread|rewrite this/);
+    expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/never web_search or scrape for text/);
+  });
+
   it("carries the cite-source guidance for fetched answers (cite-source-link)", () => {
     expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/cite your source|source: <url>/);
     expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/never invent or guess a link/);
