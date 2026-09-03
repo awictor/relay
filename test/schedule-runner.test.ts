@@ -475,6 +475,42 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
     expect(daily.dueMs).toBeGreaterThan(NOW);      // advanced to its next occurrence, not fired now
   });
 
+  it("an over-cap ALERT check still RUNS (edge-triggered, self-throttling) — a crossing isn't lost (sendcap-drops-alert-checks)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    let alertChecks = 0;
+    const { store, runner } = harness(clock, {
+      maxPerChatPerHour: 1,
+      runAgent: async (task) => ({ reply: `did:${task}` }),
+      send: async (_c, text) => { sent.push(text); },
+      alertCheck: async () => { alertChecks++; return { message: "🔔 btc: below 50k", commit: () => {} }; },
+    });
+    store.add(1, { kind: "once", task: "filler", dueMs: NOW - 1 }, NOW);          // consumes the 1 slot
+    store.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW - 1, hourMin: "09:00" }, NOW); // over cap
+    await runner.tick();
+    expect(alertChecks).toBe(1);   // the alert was CHECKED despite the cap (not skipped)
+    // and since it crossed, it sent — an edge-triggered crossing is worth the send even over-cap
+    expect(sent).toContain("🔔 btc: below 50k");
+  });
+
+  it("an over-cap alert check that DOESN'T change stays silent (no send, no storm)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    let alertChecks = 0;
+    const { store, runner } = harness(clock, {
+      maxPerChatPerHour: 1,
+      runAgent: async (task) => ({ reply: `did:${task}` }),
+      send: async (_c, text) => { sent.push(text); },
+      alertCheck: async () => { alertChecks++; return { message: null, commit: () => {} }; }, // unchanged
+    });
+    store.add(1, { kind: "once", task: "filler", dueMs: NOW - 1 }, NOW);
+    store.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    expect(alertChecks).toBe(1);                              // still checked
+    expect(sent).toHaveLength(1);                             // only the filler reminder, no alert send
+    expect(sent.some((t) => /btc|🔔/.test(t))).toBe(false);   // unchanged alert stayed silent — can't storm
+  });
+
   it("the cap is per-chat (a 2nd chat is unaffected)", async () => {
     const clock = { t: NOW };
     const sent: Array<{ chatId: number }> = [];

@@ -23,7 +23,7 @@
       "title": "anti-spam send-cap silently skips alert CHECKS, losing edge-triggered crossings",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "In the runner tick, an over-cap recurring schedule is safeComplete'd + advanced — but for an alert:-marked schedule that skips the CHECK entirely, not just a send. The cap is meant to throttle SENDS, so a 'below 50k' crossing during a capped hour is never evaluated and never re-fires (a below->above->below bounce is lost). The headline watch feature misses the exact event it promised (audit B#3).",
       "how": "In the tick, when an over-cap schedule is an alert: marker, still RUN the check (it's silent unless it notifies) — only gate the SEND on the cap. Or exempt alert checks from the proactive-send cap (they self-limit via edge-trigger). Keep dailies/reminders capped. Test: an alert crossing during a capped window still notifies."
     },
@@ -1892,6 +1892,10 @@
     {
       "id": "proactive-runs-datetime-units-blind",
       "note": "The proactive half of Relay ran dumber than the reactive half: the inbound path threads nowMs/tzOffsetMin/weatherCoords/weatherUnits into runAgent, but every proactive caller (schedule/alert/digest/chain runner) called runAgent(task,{llm,context},[]) with none — so a scheduled 'top news today'/'days until my trip' reasoned from the model's training date and a metric user's daily weather came back in °F. Added an AgentEnv type + an optional agentEnv(chatId) dep to all four runners (widening their runAgent dep to carry the fields), spread into every proactive runAgent call. index wires a shared agentEnvFor(chatId) = {nowMs: Date.now(), tzOffsetMin from profile, weatherCoords freshCoords, weatherUnits from profile} into the schedule runner, alertCheck, digestRunText (+ its runChain), the trigger-to-action runThen, scheduled runChain, and the inbound runChainRecipe. So proactive runs now get the same buildNowLine + unit-aware get_weather the inbound path does. 1 test (schedule tick threads nowMs/tz/units into runAgent). call-tested: false (offline unit proves the deps thread through). 1164 tests green."
+    },
+    {
+      "id": "sendcap-drops-alert-checks",
+      "note": "The anti-spam send-cap dropped alert CHECKS, not just sends: an over-cap recurring schedule was safeComplete'd + advanced, so for an 'alert:'-marked schedule the whole check was skipped and a 'below 50k' crossing during a capped hour was never evaluated and never re-fired (a below->above->below bounce lost). The headline watch feature silently missed the exact event it promised. Fixed: an alert: marker now bypasses the send-cap gate and falls through to fireOne — alertCheck is edge-triggered (sends ONLY on a real change) so it self-throttles and can't storm; a resulting send still calls noteSend so cap accounting stays honest, and the baseline commit still gates on a successful send. Dailies/reminders stay capped. 2 tests (over-cap alert still checks + sends its crossing / over-cap unchanged alert checks but stays silent). call-tested: false (offline unit). 1166 tests green."
     }
   ],
   "audits": [

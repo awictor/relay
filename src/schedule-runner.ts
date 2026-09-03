@@ -260,7 +260,14 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // reminder is an explicit, single promise ("remind me to take my meds at 3pm"); completing
         // it here deleted it forever with only a log line — a black hole. Instead DEFER it: leave it
         // due (don't complete) so a later tick, once the rolling-hour cap frees a slot, delivers it.
-        if (overCap(s.chatId, deps.now())) {
+        // An alert: check is edge-triggered — it only SENDS on a real change, so it self-throttles and
+        // must NOT be dropped by the send-cap. Dropping the CHECK (not just a send) meant a "below 50k"
+        // crossing during a capped hour was never evaluated and never re-fired (sendcap-drops-alert-
+        // checks). Let it fall through to fireOne; alertCheck stays silent unless the value changed, and
+        // the caller's post-send commit still gates the baseline advance. A genuine burst of alert
+        // notifications is rare (each needs a distinct change) so this can't storm like a misfiring daily.
+        const isAlertCheck = /^alert:/.test(s.task);
+        if (overCap(s.chatId, deps.now()) && !isAlertCheck) {
           if (s.kind === "once") {
             // A "once" reminder is an explicit single promise; defer past the cap rather than drop it.
             // BUT a chat with many recurring watches can stay over-cap indefinitely, starving the
