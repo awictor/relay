@@ -280,3 +280,25 @@ describe("runAgent get_weather (geo-tool-cluster)", () => {
     expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/no saved location/i);
   });
 });
+
+describe("runAgent compose (draft-to-send-composer)", () => {
+  it("drafts an email + returns a mailto artifact, sends nothing", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "compose", args: { kind: "email", to: "landlord@x.com", subject: "Rent", body: "Hi, rent is sent." } } },
+      { toolCall: { name: "reply", args: { text: "Here's your draft — tap to send." } } },
+    ]);
+    await runAgent("draft an email to my landlord that rent is sent", { llm });
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/Draft email/);
+    expect(toolMsg!.content).toMatch(/Tap to send: mailto:landlord@x\.com\?subject=Rent/);
+    expect(toolMsg!.content).toMatch(/NOT sending/i);
+  });
+  it("errors clearly on an empty body", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "compose", args: { kind: "email", body: "" } } },
+      { toolCall: { name: "reply", args: { text: "I need the content first." } } },
+    ]);
+    await runAgent("draft it", { llm });
+    expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/no draft body/i);
+  });
+});

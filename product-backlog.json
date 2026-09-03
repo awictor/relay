@@ -1067,7 +1067,7 @@
       "title": "draft-to-send composer (non-gated acting slice)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Relay is read-only + dead-ends at \"here is what I found\"; the honest non-gated answer to Instinct acting is composing the email/DM/reply as a ready artifact the USER sends.",
       "how": "A compose intent -> LLM drafts the message + a copy block + a mailto:/tel: deep link; never hits send (safety guard untouched)."
     },
@@ -1445,6 +1445,10 @@
     {
       "id": "fx-live-claim-timestamp",
       "note": "convert_currency no longer claims a money figure is \"live\" (the source refreshes ~daily): parseFx now returns the API time_last_update_utc as a YYYY-MM-DD asOf, formatConversion appends \"as of <date>\" + the prompt says report it. Also fmtRate renders a tiny inverse rate at adaptive precision (IDR->USD 0.0000238, not \"0.0000\"). parseFxRate kept as a back-compat shim. 987 tests green."
+    },
+    {
+      "id": "draft-to-send-composer",
+      "note": "Added a compose tool — the non-gated slice of Instinct acting: the agent drafts an email/text and returns a copy block + a one-tap mailto:/sms: deep link the USER sends; Relay never sends (safety guard untouched). New src/lib/compose.ts (mailtoLink/smsLink RFC-encoded, formatDraft) + agent tool/dispatch/prompt; passed to the user verbatim. Closes the read-only \"here is what I found\" dead-end. 995 tests green."
     }
   ],
   "audits": [

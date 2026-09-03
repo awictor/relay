@@ -15,6 +15,7 @@ import { fetchYouTubeTranscript } from "./lib/youtube.js";
 import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { getWeather as fetchWeather, formatWeather } from "./lib/weather.js";
+import { formatDraft, type Draft } from "./lib/compose.js";
 
 // Does the user's task ask for a keepable file (csv-export-compare)? A compare/extract then attaches
 // a CSV document instead of only pasting a truncated JSON blob in chat.
@@ -132,6 +133,20 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "compose",
+    description: "Draft an email or text message for the user to review and SEND THEMSELVES (you never send it). Use when the user asks you to \"write/draft the email to X\", \"reply to this\", \"text Y that ...\". You write the body (and subject for email); this returns a copy block + a one-tap mailto:/sms: link. This is how Relay helps with correspondence without logging in or sending.",
+    parameters: {
+      type: "object",
+      properties: {
+        kind: { type: "string", description: "\"email\" or \"message\" (SMS/text)" },
+        to: { type: "string", description: "Recipient — an email address (email) or phone number (message). Optional." },
+        subject: { type: "string", description: "Email subject line (email only). Optional." },
+        body: { type: "string", description: "The full drafted message text you wrote." },
+      },
+      required: ["kind", "body"],
+    },
+  },
+  {
     name: "transcript",
     description: "Fetch the spoken transcript (captions) of a YouTube video by URL. Use this — NOT scrape — whenever the user gives a YouTube link (youtube.com/watch, youtu.be, /shorts) and wants it summarized, quoted, or answered from (\"summarize this video\", \"what does this video say about X\", \"tldr\"). Returns the plain transcript text; then summarize/answer from it. If captions are unavailable it says so.",
     parameters: { type: "object", properties: { url: { type: "string", description: "A YouTube video URL (watch/youtu.be/shorts)" } }, required: ["url"] },
@@ -171,6 +186,7 @@ Tools:
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "get_weather" (place?): current weather + today's high/low. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location.
+- "compose" (kind, to?, subject?, body): draft an email/text for the user to SEND THEMSELVES (you write the body; it returns a copy block + a mailto:/sms: link). Use for "write/draft/reply to..." asks. You never send — pass the returned draft to the user verbatim in reply.
 - "reply" (text): finish.
 
 Rules:
@@ -564,6 +580,17 @@ export async function runAgent(
         } catch (e) {
           push("get_weather", `ERROR getting weather: ${e instanceof Error ? e.message : String(e)}`);
         }
+        continue;
+      }
+
+      if (call.name === "compose") {
+        const body = String(call.args.body ?? "").trim();
+        if (!body) { push("compose", "ERROR: no draft body given."); continue; }
+        const kind = String(call.args.kind ?? "email").toLowerCase() === "message" ? "message" : "email";
+        const draft: Draft = { kind, body, ...(call.args.to ? { to: String(call.args.to) } : {}), ...(call.args.subject ? { subject: String(call.args.subject) } : {}) };
+        // The formatted draft + deep link IS the user-facing deliverable — hand it straight back so the
+        // model relays it verbatim in reply (never re-summarize a draft the user is about to send).
+        push("compose", `${formatDraft(draft)}\n\n(Give this to the user verbatim — the copy block + the "Tap to send" link. You are NOT sending it; they review and send.)`);
         continue;
       }
 
