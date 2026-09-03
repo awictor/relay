@@ -106,6 +106,12 @@ describe("ProfileStore", () => {
   it("contextLine is empty for an unknown chat", () => {
     expect(new ProfileStore({ file: tmp() }).contextLine(99)).toBe("");
   });
+  it("stores + surfaces coords from a location pin (telegram-location-pin)", () => {
+    const s = new ProfileStore({ file: tmp() });
+    s.set(1, { lat: 30.2711, lng: -97.7437 });
+    expect(s.get(1)!.lat).toBe(30.2711);
+    expect(s.contextLine(1)).toMatch(/current coordinates are 30\.27110,-97\.74370/);
+  });
   it("clear() forgets a chat's profile + reports whether there was one (profile-view-reset)", () => {
     const f = tmp();
     const s = new ProfileStore({ file: f });

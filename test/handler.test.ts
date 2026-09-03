@@ -1121,3 +1121,33 @@ describe("resumeErrand (background-errand-persist startup recovery)", () => {
     expect(done).toEqual(["bg-recovered-1"]); // settled under the SAME id
   });
 });
+
+describe("shared location pin (telegram-location-pin)", () => {
+  const pin = (lat: number, lng: number, text = "", chatId = 5): InboundMessage =>
+    ({ chatId, from: "u", text, location: { latitude: lat, longitude: lng } } as InboundMessage);
+
+  it("a captionless pin saves coords + acks, no agent run", async () => {
+    const saved: Array<{ lat: number; lng: number }> = [];
+    let agentCalls = 0;
+    const { handle, sent } = harness({
+      saveCoords: (_c, lat, lng) => saved.push({ lat, lng }),
+      runAgentFn: async () => { agentCalls++; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(pin(30.27, -97.74));
+    expect(saved).toEqual([{ lat: 30.27, lng: -97.74 }]);
+    expect(agentCalls).toBe(0);
+    expect(sent[0]!.text).toMatch(/got your location/i);
+  });
+
+  it("a pin WITH a caption saves coords then runs the caption as a task", async () => {
+    const saved: Array<{ lat: number; lng: number }> = [];
+    let ran = "";
+    const { handle } = harness({
+      saveCoords: (_c, lat, lng) => saved.push({ lat, lng }),
+      runAgentFn: async (t) => { ran = t; return { reply: "coffee spots: ...", steps: 1, tools: [] }; },
+    });
+    await handle(pin(30.27, -97.74, "coffee near here"));
+    expect(saved).toEqual([{ lat: 30.27, lng: -97.74 }]);
+    expect(ran).toBe("coffee near here"); // ran the caption, coords now in profile context
+  });
+});

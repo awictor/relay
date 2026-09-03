@@ -8,6 +8,8 @@ export interface Profile {
   location?: string;              // free-text home place, e.g. "Austin, TX"
   units?: "metric" | "imperial";  // preferred units
   tzOffsetMin?: number;           // minutes EAST of UTC (from a "UTC-5"-style clause), for schedules
+  lat?: number;                   // precise coords from a shared location pin (telegram-location-pin)
+  lng?: number;
 }
 
 /** Render a minutes-east-of-UTC offset as "UTC-5" / "UTC+5:30" / "UTC+0". Preserves the half/quarter-
@@ -179,6 +181,8 @@ export class ProfileStore {
     if (patch.location !== undefined) p.location = patch.location;
     if (patch.units !== undefined) p.units = patch.units;
     if (patch.tzOffsetMin !== undefined) p.tzOffsetMin = patch.tzOffsetMin;
+    if (patch.lat !== undefined) p.lat = patch.lat;
+    if (patch.lng !== undefined) p.lng = patch.lng;
     this.persist();
     return p;
   }
@@ -201,6 +205,7 @@ export class ProfileStore {
     if (!p) return "";
     const bits: string[] = [];
     if (p.location) bits.push(`home location is ${p.location}`);
+    if (typeof p.lat === "number" && typeof p.lng === "number") bits.push(`current coordinates are ${p.lat.toFixed(5)},${p.lng.toFixed(5)} (use for "near me"/directions)`);
     if (p.units) bits.push(`prefers ${p.units} units`);
     if (typeof p.tzOffsetMin === "number") bits.push(`timezone is ${formatUtcOffset(p.tzOffsetMin)}`);
     return bits.join("; ");

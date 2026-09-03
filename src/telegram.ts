@@ -24,6 +24,9 @@ export interface InboundMessage {
   documentFileId?: string; // set when the message is a document/PDF (product-loop): file_id; `text`
                            // carries the caption. Handler downloads + asks the vision LLM about it.
   documentMime?: string;   // the document's declared mime_type (e.g. application/pdf), if any.
+  location?: { latitude: number; longitude: number }; // set when the message is a shared location pin
+                                                      // (the natural "near me" move). Handler saves it
+                                                      // as the chat's coords + acks, so it's not dropped.
 }
 
 export function hasToken(): boolean {
@@ -211,6 +214,7 @@ interface TgUpdate {
     photo?: Array<{ file_id: string; width?: number; height?: number }>; // size variants, ascending
     voice?: { file_id: string; duration?: number; mime_type?: string };  // voice note
     document?: { file_id: string; mime_type?: string; file_name?: string }; // forwarded file/PDF
+    location?: { latitude: number; longitude: number };                     // a shared location pin
     from?: { username?: string; first_name?: string };
   };
 }
@@ -243,6 +247,10 @@ export function parseUpdates(updates: TgUpdate[], offset: number): { messages: I
     } else if (m.document?.file_id) {
       // Forwarded document/PDF (product-loop): handler downloads + asks the vision LLM. Caption = the question.
       messages.push({ chatId: m.chat.id, text: (m.caption ?? "").trim(), from, messageId: m.message_id, documentFileId: m.document.file_id, documentMime: m.document.mime_type });
+    } else if (m.location && typeof m.location.latitude === "number" && typeof m.location.longitude === "number") {
+      // A shared location pin (telegram-location-pin): text-less, so it was silently dropped. Carry the
+      // coords + any caption so the handler can save them + acknowledge (the natural "near me" move).
+      messages.push({ chatId: m.chat.id, text: (m.caption ?? "").trim(), from, messageId: m.message_id, location: { latitude: m.location.latitude, longitude: m.location.longitude } });
     } else if (m.text) {
       messages.push({ chatId: m.chat.id, text: m.text, from, messageId: m.message_id });
     }

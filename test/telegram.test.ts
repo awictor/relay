@@ -37,6 +37,12 @@ describe("parseUpdates — inbound delivery contract", () => {
     expect(nextOffset).toBe(5);
   });
 
+  it("maps a location pin to an InboundMessage with location coords (telegram-location-pin)", () => {
+    const pin = { update_id: 40, message: { message_id: 9, chat: { id: 88 }, location: { latitude: 30.27, longitude: -97.74 }, from: { username: "alex" } } } as Parameters<typeof parseUpdates>[0][0];
+    const { messages } = parseUpdates([pin], 0);
+    expect(messages).toEqual([{ chatId: 88, text: "", from: "alex", messageId: 9, location: { latitude: 30.27, longitude: -97.74 } }]);
+  });
+
   it("maps a photo message to an InboundMessage with photoFileId + caption as text (product-loop)", () => {
     const photo = { update_id: 30, message: { message_id: 8, chat: { id: 77 }, caption: "what's the total?",
       photo: [{ file_id: "small" }, { file_id: "large" }], from: { username: "alex" } } } as Parameters<typeof parseUpdates>[0][0];

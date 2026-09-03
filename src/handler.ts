@@ -58,6 +58,9 @@ export interface HandlerDeps {
   // once, then re-runs the original errand — instead of the agent asking the city every time. Optional.
   hasLocation?: (chatId: number) => boolean;
   captureLocation?: (chatId: number, text: string) => { location: string; tzOffsetMin?: number } | null;
+  // Shared location pin (telegram-location-pin): save the chat's precise coords so "near me"/directions
+  // resolve against them. Optional; absent -> a location pin just gets a generic ack.
+  saveCoords?: (chatId: number, lat: number, lng: number) => void;
   // Answer history (answer-history-recall): recallAnswers searches this chat's PAST answers by keyword
   // ("what was that sushi place you found", "resend the flights") and returns the matches (task + reply
   // + when); logAnswer records a fresh answer. When both are wired, a recall ask is served from the log
@@ -262,7 +265,23 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   return handle;
 
   async function handleOne(msg: InboundMessage): Promise<void> {
-    log(`[in] ${msg.from}: ${msg.photoFileId ? "[photo] " : ""}${msg.voiceFileId ? "[voice] " : ""}${msg.documentFileId ? "[doc] " : ""}${deps.redactText(msg.text).slice(0, 120)}`);
+    log(`[in] ${msg.from}: ${msg.photoFileId ? "[photo] " : ""}${msg.voiceFileId ? "[voice] " : ""}${msg.documentFileId ? "[doc] " : ""}${msg.location ? "[location] " : ""}${deps.redactText(msg.text).slice(0, 120)}`);
+
+    // Shared location pin (telegram-location-pin): a text-less pin used to be dropped silently. Save the
+    // coords (so "near me"/directions resolve against them), then either run the caption as an errand
+    // now that we have the location, or ack + prompt for what they want. Handled before the empty-text
+    // guard so a captionless pin isn't rejected.
+    if (msg.location) {
+      deps.saveCoords?.(msg.chatId, msg.location.latitude, msg.location.longitude);
+      if (msg.text) {
+        // Caption present ("coffee near here") — run it as a normal task; the saved coords are now in
+        // the agent's profile context.
+        msg = { ...msg, location: undefined };
+      } else {
+        await deps.sendMessage(msg.chatId, "📍 Got your location — I'll use it for \"near me\", weather, and directions. What would you like?");
+        return;
+      }
+    }
 
     // Inbound photo (product-loop): answer about the image (caption = question, or a default). This is
     // a vision call, not the browser agent — handled before the empty-text guard so a captionless

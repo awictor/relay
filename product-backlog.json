@@ -995,7 +995,7 @@
       "title": "Telegram location-pin messages silently dropped",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Tapping attach->Location (the natural \"near me\" move) sends a text-less message that is dropped with no reply — reads as broken.",
       "how": "Parse msg.location.{latitude,longitude} in the telegram intake; feed coords to the agent (enables precise near-me) or at least acknowledge + offer to save as location."
     },
@@ -1371,6 +1371,10 @@
     {
       "id": "fx-conversion-tool",
       "note": "Added a convert_currency tool backed by a keyless FX API (open.er-api.com) — \"200 USD in EUR\" is now instant + exact instead of a slow scrape. New src/lib/fx.ts (normalizeCurrency incl symbols/words, fxUrl, parseFxRate, convertCurrency with injected fetch) + backend.convertCurrency + agent tool/dispatch/prompt. Live-verified the API (result:success, real USD->EUR/GBP rates). 964 tests green."
+    },
+    {
+      "id": "telegram-location-pin",
+      "note": "A shared Telegram location pin (attach->Location, the natural \"near me\" move) was text-less + silently dropped. Now parseUpdates maps it to an InboundMessage with coords; the handler saves them to the profile (lat/lng, surfaced in the agent context line for near-me/directions) + acks, or runs the caption as a task if one was sent. hasLocation counts coords too. 968 tests green."
     }
   ],
   "audits": [
