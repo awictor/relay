@@ -1,6 +1,33 @@
 {
   "items": [
     {
+      "id": "random-decision-helper",
+      "title": "'flip a coin' / 'roll a d20' / 'pick one' has no tool — slow browse or a fake 'random' value",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "A classic 'does this thing work' opener (flip a coin, roll a d20, random number 1-100, pick tacos-or-sushi) spun a 20-30s browser run or got an LLM-hallucinated 'random' value that isn't actually random. A sub-second deterministic answer is a cheap instant-delight win (audit 29 A#1).",
+      "how": "New src/lib/random.ts (parseRandomRequest + runRandom, RNG injected for tests) + a `random` agent tool using Math.random app-side, told to relay the exact result + never invent one."
+    },
+    {
+      "id": "personal-notes-lists-store",
+      "title": "no personal notes/lists store — 'remember I parked in C' / 'add eggs to my list' fails on recall",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "recall only searches Relay's OWN past answers (the prompt says 'NOT for facts the user told me about themselves'), there's no list store, so 'remember I parked in lot C' -> 'where did I park?' and 'add eggs to my grocery list' -> 'what's on my list' both fail. Remembering user-supplied facts/lists is table-stakes for a personal assistant (audit 29 A#3).",
+      "how": "Check whether the notes-store (src/lib/notes.ts — 'remember I'm vegetarian' facts) already covers arbitrary facts; if so, widen the parse to plain 'remember X' + a named-list variant ('add X to my <list> list', 'what's on my <list>'). New list store keyed by chat+list name, or reuse notes with a list tag. Handler branches + tests."
+    },
+    {
+      "id": "pasted-text-process",
+      "title": "pasted text ('summarize this' / 'proofread this') nudged toward web_search instead of just doing it",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "A user pastes an email/paragraph + 'make this shorter'/'fix the grammar'/'tldr' — the tool-oriented SYSTEM_PROMPT nudges the agent toward web_search/scrape instead of operating on the text already in the message, so a zero-latency errand becomes a slow/confused turn (audit 29 A#4).",
+      "how": "A SYSTEM_PROMPT rule: if the user's message CONTAINS the text to work on (summarize/shorten/rewrite/proofread/translate this <text>), process it directly with NO tool call. Light + prompt-only; verify with an offline agent test that a paste-and-summarize does a bare reply, not a web_search."
+    },
+    {
       "id": "schedule-date-parse-regressions",
       "title": "date/alarm parser hijacks 'separate 3'/'next month'/'alarm for 20 min' + drops the alarm task",
       "impact": "high",
@@ -2169,6 +2196,10 @@
     {
       "id": "schedule-date-parse-regressions",
       "note": "Bundle-fixed 4 regressions the audit found in the just-shipped absolute-date + alarm branches: (1) the month regex had no word boundary after the 3-letter stem, so 'mark 5 emails'/'separate 3 files'/'junk 4 tabs'/'may 6 people' were hijacked into date reminders -> now a full month name OR a bounded 3-letter abbrev, and bare 'may N' only after 'on'; (2) 'next month' matched 'next mon'+th -> next Monday (~3 weeks early) -> next-weekday now matches full weekday words only; (3) 'set an alarm for 20 minutes' read 20 as an 8pm clock hour -> negative-lookahead skips a following min/hour/sec unit (it's a timer, falls through); (4) an alarm returned 'wake up' unconditionally, dropping the purpose -> cleanTask keeps 'to leave for the airport', bare alarm still 'wake up'. Mirrored the tightened patterns in the handler scheduleCue. 4 tests (prefix-collision / next-month / alarm-for-N-min / alarm-keeps-task). call-tested: false (pure parse). 1227 tests green."
+    },
+    {
+      "id": "random-decision-helper",
+      "note": "Added a random/decision tool so a classic first-errand opener ('flip a coin', 'roll a d20', 'random number 1-100', 'pick one: tacos or sushi') gets a sub-second genuinely-random answer instead of a slow browse or an LLM-faked value. New src/lib/random.ts: parseRandomRequest (coin/dice 'NdM'/number-range/'up to'/'pick between/or/and' — anchored so 'a coin costs a dollar' isn't hijacked) + runRandom (RNG injected for deterministic tests). A `random` agent tool runs Math.random app-side + instructs the model to relay the EXACT result, never invent/re-roll. Wired into tool surface + SYSTEM_PROMPT + help. 17 tests (parse coin/dice/number/pick/no-hijack + splitOptions + seeded runRandom + 2 agent dispatch). call-tested: false (Math.random is app-side, deterministic under a seed in tests). 1240 tests green."
     }
   ],
   "audits": [

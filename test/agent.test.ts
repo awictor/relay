@@ -277,6 +277,38 @@ describe("runAgent get_quote (stock-quote-tool)", () => {
   });
 });
 
+describe("runAgent random (random-decision-helper)", () => {
+  const backend = () => ({
+    scrape: async (url: string) => ({ title: "", content: "", url }),
+    createSession: async () => ({ id: "s" }),
+    navigate: async (_i: string, url: string) => ({ url, title: "" }),
+    click: async () => {}, type: async () => {},
+    readCurrent: async () => ({ title: "", content: "", url: "" }),
+    releaseSession: async () => {},
+    discoverLinks: async () => [],
+    fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+  });
+  it("answers a coin flip from the tool (a real result, no browser)", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "random", args: { request: "flip a coin" } } },
+      { toolCall: { name: "reply", args: { text: "Heads!" } } },
+    ]);
+    await runAgent("flip a coin", { llm, backend: backend() });
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/🪙 (Heads|Tails)/);        // a real coin result
+    expect(toolMsg!.content).toMatch(/do not change or re-roll/); // instructs the model not to fake it
+  });
+  it("asks to clarify when the ask isn't a recognizable randomize", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "random", args: { request: "do something random-ish" } } },
+      { toolCall: { name: "reply", args: { text: "Coin, dice, a number, or a list?" } } },
+    ]);
+    await runAgent("randomize", { llm, backend: backend() });
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/Couldn't tell what to randomize/);
+  });
+});
+
 describe("runAgent get_crypto (crypto-quote-tool)", () => {
   it("uses get_crypto for a coin price, not web_search", async () => {
     const llm = new MockLLM([

@@ -16,6 +16,7 @@ import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
+import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
 import { getWeather as fetchWeather, formatWeather, formatWeatherWhen } from "./lib/weather.js";
@@ -113,6 +114,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { symbol: { type: "string", description: "Ticker symbol, e.g. \"AAPL\" or \"TSLA\". Non-US: add a market suffix like \"VOD.UK\"." } },
       required: ["symbol"],
+    },
+  },
+  {
+    name: "random",
+    description: "Flip a coin, roll dice, pick a random number, or choose randomly between options — use for \"flip a coin\", \"roll a d20\", \"random number 1-100\", \"pick one: tacos or sushi\". Genuinely random (don't make one up yourself). Pass the user's request verbatim.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The user's random/decision ask, e.g. \"flip a coin\", \"roll 2d6\", \"pick between A and B\"." } },
+      required: ["request"],
     },
   },
   {
@@ -277,6 +287,7 @@ Tools:
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
+- "random" (request): flip a coin / roll dice / random number / pick from options. Use this — NEVER invent a "random" value yourself — for "flip a coin", "roll a d20", "random number 1-100", "pick one: X or Y".
 - "get_crypto" (coin): current crypto price + 24h change. Use this — NOT get_quote/web_search — for "price of bitcoin"/"what's ETH at"/"BTC price"/"how's doge doing". Pass the ticker or name (btc, eth, sol, doge).
 - "get_quote" (symbol): latest stock/equity price. Use this — NOT web_search/scrape — for any "what's Tesla at"/"AAPL price"/"how's NVDA doing" question; it's instant. Pass the ticker (AAPL, TSLA); non-US add a market suffix (VOD.UK).
 - "get_weather" (place?, when?): current weather, today's high/low, + up to a 7-day forecast. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location. For a future day, pass "when" with the user's words ("tomorrow", "this weekend", "Saturday") so the RIGHT day is reported, not today.
@@ -710,6 +721,14 @@ export async function runAgent(
         } catch (e) {
           push("get_quote", `ERROR getting quote: ${e instanceof Error ? e.message : String(e)}`);
         }
+        continue;
+      }
+
+      if (call.name === "random") {
+        const req = parseRandomRequest(String(call.args.request ?? ""));
+        if (!req) { push("random", "Couldn't tell what to randomize — ask the user to clarify (coin / dice / a number range / a list to pick from)."); continue; }
+        // App-side RNG (Math.random) — genuinely random, no network. The LLM must NOT invent the value.
+        push("random", `${runRandom(req)}. Report this EXACT result to the user; do not change or re-roll it.`);
         continue;
       }
 
