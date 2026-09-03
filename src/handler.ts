@@ -17,7 +17,7 @@ import { isRecallRequest } from "./lib/notes.js";
 import { needsLocationContext } from "./lib/profile.js";
 import { isBackgroundErrand, stripDispatchPhrasing, BACKGROUND_MAX_STEPS } from "./lib/background.js";
 import { isAnswerRecall, relativeAge } from "./lib/answer-log.js";
-import { parseSaveThatAs, parseWatchThat, parseScheduleThat } from "./lib/recipes.js";
+import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./lib/recipes.js";
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -119,6 +119,9 @@ export interface HandlerDeps {
   // parses a run command + looks up. { missingArg } = a slotted recipe was run with no value, so the
   // handler asks for it instead of running a broken (empty-slot) task (product-loop).
   recipeResolve?: (chatId: number, text: string) => { name: string; task: string } | { name: string; missingArg: true } | null;
+  // Run a chained recipe (task with ">>" steps) sequentially, returning the final output (recipe-chaining).
+  // Optional; absent -> a chained task just runs as one agent task (the ">>" is inert).
+  runChainRecipe?: (chatId: number, task: string) => Promise<string>;
   recipeList?: (chatId: number) => Array<{ name: string; task: string; schedule?: string }>;
   // recipe-auto-recall (product-loop): a free-text message strongly matching a saved recipe -> the
   // matching recipe name (else null), so the handler offers "/run <name>" instead of a cold agent run.
@@ -833,6 +836,25 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       }
       const hit = deps.recipeResolve?.(msg.chatId, msg.text);
       if (hit && "missingArg" in hit) { await deps.sendMessage(msg.chatId, `"${hit.name}" needs a value — try "/run ${hit.name} <value>".`); return; }
+      // A chained recipe (task has ">>") runs its steps sequentially via runChainRecipe rather than as
+      // one agent task (recipe-chaining). Rate-limited like an agent turn; result cached for drilldown.
+      if (hit && "task" in hit && deps.runChainRecipe && isChain(hit.task)) {
+        const rl = deps.checkRateLimit(msg.chatId);
+        if (!rl.allowed) { await deps.sendMessage(msg.chatId, `You're sending a lot — give me ${rl.retryAfterSec}s to catch up.`); return; }
+        await deps.sendTyping(msg.chatId);
+        const startedAt = deps.now();
+        try {
+          const out = await deps.runChainRecipe(msg.chatId, hit.task);
+          const parts = formatReplyParts(out);
+          lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, parts.shown) });
+          await deps.sendMessage(msg.chatId, parts.shown);
+          deps.recordTurn({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
+        } catch (e) {
+          deps.recordTurn({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: false });
+          await deps.sendMessage(msg.chatId, friendlyError(e instanceof Error ? e.message : String(e)));
+        }
+        return;
+      }
       if (hit) { msg = { ...msg, text: hit.task }; } // run the saved task via the agent path below
       else if (/^\/run\b/i.test(msg.text)) { await deps.sendMessage(msg.chatId, "No recipe or digest by that name — see /recipes or /digests."); return; }
       // natural "run ..." with no match: fall through to the agent as a normal message.

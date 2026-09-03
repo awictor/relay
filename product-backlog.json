@@ -1184,7 +1184,7 @@
       "title": "conditional multi-step recipe chaining",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Recipes are one-shot; the biggest power multiplier (Instinct core) is chained steps where N feeds N+1 (\"find cheapest flight to {city}, then weather+news there, then summarize\") with an optional if/stop gate.",
       "how": "A chain recipe = ordered steps; run each, inject the prior output into the next task, optional contains/threshold gate to stop early. Mock-LLM testable."
     },
@@ -1610,6 +1610,10 @@
     {
       "id": "find-nearby-radius-expand",
       "note": "find_nearby now expands its search radius 3->10->30km until results appear, so \"nearest ER/hospital\" is no longer a dangerous false-negative just past 3km; it also distinguishes a failed area geocode (area_not_found) from a genuinely-empty result, and surfaces the radius when it widened past 3km. findNearby returns a NearbyOutcome ({places,radiusKm} | {error}); agent dispatch handles each case. 1054 tests green."
+    },
+    {
+      "id": "recipe-chaining",
+      "note": "Recipes can now be multi-step workflows: a task with >>-separated steps runs each in order, feeding the PRIOR step output into the next as context (\"cheapest flight to {city} >> weather + news there >> summarize\"). An \"if <kw>: <step>\" gate stops the chain when the prior output lacks the keyword; a degraded/empty step also stops it. New parseChainSteps/isChain in recipes.ts + src/chain-runner.ts (runChain, injected agent, read-only — safety intact); handler routes a chained /run through runChainRecipe (rate-limited, cached for drilldown). 1064 tests green."
     }
   ],
   "audits": [

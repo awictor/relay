@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, parseSaveThatAs, parseWatchThat, parseScheduleThat, applySlots, slotNames, hasSlots, RecipeStore } from "../src/lib/recipes.js";
+import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, parseSaveThatAs, parseWatchThat, parseScheduleThat, applySlots, slotNames, hasSlots, parseChainSteps, isChain, RecipeStore } from "../src/lib/recipes.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -161,5 +161,22 @@ describe("RecipeStore", () => {
     expect(s.add(1, { name: "c", task: "3" }, NOW)).toBeNull(); // capped
     expect(s.add(1, { name: "a", task: "updated" }, NOW)).toBeTruthy(); // update exempt
     expect(s.get(1, "a")!.task).toBe("updated");
+  });
+});
+
+describe("parseChainSteps / isChain (recipe-chaining)", () => {
+  it("splits on >> into ordered steps", () => {
+    const s = parseChainSteps("find flight to {city} >> weather there >> summarize");
+    expect(s.map((x) => x.text)).toEqual(["find flight to {city}", "weather there", "summarize"]);
+    expect(s.every((x) => x.ifContains === undefined)).toBe(true);
+  });
+  it("parses an 'if <kw>:' gate on a step", () => {
+    const s = parseChainSteps("check price >> if under: draft the order email");
+    expect(s[1]).toEqual({ text: "draft the order email", ifContains: "under" });
+  });
+  it("a task with no >> is a single step; isChain reflects it", () => {
+    expect(parseChainSteps("just one task")).toEqual([{ text: "just one task" }]);
+    expect(isChain("a >> b")).toBe(true);
+    expect(isChain("plain")).toBe(false);
   });
 });

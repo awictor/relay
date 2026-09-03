@@ -34,6 +34,7 @@ import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { AnswerLog, recallKeywords } from "./lib/answer-log.js";
 import { BackgroundStore, planErrandReplay } from "./lib/background-store.js";
 import { checkAlert } from "./alert-runner.js";
+import { runChain } from "./chain-runner.js";
 import { parseScheduleFor } from "./lib/schedule.js";
 
 // Agent brain, chosen by LLM_PROVIDER (m24). Default gemini (free tier) — nothing changes unless
@@ -322,6 +323,11 @@ const handle = createHandler({
     // A slotted recipe run with no value would substitute empty + run a broken task — ask instead.
     if (hasSlots(rec.task) && !parsed.args.trim()) return { name: rec.name, missingArg: true };
     return { name: rec.name, task: applySlots(rec.task, parsed.args) };
+  },
+  // Run a chained recipe (">>"-separated steps) sequentially, feeding each step's output to the next.
+  runChainRecipe: async (chatId, task) => {
+    const r = await runChain(chatId, task, { llm, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()) });
+    return r.final;
   },
   recipeList: (chatId) => recipes.list(chatId).map((r) => ({ name: r.name, task: r.task, schedule: r.schedule })),
   // recipe-auto-recall: offer a saved recipe when a free-text message strongly matches its task. Skip

@@ -1151,3 +1151,28 @@ describe("shared location pin (telegram-location-pin)", () => {
     expect(ran).toBe("coffee near here"); // ran the caption, coords now in profile context
   });
 });
+
+describe("chained recipe run (recipe-chaining)", () => {
+  it("routes a chained recipe through runChainRecipe, not the plain agent path", async () => {
+    let chainTask = "", agentCalls = 0;
+    const { handle, sent } = harness({
+      recipeResolve: (_c, t) => /^\/run flow/.test(t) ? { name: "flow", task: "step a >> step b" } : null,
+      runChainRecipe: async (_c, task) => { chainTask = task; return "chained final answer"; },
+      runAgentFn: async () => { agentCalls++; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("/run flow", 5));
+    expect(chainTask).toBe("step a >> step b");
+    expect(agentCalls).toBe(0);            // ran the chain, not a single agent task
+    expect(sent[0]!.text).toMatch(/chained final answer/);
+  });
+  it("a NON-chained recipe still runs the normal agent path", async () => {
+    let ran = "";
+    const { handle } = harness({
+      recipeResolve: (_c, t) => /^\/run btc/.test(t) ? { name: "btc", task: "price of bitcoin" } : null,
+      runChainRecipe: async () => "should not be called",
+      runAgentFn: async (t) => { ran = t; return { reply: "$65k", steps: 1, tools: [] }; },
+    });
+    await handle(msg("/run btc", 5));
+    expect(ran).toBe("price of bitcoin");  // single task via the agent, chain runner untouched
+  });
+});

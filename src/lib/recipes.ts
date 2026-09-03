@@ -94,6 +94,21 @@ export function parseRunWithArgs(text: string): { name: string; args: string } |
   return { name, args: m[2]!.trim() };
 }
 
+// Split a recipe task into sequential chain steps on the ">>" delimiter (recipe-chaining) — "find the
+// cheapest flight to {city} >> then the weather + top news there >> summarize it all". Each step runs
+// in order, the prior step's OUTPUT fed into the next as context, so a recipe becomes a small workflow.
+// A step may start with "if <keyword>:" — the step only runs when the prior output contains <keyword>
+// (case-insensitive), else the chain STOPS (a cheap conditional gate). Returns the ordered steps (the
+// {text, ifContains?} shape); a task with no ">>" yields a single step (a plain recipe). Exported for tests.
+export interface ChainStep { text: string; ifContains?: string }
+export function parseChainSteps(task: string): ChainStep[] {
+  return task.split(/\s*>>\s*/).map((raw) => raw.trim()).filter(Boolean).map((s) => {
+    const m = s.match(/^if\s+([^:]+?)\s*:\s*(.+)$/i);
+    return m ? { text: m[2]!.trim(), ifContains: m[1]!.trim().toLowerCase() } : { text: s };
+  });
+}
+export function isChain(task: string): boolean { return task.includes(">>"); }
+
 // The distinct {slot} names in a task, in first-appearance order. Exported for tests.
 export function slotNames(task: string): string[] {
   const out: string[] = [], seen = new Set<string>();
