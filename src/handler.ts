@@ -20,8 +20,37 @@ import { isAnswerRecall, relativeAge } from "./lib/answer-log.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./lib/recipes.js";
 import { getTemplate, templateCatalog } from "./lib/templates.js";
 import { photoNeedsAgent, photoIsQrScan } from "./lib/photo-intent.js";
-import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, tryButtons as buildTryButtons, TRY_EXAMPLES, type InlineKeyboard } from "./lib/callbacks.js";
+import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, tryButtons as buildTryButtons, actButtons, TRY_EXAMPLES, type InlineKeyboard } from "./lib/callbacks.js";
 import { parseResultList, firstUrl, type ResultItem } from "./lib/result-list.js";
+
+// Tap-to-watch gating (tap-to-watch-on-answers). Only offer the "make this recurring" buttons on a
+// task that's a plausible standing errand — NOT a command-shaped message (already an automation / a
+// save / a slash command), NOT a trivial one-word ask, NOT a follow-up ("more"/"why"). Conservative so
+// the buttons don't clutter every reply.
+const AUTOMATION_SKIP_RE = /^\s*(?:\/|run\b|save\b|watch\b|alert\b|change\b|remind|every\b|schedule\b|digest\b|follow\b|snooze\b|pause\b|resume\b|more\b|why\b|link\b)/i;
+export function canOfferAutomation(text: string): boolean {
+  const t = String(text ?? "").trim();
+  if (t.length < 6) return false;                 // too trivial to be a standing errand
+  if (t.split(/\s+/).length < 2) return false;    // a single token ("weather" is fine at >=6 chars, "hi" isn't)
+  if (AUTOMATION_SKIP_RE.test(t)) return false;   // already a command/automation/follow-up
+  return true;
+}
+// A short watch name derived from a task (tap-to-watch-on-answers): the first salient word(s), so
+// "price of bitcoin" -> "bitcoin", "AAPL stock price" -> "aapl". Falls back to "watch" if nothing
+// salient. The user can rename via the normal alert flow later; this just needs to be a stable handle.
+const SLUG_STOP = new Set(["the", "a", "an", "of", "for", "price", "cost", "what", "whats", "is", "how", "much", "to", "in", "on", "my", "me", "get", "show", "current"]);
+export function watchSlug(task: string): string {
+  const words = String(task ?? "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+  const salient = words.filter((w) => w.length > 1 && !SLUG_STOP.has(w));
+  return (salient[0] ?? words[0] ?? "watch").slice(0, 20);
+}
+// True when an answer is a price/number worth a change-watch (so we add "🔔 Watch this"), mirroring
+// recurringCta's price signal: a money amount anywhere, or a price/cost ask that returned a number.
+export function answerIsWatchable(userText: string, reply: string): boolean {
+  const both = `${userText} ${reply}`;
+  if (/[$€£]\s?\d/.test(both)) return true;
+  return /\b(price|cost|worth|how much|in stock|back in stock|stock|rate)\b/i.test(userText) && /\d/.test(reply);
+}
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -312,6 +341,9 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   // persistently unwritable disk doesn't append the notice to every turn. In-memory; re-warns after a
   // restart, which is fine (a restart is exactly when the lost context would surface).
   const memWarnedChats = new Set<number>();
+  // Last answer's TASK text per chat (tap-to-watch-on-answers), so a "🔁 Every morning" / "🔔 Watch this"
+  // button tap can turn it into a schedule/alert without the user retyping. Overwritten each clean answer.
+  const lastTask = new Map<number, string>();
   const handle = ((msg: InboundMessage): Promise<void> => {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -386,6 +418,20 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     const rl = deps.checkRateLimit(chatId);
     if (!rl.allowed) return `Slow down — ${rl.retryAfterSec}s`;
     try {
+      if (action.kind === "act") {
+        // Tap-to-watch (tap-to-watch-on-answers): turn the chat's last answer into an automation. The
+        // task text was cached when the answer was sent; synthesize the command a user would have typed
+        // and run it through the SAME handler flow (schedule / alert routing), so no new backend is
+        // needed and every existing guard applies. A stale tap (task evicted) gets an honest note.
+        const task = lastTask.get(chatId);
+        if (!task) { await deps.sendMessage(chatId, "I can't set that up anymore — ask me the thing again and I'll offer the button fresh."); return "Expired"; }
+        lastTask.delete(chatId); // one-shot: consume so a double-tap doesn't stack two automations
+        const synthetic = action.mode === "daily"
+          ? `every morning ${task}`
+          : `watch ${watchSlug(task)}: ${task} when it changes`;
+        await handleOne({ chatId, from: "tap", text: synthetic, messageId: 0 } as InboundMessage);
+        return action.mode === "daily" ? "Every morning" : "Watching";
+      }
       if (action.kind === "try") {
         // Onboarding tap-to-try (onboarding-tap-to-try): run the canned example as if the user typed it,
         // so the first tap produces a real answer through the normal flow (command/agent routing).
@@ -1497,10 +1543,18 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       // of options, cache the items + attach a "1 2 3…" pick-button row so a tap resends that one option
       // (with its link) instead of a retype. Text replies only (a photo/doc caption isn't a pickable
       // list) + not degraded (a partial answer's list is unreliable). Buttons cap at pickButtons' max.
-      let pickKeyboard: InlineKeyboard | undefined;
+      let replyKeyboard: InlineKeyboard | undefined;
       if (!photo && !doc && !degraded) {
         const items = parseResultList(body);
-        if (items.length >= 2) { pickLists.set(msg.chatId, items); pickKeyboard = pickButtons(items.length); }
+        if (items.length >= 2) { pickLists.set(msg.chatId, items); replyKeyboard = pickButtons(items.length); }
+        // Tap-to-watch (tap-to-watch-on-answers): on a clean answer that isn't a pick-list, offer one-tap
+        // "🔁 Every morning" (+ "🔔 Watch this" for a price/number answer) so the user turns it into an
+        // automation without retyping — the retention flywheel the text save-nudge only describes. Gated
+        // to when schedule wiring exists + this task isn't already a command-shaped/automation message.
+        else if (deps.answerCallback && deps.scheduleAdd && canOfferAutomation(msg.text)) {
+          lastTask.set(msg.chatId, msg.text.trim());
+          replyKeyboard = actButtons(answerIsWatchable(msg.text, reply));
+        }
       }
       if (photo && deps.sendPhoto) {
         await deps.sendPhoto(msg.chatId, photo, out.slice(0, 1024));
@@ -1509,7 +1563,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         await deps.sendDocument(msg.chatId, doc, docName ?? "page.pdf", out.slice(0, 1024));
         if (out.length > 1024) await deps.sendMessage(msg.chatId, out);
       } else {
-        await deps.sendMessage(msg.chatId, out, pickKeyboard);
+        await deps.sendMessage(msg.chatId, out, replyKeyboard);
       }
 
       // Append this turn to the CURRENT memory, not the pre-run `history` snapshot taken minutes ago

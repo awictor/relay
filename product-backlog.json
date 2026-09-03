@@ -2534,7 +2534,7 @@
       "title": "a fresh inbound answer has no one-tap 'watch this / save this' button",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Inline buttons only attach to PROACTIVE pings; a fresh answer gets at most a text save-nudge nobody acts on. One tap to turn any answer into a recurring watch/alert/saved recipe is the retention flywheel, and the button + alert/recipe backends already exist.",
       "how": "On a clean inbound text answer, attach a small keyboard (Watch this / Save / Daily) via the existing callbacks codec; a tap wires the alert/recipe the save-nudge currently only describes in prose. Reuse callbacks.ts + handler routing."
     },
@@ -3575,6 +3575,10 @@
     {
       "item": "sticky-ack-too-broad",
       "note": "Fixed a bare 'ok'/'got it'/'stop' silently deleting an active sticky nag (sticky-ack-only-when-recent). hasSticky gated a bare ack but ignored whether a sticky recently PINGED, so an unrelated 'ok' hours after the meds/water nag last fired wiped the safety-net reminder. Added ScheduleStore.hasRecentlyFiredSticky(chatId,now,windowMs) — true only when a sticky pinged within the window (user plausibly replying to it) or hasn't fired yet (ack about the setup); index's stickyAck now gates on it (RELAY_STICKY_ACK_WINDOW_MS, default 90m) so a bare ack outside the window routes as a normal message. .env.example parity added. 1 new store test (not-yet-fired counts, 30m-ago counts, 3h-ago doesn't, hasSticky still true). suite 1729 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "tap-to-watch-on-answers",
+      "note": "One-tap 'make this recurring' buttons on fresh answers (tap-to-watch-on-answers) — the retention flywheel the text save-nudge only described. A clean inbound text answer that's a plausible standing errand now gets 🔁 Every morning (+ 🔔 Watch this for a price/number answer). Added an 'act' callback op (bare opcodes ad/aw, no payload — the task is resolved from a per-chat lastTask cache) + actButtons(offerWatch) in callbacks.ts; handler caches the answer's task, gates the offer via canOfferAutomation (skips command/automation/follow-up/trivial messages) + answerIsWatchable (money or a price-ask returning a number), and on tap synthesizes 'every morning <task>' or 'watch <slug>: <task> when it changes' (watchSlug derives a short name) and runs it through handleOne — same schedule/alert routing, no new backend, every existing guard applies. One-shot (consumes the cached task so a double-tap can't stack two). Stale tap -> honest note. Pick-list answers keep their 1/2/3 buttons (act only when not a list). HELP updated. 6 new tests (act codec + buttons, gating helpers, answer-attaches + Every-morning schedules + Watch-this defines + stale). suite 1735 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [

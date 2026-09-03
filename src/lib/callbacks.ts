@@ -27,7 +27,12 @@ export type CallbackAction =
   | { kind: "pick"; index: number }
   // Run a canned first-errand example from the onboarding buttons (onboarding-tap-to-try). Carries the
   // 0-based index into the fixed TRY_EXAMPLES list so the payload is tiny + stable.
-  | { kind: "try"; index: number };
+  | { kind: "try"; index: number }
+  // Turn the last answer into a recurring automation with one tap (tap-to-watch-on-answers). No payload
+  // beyond the mode — the handler resolves the actual task text from the chat's cached last answer, so
+  // the callback_data stays tiny regardless of how long the task was. "daily" = every-morning schedule;
+  // "watch" = a value/change watch.
+  | { kind: "act"; mode: "daily" | "watch" };
 
 // Opcode <-> action for the NAME-carrying actions. 2-char ops keep the payload short so long-ish
 // names still fit the 64-byte cap. The pick action (index-carrying) uses opcode "pk" handled separately.
@@ -43,6 +48,8 @@ const OP_FOR = new Map<string, string>(
 );
 const PICK_OP = "pk";
 const TRY_OP = "ty";
+const ACT_DAILY = "ad";
+const ACT_WATCH = "aw";
 
 const utf8Len = (s: string): number => new TextEncoder().encode(s).length;
 
@@ -66,6 +73,9 @@ export function encodeCallback(a: CallbackAction): string | null {
     ? `${PICK_OP}|${a.index}`
     : a.kind === "try"
     ? `${TRY_OP}|${a.index}`
+    // act carries no payload (the task is resolved from the chat's cached last answer) — a bare opcode.
+    : a.kind === "act"
+    ? (a.mode === "daily" ? ACT_DAILY : ACT_WATCH)
     : (() => { const op = OP_FOR.get(`${a.kind}:${a.action}`); return op ? `${op}|${a.name}` : null; })();
   if (data === null) return null;
   return utf8Len(data) <= CALLBACK_MAX_BYTES ? data : null;
@@ -76,6 +86,9 @@ export function encodeCallback(a: CallbackAction): string | null {
  * "|" only, so a name with a "|" survives. A pick decodes its index (rejects a non-integer/negative). */
 export function decodeCallback(data: string | undefined | null): CallbackAction | null {
   if (!data) return null;
+  // act ops are bare opcodes (no payload — task comes from the cached last answer).
+  if (data === ACT_DAILY) return { kind: "act", mode: "daily" };
+  if (data === ACT_WATCH) return { kind: "act", mode: "watch" };
   const i = data.indexOf("|");
   if (i < 0) return null;
   const op = data.slice(0, i);
@@ -146,6 +159,21 @@ export function tryButtons(): InlineKeyboard {
     else kb.push([btn]);
   }
   return kb;
+}
+
+/** Buttons that turn the last answer into a recurring automation (tap-to-watch-on-answers): "🔁 Every
+ * morning" (a daily schedule of the same task) + optionally "🔔 Watch this" when the answer is a
+ * price/number worth watching for a change. No payload — the handler resolves the task from the chat's
+ * cached last answer. `offerWatch` gates the watch button (a price/stock/number answer). */
+export function actButtons(offerWatch: boolean): InlineKeyboard | undefined {
+  const row: InlineButton[] = [];
+  const daily = encodeCallback({ kind: "act", mode: "daily" });
+  if (daily) row.push({ text: "🔁 Every morning", callback_data: daily });
+  if (offerWatch) {
+    const watch = encodeCallback({ kind: "act", mode: "watch" });
+    if (watch) row.push({ text: "🔔 Watch this", callback_data: watch });
+  }
+  return row.length ? [row] : undefined;
 }
 
 /** Given a proactive schedule's task marker ("alert:<name>" / "digest:<name>" / "recipe:<name>"),

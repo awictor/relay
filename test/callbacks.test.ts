@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   encodeCallback, decodeCallback, alertButtons, digestButtons, recipeButtons, buttonsForTask, pickButtons,
-  tryButtons, TRY_EXAMPLES, CALLBACK_MAX_BYTES,
+  tryButtons, actButtons, TRY_EXAMPLES, CALLBACK_MAX_BYTES,
 } from "../src/lib/callbacks.js";
 
 describe("callback codec", () => {
@@ -93,6 +93,22 @@ describe("keyboard builders", () => {
   it("try decodes reject a non-integer index", () => {
     expect(decodeCallback("ty|x")).toBeNull();
     expect(decodeCallback("ty|0")).toEqual({ kind: "try", index: 0 });
+  });
+
+  it("act ops (tap-to-watch) are bare opcodes, round-trip, no payload", () => {
+    const daily = encodeCallback({ kind: "act", mode: "daily" })!;
+    const watch = encodeCallback({ kind: "act", mode: "watch" })!;
+    expect(daily).not.toContain("|");
+    expect(decodeCallback(daily)).toEqual({ kind: "act", mode: "daily" });
+    expect(decodeCallback(watch)).toEqual({ kind: "act", mode: "watch" });
+  });
+
+  it("actButtons: Every-morning always, Watch-this only when watchable", () => {
+    const noWatch = actButtons(false)!;
+    expect(noWatch[0]!.map((b) => b.text)).toEqual(["🔁 Every morning"]);
+    const withWatch = actButtons(true)!;
+    expect(withWatch[0]!.some((b) => /Watch this/.test(b.text))).toBe(true);
+    expect(decodeCallback(withWatch[0]!.find((b) => /Watch/.test(b.text))!.callback_data)).toEqual({ kind: "act", mode: "watch" });
   });
 
   it("buttonsForTask maps the schedule marker to the right keyboard", () => {

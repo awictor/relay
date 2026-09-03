@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createHandler, type HandlerDeps } from "../src/handler.js";
+import { createHandler, canOfferAutomation, answerIsWatchable, watchSlug, type HandlerDeps } from "../src/handler.js";
 import type { InboundMessage } from "../src/telegram.js";
 import type { LLMMessage } from "../src/llm.js";
 import { encodeCallback, TRY_EXAMPLES } from "../src/lib/callbacks.js";
@@ -152,6 +152,54 @@ describe("handler — inline-button callbacks", () => {
     expect(ranText).toBe(TRY_EXAMPLES[0]!.text);
     expect(sent[sent.length - 1]!.text).toMatch(/sunny/);
     expect(acked[0]).toBeTruthy();
+  });
+
+  it("canOfferAutomation / answerIsWatchable / watchSlug gate + shape the tap-to-watch offer", () => {
+    expect(canOfferAutomation("price of bitcoin")).toBe(true);
+    expect(canOfferAutomation("top news today")).toBe(true);
+    expect(canOfferAutomation("hi")).toBe(false);            // trivial
+    expect(canOfferAutomation("watch btc: ...")).toBe(false); // already an automation
+    expect(canOfferAutomation("/help")).toBe(false);          // command
+    expect(canOfferAutomation("more")).toBe(false);           // follow-up
+    expect(answerIsWatchable("price of bitcoin", "$65,000")).toBe(true);
+    expect(answerIsWatchable("top news", "Headlines: ...")).toBe(false);
+    expect(watchSlug("price of bitcoin")).toBe("bitcoin");
+    expect(watchSlug("AAPL stock price")).toBe("aapl");
+  });
+
+  it("a clean answer offers tap-to-watch buttons; tapping 'Every morning' schedules it (tap-to-watch-on-answers)", async () => {
+    const scheduled: string[] = [];
+    const { handle, sent, acked } = harness({
+      handleCommand: () => null,
+      scheduleAdd: (_c, text) => { scheduled.push(text); return { ok: true, kind: "daily", task: text, whenMs: 0 }; },
+      runAgentFn: async () => ({ reply: "Cloudy, 60°F.", steps: 1, tools: [] }),
+    });
+    await handle({ chatId: 1, from: "u", text: "weather in Paris", messageId: 1 } as InboundMessage);
+    expect(sent[sent.length - 1]!.hasButtons).toBe(true);
+    // Tap "Every morning" -> synthesizes "every morning weather in Paris" through the schedule path.
+    await handle(tap(encodeCallback({ kind: "act", mode: "daily" })!));
+    expect(scheduled.some((t) => /every morning weather in Paris/i.test(t))).toBe(true);
+    expect(acked.some((a) => /Every morning/.test(a ?? ""))).toBe(true);
+  });
+
+  it("tapping 'Watch this' synthesizes a watch command from the last answer", async () => {
+    let defined = "";
+    const { handle } = harness({
+      handleCommand: () => null,
+      scheduleAdd: () => ({ ok: true, kind: "daily", task: "x", whenMs: 0 }),
+      alertDefine: (_c, text) => { defined = text; return { ok: true, name: "bitcoin" }; },
+      runAgentFn: async () => ({ reply: "$65,000", steps: 1, tools: [] }),
+    });
+    await handle({ chatId: 1, from: "u", text: "price of bitcoin", messageId: 1 } as InboundMessage);
+    await handle(tap(encodeCallback({ kind: "act", mode: "watch" })!));
+    expect(defined).toMatch(/watch bitcoin:.*price of bitcoin/i);
+  });
+
+  it("a stale act tap (no cached task) is handled gracefully", async () => {
+    const { handle, sent, acked } = harness({ scheduleAdd: () => ({ ok: true, kind: "daily", task: "x", whenMs: 0 }) });
+    await handle(tap(encodeCallback({ kind: "act", mode: "daily" })!));
+    expect(sent[0]!.text).toMatch(/can't set that up/i);
+    expect(acked[0]).toMatch(/Expired/);
   });
 
   it("rate-limited tap does not act", async () => {
