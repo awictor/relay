@@ -38,9 +38,14 @@ export function smsLink(d: Draft): string {
  */
 export function formatDraft(d: Draft): string {
   const lines: string[] = [];
+  // Only show a "To:" line when the recipient is VALID for the kind — otherwise the deep link is built
+  // with a blank address (tapping opens an unaddressed draft), so echoing "To: john at x.com" would
+  // mislead the user into thinking it's addressed (compose-invalid-recipient). Flag the bad value instead.
+  const validTo = d.to ? (d.kind === "email" ? EMAIL_RE.test(d.to.trim()) : PHONE_RE.test(d.to.trim())) : false;
+  const toLine = validTo ? `To: ${d.to}` : (d.to ? `(Couldn't parse "${d.to}" as ${d.kind === "email" ? "an email address" : "a phone number"} — add the recipient yourself.)` : "");
   if (d.kind === "email") {
     lines.push("✉️ Draft email (review + send):");
-    if (d.to) lines.push(`To: ${d.to}`);
+    if (toLine) lines.push(toLine);
     if (d.subject) lines.push(`Subject: ${d.subject}`);
     lines.push("");
     lines.push(d.body);
@@ -48,7 +53,7 @@ export function formatDraft(d: Draft): string {
     lines.push(`Tap to send: ${mailtoLink(d)}`);
   } else {
     lines.push("💬 Draft message (review + send):");
-    if (d.to) lines.push(`To: ${d.to}`);
+    if (toLine) lines.push(toLine);
     lines.push("");
     lines.push(d.body);
     lines.push("");

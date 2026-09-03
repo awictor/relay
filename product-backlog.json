@@ -1139,7 +1139,7 @@
       "title": "compose echoes an invalid recipient but blanks the deep link",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A malformed to shows \"To: john at x.com\" in the copy block yet the mailto/sms link has an empty address — tapping opens a blank draft; user thinks it is addressed.",
       "how": "When to fails EMAIL_RE/PHONE_RE, omit the To: line + note the address could not be parsed, or keep it out of both."
     }
@@ -1540,6 +1540,10 @@
     {
       "id": "weather-ambiguous-city",
       "note": "get_weather no longer always returns the biggest same-name city: geocode now fetches 5 candidates (parseGeocodeAll) and pickCandidate prefers the one within ~250km of the user saved coords, else the top match. Agent passes weatherCoords as near when a place is named. So \"weather in Portland\" for a Boston user resolves to Portland ME, not OR. parseGeocode kept as a back-compat shim. 1043 tests green."
+    },
+    {
+      "id": "compose-invalid-recipient",
+      "note": "compose no longer echoes a malformed recipient as \"To: john at x.com\" while the deep link is blank-addressed (misleads the user into thinking it is addressed). formatDraft now shows the To: line only when the recipient is VALID for the kind (email/phone), else a \"Couldn t parse ... add the recipient yourself\" note. 1044 tests green."
     }
   ],
   "audits": [

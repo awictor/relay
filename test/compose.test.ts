@@ -35,4 +35,11 @@ describe("formatDraft", () => {
     expect(out).toMatch(/💬 Draft message/);
     expect(out).toMatch(/Tap to send: sms:\+15125551212\?body=running%20late/);
   });
+  it("flags an unparseable recipient instead of echoing a misleading To: (compose-invalid-recipient)", () => {
+    const out = formatDraft({ kind: "email", to: "john at x.com", subject: "Hi", body: "hey" });
+    expect(out).not.toMatch(/To: john at x\.com/);   // not shown as addressed
+    expect(out).toMatch(/Couldn't parse "john at x\.com" as an email address/);
+    const sms = formatDraft({ kind: "message", to: "bob", body: "yo" });
+    expect(sms).toMatch(/Couldn't parse "bob" as a phone number/);
+  });
 });
