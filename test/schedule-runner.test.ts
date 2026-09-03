@@ -52,6 +52,51 @@ describe("makeScheduleRunner — inline buttons (inline-tap-buttons)", () => {
     const reminderSend = sent.find((s) => /take my meds/.test(s.text))!;
     expect(reminderSend.keyboard).toBeUndefined();
   });
+
+  it("attaches pick buttons + caches items when a proactive list ping is a numbered list (picker-on-proactive-pings)", async () => {
+    const clock = { t: NOW };
+    const store = new ScheduleStore({ file: tmpFile() });
+    const sent: Array<{ text: string; keyboard: unknown }> = [];
+    const pickListStore = new Map<number, Array<{ index: number; text: string }>>();
+    const runner = makeScheduleRunner({
+      store, llm: {} as never,
+      runAgent: async () => ({ reply: "New listings:\n1. 2020 Civic $18k\n2. 2019 Corolla $16k\n3. 2021 Mazda3 $20k" }),
+      send: async (_c, text, keyboard) => { sent.push({ text, keyboard }); },
+      formatReply: (t) => t, now: () => clock.t, periodMs: 0,
+      pickListStore,
+    });
+    store.add(7, { kind: "daily", task: "new car listings", dueMs: NOW - 1, hourMin: [9, 0] }, NOW - MIN);
+    await runner.tick();
+    const kb = sent[0]!.keyboard as Array<Array<{ text: string; callback_data: string }>>;
+    // A pick row of 1/2/3 buttons.
+    const pickRow = kb.find((row) => row.some((b) => /^\d+$/.test(b.text)))!;
+    expect(pickRow.map((b) => b.text)).toEqual(["1", "2", "3"]);
+    // Items cached for a subsequent tap.
+    expect(pickListStore.get(7)).toHaveLength(3);
+    expect(pickListStore.get(7)![1]!.text).toMatch(/Corolla/);
+  });
+
+  it("merges pick buttons BELOW an alert's Refresh/Stop row when a watch ping is a list", async () => {
+    const clock = { t: NOW };
+    const store = new ScheduleStore({ file: tmpFile() });
+    const sent: Array<{ keyboard: unknown }> = [];
+    const pickListStore = new Map<number, Array<{ index: number; text: string }>>();
+    const runner = makeScheduleRunner({
+      store, llm: {} as never,
+      runAgent: async () => ({ reply: "x" }),
+      send: async (_c, _t, keyboard) => { sent.push({ keyboard }); },
+      formatReply: (t) => t, now: () => clock.t, periodMs: 0,
+      alertCheck: async () => ({ message: "Restocks:\n1. Size M\n2. Size L", commit: () => {} }),
+      pickListStore,
+    });
+    store.add(3, { kind: "daily", task: "alert:sizes", dueMs: NOW - 1, hourMin: [9, 0] }, NOW - MIN);
+    await runner.tick();
+    const kb = sent[0]!.keyboard as Array<Array<{ text: string }>>;
+    // Row 0 = Refresh/Snooze/Stop (marker), later row = pick 1/2.
+    expect(kb[0]!.some((b) => /Refresh/.test(b.text))).toBe(true);
+    expect(kb.some((row) => row.every((b) => /^\d+$/.test(b.text)))).toBe(true);
+    expect(pickListStore.get(3)).toHaveLength(2);
+  });
 });
 
 describe("makeScheduleRunner.tick", () => {

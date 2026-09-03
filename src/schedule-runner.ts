@@ -8,7 +8,8 @@ import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Schedule, ScheduleStore } from "./lib/schedule.js";
 import { hasSlots, isChain } from "./lib/recipes.js";
 import type { AgentEnv } from "./chain-runner.js";
-import { buttonsForTask, type InlineKeyboard } from "./lib/callbacks.js";
+import { buttonsForTask, pickButtons, type InlineKeyboard } from "./lib/callbacks.js";
+import { parseResultList, type ResultItem } from "./lib/result-list.js";
 
 export interface ScheduleRunnerDeps {
   store: ScheduleStore;
@@ -66,6 +67,11 @@ export interface ScheduleRunnerDeps {
   // is how many chars actually went out (so "more" can page the dropped tail). Omit sentLen when the whole
   // thing was sent. Passing the trimmed text as `full` broke drilldown on long digests (digest-drilldown-trims-tail).
   recordSend?: (chatId: number, full: string, sentLen?: number) => void;
+  // Shared pick-list cache (picker-on-proactive-pings): when a proactive ping (a watchlist/feed list)
+  // is a numbered/bulleted list, the runner caches its items here so a "pick N" button tap on the ping
+  // resends that item — the same store + routing the inbound picker uses. Optional; absent -> proactive
+  // list pings get no pick buttons (Refresh/Stop still attach). Keyed by chatId, overwritten per ping.
+  pickListStore?: Map<number, ResultItem[]>;
   // Quiet hours (quiet-hours): given a chat + now, return the epoch-ms to defer a proactive send to
   // (the end of the quiet window) if now is inside it, else 0/undefined = send now. A mis-timed
   // schedule/alert then lands at the window's end instead of waking the user at 3am. Optional.
@@ -273,7 +279,20 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     // Attach one-tap buttons for a watch/digest/recipe ping (inline-tap-buttons): Refresh/Snooze/Stop
     // on an alert, Run again on a digest/recipe. A plain reminder (no marker) gets none. buttonsForTask
     // reads the "alert:/digest:/recipe:<name>" marker; a channel without inline buttons ignores it.
-    await deps.send(s.chatId, sendText!, buttonsForTask(s.task)); // non-null here (alert-silent path returned early)
+    const markerRows = buttonsForTask(s.task);
+    // Pick buttons on a list-shaped proactive ping (picker-on-proactive-pings): if the ping is a 2+ item
+    // numbered/bulleted list (a watchlist restock, a feed of new listings), cache its items + add a
+    // "1 2 3…" pick row so a tap resends that item — same store + routing as the inbound picker. The pick
+    // row goes BELOW the marker row (Refresh/Stop stays the top, most-common action).
+    let keyboard = markerRows;
+    if (deps.pickListStore) {
+      const items = parseResultList(sendText!);
+      if (items.length >= 2) {
+        const pickRows = pickButtons(items.length);
+        if (pickRows) { deps.pickListStore.set(s.chatId, items); keyboard = [...(markerRows ?? []), ...pickRows]; }
+      }
+    }
+    await deps.send(s.chatId, sendText!, keyboard); // non-null here (alert-silent path returned early)
     alertCommit?.(); // send succeeded -> NOW advance the alert baseline (a throw above skips this)
     // Cache the UNTRIMMED text + how much was actually sent, so "more"/"send the link" can page a long
     // digest's dropped tail (digest-drilldown-trims-tail). fullText is set where a send may be trimmed.

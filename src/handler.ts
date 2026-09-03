@@ -129,6 +129,10 @@ export interface HandlerDeps {
   // last proactive ping (ping: pageable + follow-up context) are SEPARATE slots; a ping never touches
   // the answer's paging.
   lastResultStore?: Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>;
+  // Shared pick-list cache (inline-result-picker / picker-on-proactive-pings): the 0-based items of the
+  // last numbered/bulleted list sent to a chat, so a "pick N" button tap resends that item. When shared
+  // with the schedule-runner, a PROACTIVE list ping is pickable too. Absent -> handler uses a private map.
+  pickListStore?: Map<number, ResultItem[]>;
   // Inbound photo (product-loop): when a message carries photoFileId, describeImage answers about it
   // (caption = the question). Optional; absent -> a photo message gets a "can't read images yet" note.
   describeImage?: (fileId: string, caption: string) => Promise<string>;
@@ -296,9 +300,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   const lastResult = deps.lastResultStore ?? new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
   // Last pickable result list per chat (inline-result-picker): when a reply is a numbered/bulleted
   // list, we cache its items so a "pick N" button tap resends that one item (+ its link) without an
-  // agent re-run. In-memory; overwritten on the next list reply, cleared implicitly by staleness (a tap
-  // referencing a since-replaced list just gets the current one's item N, or an out-of-range note).
-  const pickLists = new Map<number, ResultItem[]>();
+  // agent re-run. Uses the SHARED store when provided so a PROACTIVE list ping (a watchlist restock,
+  // a feed of new listings) is pickable too — the schedule-runner writes its list items here and a tap
+  // resolves against them; else a private in-memory map (inbound-only). Overwritten on the next list.
+  const pickLists = deps.pickListStore ?? new Map<number, ResultItem[]>();
   const handle = ((msg: InboundMessage): Promise<void> => {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });

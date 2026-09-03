@@ -201,6 +201,11 @@ const SCHED_TICK_MS = intEnv(process.env.RELAY_SCHED_TICK_MS, { fallback: 30_000
 // Shared last-result cache (proactive-ping-drilldown-cache): the handler stores answers here + the
 // runner records proactive sends, so "more"/"send the link" works after an unprompted ping too.
 const lastResultStore = new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
+// Shared pick-list cache (picker-on-proactive-pings): the handler caches an inbound list reply's items
+// here + the schedule-runner caches a proactive list ping's items, so a "pick N" button tap resolves
+// against whichever list the chat last saw — inbound answer or unprompted ping.
+import type { ResultItem } from "./lib/result-list.js";
+const pickListStore = new Map<number, ResultItem[]>();
 const scheduleRunner = makeScheduleRunner({
   store: schedules, llm, runAgent, send: sendMessage, formatReply, formatReplyParts, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor,
   now: () => Date.now(), periodMs: SCHED_TICK_MS,
@@ -216,6 +221,7 @@ const scheduleRunner = makeScheduleRunner({
   // drilldown-cache). The ping is sent whole (untrimmed), so its paging offset starts at full length
   // ("more" after a ping only pages a still-unshown ANSWER tail); links/context still read the ping.
   recordSend: (chatId, full, sentLen) => { const e = lastResultStore.get(chatId); lastResultStore.set(chatId, { full: e?.full ?? "", sent: e?.sent ?? 0, ping: { full, sent: sentLen ?? full.length } }); },
+  pickListStore, // proactive list pings get pick buttons too (picker-on-proactive-pings)
   // Quiet hours (quiet-hours): defer a proactive send that lands in the window to its end, in the
   // chat's tz. Off unless RELAY_QUIET_START/END set (default start===end 0 = no window).
   quietUntil: (chatId, now) => quietUntilMs(now, QUIET_START, QUIET_END, profiles.offsetMin(chatId) ?? tzOffsetMin()),
@@ -387,6 +393,7 @@ const handle = createHandler({
   },
   suggestSaves: true, // offer to save a repeated ask as a recipe (product-loop retention nudge)
   lastResultStore, // shared with the schedule runner so drilldown works on proactive pings too
+  pickListStore,   // shared so a "pick N" tap resolves against an inbound OR proactive list (picker-on-proactive-pings)
   // Inbound photo (product-loop): download the Telegram file, ask the LLM to answer about it. Needs
   // a multimodal LLM (Gemini); absent describeImage -> handler tells the user images aren't supported.
   describeImage: llm.describeImage

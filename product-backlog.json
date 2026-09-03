@@ -2480,7 +2480,7 @@
       "title": "pick buttons only on inbound replies — proactive list pings still dump text",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The inline-result-picker attaches 1/2/3 buttons to INBOUND agent answers, but a scheduled/alert list ping (a watchlist restock, new listings feed) still arrives as a text wall with no pick. Same value, other half of the surface.",
       "how": "In schedule-runner, parseResultList the proactive sendText; when it's a 2+ item list, attach pickButtons AND cache the items into the shared lastResult/pick store keyed by chat so a tap on a proactive ping resends the item. Reuse result-list.ts + the handler's pick routing already built."
     }
@@ -3457,6 +3457,10 @@
     {
       "item": "inline-result-picker",
       "note": "One-tap pick buttons on numbered/bulleted answers (inline-result-picker). New src/lib/result-list.ts: parseResultList detects a genuine 2+ item numbered (ascending from 1, stops at a gap) or bulleted list in a reply — conservative so prose with an incidental '1.' or 'the answer is 42' never sprouts buttons; firstUrl pulls an item's link. Extended callbacks.ts with a 'pick' op (opcode pk|<index>, index-carrying not name, rejects non-integer/negative) + pickButtons(count) building a capped '1 2 3…' row. handler: a clean non-degraded text reply that's a list caches its items per-chat + attaches the pick row; a pick tap resends '<n>. <item>' with a 🔗 link line when the URL is mid-text (deduped when it already trails). Stale/out-of-range/no-cached-list taps give an honest 'not available' note. HELP updated. 14 new tests (parser incl. no-false-fire/gap-stop/start-at-1, pick codec cap+reject, handler list-attaches-buttons + pick-resend + link + stale). suite 1707 green, tsc clean. Offline (no data source); anvil-independent."
+    },
+    {
+      "item": "picker-on-proactive-pings",
+      "note": "Extended the one-tap result picker to PROACTIVE list pings (picker-on-proactive-pings). Made the handler's pick-list cache injectable (pickListStore dep) + shared it with the schedule-runner via index; the runner now parseResultList's each proactive sendText and, on a 2+ item numbered/bulleted ping (a watchlist restock, a feed of new listings), caches the items + appends a '1 2 3…' pick row BELOW any Refresh/Stop marker row — so a tap resends that item via the same handler pick routing built earlier. A tap resolves against whichever list the chat last saw, inbound answer or unprompted ping. 2 new runner tests (numbered ping attaches+caches; pick row merges below an alert's Refresh/Stop). suite 1709 green, tsc clean. Offline (no data source); anvil-independent."
     }
   ],
   "audits": [
