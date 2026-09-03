@@ -18,6 +18,7 @@ import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
 import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
 import { parseWorldClock, runWorldClock } from "./lib/worldclock.js";
+import { getScores as scoresFetch, formatScores } from "./lib/scores.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -135,6 +136,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { coin: { type: "string", description: "Coin ticker or name, e.g. \"BTC\", \"bitcoin\", \"ethereum\", \"doge\"." } },
       required: ["coin"],
+    },
+  },
+  {
+    name: "get_scores",
+    description: "Get today's sports scores/schedule for a league or team (no key, instant). Use this — NOT web_search/scrape — for \"did the Lakers win\", \"Man City score\", \"NBA scores\", \"who's playing tonight\", \"is the game on\". Pass the user's request verbatim (a team or league name). Covers NBA/NFL/MLB/NHL/NCAA + major soccer leagues.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The user's sports question verbatim, e.g. \"did the Lakers win\" or \"Premier League scores\"." } },
+      required: ["request"],
     },
   },
   {
@@ -307,6 +317,7 @@ Tools:
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "get_time" (request): current time in another city/timezone, or convert a time between zones. Use this — NOT web_search — for "what time is it in Tokyo"/"time in London"/"9am PT in London"/"convert 3pm EST to Tokyo". Pass the request verbatim. Standard-time offsets (may be an hour off during daylight saving).
+- "get_scores" (request): today's sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight". Pass the request verbatim. Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
 - "define" (word): a word's definition, pronunciation, and synonyms. Use this — NOT web_search/scrape — for "what does X mean"/"define X"/"synonyms for X"/"how do you spell X". English words only; pass the single word.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
@@ -368,6 +379,9 @@ export interface BrowserBackend {
   // Optional: define a word (dictionary-tool). Absent -> the define tool reports it's unavailable.
   // Returns null on an unknown word / fetch failure.
   defineWord?(word: string): Promise<import("./lib/dictionary.js").WordEntry | null>;
+  // Optional: today's sports scores for a league/team (sports-scores-tool). Absent -> the get_scores
+  // tool reports it's unavailable. Returns null on an unknown league / fetch failure.
+  getScores?(query: string): Promise<{ leagueName: string; games: import("./lib/scores.js").GameScore[] } | null>;
   // Optional: current weather for a place or coords (geo-tool-cluster). Absent -> the get_weather tool
   // reports it's unavailable. Returns null on a bad place / fetch failure.
   getWeather?(opts: { place?: string; lat?: number; lng?: number; near?: { lat: number; lng: number } }): Promise<import("./lib/weather.js").WeatherResult | null>;
@@ -472,6 +486,7 @@ const defaultBackend: BrowserBackend = {
   getQuote: (symbol) => quoteFetch(symbol, defaultFetchText),
   getCrypto: (coin) => cryptoFetch(coin, defaultFetchText),
   defineWord: (word) => dictFetch(word, defaultFetchText),
+  getScores: (query) => scoresFetch(query, defaultFetchText),
   getWeather: (opts) => fetchWeather(opts, defaultFetchText),
   findNearby: (opts) => fetchNearby(opts, defaultFetchTextPost),
   getDirections: (opts) => fetchDirections(opts, defaultFetchText),
@@ -793,6 +808,19 @@ export async function runAgent(
         const answer = parsed ? runWorldClock(parsed, nowForTz) : null;
         if (!answer) { push("get_time", `Couldn't resolve a timezone in "${request}" (unknown city/abbreviation). Report that you couldn't place that zone + ask which city/UTC offset, or try web_search for an unusual place.`); continue; }
         push("get_time", `${answer}\n\nReport this to the user (include the daylight-saving caveat only if it's relevant / they're near a DST change).`);
+        continue;
+      }
+
+      if (call.name === "get_scores") {
+        if (!backend.getScores) { push("get_scores", "ERROR: sports scores aren't available."); continue; }
+        const request = String(call.args.request ?? "").trim();
+        try {
+          const r = await backend.getScores(request);
+          if (!r) { push("get_scores", `I don't cover that league/team with my scores tool (I do NBA/NFL/MLB/NHL/NCAA + major soccer). Try web_search for "${request}", or name the league.`); continue; }
+          push("get_scores", `${formatScores(r.leagueName, r.games)}\n\nReport this to the user (scores + status; note it's live/today).`);
+        } catch (e) {
+          push("get_scores", `ERROR getting scores: ${e instanceof Error ? e.message : String(e)}`);
+        }
         continue;
       }
 

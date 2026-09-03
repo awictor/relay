@@ -1787,7 +1787,7 @@
       "title": "No live sports scores (promised in prompt, unbacked)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "SYSTEM_PROMPT advertises \"who won the game\" but there is no tool; falls to a flaky scrape of JS scoreboards. Keyless ESPN scoreboard JSON exists.",
       "how": "New src/lib/scores.ts hitting a keyless ESPN scoreboard endpoint; parse team+score+status; get_score tool + dispatch + prompt + help."
     },
@@ -2473,6 +2473,10 @@
     {
       "item": "quiet-hours-defers-alert-check",
       "note": "Exempted alert: checks from the quiet-hours defer in schedule-runner tick(), mirroring the existing send-cap exemption. Deferring the CHECK (not just the send) meant an edge-triggered watch that crossed + reverted inside the quiet window was evaluated only at quiet-end and the crossing was lost forever. Now the check runs on cadence; it only SENDS on a real change (rare, user-requested, can't storm like a daily/digest). Non-alert sends (digest/daily/once) still defer. 2 new tests (alert-check-runs-in-quiet + non-alert-still-deferred regression). Suite 1346 green, tsc clean."
+    },
+    {
+      "item": "sports-scores-tool",
+      "note": "Added get_scores tool: new src/lib/scores.ts (resolveLeague from a league word or a known team, keyless cdn.espn.com scoreboard fetch, parseScoreboard, filterByTeam, formatGame/formatScores) covering NBA/WNBA/NFL/MLB/NHL/NCAA + major soccer leagues. Wired agent.ts (TOOLS, backend.getScores + defaultBackend, dispatch, prompt), pinned tool list, HELP. 'did the Lakers win?'/'Man City score'/'NBA scores' now instant + sourced instead of a flaky JS-scoreboard scrape (the SYSTEM_PROMPT already promised 'who won the game'). Used cdn.espn.com not site.api.espn.com (latter 403s datacenter IPs + plain UA; cdn returns 200 with relay-bot UA). 18 new tests, suite 1360 green, tsc clean. call-tested:true (live cdn.espn NBA board fetched + parsed via ctx_execute)."
     }
   ],
   "audits": [
