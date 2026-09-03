@@ -309,6 +309,41 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.list(1)).toHaveLength(0); // once dropped
   });
 
+  it("a RECURRING recipe/digest whose content is gone sends a one-time notice, then stays silent (digest-silent-on-member-delete)", async () => {
+    const clock = { t: NOW };
+    const notices: Array<{ what: string; name: string }> = [];
+    const { store, runner, sent } = harness(clock, {
+      recipeResolveTask: () => null,          // recipe deleted
+      digestRun: async () => null,            // digest members all gone
+      goneNotice: (_s, what, name) => { notices.push({ what, name }); return `⚠️ "${name}" ${what} stopped.`; },
+    });
+    store.add(1, { kind: "daily", task: "recipe:brief", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    store.add(2, { kind: "daily", task: "digest:morning", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    expect(notices).toEqual([{ what: "recipe", name: "brief" }, { what: "digest", name: "morning" }]);
+    expect(sent.filter((s) => /stopped/.test(s.text))).toHaveLength(2);
+    // Fire again next day — the notice does NOT repeat (one-shot per schedule id).
+    clock.t = NOW + 25 * 3_600_000;
+    // re-due both (daily advanced ~24h; push them due again)
+    for (const s of store.list(1).concat(store.list(2))) store.deferTo(s.id, clock.t - 1);
+    await runner.tick();
+    expect(notices).toHaveLength(2); // still just the two — no repeat
+  });
+
+  it("a ONCE recipe whose content is gone stays silent (no notice — it just drops)", async () => {
+    const clock = { t: NOW };
+    const notices: unknown[] = [];
+    const { store, runner, sent } = harness(clock, {
+      recipeResolveTask: () => null,
+      goneNotice: () => { notices.push(1); return "should not fire"; },
+    });
+    store.add(1, { kind: "once", task: "recipe:gone", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(notices).toHaveLength(0);   // a once needs no "it stopped" notice
+    expect(sent).toHaveLength(0);
+    expect(store.list(1)).toHaveLength(0);
+  });
+
   it("records the proactive send into the shared cache for a 'more'/'link' drilldown (proactive-ping-drilldown-cache)", async () => {
     const clock = { t: NOW };
     const store = new Map<number, { full: string; sent: number }>();

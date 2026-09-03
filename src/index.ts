@@ -250,6 +250,14 @@ const scheduleRunner = makeScheduleRunner({
     const label = s.task.replace(/^(?:digest|alert|recipe):/, "");
     return `⚠️ Heads up — "${label}" has failed ${streak} checks in a row. The site may have changed or a login expired; check it or /cancel + re-add it.`;
   },
+  // Empty-content notice (digest-silent-on-member-delete): a scheduled digest/recipe whose content was
+  // deleted no-shows silently forever — tell the user once why + how to fix, and stop it firing.
+  goneNotice: (s, what, name) => {
+    schedules.removeByTask(s.chatId, `${what}:${name}`); // stop the dead schedule from firing again
+    return what === "digest"
+      ? `⚠️ Your scheduled "${name}" briefing stopped — all the recipes it bundled were removed, so there's nothing left to send. I've turned it off. Rebuild it with "define digest ${name}: ..." to bring it back.`
+      : `⚠️ Your scheduled "${name}" stopped — that recipe was deleted, so there's nothing to run. I've turned off its schedule. Re-save it with "save ${name}: ..." and schedule it again if you want it back.`;
+  },
 });
 
 const handle = createHandler({

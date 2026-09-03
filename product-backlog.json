@@ -2561,7 +2561,7 @@
       "title": "a digest/recipe goes permanently silent when its member recipes are deleted",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The relied-upon morning briefing just stops arriving with zero explanation when a member recipe is forgotten; the runner completes+advances silently on a null compose.",
       "how": "When digestRun/recipeResolveTask returns null (members gone), send a one-time 'your <name> briefing has no content left — its recipes were removed' notice instead of silently advancing forever."
     },
@@ -2573,6 +2573,15 @@
       "status": "done",
       "why": "A standing 'nag me to take meds until done' sticky was deleted by an unrelated 'ok'/'got it' reply hours after it last pinged — the highest-trust safety-net reminder destroyed by a filler word.",
       "how": "Gate the bare-ack sticky-stop on a RECENTLY-fired (or not-yet-fired) sticky."
+    },
+    {
+      "id": "flight-status",
+      "title": "flight status lookup ('is AA100 on time / what gate')",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "A very common assistant errand — 'is AA100 delayed / what gate / when does it land' — dead-ends: track_package only recognizes UPS/FedEx/USPS/DHL parcel numbers, and a flight number falls to a flaky web_search.",
+      "how": "anvil (real Chrome) can scrape Google's flight-status card the same way track_package scrapes carrier pages; add a flight-number detector + a get_flight backend that reads the status/gate/times. Keyless, high-frequency, high-stakes."
     }
   ],
   "history": [
@@ -3587,6 +3596,10 @@
     {
       "item": "transit-answered-as-driving",
       "note": "Stopped answering transit asks with a car ETA (transit-honest-not-driving). routeMode silently mapped transit->driving, so 'how long downtown by subway/bus/train' returned an OSRM CAR duration labeled 'drive' — a confidently-wrong answer. directions.ts: added wantsTransit() (subway/metro/bus/train/tram/tube/'by transit'/'public transport', NOT a bare 'how do I get to X') + transitMapsLink() (a Google Maps travelmode=transit link, coords when known else labels). agent.ts directions dispatch: a transit ask (and no explicit driving/walking/cycling mode override) now returns the Maps transit link + an honest 'I can't compute transit times myself' note instead of an OSRM route; offers a driving/walking estimate as fallback. Tool desc updated. 3 new tests (wantsTransit detects/ignores, transitMapsLink coords+labels+My-Location). suite 1739 green, tsc clean. Offline; anvil-independent (Maps link, no fetch)."
+    },
+    {
+      "item": "digest-silent-on-member-delete",
+      "note": "A scheduled digest/recipe no longer goes silently dead when its content is deleted (digest-silent-on-member-delete). Both null-compose branches in schedule-runner (digestRun -> null = all members gone; recipeResolveTask -> null = recipe deleted) used to just complete() + advance, so a relied-upon 'morning briefing' no-showed every day forever with zero explanation. Added a goneNotice dep + noteGone() helper: for a RECURRING schedule (not a once, which just drops) it sends a one-time 'your <name> briefing/recipe stopped — its content was removed, I've turned it off' notice, tracked per schedule id (goneNotified set) so a daily doesn't repeat it, and anti-spam-capped. index's goneNotice also removeByTask's the dead schedule so it stops firing. 2 new tests (recurring recipe+digest each notify once then stay silent across a re-fire; a once stays silent). suite 1741 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
@@ -3796,6 +3809,9 @@
     },
     {
       "note": "Backlog dry (only low/M + owner-gated) -> 3-agent audit. A(new-user): transit-as-driving [SEEDED], flight status, streaming availability, retailer-order honesty. B(reliability): bare-ok-kills-sticky [SEEDED+BUILT], relative-once quiet-defer [SEEDED], DST drift on recurring, digest-silent-on-member-delete [SEEDED], sticky self-cap silent stop. C(power): tap-to-watch on every answer [SEEDED], replayable browse macros, named saved places, auto-assembled briefing. Seeded: sticky-ack(built), tap-to-watch-on-answers, transit-answered-as-driving, relative-once-quiet-defer, digest-silent-on-member-delete."
+    },
+    {
+      "note": "No audit this run — built from the prior audit's seeded queue (digest-silent-on-member-delete). Refilled by promoting a parked Agent-A finding: flight-status (medium/M, anvil-scrapeable Google flight card). Remaining: flight-status, callback-edit-in-place(low), confirm-to-act(owner-gated)."
     }
   ]
 }

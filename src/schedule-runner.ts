@@ -86,6 +86,13 @@ export interface ScheduleRunnerDeps {
   // edge-triggered one stays EXEMPT so the crossing is still evaluated on cadence. Absent/false ->
   // treat the alert as edge-triggered (the safe default: keep it exempt, as before this change).
   alertQuietDeferrable?: (chatId: number, name: string) => boolean;
+  // Empty-content notice (digest-silent-on-member-delete): what to tell the user ONCE when a RECURRING
+  // digest/recipe schedule fires but its content is gone (all member recipes deleted / the recipe
+  // forgotten), so a relied-upon "morning briefing" that silently no-shows forever instead explains
+  // itself. `what` is "digest"|"recipe", `name` the human name. Return the message, or null to stay
+  // silent. index wires it; absent -> silent (prior behavior). Sent once per schedule id (the runner
+  // tracks it) so a daily doesn't repeat the notice every morning.
+  goneNotice?: (s: Schedule, what: "digest" | "recipe", name: string) => string | null;
   // Failed-watch receipt (failed-watch-receipts): what to tell the user when a RECURRING schedule has
   // failed to fire this many consecutive times (a dead watch otherwise reads as 'no news'). Return the
   // message, or null to stay silent. index wires it for daily/weekly/interval. Optional.
@@ -145,6 +152,21 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   })();
   const cap = deps.maxPerChatPerHour ?? 0;
   const sendTimes = new Map<number, number[]>(); // chatId -> recent send epochs (rolling hour)
+  // Schedule ids already sent the "content is gone" notice (digest-silent-on-member-delete), so a daily
+  // whose members were deleted explains itself ONCE, not every morning. In-memory; a restart may re-notify
+  // once, which is harmless (a restart is when a still-dead briefing would resurface anyway).
+  const goneNotified = new Set<string>();
+
+  // Send the one-time "your <name> briefing/recipe has no content left" notice for a RECURRING schedule
+  // whose digest/recipe resolved empty, then remember we did. A once (fires + drops on its own) gets no
+  // notice — there's no repeated silent no-show to explain. Best-effort + subject to the anti-spam cap.
+  async function noteGone(s: Schedule, what: "digest" | "recipe", name: string): Promise<void> {
+    if (!deps.goneNotice || s.kind === "once" || goneNotified.has(s.id) || overCap(s.chatId, deps.now())) return;
+    const msg = deps.goneNotice(s, what, name);
+    if (!msg) return;
+    goneNotified.add(s.id);
+    try { await deps.send(s.chatId, msg); noteSend(s.chatId, deps.now()); } catch (e) { deps.onError?.(e); }
+  }
 
   // True if this chat is at/over the hourly proactive-send cap (prunes old timestamps).
   function overCap(chatId: number, now: number): boolean {
@@ -204,6 +226,10 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       // briefing on cadence — mirrors the deleted-recipe path above.
       if (composed === null) {
         if (isCancelled()) return; // timed out late: the tick's catch already handled this schedule
+        // A RECURRING digest whose members were all deleted no-shows every morning forever — tell the
+        // user ONCE why instead of silently advancing (digest-silent-on-member-delete). A once needs no
+        // notice (it fires + drops). noteGone is one-shot per schedule id + anti-spam-capped.
+        await noteGone(s, "digest", digestMatch[1]!.trim());
         deps.store.complete(s.id, deps.now());
         log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, digest: digestMatch[1], ok: true, sent: false, empty: true })}`);
         deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
@@ -221,7 +247,10 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       if (recipeMatch && deps.recipeResolveTask) {
         const resolved = deps.recipeResolveTask(s.chatId, recipeMatch[1]!.trim());
         if (resolved === null) {
-          // Recipe was deleted after scheduling — stop firing (drop once / advance daily), no send.
+          // Recipe was deleted after scheduling — stop firing (drop once / advance daily), no result.
+          // For a RECURRING schedule, tell the user ONCE why their scheduled "<name>" stopped arriving,
+          // instead of silently advancing forever (digest-silent-on-member-delete). A once needs none.
+          await noteGone(s, "recipe", recipeMatch[1]!.trim());
           deps.store.complete(s.id, deps.now());
           log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, recipe: recipeMatch[1], ok: true, sent: false, gone: true })}`);
           deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
