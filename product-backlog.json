@@ -1670,7 +1670,7 @@
       "title": "Units default to imperial worldwide, wrong for ~95% of users",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "weatherUnits defaults imperial + find_nearby distances follow it; a London user first errand \"weather in Paris\" gets Fahrenheit unless they know to append (metric).",
       "how": "Infer metric/imperial from the resolved place country (US/liberia/myanmar imperial, else metric) when the user has not set a preference; keep explicit (metric)/(imperial) override."
     },
@@ -2334,6 +2334,10 @@
     {
       "item": "persist-bool-all-stores",
       "note": "Completed the atomic-write-failure fix across all stores. persist() now returns bool + records lastWriteOk in Schedule/Alert/Recipe/Digest/Profile stores (getter lastSaveOk()). Confirmations for reminders (scheduleAdd), watches (alertDefine, both alert row + cadence schedule), recipe save (recipeSave + recipeSaveNamed), and digest define now HEDGE honestly (couldn't save to disk, may be lost on restart; alert also skips the run-now check) instead of falsely confirming. 3 new tests. Suite 1301 green, tsc clean."
+    },
+    {
+      "item": "metric-imperial-infer",
+      "note": "Units now inferred from the resolved place country instead of defaulting the world to imperial. New src/lib/units.ts (inferUnitsFromPlace + resolveUnits): user pref wins; else infer (US/Liberia/Myanmar -> imperial, any other recognizable country tail -> metric); else keep imperial fallback (no regression for US-no-location). Wired at the 3 agent dispatch sites: get_weather uses resolved w.place (has country tail), find_nearby uses the named area, directions uses destination/origin. A London user's first \"weather in Paris\" now returns C, not F. HELP updated. 9 new tests, suite 1310 green, tsc clean."
     }
   ],
   "audits": [

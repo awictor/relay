@@ -508,6 +508,29 @@ describe("runAgent get_weather (geo-tool-cluster)", () => {
     // metric units requested -> the tool result renders °C
     expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/30°C/);
   });
+  it("infers °C for a metric-country place when the user set no unit pref (metric-imperial-infer)", async () => {
+    // Resolved place carries a country tail -> France -> metric, even though the global default is °F.
+    const paris = { place: "Paris, Île-de-France, France", current: { tempC: 18, tempF: 64, code: 2, desc: "partly cloudy", windKph: 10 }, today: { hiC: 20, loC: 12, hiF: 68, loF: 54, precipPct: 20 } };
+    const llm = new MockLLM([
+      { toolCall: { name: "get_weather", args: { place: "Paris" } } },
+      { toolCall: { name: "reply", args: { text: "Paris: 18°C." } } },
+    ]);
+    const backend = wxBackend({ getWeather: async () => paris });
+    await runAgent("weather in Paris", { llm, backend }); // NO weatherUnits set
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool")!.content;
+    expect(toolMsg).toMatch(/18°C/);
+    expect(toolMsg).not.toMatch(/64°F/);
+  });
+  it("still defaults to °F for a US place with no user pref (no regression)", async () => {
+    const dallas = { place: "Dallas, Texas, United States", current: { tempC: 30, tempF: 86, code: 0, desc: "clear", windKph: 5 }, today: { hiC: 35, loC: 25, hiF: 95, loF: 77, precipPct: 0 } };
+    const llm = new MockLLM([
+      { toolCall: { name: "get_weather", args: { place: "Dallas" } } },
+      { toolCall: { name: "reply", args: { text: "Dallas: 86°F." } } },
+    ]);
+    const backend = wxBackend({ getWeather: async () => dallas });
+    await runAgent("weather in Dallas", { llm, backend });
+    expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/86°F/);
+  });
   it("no place and no coords -> asks for a city, no crash", async () => {
     const llm = new MockLLM([
       { toolCall: { name: "get_weather", args: {} } },

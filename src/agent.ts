@@ -25,6 +25,7 @@ import { getWeather as fetchWeather, formatWeather, formatWeatherWhen } from "./
 import { formatDraft, type Draft } from "./lib/compose.js";
 import { findNearby as fetchNearby, formatPlaces } from "./lib/places.js";
 import { getDirections as fetchDirections, formatRoute, routeMode } from "./lib/directions.js";
+import { resolveUnits } from "./lib/units.js";
 import { formatCalendar, type CalEvent } from "./lib/calendar.js";
 
 // Does the user's task ask for a keepable file (csv-export-compare)? A compare/extract then attaches
@@ -845,7 +846,9 @@ export async function runAgent(
         try {
           const w = await backend.getWeather(opts);
           if (!w) { push("get_weather", `Couldn't get weather for ${place || "your location"} (unknown place or fetch failed). Try a more specific city.`); continue; }
-          const units = deps.weatherUnits ?? "imperial";
+          // No explicit user pref -> infer °C/°F from the RESOLVED place's country (metric-imperial-infer)
+          // instead of defaulting the whole world to °F. w.place carries the country tail from geocoding.
+          const units = resolveUnits(deps.weatherUnits, w.place);
           // A future-day question ("tomorrow", "this weekend", "Saturday") -> report THOSE days, not
           // today's numbers (weather-multi-day). Falls back to the current-weather line otherwise.
           const forecast = when ? formatWeatherWhen(w, when, units) : null;
@@ -863,7 +866,9 @@ export async function runAgent(
         if (!what) { push("find_nearby", "ERROR: say what to find (e.g. \"coffee\")."); continue; }
         if (!near && !deps.weatherCoords) { push("find_nearby", "No area given and no saved location — ask the user where, or have them share their location."); continue; }
         try {
-          const units = deps.weatherUnits ?? "imperial";
+          // Infer from the named area's country when the user gave one (metric-imperial-infer); a bare
+          // "near me" (coords, no place text) has no country signal, so it keeps the user pref/default.
+          const units = resolveUnits(deps.weatherUnits, near);
           const opts = near
             ? { what, near, units, ...(deps.weatherCoords ? { bias: deps.weatherCoords } : {}) }
             : { what, lat: deps.weatherCoords!.lat, lng: deps.weatherCoords!.lng, units };
@@ -891,7 +896,9 @@ export async function runAgent(
         const from = String(call.args.from ?? "").trim();
         if (!to) { push("directions", "ERROR: no destination given."); continue; }
         if (!from && !deps.weatherCoords) { push("directions", "No start given and no saved location — ask where they're starting from."); continue; }
-        const units = deps.weatherUnits ?? "imperial";
+        // Infer from the destination (or origin) place name's country (metric-imperial-infer); no
+        // recognizable country -> user pref / imperial default.
+        const units = resolveUnits(deps.weatherUnits, to || from);
         const mode = (["driving", "walking", "cycling"].includes(String(call.args.mode)) ? String(call.args.mode) : routeMode(userText)) as "driving" | "walking" | "cycling";
         try {
           // A named `from` + known user coords: pass coords as `bias` (a hint) so the origin+destination
