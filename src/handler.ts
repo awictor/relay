@@ -61,6 +61,10 @@ export interface HandlerDeps {
   // Shared location pin (telegram-location-pin): save the chat's precise coords so "near me"/directions
   // resolve against them. Optional; absent -> a location pin just gets a generic ack.
   saveCoords?: (chatId: number, lat: number, lng: number) => void;
+  // Weather (geo-tool-cluster): the chat's saved coords + unit preference, passed to the agent so
+  // get_weather with no place uses their location and renders in their units. Optional.
+  weatherCoords?: (chatId: number) => { lat: number; lng: number } | undefined;
+  weatherUnits?: (chatId: number) => "metric" | "imperial" | undefined;
   // Answer history (answer-history-recall): recallAnswers searches this chat's PAST answers by keyword
   // ("what was that sushi place you found", "resend the flights") and returns the matches (task + reply
   // + when); logAnswer records a fresh answer. When both are wired, a recall ask is served from the log
@@ -238,7 +242,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     bgInFlight.set(chatId, (bgInFlight.get(chatId) ?? 0) + 1);
     void (async () => {
       try {
-        const r = await runIt(errand, { llm: deps.llm, context: deps.profileContext?.(chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(chatId) ?? 0, maxSteps: BACKGROUND_MAX_STEPS }, bgHistory);
+        const r = await runIt(errand, { llm: deps.llm, context: deps.profileContext?.(chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(chatId) ?? 0, weatherCoords: deps.weatherCoords?.(chatId), weatherUnits: deps.weatherUnits?.(chatId), maxSteps: BACKGROUND_MAX_STEPS }, bgHistory);
         const parts = formatReplyParts(r.reply);
         const out = r.degraded ? `⚠️ Here's what I got (I couldn't fully finish):\n\n${parts.shown}` : `✅ Done with "${errand}":\n\n${parts.shown}`;
         // Deliver like a proactive ping: write the PING sub-slot (preserve any inbound answer's paging).
@@ -932,7 +936,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         ? `The user is replying to this message I just sent them: "${cachedPing.full.slice(0, 600)}". Answer their follow-up in that context.`
         : "";
       const context = [profileCtx, pingCtx].filter(Boolean).join(" ") || undefined;
-      const { reply, steps, tools, photo, doc, docName, degraded } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0 }, history);
+      const { reply, steps, tools, photo, doc, docName, degraded } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, weatherCoords: deps.weatherCoords?.(msg.chatId), weatherUnits: deps.weatherUnits?.(msg.chatId) }, history);
       clearProgress();
       // A degraded reply is a soft-failure fallback (agent ran out of steps / produced no answer,
       // DEV-0176), not a real answer. Prepend a one-line hint so a live-bot user knows the result is

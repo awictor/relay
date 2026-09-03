@@ -1040,7 +1040,7 @@
       "title": "weather/near-me/directions have no backend (LLM-guessed API)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The #1 first errand \"weather\" + the advertised \"near me\"/\"directions\"/\"how far\" all lack a real tool — the agent guesses a forecast URL or scrapes a JS map shell and floods/fails. LOCATION_ERRAND_RE + saved coords already exist; only the backend is missing.",
       "how": "A keyless geo cluster over Open-Meteo (geocode + forecast), Nominatim (place->coords), OSRM (route distance/ETA), Overpass (nearby POIs). Start with weather (highest frequency) as get_weather via fetch_json + a geocode step; honor profile coords/units."
     },
@@ -1433,6 +1433,10 @@
     {
       "id": "watchlist-concurrency-csv-injection",
       "note": "Fixed 2 defects the refill audit found: (1) watchlist member checks ran an unbounded Promise.all over up to 8 members, bypassing the anvil-pool bound (browser-pool exhaustion; degraded members silently dropped) — now mapPool at WATCHLIST_CONCURRENCY(3); (2) CSV export did not guard formula injection — csvCell now prefixes =/+/-/@ cells with a quote so a scraped =HYPERLINK/=cmd cell is inert in Excel/Sheets. 969 tests green."
+    },
+    {
+      "id": "geo-tool-cluster",
+      "note": "Added a get_weather tool (the #1 first errand had no backend — the agent guessed a forecast URL or scraped a JS shell). Keyless Open-Meteo: geocode city->coords then current+today forecast. New src/lib/weather.ts (weatherDesc/parseGeocode/parseForecast/formatWeather/getWeather with injected fetch) + backend.getWeather + agent tool/dispatch/prompt; honors the chat saved coords (near-me weather with no place) + unit preference. Live-verified the APIs (Austin geocode + real forecast). Directions/near-me-POI still seeded for later. 982 tests green."
     }
   ],
   "audits": [

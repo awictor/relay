@@ -235,6 +235,8 @@ const handle = createHandler({
   // save a bare "which city?" reply (+re-stamp recurring reminders if a tz came with it).
   hasLocation: (chatId) => { const p = profiles.get(chatId); return !!(p?.location || (typeof p?.lat === "number" && typeof p?.lng === "number")); },
   saveCoords: (chatId, lat, lng) => { profiles.set(chatId, { lat, lng }); },
+  weatherCoords: (chatId) => { const p = profiles.get(chatId); return (typeof p?.lat === "number" && typeof p?.lng === "number") ? { lat: p.lat, lng: p.lng } : undefined; },
+  weatherUnits: (chatId) => profiles.get(chatId)?.units,
   captureLocation: (chatId, text) => {
     const c = parseCityReply(text);
     if (!c) return null;

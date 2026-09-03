@@ -229,3 +229,54 @@ describe("runAgent convert_currency (fx-conversion-tool)", () => {
     expect(toolMsg!.content).toMatch(/Couldn't convert/i);
   });
 });
+
+describe("runAgent get_weather (geo-tool-cluster)", () => {
+  const wx = { place: "Austin", current: { tempC: 30, tempF: 86, code: 0, desc: "clear", windKph: 5 }, today: { hiC: 35, loC: 25, hiF: 95, loF: 77, precipPct: 0 } };
+  function wxBackend(over: Record<string, unknown> = {}) {
+    return {
+      scrape: async (url: string) => ({ title: "", content: "", url }),
+      createSession: async () => ({ id: "s" }),
+      navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {},
+      readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {},
+      discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+      ...over,
+    };
+  }
+  it("uses get_weather for a named place, no browser", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "get_weather", args: { place: "Austin" } } },
+      { toolCall: { name: "reply", args: { text: "Austin: 86°F, clear." } } },
+    ]);
+    let seen: unknown = null;
+    const backend = wxBackend({ getWeather: async (opts: unknown) => { seen = opts; return wx; } });
+    const { reply } = await runAgent("what's the weather in Austin", { llm, backend });
+    expect(seen).toEqual({ place: "Austin" });
+    expect(reply).toMatch(/86°F/);
+    expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/Austin: 86°F, clear/);
+  });
+  it("with no place but saved coords, uses the coords (near-me weather)", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "get_weather", args: {} } },
+      { toolCall: { name: "reply", args: { text: "It's 30C where you are." } } },
+    ]);
+    let seen: { lat?: number; lng?: number } | null = null;
+    const backend = wxBackend({ getWeather: async (opts: { lat?: number; lng?: number }) => { seen = opts; return wx; } });
+    await runAgent("weather", { llm, backend, weatherCoords: { lat: 30.27, lng: -97.74 }, weatherUnits: "metric" });
+    expect(seen).toEqual({ lat: 30.27, lng: -97.74 });
+    // metric units requested -> the tool result renders °C
+    expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/30°C/);
+  });
+  it("no place and no coords -> asks for a city, no crash", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "get_weather", args: {} } },
+      { toolCall: { name: "reply", args: { text: "Which city?" } } },
+    ]);
+    const backend = wxBackend({ getWeather: async () => wx });
+    const { reply } = await runAgent("weather", { llm, backend });
+    expect(reply).toMatch(/which city/i);
+    expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/no saved location/i);
+  });
+});

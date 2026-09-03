@@ -14,6 +14,7 @@ import { isDangerousAction } from "./safety.js";
 import { fetchYouTubeTranscript } from "./lib/youtube.js";
 import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
+import { getWeather as fetchWeather, formatWeather } from "./lib/weather.js";
 
 // Does the user's task ask for a keepable file (csv-export-compare)? A compare/extract then attaches
 // a CSV document instead of only pasting a truncated JSON blob in chat.
@@ -98,6 +99,15 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "get_weather",
+    description: "Current weather + today's high/low for a place (keyless, instant). Use this — NOT web_search/scrape — for any \"weather\", \"forecast\", \"is it going to rain\", \"how hot is it\" question. Pass the city name; if the user gave no place but their location is known, omit place (it uses their saved coords).",
+    parameters: {
+      type: "object",
+      properties: { place: { type: "string", description: "City/place name, e.g. \"Austin\" or \"Paris, France\". Omit to use the user's saved location." } },
+      required: [],
+    },
+  },
+  {
     name: "search",
     description: "Open a search or listing page and get back candidate result links (deduped, same-site preferred, capped). Use when the user names WHAT they want but not the exact URLs — then extract/compare across the returned links. Provide a search-results URL (build the site's query URL, e.g. https://news.ycombinator.com/newest or a site search).",
     parameters: {
@@ -160,6 +170,7 @@ Tools:
 - "pdf" (url): render a page to a PDF and send it as a document. Use when the user wants to SAVE or KEEP a page ("save as PDF", "send me a PDF of X"). Then call reply with a short caption.
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
+- "get_weather" (place?): current weather + today's high/low. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location.
 - "reply" (text): finish.
 
 Rules:
@@ -200,6 +211,9 @@ export interface BrowserBackend {
   // Optional: convert an amount between currencies at the live rate (fx-conversion-tool). Absent ->
   // the convert_currency tool reports it's unavailable. Returns null on a bad code / fetch failure.
   convertCurrency?(amount: number, from: string, to: string): Promise<import("./lib/fx.js").Conversion | null>;
+  // Optional: current weather for a place or coords (geo-tool-cluster). Absent -> the get_weather tool
+  // reports it's unavailable. Returns null on a bad place / fetch failure.
+  getWeather?(opts: { place?: string; lat?: number; lng?: number }): Promise<import("./lib/weather.js").WeatherResult | null>;
 }
 
 const FETCH_JSON_MAX_BYTES = 200_000;
@@ -277,6 +291,7 @@ const defaultBackend: BrowserBackend = {
   scrape: (url) => anvil.scrape(url, { format: "text" }),
   videoTranscript: (url) => fetchYouTubeTranscript(url, defaultFetchText),
   convertCurrency: (amount, from, to) => fxConvert(amount, from, to, defaultFetchText),
+  getWeather: (opts) => fetchWeather(opts, defaultFetchText),
   createSession: () => anvil.createSession().then((s) => ({ id: s.id })),
   navigate: (id, url) => anvil.navigate(id, url),
   click: (id, sel) => anvil.click(id, sel),
@@ -306,6 +321,10 @@ export interface AgentDeps {
   // Optional; absent -> no datetime line. Both together let the agent render + reason in the user's zone.
   nowMs?: number;
   tzOffsetMin?: number;
+  // Weather (geo-tool-cluster): the user's saved coords + unit preference, so get_weather with no place
+  // uses their location and renders in their units. Optional; absent -> place is required + F default.
+  weatherCoords?: { lat: number; lng: number };
+  weatherUnits?: "metric" | "imperial";
   // Background errands (async-background-errands): a raised per-run step budget for a long,
   // dispatch-and-ping task ("find the 5 cheapest flights and get back to me") that a normal ~8-step
   // synchronous run would truncate. Optional; absent/<=0 -> the RELAY_MAX_STEPS default. Clamped to a
@@ -528,6 +547,22 @@ export async function runAgent(
           push("convert_currency", `${formatConversion(c)}. Report this to the user; the rate is live.`);
         } catch (e) {
           push("convert_currency", `ERROR converting: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "get_weather") {
+        if (!backend.getWeather) { push("get_weather", "ERROR: weather isn't available."); continue; }
+        const place = String(call.args.place ?? "").trim();
+        // No place given but the user's coords are known -> use them (near-me weather).
+        const opts = place ? { place } : (deps.weatherCoords ? { lat: deps.weatherCoords.lat, lng: deps.weatherCoords.lng } : {});
+        if (!place && !deps.weatherCoords) { push("get_weather", "No place given and no saved location — ask the user which city."); continue; }
+        try {
+          const w = await backend.getWeather(opts);
+          if (!w) { push("get_weather", `Couldn't get weather for ${place || "your location"} (unknown place or fetch failed). Try a more specific city.`); continue; }
+          push("get_weather", `${formatWeather(w, deps.weatherUnits ?? "imperial")} Report this to the user.`);
+        } catch (e) {
+          push("get_weather", `ERROR getting weather: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }
