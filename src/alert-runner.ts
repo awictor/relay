@@ -6,6 +6,12 @@
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Alert } from "./lib/alerts.js";
 import { changed, conditionHolds, extractValue, extractListItems, feedItemKey } from "./lib/alerts.js";
+import { mapPool } from "./lib/pool.js";
+
+// Cap concurrent watchlist member checks so a multi-member watchlist can't stampede the shared anvil
+// browser pool (each member is a full agent run + browser session) — the same bound the digest runner
+// + inbound dispatch use. Env-tunable; default 3.
+const WATCHLIST_CONCURRENCY = Math.max(1, Number(process.env.RELAY_WATCHLIST_CONCURRENCY) || 3);
 
 export interface AlertRunResult {
   notify: boolean;   // did the value change (or first run)?
@@ -61,13 +67,17 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // Member-last advances are deferred to the caller's post-send commit (a failed send re-reports).
   if (alert.members?.length) {
     const ctx = deps.contextFor?.(alert.chatId) || undefined;
-    const results = await Promise.all(alert.members.map(async (mem) => {
+    // Bounded fan-out: a watchlist can have up to MAX_WATCHLIST_MEMBERS members, each a full agent run +
+    // browser session. mapPool caps in-flight at WATCHLIST_CONCURRENCY so it can't exhaust the shared
+    // anvil pool (the DEV-0140 bound the digest runner + inbound dispatch already use). Per-member
+    // try/catch keeps one failure from sinking the batch; order is preserved.
+    const results = await mapPool(alert.members, WATCHLIST_CONCURRENCY, async (mem) => {
       try {
         const res = await deps.runAgent(mem.task, { llm: deps.llm, context: ctx }, []);
         if (res.degraded) return { mem, value: null as string | null };
         return { mem, value: deps.formatReply(res.reply).trim() };
       } catch { return { mem, value: null as string | null }; }
-    }));
+    });
     const firstRunWl = alert.members.every((m) => m.last === undefined);
     const updates: Array<{ label: string; value: string }> = [];
     const changedLines: string[] = [];

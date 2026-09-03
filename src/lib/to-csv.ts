@@ -10,6 +10,10 @@ function csvCell(v: unknown): string {
   if (v === null || v === undefined) s = "";
   else if (typeof v === "object") s = JSON.stringify(v);
   else s = String(v);
+  // CSV formula-injection guard: cells come from arbitrary scraped pages (untrusted). A value starting
+  // with = + - @ (or a tab/CR that Excel treats as a formula lead) executes as a formula on open in
+  // Excel/Sheets. Prefix a single quote to neutralize it while keeping the text readable.
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

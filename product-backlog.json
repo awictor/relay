@@ -1025,6 +1025,60 @@
       "status": "done",
       "why": "A user with a basket (5 stocks / 3 job feeds) must define N separate alerts + get N pings; a watchlist groups them into one standing dashboard.",
       "how": "A member array on an alert + a combined formatter reusing the alert store; ping only the moved items in one message."
+    },
+    {
+      "id": "watchlist-concurrency-csv-injection",
+      "title": "watchlist member fan-out unbounded + CSV formula injection",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "Audit found the just-shipped watchlist ran Promise.all over up to 8 members, bypassing the DISPATCH_CONCURRENCY pool bound (reintroduces browser-pool exhaustion; degraded members silently dropped from the ping). And CSV export did not guard formula injection from scraped cells.",
+      "how": "mapPool at WATCHLIST_CONCURRENCY (default 3) for member checks; csvCell prefixes =/+/-/@ cells with a quote."
+    },
+    {
+      "id": "geo-tool-cluster",
+      "title": "weather/near-me/directions have no backend (LLM-guessed API)",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "The #1 first errand \"weather\" + the advertised \"near me\"/\"directions\"/\"how far\" all lack a real tool — the agent guesses a forecast URL or scrapes a JS map shell and floods/fails. LOCATION_ERRAND_RE + saved coords already exist; only the backend is missing.",
+      "how": "A keyless geo cluster over Open-Meteo (geocode + forecast), Nominatim (place->coords), OSRM (route distance/ETA), Overpass (nearby POIs). Start with weather (highest frequency) as get_weather via fetch_json + a geocode step; honor profile coords/units."
+    },
+    {
+      "id": "coords-privacy-ttl",
+      "title": "shared coords leak to the LLM forever with no TTL",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "A location pin shared once keeps sending ~1m coords to the external LLM on EVERY later message (incl unrelated ones) + \"near me\" resolves against a stale spot; static pins are stored permanently.",
+      "how": "Expire pin coords after a TTL (e.g. a few hours) so they inform near-term near-me but do not persist as \"current\"; drop them from contextLine once stale; keep the free-text home location durable."
+    },
+    {
+      "id": "fx-live-claim-timestamp",
+      "title": "convert_currency claims \"live\" but rate is ~daily + tiny rates render 0.0000",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "The FX source refreshes ~daily; the tool tells the user \"the rate is live\" (misrepresentation for a money decision) and a small inverse rate shows \"rate 0.0000\".",
+      "how": "Surface the API time_last_update_utc + drop the \"live\" wording (say \"as of <date>\"); format the rate with adaptive precision so a <0.01 rate is not 0.0000."
+    },
+    {
+      "id": "draft-to-send-composer",
+      "title": "draft-to-send composer (non-gated acting slice)",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "Relay is read-only + dead-ends at \"here is what I found\"; the honest non-gated answer to Instinct acting is composing the email/DM/reply as a ready artifact the USER sends.",
+      "how": "A compose intent -> LLM drafts the message + a copy block + a mailto:/tel: deep link; never hits send (safety guard untouched)."
+    },
+    {
+      "id": "watchlist-member-label-collision",
+      "title": "watchlist member labels can collide",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "memberLabel = first 4 words; two similar members collapse to one label so setMemberLasts updates the wrong one + one member re-fires every check.",
+      "how": "Disambiguate duplicate labels (append an index) or key members by task, not label."
     }
   ],
   "history": [
@@ -1375,6 +1429,10 @@
     {
       "id": "telegram-location-pin",
       "note": "A shared Telegram location pin (attach->Location, the natural \"near me\" move) was text-less + silently dropped. Now parseUpdates maps it to an InboundMessage with coords; the handler saves them to the profile (lat/lng, surfaced in the agent context line for near-me/directions) + acks, or runs the caption as a task if one was sent. hasLocation counts coords too. 968 tests green."
+    },
+    {
+      "id": "watchlist-concurrency-csv-injection",
+      "note": "Fixed 2 defects the refill audit found: (1) watchlist member checks ran an unbounded Promise.all over up to 8 members, bypassing the anvil-pool bound (browser-pool exhaustion; degraded members silently dropped) — now mapPool at WATCHLIST_CONCURRENCY(3); (2) CSV export did not guard formula injection — csvCell now prefixes =/+/-/@ cells with a quote so a scraped =HYPERLINK/=cmd cell is inert in Excel/Sheets. 969 tests green."
     }
   ],
   "audits": [
@@ -1449,6 +1507,9 @@
     },
     {
       "note": "Backlog dry after background-errand-persist -> 3-agent audit. A(new-user): maps/places/directions (Nominatim/Overpass/OSRM), Telegram location-pin dropped, web_search single-provider Bing scrape, package tracking, FX via JSON. B(reliability): NEW defects in the just-shipped crash-recovery (drain-gap data loss, poison crash-loop, double-ACK) — BUILT the fix; also once-reminder cap starvation, then-recipe re-run no dedup. C(power): watchlists, CSV export, template library, draft-to-send composer, recipe chaining. Built bg-recovery-hardening (broken just-shipped path); seeded the rest."
+    },
+    {
+      "note": "Backlog dry after telegram-location-pin -> 3-agent audit. A(new-user): NO weather/geocode/route/POI backend behind the advertised weather/near-me/directions (Open-Meteo/Nominatim/OSRM/Overpass), translation not in the answer-direct list, package-tracking has no free API. B(reliability): watchlist unbounded fan-out (BUILT fix) + CSV formula injection (BUILT fix), coords leak to LLM forever no TTL, FX \"live\" claim ~daily + tiny-rate 0.0000, member-label collision. C(power): draft-to-send composer, template gallery, recipe chaining, .ics export, shareable recipes. Built the watchlist+CSV fix cluster (broken just-shipped path + a security gap); seeded the rest."
     }
   ]
 }
