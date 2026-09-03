@@ -696,6 +696,23 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
     expect(store.list(1)).toHaveLength(0);   // completed
   });
 
+  it("an over-cap MONTHLY reminder is deferred (kept), not dropped for the month (monthly-yearly-cap-drop)", async () => {
+    const clock = { t: NOW };
+    const sent: unknown[] = [];
+    const { store, runner } = harness(clock, {
+      maxPerChatPerHour: 1,
+      runAgent: async (task) => ({ reply: `did:${task}` }),
+      send: async () => { sent.push(1); },
+    });
+    store.add(1, { kind: "once", task: "filler", dueMs: NOW - 1 }, NOW);   // consumes the 1 slot
+    store.add(1, { kind: "monthly", task: "pay rent", dueMs: NOW - 1, hourMin: "09:00", offsetMin: 0, dayOfMonth: 1, reminderOnly: true }, NOW); // over cap
+    await runner.tick();
+    expect(sent).toHaveLength(1);                    // only the filler; the rent reminder deferred, not dropped
+    const monthly = store.list(1).find((s) => s.kind === "monthly")!;
+    expect(monthly).toBeTruthy();
+    expect(monthly.dueMs).toBeLessThanOrEqual(NOW);  // left DUE (grace) so a later tick delivers it — NOT advanced a month out
+  });
+
   it("an over-cap DAILY occurrence is still dropped (advances), not deferred — it must not storm", async () => {
     const clock = { t: NOW };
     const sent: unknown[] = [];

@@ -418,6 +418,18 @@ describe("parseSchedule — monthly / yearly (monthly-yearly-reminders)", () => 
     const s = parseSchedule("remind me to call the bank on the 1st", NOW)!;
     expect(s.kind).toBe("once"); // absolute-date one-shot, not recurring
   });
+  it("rejects an impossible yearly date (Feb 30, Jun 31) rather than firing it on the wrong day (yearly-feb29-wrong-day)", () => {
+    // Not a valid yearly -> falls through (parseSchedule returns null or a non-yearly reading), never a yearly.
+    const feb30 = parseSchedule("wish X every year on Feb 30", NOW);
+    expect(feb30?.kind).not.toBe("yearly");
+    const jun31 = parseSchedule("do X every year on June 31", NOW);
+    expect(jun31?.kind).not.toBe("yearly");
+  });
+  it("allows a Feb 29 yearly (leap day) — it clamps at fire time, not reject", () => {
+    const s = parseSchedule("mom's birthday every year on Feb 29", NOW)!;
+    expect(s.kind).toBe("yearly");
+    expect(s.month).toBe(1); expect(s.dayOfMonth).toBe(29);
+  });
 });
 
 describe("parseSchedule — sticky / acknowledged reminders (sticky-acknowledged-reminders)", () => {
@@ -511,6 +523,30 @@ describe("ScheduleStore.complete persist (once-complete-ignores-persist)", () =>
     expect(after.dueMs).toBeGreaterThan(NOW);
     expect(new Date(after.dueMs).getUTCMonth()).toBe(5); // June
     expect(new Date(after.dueMs).getUTCDate()).toBe(3);
+  });
+  it("a monthly-on-the-31st CLAMPS to short-month end, never skips (monthly-short-month-skip)", async () => {
+    const { nextMonthlyMs } = await import("../src/lib/schedule.js");
+    // Jan 15 2026, UTC. The next 31st is Jan 31; then Feb (no 31st) must land Feb 28, not skip to March.
+    const jan15 = Date.UTC(2026, 0, 15, 12, 0, 0);
+    const firstFire = nextMonthlyMs(jan15, 31, 9, 0, 0);
+    expect(new Date(firstFire).getUTCMonth()).toBe(0);  // January
+    expect(new Date(firstFire).getUTCDate()).toBe(31);
+    const febFire = nextMonthlyMs(firstFire, 31, 9, 0, 0); // after Jan 31
+    expect(new Date(febFire).getUTCMonth()).toBe(1);    // February, NOT skipped to March
+    expect(new Date(febFire).getUTCDate()).toBe(28);    // clamped to Feb 28 (2026 non-leap)
+  });
+  it("a yearly Feb 29 CLAMPS to Feb 28 in a non-leap year (yearly-feb29-wrong-day)", async () => {
+    const { nextYearlyMs } = await import("../src/lib/schedule.js");
+    // From mid-2026 (non-leap), the next Feb 29 occurrence is Feb 28 2027 (also non-leap), NOT Mar 1.
+    const mid2026 = Date.UTC(2026, 6, 1, 12, 0, 0);
+    const fire = nextYearlyMs(mid2026, 1, 29, 9, 0, 0);
+    expect(new Date(fire).getUTCMonth()).toBe(1);       // February, not rolled to March
+    expect(new Date(fire).getUTCDate()).toBe(28);        // clamped
+    // From mid-2027, the next is Feb 29 2028 (leap) — the real leap day.
+    const mid2027 = Date.UTC(2027, 6, 1, 12, 0, 0);
+    const leap = nextYearlyMs(mid2027, 1, 29, 9, 0, 0);
+    expect(new Date(leap).getUTCFullYear()).toBe(2028);
+    expect(new Date(leap).getUTCDate()).toBe(29);
   });
 });
 

@@ -282,8 +282,12 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
         if (/^\d/.test(md[1]!) && /^\d/.test(md[2]!)) { mon = parseInt(md[1]!, 10) - 1; day = parseInt(md[2]!, 10); } // M/D
         else if (/^\d/.test(md[1]!)) { day = parseInt(md[1]!, 10); mon = MON[md[2]!]; } // "3rd of May"
         else { mon = MON[md[1]!]; day = parseInt(md[2]!, 10); } // "May 3"
-        if (mon !== undefined && mon >= 0 && mon <= 11 && day >= 1 && day <= 31) {
-          const dueMs = dateAtMs(now, mon, day, hh, mm, offsetMin);
+        // Reject an impossible month/day (Feb 30, Jun 31) rather than silently firing it on the wrong
+        // rolled-over day (yearly-feb29-wrong-day). Feb 29 is ALLOWED — nextYearlyMs clamps it to Feb 28
+        // in non-leap years. Max day per month (Feb capped at 29 for the leap-day case).
+        const MAX_DAY = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        if (mon !== undefined && mon >= 0 && mon <= 11 && day >= 1 && day <= MAX_DAY[mon]!) {
+          const dueMs = nextYearlyMs(now, mon, day, hh, mm, offsetMin); // clamps Feb 29 -> Feb 28 in non-leap years
           const hourMin = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
           let task = stripTime(cleanTask(raw, md[0]!));
           task = task.replace(/\bevery\s+(?:single\s+)?year\b|\byearly\b|\bannually\b/gi, "").replace(/\s+/g, " ").replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, "").trim();
@@ -296,7 +300,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
       if (dom) {
         const day = parseInt(dom[1]!, 10);
         if (day >= 1 && day <= 31) {
-          const dueMs = domAtMs(now, day, hh, mm, offsetMin);
+          const dueMs = nextMonthlyMs(now, day, hh, mm, offsetMin); // clamps a 29/30/31 to short-month end, never skips
           const hourMin = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
           let task = stripTime(cleanTask(raw, dom[0]!));
           task = task.replace(/\bevery\s+(?:single\s+)?month\b|\bmonthly\b/gi, "").replace(/\bof\b\s*$/i, "").replace(/\s+/g, " ").replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, "").trim();
@@ -559,6 +563,42 @@ export function domAtMs(now: number, day: number, hh: number, mm: number, offset
     const atUser = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + add, day, hh, mm, 0, 0);
     const t = atUser - offsetMin * 60_000;
     if (t > now && new Date(atUser).getUTCDate() === day) return t; // valid day in that month + future
+  }
+  return dayAtMs(now, hh, mm, 1, offsetMin); // fallback (shouldn't hit)
+}
+
+// Days in a given month (year, month 0-11), accounting for leap Februaries.
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate(); // day 0 of next month = last day of this one
+}
+
+// Next RECURRING monthly occurrence of `day` at hh:mm in the user's zone, at/after now (monthly-short-
+// month-skip). Unlike domAtMs (which SKIPS a month lacking the day — right for a one-shot "on the Nth"),
+// a monthly reminder CLAMPS to the month's last day so "on the 31st every month" still fires end-of-Feb /
+// Apr 30 instead of silently no-showing ~5 cycles a year. Scans forward month-by-month for the first
+// clamped instant strictly after now.
+export function nextMonthlyMs(now: number, day: number, hh: number, mm: number, offsetMin = tzOffsetMin()): number {
+  const d = new Date(now + offsetMin * 60_000);
+  for (let add = 0; add <= 12; add++) {
+    const year = d.getUTCFullYear(), month = d.getUTCMonth() + add;
+    const y = year + Math.floor(month / 12), m = ((month % 12) + 12) % 12;
+    const clampedDay = Math.min(day, daysInMonth(y, m)); // 31 -> 30/28/29 as the month allows
+    const t = Date.UTC(y, m, clampedDay, hh, mm, 0, 0) - offsetMin * 60_000;
+    if (t > now) return t;
+  }
+  return dayAtMs(now, hh, mm, 1, offsetMin); // fallback (shouldn't hit)
+}
+
+// Next RECURRING yearly occurrence of month+day at hh:mm in the user's zone, at/after now (yearly-feb29-
+// wrong-day). CLAMPS the day to the month's length in that year, so "Feb 29 every year" fires Feb 28 in a
+// non-leap year (and Feb 29 in a leap year) instead of silently rolling to Mar 1. Scans this year then next.
+export function nextYearlyMs(now: number, month: number, day: number, hh: number, mm: number, offsetMin = tzOffsetMin()): number {
+  const startYear = new Date(now + offsetMin * 60_000).getUTCFullYear();
+  for (let add = 0; add <= 4; add++) {
+    const y = startYear + add;
+    const clampedDay = Math.min(day, daysInMonth(y, month));
+    const t = Date.UTC(y, month, clampedDay, hh, mm, 0, 0) - offsetMin * 60_000;
+    if (t > now) return t;
   }
   return dayAtMs(now, hh, mm, 1, offsetMin); // fallback (shouldn't hit)
 }
@@ -829,12 +869,12 @@ export class ScheduleStore {
       } else if (s.kind === "monthly" && s.hourMin && s.dayOfMonth !== undefined) {
         const [hh, mm] = s.hourMin.split(":").map((n) => parseInt(n, 10));
         s.offsetMin = offsetMin;
-        s.dueMs = domAtMs(now, s.dayOfMonth, hh!, mm!, offsetMin);
+        s.dueMs = nextMonthlyMs(now, s.dayOfMonth, hh!, mm!, offsetMin); // clamp, don't skip short months
         moved++;
       } else if (s.kind === "yearly" && s.hourMin && s.dayOfMonth !== undefined && s.month !== undefined) {
         const [hh, mm] = s.hourMin.split(":").map((n) => parseInt(n, 10));
         s.offsetMin = offsetMin;
-        s.dueMs = dateAtMs(now, s.month, s.dayOfMonth, hh!, mm!, offsetMin);
+        s.dueMs = nextYearlyMs(now, s.month, s.dayOfMonth, hh!, mm!, offsetMin); // clamp Feb 29 in non-leap years
         moved++;
       } else if (s.kind === "once" && s.clockTime && s.dueMs > now) {
         // A FUTURE clock-time once (once-reminder-tz-restamp): "remind me tomorrow at 8am" set before the
@@ -869,12 +909,12 @@ export class ScheduleStore {
       s.dueMs = nextWeeklyMs(now, hh!, mm!, s.weekdays, off);
       return this.persist();
     } else if (s.kind === "monthly" && s.dayOfMonth !== undefined) {
-      // Next occurrence of the day-of-month after now (domAtMs skips short months lacking the day).
-      s.dueMs = domAtMs(now, s.dayOfMonth, hh!, mm!, off);
+      // Next day-of-month after now, CLAMPED to short-month end (never skips — monthly-short-month-skip).
+      s.dueMs = nextMonthlyMs(now, s.dayOfMonth, hh!, mm!, off);
       return this.persist();
     } else if (s.kind === "yearly" && s.dayOfMonth !== undefined && s.month !== undefined) {
-      // Next occurrence of month+day after now (dateAtMs rolls to next year since this year's just fired).
-      s.dueMs = dateAtMs(now, s.month, s.dayOfMonth, hh!, mm!, off);
+      // Next month+day after now, clamping Feb 29 to Feb 28 in non-leap years (yearly-feb29-wrong-day).
+      s.dueMs = nextYearlyMs(now, s.month, s.dayOfMonth, hh!, mm!, off);
       return this.persist();
     } else if (s.kind === "interval" && s.intervalMs) {
       // A sticky reminder (sticky-acknowledged-reminders) counts its fires and gives up on its own once it

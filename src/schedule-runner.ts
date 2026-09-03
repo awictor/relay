@@ -361,7 +361,10 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // not the plain-daily drop. A plain daily/weather still drops its occurrence (it re-fires on its
         // own cadence + isn't a bundle the user explicitly assembled).
         const isDigest = /^digest:/.test(s.task);
-        const graceEligible = s.kind === "once" || isDigest;
+        // monthly/yearly are single high-stakes promises per period (rent, a birthday) — like a "once",
+        // not a droppable daily (monthly-yearly-cap-drop). Give them the defer-then-force grace so an
+        // over-cap morning doesn't lose THIS month's/year's reminder (next is 30/365 days out).
+        const graceEligible = s.kind === "once" || s.kind === "monthly" || s.kind === "yearly" || isDigest;
         if (overCap(s.chatId, deps.now()) && !isAlertCheck) {
           if (graceEligible) {
             // Defer past the cap rather than drop it. BUT a chat with many recurring watches can stay

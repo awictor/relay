@@ -2210,7 +2210,7 @@
       "title": "monthly reminder on day 29/30/31 silently skips every short month",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "domAtMs requires new Date(atUser).getUTCDate()===day, so 'pay rent on the 31st every month' fires only in the 7 months with a 31st (skips Feb/Apr/Jun/Sep/Nov); 'on the 30th' skips Feb. User is confirmed 'I'll do this every month' but gets NO reminder for ~5 bill cycles a year, silently. complete() reschedules through the same fn so it repeats forever. Regression in the just-shipped monthly kind.",
       "how": "For monthly, clamp the day to the month's LAST day instead of skipping (Feb 31 -> Feb 28/29, Apr 31 -> Apr 30). Add a monthly-specific next-occurrence that clamps rather than reusing domAtMs's skip semantics (keep domAtMs as-is for the absolute 'on the Nth' one-shot). Offline test: 'on the 31st' fires end-of-Feb + Apr30, never skips."
     },
@@ -2219,7 +2219,7 @@
       "title": "monthly/yearly reminder dropped for the whole period if over the hourly send-cap",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "schedule-runner graceEligible = kind==='once' || isDigest; monthly/yearly fall into the else branch that safeCompletes (advances the recurrence) when over-cap — like a harmless daily. But a monthly/yearly is a single high-stakes promise per period: if the chat is over-cap the morning rent/birthday is due, THIS month's/year's reminder is lost + the next is 30/365 days out.",
       "how": "Add monthly/yearly to graceEligible so they get the defer-then-force grace a 'once' gets (retry until a slot frees, force past the grace window) instead of being dropped. Offline test: a monthly over-cap defers, not drops."
     },
@@ -2228,7 +2228,7 @@
       "title": "yearly reminder on Feb 29 (+ invalid Feb 30/Jun 31) fires the wrong day, mislabeled",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "dateAtMs has no getUTCDate()===day validity check (unlike domAtMs), and the yearly parser accepts any day 1-31 for any month. 'birthday every year on Feb 29' fires Mar 1 in non-leap years; 'Feb 30'/'June 31' silently fire Mar 2/Jul 1. The reminder header shows the date the user asked for, so the mistimed ping looks authoritative.",
       "how": "For yearly, snap Feb 29 -> Feb 28 in non-leap years (clamp to month-end, same fix as monthly) and REJECT an impossible month/day pair at parse time (Feb 30, Jun 31) so it doesn't silently become a wrong-day yearly. Offline test: Feb 29 yearly fires Feb 28 in a non-leap year; 'Feb 30' is rejected."
     },
@@ -3110,6 +3110,10 @@
     {
       "item": "alert-edit-persist-hedge",
       "note": "alertEdit now hedges a failed disk write like every other write path. 'change btc to below 45000' confirmed 'Updated' unconditionally, so a failed persist silently reverted the trigger to the old threshold on restart — user watched the wrong number with no warning. index.alertEdit now returns saved (alerts.lastSaveOk(), which updateTrigger already sets) + the handler appends 'I couldn't save that to disk — it may revert if I restart' when saved===false, matching alertDefine/scheduleAdd/etc. 1 new handler test, suite 1594 green, tsc clean. call-tested:false (offline handler test)."
+    },
+    {
+      "item": "monthly-short-month-skip + yearly-feb29-wrong-day + monthly-yearly-cap-drop",
+      "note": "Fixed 3 coupled regressions in the just-shipped monthly/yearly reminders. (1) SHORT-MONTH SKIP: 'pay rent on the 31st every month' fired only in the 7 months with a 31st (domAtMs's getUTCDate check skips a month lacking the day) — silent no-show ~5 bill cycles/yr. New nextMonthlyMs CLAMPS the day to the month's last day (31->Feb28/Apr30), never skips; used in parse + complete + restamp. domAtMs kept as-is for the one-shot 'on the Nth'. (2) FEB-29: yearly 'Feb 29' fired Mar 1 in non-leap years (dateAtMs had no validity check) + invalid Feb30/Jun31 were accepted. New nextYearlyMs clamps Feb 29->Feb 28 in non-leap years (real Feb 29 in leap years); the parser now rejects an impossible month/day (per-month MAX_DAY, Feb allowed 29). (3) CAP-DROP: monthly/yearly weren't graceEligible in schedule-runner, so an over-cap period was dropped + advanced a month/year out — added them to graceEligible (defer-then-force like a 'once'), since each is a single high-stakes promise per period. 9 new tests (parse reject/allow + nextMonthlyMs/nextYearlyMs clamp + monthly cap-defer), suite 1599 green, tsc clean. call-tested:false (offline)."
     }
   ],
   "audits": [
