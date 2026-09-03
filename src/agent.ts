@@ -15,6 +15,7 @@ import { fetchYouTubeTranscript } from "./lib/youtube.js";
 import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
+import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { getWeather as fetchWeather, formatWeather, formatWeatherWhen } from "./lib/weather.js";
 import { formatDraft, type Draft } from "./lib/compose.js";
 import { findNearby as fetchNearby, formatPlaces } from "./lib/places.js";
@@ -110,6 +111,18 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { symbol: { type: "string", description: "Ticker symbol, e.g. \"AAPL\" or \"TSLA\". Non-US: add a market suffix like \"VOD.UK\"." } },
       required: ["symbol"],
+    },
+  },
+  {
+    name: "track_package",
+    description: "Track a shipment by its tracking number (UPS/FedEx/USPS/DHL) — use this for any \"where's my package\", \"track 1Z...\", \"track my order 9400...\" request. I detect the carrier from the number's shape + read the carrier's official tracking page. Pass the tracking number as given; optionally name the carrier if you know it.",
+    parameters: {
+      type: "object",
+      properties: {
+        number: { type: "string", description: "The tracking number, e.g. \"1Z999AA10123456784\" or \"9400111899223817612345\"." },
+        carrier: { type: "string", description: "Optional: ups | fedex | usps | dhl, if the user named it (overrides shape detection)." },
+      },
+      required: ["number"],
     },
   },
   {
@@ -242,6 +255,7 @@ Tools:
 - "pdf" (url): render a page to a PDF and send it as a document. Use when the user wants to SAVE or KEEP a page ("save as PDF", "send me a PDF of X"). Then call reply with a short caption.
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
+- "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
 - "get_quote" (symbol): latest stock/equity price. Use this — NOT web_search/scrape — for any "what's Tesla at"/"AAPL price"/"how's NVDA doing" question; it's instant. Pass the ticker (AAPL, TSLA); non-US add a market suffix (VOD.UK).
 - "get_weather" (place?, when?): current weather, today's high/low, + up to a 7-day forecast. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location. For a future day, pass "when" with the user's words ("tomorrow", "this weekend", "Saturday") so the RIGHT day is reported, not today.
 - "find_nearby" (what, near?): find places near the user (coffee, pharmacy, ATM, gas...). Use this — NOT web_search — for "X near me"/"nearest Y". Omit near to use the user's location.
@@ -664,6 +678,26 @@ export async function runAgent(
           push("get_quote", `${formatQuote(q)}. Report this to the user, including the "as of" time if shown (it's the last close/trade, not a to-the-second live tick).`);
         } catch (e) {
           push("get_quote", `ERROR getting quote: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "track_package") {
+        const rawNum = String(call.args.number ?? "").trim();
+        const named = String(call.args.carrier ?? "").trim().toLowerCase();
+        const carrier = (["ups", "fedex", "usps", "dhl"].includes(named) ? named : detectCarrier(rawNum)) as import("./lib/tracking.js").Carrier | null;
+        if (!rawNum) { push("track_package", "No tracking number given — ask the user for it."); continue; }
+        if (!carrier) { push("track_package", `Couldn't tell which carrier "${rawNum}" is from. Ask the user which carrier (UPS/FedEx/USPS/DHL).`); continue; }
+        try {
+          // Drive the real browser (anvil) to the carrier's official page — a keyless GET 403s, but the
+          // page renders the status; scrape returns its text for the model to read out the latest event.
+          const url = trackingUrl(carrier, rawNum);
+          const r = await backend.scrape(url);
+          const body = truncateForModel(r.content || "");
+          if (!body.trim()) { push("track_package", `Opened ${carrierName(carrier)} tracking for ${rawNum} but the page came back empty (it may need a moment or the number may be wrong). Tell the user + suggest re-checking the number.`); continue; }
+          push("track_package", `${carrierName(carrier)} tracking page for ${rawNum}:\n${body}\n\nSummarize the LATEST status + expected delivery for the user in one line; if the page shows no match, say the number wasn't found.`);
+        } catch (e) {
+          push("track_package", `ERROR reading the ${carrierName(carrier)} tracking page: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

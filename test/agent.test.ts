@@ -277,6 +277,54 @@ describe("runAgent get_quote (stock-quote-tool)", () => {
   });
 });
 
+describe("runAgent track_package (package-tracking-watcher)", () => {
+  it("detects the carrier + scrapes the official tracking page, no web_search", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "track_package", args: { number: "1Z999AA10123456784" } } },
+      { toolCall: { name: "reply", args: { text: "Your UPS package is out for delivery." } } },
+    ]);
+    let scraped = "";
+    const backend = {
+      scrape: async (url: string) => { scraped = url; return { title: "", content: "Out for delivery — arriving today by 9pm", url }; },
+      createSession: async () => ({ id: "s" }),
+      navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {},
+      readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {},
+      discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+    };
+    const { reply } = await runAgent("where's my package 1Z999AA10123456784", { llm, backend });
+    expect(scraped).toBe("https://www.ups.com/track?tracknum=1Z999AA10123456784"); // UPS URL from shape detection
+    expect(reply).toMatch(/out for delivery/i);
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/UPS tracking page/);
+    expect(toolMsg!.content).toMatch(/Out for delivery/);
+  });
+  it("asks which carrier when the number's shape is unrecognized", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "track_package", args: { number: "12345" } } },
+      { toolCall: { name: "reply", args: { text: "Which carrier is that?" } } },
+    ]);
+    let scraped = false;
+    const backend = {
+      scrape: async (url: string) => { scraped = true; return { title: "", content: "", url }; },
+      createSession: async () => ({ id: "s" }),
+      navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {},
+      readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {},
+      discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+    };
+    const { reply } = await runAgent("track 12345", { llm, backend });
+    expect(scraped).toBe(false); // never scraped — shape unrecognized
+    expect(reply).toMatch(/which carrier/i);
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/Couldn't tell which carrier/);
+  });
+});
+
 describe("runAgent get_weather (geo-tool-cluster)", () => {
   const wx = { place: "Austin", current: { tempC: 30, tempF: 86, code: 0, desc: "clear", windKph: 5 }, today: { hiC: 35, loC: 25, hiF: 95, loF: 77, precipPct: 0 } };
   function wxBackend(over: Record<string, unknown> = {}) {

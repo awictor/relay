@@ -29,6 +29,7 @@ const HELP = `Relay — what I can do:
 • Weather: "weather in Paris" or just "weather" (if you've shared your location) → current + today's high/low, instantly.
 • Find places nearby: "coffee near me", "nearest pharmacy" (share your location first) → real nearby spots with distance + hours.
 • Convert currency: "how much is 200 USD in EUR" → I use the live rate, instantly.
+• Track a package: "where's my package 1Z999..." or "track 9400..." → I spot the carrier (UPS/FedEx/USPS/DHL) + read its tracking page. Add "watch" to get pinged when the status changes.
 • Share your location: tap 📎 → Location and I'll use it for "near me", weather, and directions.
 • Big errands: "find the 5 cheapest flights to Lisbon and get back to me" → I work on it in the background and text you when it's done.
 
