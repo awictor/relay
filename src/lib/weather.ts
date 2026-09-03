@@ -167,6 +167,9 @@ export function formatDay(day: ForecastDay, label: string, units: "metric" | "im
  * N days" (a range). `todayDow` is 0..6 (Sun..Sat) for the resolved location's today. Pure + tested. */
 export function resolveWhen(text: string, todayDow: number, maxDays: number): number[] | null {
   const t = text.toLowerCase();
+  // "day after tomorrow" is +2 — checked BEFORE the \btomorrow\b branch, which would otherwise match it
+  // and wrongly return [1] (tomorrow), a day early (weather-day-after-tomorrow).
+  if (/\b(?:the\s+)?day after tomorrow\b/.test(t)) return maxDays > 2 ? [2] : null;
   if (/\btomorrow\b/.test(t)) return maxDays > 1 ? [1] : null;
   if (/\bthis weekend\b|\bweekend\b/.test(t)) {
     const idx: number[] = [];
@@ -186,8 +189,11 @@ export function resolveWhen(text: string, todayDow: number, maxDays: number): nu
     if (new RegExp(`\\b${dayName}\\b`).test(t)) {
       let target = -1;
       for (let i = 0; i < 7; i++) { if ((todayDow + i) % 7 === d) { target = i; break; } } // soonest, 0..6
+      // "next <weekday>" means the occurrence in the FOLLOWING week, not this week's soonest — so "next
+      // Friday" said on a Wed is +9 (this Fri +7), not +2 (weather-next-weekday). Bump the soonest by a
+      // full week whenever "next" is present, not only when it lands on today.
       const wantsNext = new RegExp(`\\bnext\\s+${dayName}\\b`).test(t);
-      if (wantsNext && target === 0) target = 7; // "next Monday" on a Monday -> next week, not today
+      if (wantsNext) target += 7;
       return target < 0 ? null : [target];
     }
   }

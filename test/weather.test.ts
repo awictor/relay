@@ -212,14 +212,25 @@ describe("multi-day forecast (weather-multi-day)", () => {
     expect(resolveWhen("how hot is it right now", 6, 7)).toBeNull();    // no future day
   });
 
-  it("resolveWhen handles 'next <weekday>' as the following week, not today (weather-future-day-falls-back-to-today)", () => {
+  it("resolveWhen handles 'next <weekday>' as the following week, always +7 past the soonest (weather-next-weekday)", () => {
     // todayDow=1 (Monday). "next Monday" must be +7, NOT [0]/today.
     expect(resolveWhen("weather next monday", 1, 14)).toEqual([7]);
     // a bare "monday" on Monday is today-or-soonest = today (0); "next monday" is the one after.
     expect(resolveWhen("weather monday", 1, 14)).toEqual([0]);
-    // "next friday" on Monday = +4 (soonest Fri, no today collision so "next" doesn't add a week here...
-    // it's the coming Friday). Index returned regardless of window; formatWeatherWhen handles overflow.
-    expect(resolveWhen("weather next friday", 1, 7)).toEqual([4]);
+    // "next friday" on Monday: soonest Fri is +4, so "next" = +4+7 = +11 (the FOLLOWING week's Friday),
+    // not this week's — the bug was returning +4. Index returned regardless of window; formatWeatherWhen
+    // turns an out-of-window day into a "beyond my N-day forecast" note.
+    expect(resolveWhen("weather next friday", 1, 14)).toEqual([11]);
+    expect(resolveWhen("weather friday", 1, 14)).toEqual([4]); // bare = this coming Friday
+  });
+
+  it("resolveWhen: 'day after tomorrow' is +2, not tomorrow (weather-day-after-tomorrow)", () => {
+    expect(resolveWhen("weather the day after tomorrow", 3, 7)).toEqual([2]);
+    expect(resolveWhen("rain day after tomorrow", 3, 7)).toEqual([2]);
+    // 'tomorrow' alone is still +1 (the day-after check doesn't shadow it)
+    expect(resolveWhen("weather tomorrow", 3, 7)).toEqual([1]);
+    // out of window (only 2 days) -> null, not a wrong day
+    expect(resolveWhen("day after tomorrow", 3, 2)).toBeNull();
   });
 
   it("dayLabel names Today/Tomorrow/weekday", () => {

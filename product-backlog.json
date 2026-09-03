@@ -3122,6 +3122,15 @@
       "status": "done",
       "why": "parseLogCommand's amount pattern was \\d+(\\.\\d+)? — no thousands comma — so a rent/salary/bill log with a comma ('spent $1,250 on rent', 'log salary 5,000') returned null and nothing was recorded, while the user thought it logged. A comma is exactly where big-ticket expenses appear.",
       "how": "Accept a thousands-separated NUM in both the money + generic branches, strip commas before parseFloat. Also allowed an optional leading 'I ' ('I spent $1,250 on rent') — a natural phrasing that also failed. Guarded so 'independent 5 on x' doesn't false-match the 'i' prefix."
+    },
+    {
+      "id": "weather-day-resolution-bugs",
+      "title": "'day after tomorrow' + 'next <weekday>' resolved to the wrong forecast day",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "resolveWhen picked the wrong day for two common phrasings: 'day after tomorrow' matched the \\btomorrow\\b branch -> [1] (a day early), and 'next friday' only bumped +7 when it collided with today, so mid-week it returned THIS Friday not next week's. A weather answer for the wrong day reads as confidently correct.",
+      "how": "Check 'day after tomorrow' (+2) BEFORE the tomorrow branch; make 'next <weekday>' always add a week past the soonest occurrence (not only on a today-collision). Both guarded by maxDays / handled out-of-window by formatWeatherWhen's 'beyond my N-day forecast' note."
     }
   ],
   "history": [
@@ -4384,6 +4393,10 @@
     {
       "id": "quick-log-thousands-comma",
       "note": "Self-audit (anvil DOWN, both todos gated): probed logs.ts. parseLogQuery + sumSeries clean; parseLogCommand dropped any amount with a thousands comma ('spent $1,250 on rent' -> null, silently unlogged) — the exact shape a rent/salary/bill takes. Fixed: comma-tolerant NUM in money+generic branches (strip before parseFloat) + optional leading 'I '. +1 test, 2018 green."
+    },
+    {
+      "id": "weather-day-resolution-bugs",
+      "note": "Self-audit (anvil DOWN, both todos gated): probed weather day/hour/geo resolution. resolveHourWindow + pickCandidate clean. resolveWhen had two wrong-day bugs: 'day after tomorrow' -> [1] (tomorrow, matched \\btomorrow\\b first) and 'next friday' mid-week -> this Friday not next week's (only bumped +7 on a today-collision). Fixed both; updated the test that encoded the old 'next friday'=+4 behavior. +1 test net, 2019 green."
     }
   ],
   "audits": [
@@ -4707,6 +4720,9 @@
     },
     {
       "note": "anvil DOWN -> confirm-to-act (owner) + anvil-live-e2e (anvil) both still gated. Self-audit found + fixed quick-log-thousands-comma (silent expense-log failure) — a genuine medium, not filler. Remaining backlog = the two gated items; product surface converged, awaiting Alex's confirm-to-act decision + anvil start for the live e2e."
+    },
+    {
+      "note": "anvil DOWN -> both todos still gated (confirm-to-act owner, anvil-live-e2e anvil). Self-audit found + fixed two real weather-day resolution bugs (day-after-tomorrow, next-weekday) — wrong-day forecasts, a medium. Fresh-surface sweeps keep yielding genuine mediums; the two high-value levers remain owner/anvil-gated."
     }
   ]
 }
