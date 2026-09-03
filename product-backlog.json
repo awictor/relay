@@ -2642,7 +2642,7 @@
       "title": "quick 'who/what is X' facts are slow + unreliable (no keyless summary tool)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'who is the CEO of OpenAI'/'how tall is Everest'/'what is a Roth IRA' waits 10-30s on web_search->scrape->summarize (sometimes wrong page), when a keyless Wikipedia REST summary answers in ~200ms with a citation. The most common text-a-bot first errand is the slowest path.",
       "how": "A get_fact tool hitting en.wikipedia.org/api/rest_v1/page/summary/<title> (keyless GET, same fast-path shape as define/get_time); parse title/extract/url, format + cite. Fall back to web_search on a miss/disambiguation."
     },
@@ -3696,6 +3696,10 @@
     {
       "item": "send-never-throws-dead-commit-guard",
       "note": "Restored the failed-send re-fire guarantee (send-never-throws-dead-commit-guard). telegram sendMessage catches every error + resolved void, so the runner's carefully-built 'advance the alert baseline / complete the schedule ONLY after a successful send' guards were dead code in prod — a 429/network/blocked send committed the baseline anyway (an edge-triggered crossing swallowed forever) + completed a once (a 'take your meds' reminder silently dropped). sendMessage now RETURNS a delivered-boolean (still non-throwing for best-effort inbound replies; false = a chunk failed); the runner gates both the main proactive send (alertCommit + store.complete) and the reminderOnly send on it, throwing into the tick's catch on a false return so a once retries next tick + a recurring advances-and-retries next cadence. A channel returning void/undefined is treated as delivered (only explicit false = failure), so console/older wiring is unchanged. 4 new tests (failed alert send: no commit + re-fires; failed reminder: not completed, retries + delivers; successful send commits+completes). suite 1777 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "wikipedia-fast-fact",
+      "note": "Quick cited facts (wikipedia-fast-fact): 'who is the CEO of OpenAI', 'how tall is Everest', 'what is a Roth IRA' — the most common first errand — answered instantly instead of a 10-30s web_search->scrape->summarize (often wrong page). New src/lib/wikifact.ts: searchUrl (full-text list=search, ranks by content so 'ceo of openai'->OpenAI, unlike opensearch prefix-match) + parseSearchTitle; summaryUrl + parseSummary (REST summary -> title/description/extract/url; returns null for a disambiguation page so a multi-meaning term isn't answered with one meaning, + clips a long extract at a sentence boundary to phone size); formatFact (title — desc, extract, citation URL); getFact (search->title->summary, two keyless fetches, returns {fact:null,disambiguation?} so the caller asks-to-narrow vs falls-back-to-web_search). Wired get_fact tool + dispatch (disambiguation -> ask which; miss -> web_search) + BrowserBackend.getFact + defaultBackend + prompt menu + HELP + pinned tool-name list (41 tools). 13 new tests (url builders, search/summary parse incl disambiguation+clip, format, getFact resolve/miss/disambiguation/throw, 2 dispatch incl no-fabricate-on-ambiguous). suite 1790 green, tsc clean. Live-probed both Wikipedia APIs (search 200 resolves titles; summary 200 w/ extract+desc+url; disambiguation type detected) so call-tested:true for the sources; agent path offline-tested. Anvil-independent (keyless)."
     }
   ],
   "audits": [

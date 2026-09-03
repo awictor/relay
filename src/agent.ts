@@ -17,6 +17,7 @@ import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
 import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
+import { getFact as factFetch, formatFact } from "./lib/wikifact.js";
 import { parseWorldClock, runWorldClock } from "./lib/worldclock.js";
 import { runDateCalc, type Ymd } from "./lib/datecalc.js";
 import { getScores as scoresFetch, formatScores, getNextGame as nextGameFetch, formatNextGame, wantsNextGame } from "./lib/scores.js";
@@ -229,6 +230,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { word: { type: "string", description: "The single English word to define, e.g. \"obsequious\" or \"escrow\"." } },
       required: ["word"],
+    },
+  },
+  {
+    name: "get_fact",
+    description: "Look up a quick factual answer from Wikipedia (no key, instant, cited). Use this — NOT web_search/scrape — for \"who is X\", \"what is X\", \"how tall/big/old is X\", \"when was X\", \"tell me about X\" general-knowledge questions. Returns a one-paragraph summary + a source link. Pass the ENTITY or topic, not the whole sentence (\"CEO of OpenAI\" not \"hey who's the ceo of openai again\"). Falls back — if it can't find or the term is ambiguous, use web_search.",
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string", description: "The entity/topic to look up, e.g. \"Mount Everest\", \"Roth IRA\", \"CEO of OpenAI\"." } },
+      required: ["query"],
     },
   },
   {
@@ -446,6 +456,7 @@ Tools:
 - "get_fun" (request): a joke, fun fact, or trivia question. Use this — NOT web_search or your own memory — for "tell me a joke"/"fun fact"/"trivia"/"quiz me". Pass the request verbatim; I pick joke/fact/trivia.
 - "get_scores" (request): sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight" AND upcoming games "when do the Lakers play next"/"next Arsenal game"/"upcoming NFL". Pass the request verbatim (keep their "next"/"when do they play" wording). Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
 - "define" (word): a word's definition, pronunciation, and synonyms. Use this — NOT web_search/scrape — for "what does X mean"/"define X"/"synonyms for X"/"how do you spell X". English words only; pass the single word.
+- "get_fact" (query): a quick cited Wikipedia summary. Use this — NOT web_search — for "who is X"/"what is X"/"how tall/old/big is X"/"tell me about X" general-knowledge asks. Pass the ENTITY (not the whole sentence). Falls back to web_search on a miss/ambiguous term.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
 - "get_flight" (flight): flight route + live position by number. Use this — NOT web_search — for "is AA100 on time"/"where's UA83"/"when does DL215 land". Returns airline + from→to + airborne-now + a tracker link; it CAN'T get scheduled gate/on-time — report honestly, don't invent a gate/delay.
@@ -515,6 +526,9 @@ export interface BrowserBackend {
   // Optional: define a word (dictionary-tool). Absent -> the define tool reports it's unavailable.
   // Returns null on an unknown word / fetch failure.
   defineWord?(word: string): Promise<import("./lib/dictionary.js").WordEntry | null>;
+  // Optional: a quick Wikipedia fact (wikipedia-fast-fact). Absent -> the get_fact tool reports it's
+  // unavailable. Returns {fact:null} on a miss, or {fact:null,disambiguation:true} for an ambiguous term.
+  getFact?(query: string): Promise<{ fact: import("./lib/wikifact.js").WikiFact | null; disambiguation?: boolean }>;
   // Optional: today's sports scores for a league/team (sports-scores-tool). Absent -> the get_scores
   // tool reports it's unavailable. Returns null on an unknown league / fetch failure.
   getScores?(query: string): Promise<{ leagueName: string; games: import("./lib/scores.js").GameScore[]; teamNotPlaying?: boolean } | null>;
@@ -656,6 +670,7 @@ const defaultBackend: BrowserBackend = {
   getQuote: (symbol) => quoteFetch(symbol, defaultFetchText),
   getCrypto: (coin) => cryptoFetch(coin, defaultFetchText),
   defineWord: (word) => dictFetch(word, defaultFetchText),
+  getFact: (query) => factFetch(query, defaultFetchText),
   getScores: (query) => scoresFetch(query, defaultFetchText),
   getNextGame: (query, nowMs) => nextGameFetch(query, nowMs, defaultFetchText),
   getNews: (topic) => newsFetch(topic, defaultFetchText),
@@ -994,6 +1009,21 @@ export async function runAgent(
           push("define", `${formatDefinition(e)}\n\nReport this definition to the user (include the pronunciation + a synonym or two if present).`);
         } catch (e) {
           push("define", `ERROR looking up definition: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "get_fact") {
+        if (!backend.getFact) { push("get_fact", "ERROR: fact lookup isn't available."); continue; }
+        const query = String(call.args.query ?? "").trim();
+        if (!query) { push("get_fact", "No topic given — ask the user what they want to know."); continue; }
+        try {
+          const r = await backend.getFact(query);
+          if (r.fact) { push("get_fact", `${formatFact(r.fact)}\n\nReport this to the user in a sentence or two + keep the source link. If it doesn't actually answer their question, say so + try web_search.`); continue; }
+          if (r.disambiguation) { push("get_fact", `"${query}" is ambiguous on Wikipedia (multiple meanings). Ask the user which they mean, or web_search with more context.`); continue; }
+          push("get_fact", `No Wikipedia summary for "${query}". Answer from your own knowledge if you're confident, or use web_search.`);
+        } catch (e) {
+          push("get_fact", `ERROR looking up fact: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

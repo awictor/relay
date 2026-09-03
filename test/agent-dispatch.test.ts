@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_flight", "get_fun", "get_news", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
     );
   });
 
@@ -223,6 +223,29 @@ describe("runAgent dispatch", () => {
     ]);
     await runAgent("x", { llm, backend: b });
     expect(hits.filter((h) => h.startsWith("getFlight"))).toHaveLength(0);
+  });
+
+  it("get_fact -> backend.getFact, reaches reply, no browser (wikipedia-fast-fact)", async () => {
+    const { b, hits } = recordingBackend();
+    b.getFact = async (q) => { hits.push(`getFact:${q}`); return { fact: { title: "Mount Everest", description: "Earth's highest mountain", extract: "It's very tall.", url: "https://en.wikipedia.org/wiki/Mount_Everest" } }; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_fact", args: { query: "Mount Everest" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "Everest is Earth's highest mountain." } } as ToolCall },
+    ]);
+    const out = await runAgent("how tall is everest", { llm, backend: b });
+    expect(hits).toContain("getFact:Mount Everest");
+    expect(out.reply).toMatch(/Everest/);
+  });
+
+  it("get_fact on an ambiguous term does not fabricate — the disambiguation note reaches the model", async () => {
+    const { b } = recordingBackend();
+    b.getFact = async () => ({ fact: null, disambiguation: true });
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_fact", args: { query: "Mercury" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "Which Mercury do you mean?" } } as ToolCall },
+    ]);
+    const out = await runAgent("what is mercury", { llm, backend: b });
+    expect(out.reply).toMatch(/which mercury/i);
   });
 
   it("get_time answers from nowMs without any backend call, reaches reply", async () => {
