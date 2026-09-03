@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  encodeCallback, decodeCallback, alertButtons, digestButtons, recipeButtons, buttonsForTask,
+  encodeCallback, decodeCallback, alertButtons, digestButtons, recipeButtons, buttonsForTask, pickButtons,
   CALLBACK_MAX_BYTES,
 } from "../src/lib/callbacks.js";
 
@@ -58,6 +58,26 @@ describe("keyboard builders", () => {
     const longName = "y".repeat(80);
     expect(alertButtons(longName)).toBeUndefined();
     expect(digestButtons(longName)).toBeUndefined();
+  });
+
+  it("pick buttons: a numbered row carrying indices, round-trips", () => {
+    const kb = pickButtons(3)!;
+    const row = kb[0]!;
+    expect(row.map((b) => b.text)).toEqual(["1", "2", "3"]);
+    expect(decodeCallback(row[0]!.callback_data)).toEqual({ kind: "pick", index: 0 });
+    expect(decodeCallback(row[2]!.callback_data)).toEqual({ kind: "pick", index: 2 });
+  });
+
+  it("pick buttons cap the count + need 2+", () => {
+    expect(pickButtons(1)).toBeUndefined();
+    expect(pickButtons(0)).toBeUndefined();
+    expect(pickButtons(20)![0]!.length).toBe(8); // default max
+  });
+
+  it("pick decodes reject a non-integer/negative index", () => {
+    expect(decodeCallback("pk|x")).toBeNull();
+    expect(decodeCallback("pk|-1")).toBeNull();
+    expect(decodeCallback("pk|2")).toEqual({ kind: "pick", index: 2 });
   });
 
   it("buttonsForTask maps the schedule marker to the right keyboard", () => {

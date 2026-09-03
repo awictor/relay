@@ -96,6 +96,36 @@ describe("handler — inline-button callbacks", () => {
     expect(calls()).toBe(0);
   });
 
+  it("a list reply attaches pick buttons, and a pick tap resends that item (inline-result-picker)", async () => {
+    const { handle, sent } = harness({
+      handleCommand: () => null,
+      runAgentFn: async () => ({ reply: "1. LAX→JFK $220 https://k.com/a\n2. LAX→EWR $260\n3. LAX→BUR $275", steps: 1, tools: [] }),
+    });
+    // A normal text task -> the agent returns a numbered list; the reply should carry pick buttons.
+    await handle({ chatId: 1, from: "u", text: "cheapest flights", messageId: 1 } as InboundMessage);
+    const listSend = sent[sent.length - 1]!;
+    expect(listSend.hasButtons).toBe(true);
+    // Tap "pick index 1" -> resends option 2.
+    await handle(tap(encodeCallback({ kind: "pick", index: 1 })!));
+    expect(sent[sent.length - 1]!.text).toMatch(/2\. LAX→EWR/);
+  });
+
+  it("a pick on an item with a mid-text URL appends a 🔗 link line", async () => {
+    const { handle, sent } = harness({
+      runAgentFn: async () => ({ reply: "1. Cheap flight https://k.com/a to JFK\n2. Other option", steps: 1, tools: [] }),
+    });
+    await handle({ chatId: 1, from: "u", text: "flights", messageId: 1 } as InboundMessage);
+    await handle(tap(encodeCallback({ kind: "pick", index: 0 })!));
+    expect(sent[sent.length - 1]!.text).toMatch(/🔗 https:\/\/k\.com\/a/);
+  });
+
+  it("a pick with no cached list is handled gracefully", async () => {
+    const { handle, sent, acked } = harness();
+    await handle(tap(encodeCallback({ kind: "pick", index: 0 })!));
+    expect(sent[0]!.text).toMatch(/isn't available/i);
+    expect(acked[0]).toMatch(/Expired/);
+  });
+
   it("rate-limited tap does not act", async () => {
     let refreshed = false;
     const { handle, acked } = harness({

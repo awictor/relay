@@ -94,7 +94,7 @@ See a watch's trend: "how has btc moved this week" or "btc trend" — I summariz
 
 Pause without deleting: "snooze btc 3 days", "pause my morning digest" (until you resume it), or "snooze all" quiets an automation through travel or noise — say "resume btc" to turn it back on. The setup stays intact; nothing fires while paused.
 
-Tap, don't type: when I ping you about a watch, briefing, or scheduled task, I attach one-tap buttons — 🔄 Refresh / 💤 Snooze 1d / 🔕 Stop on a watch, and 🔁 Run again on a briefing or recipe. No need to type a reply to act on it.
+Tap, don't type: when I ping you about a watch, briefing, or scheduled task, I attach one-tap buttons — 🔄 Refresh / 💤 Snooze 1d / 🔕 Stop on a watch, and 🔁 Run again on a briefing or recipe. And when I answer with a numbered list of options (flights, listings, sizes), each gets a 1/2/3 button — tap one to pull it up with its link, no retyping.
 
 See everything at once: /dashboard rolls up all your reminders, watches, digests, and recipes in one view — what fires next, what each watch last saw, and what's paused.
 

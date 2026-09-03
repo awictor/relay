@@ -20,7 +20,8 @@ import { isAnswerRecall, relativeAge } from "./lib/answer-log.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./lib/recipes.js";
 import { getTemplate, templateCatalog } from "./lib/templates.js";
 import { photoNeedsAgent, photoIsQrScan } from "./lib/photo-intent.js";
-import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, type InlineKeyboard } from "./lib/callbacks.js";
+import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, type InlineKeyboard } from "./lib/callbacks.js";
+import { parseResultList, firstUrl, type ResultItem } from "./lib/result-list.js";
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -293,6 +294,11 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   // (last-result-drilldown). Uses the SHARED store when provided so a proactive digest/alert ping can
   // also be drilled into ("more"/"link" after an unprompted message); else a private in-memory map.
   const lastResult = deps.lastResultStore ?? new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
+  // Last pickable result list per chat (inline-result-picker): when a reply is a numbered/bulleted
+  // list, we cache its items so a "pick N" button tap resends that one item (+ its link) without an
+  // agent re-run. In-memory; overwritten on the next list reply, cleared implicitly by staleness (a tap
+  // referencing a since-replaced list just gets the current one's item N, or an out-of-range note).
+  const pickLists = new Map<number, ResultItem[]>();
   const handle = ((msg: InboundMessage): Promise<void> => {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -367,6 +373,18 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     const rl = deps.checkRateLimit(chatId);
     if (!rl.allowed) return `Slow down — ${rl.retryAfterSec}s`;
     try {
+      if (action.kind === "pick") {
+        // Resend the picked list item (inline-result-picker). The list was cached when the reply was
+        // sent; a tap on a stale/replaced list either hits the current list's item N or falls out of
+        // range (honest note rather than a wrong item).
+        const items = pickLists.get(chatId);
+        const item = items?.[action.index];
+        if (!item) { await deps.sendMessage(chatId, "That option isn't available anymore — send the request again for a fresh list."); return "Expired"; }
+        const url = firstUrl(item.text);
+        const body = url && !item.text.trim().endsWith(url) ? `${item.text}\n\n🔗 ${url}` : item.text;
+        await deps.sendMessage(chatId, `${action.index + 1}. ${body}`);
+        return `Picked ${action.index + 1}`;
+      }
       if (action.kind === "alert") {
         if (action.action === "refresh") {
           if (!deps.alertRunNow) { await deps.sendMessage(chatId, `I can't refresh "${action.name}" right now.`); return null; }
@@ -1445,6 +1463,15 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       // If the agent produced a binary (screenshot image or PDF), send it first with the reply as
       // caption, then the text if the caption overflowed. Falls back to text-only when nothing was
       // produced or the sender isn't wired.
+      // One-tap result picker (inline-result-picker): if a CLEAN text reply is a numbered/bulleted list
+      // of options, cache the items + attach a "1 2 3…" pick-button row so a tap resends that one option
+      // (with its link) instead of a retype. Text replies only (a photo/doc caption isn't a pickable
+      // list) + not degraded (a partial answer's list is unreliable). Buttons cap at pickButtons' max.
+      let pickKeyboard: InlineKeyboard | undefined;
+      if (!photo && !doc && !degraded) {
+        const items = parseResultList(body);
+        if (items.length >= 2) { pickLists.set(msg.chatId, items); pickKeyboard = pickButtons(items.length); }
+      }
       if (photo && deps.sendPhoto) {
         await deps.sendPhoto(msg.chatId, photo, out.slice(0, 1024));
         if (out.length > 1024) await deps.sendMessage(msg.chatId, out);
@@ -1452,7 +1479,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         await deps.sendDocument(msg.chatId, doc, docName ?? "page.pdf", out.slice(0, 1024));
         if (out.length > 1024) await deps.sendMessage(msg.chatId, out);
       } else {
-        await deps.sendMessage(msg.chatId, out);
+        await deps.sendMessage(msg.chatId, out, pickKeyboard);
       }
 
       // Append this turn to the CURRENT memory, not the pre-run `history` snapshot taken minutes ago

@@ -2462,7 +2462,7 @@
       "title": "multi-result pings dump a list — no one-tap pick",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "When a watch/errand returns several options (cheapest flights, new listings, restock sizes), the user gets a text wall and must retype to drill in. A one-tap pick button per result closes the loop the inline-tap-buttons plumbing now enables.",
       "how": "Extend the callback codec with a 'pick' op carrying a compact result index/id; attach a numbered button row to list-shaped proactive/errand replies; on tap, expand that result (details/link/next action). Reuse the callbacks.ts codec + handler routing already built."
     },
@@ -2474,6 +2474,15 @@
       "status": "todo",
       "why": "Tapping Refresh/Snooze/Stop posts a fresh message, so a chat accretes duplicate cards. editMessageText/editMessageReplyMarkup would update the original ping in place (e.g. grey out Stop after stopping), which feels native and keeps the thread clean.",
       "how": "Add editMessageText/editMessageReplyMarkup to telegram.ts + the Channel; thread the tapped message_id (already parsed into callback) through the handler; for terminal actions (Stop) edit the original to a done state instead of sending a new line."
+    },
+    {
+      "id": "picker-on-proactive-pings",
+      "title": "pick buttons only on inbound replies — proactive list pings still dump text",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The inline-result-picker attaches 1/2/3 buttons to INBOUND agent answers, but a scheduled/alert list ping (a watchlist restock, new listings feed) still arrives as a text wall with no pick. Same value, other half of the surface.",
+      "how": "In schedule-runner, parseResultList the proactive sendText; when it's a 2+ item list, attach pickButtons AND cache the items into the shared lastResult/pick store keyed by chat so a tap on a proactive ping resends the item. Reuse result-list.ts + the handler's pick routing already built."
     }
   ],
   "history": [
@@ -3444,6 +3453,10 @@
     {
       "item": "inline-tap-buttons",
       "note": "Wired Telegram inline keyboards end-to-end so proactive pings are one-tap, not text dead-ends. New src/lib/callbacks.ts: encode/decodeCallback (2-char opcode + name, omits a button rather than truncate past Telegram's 64-byte cap) + alert/digest/recipe keyboard builders + buttonsForTask (maps an alert:/digest:/recipe:<name> schedule marker to its keyboard). telegram.ts: parseUpdates now maps a callback_query to a callback InboundMessage (chatId from the attached message, advances offset even when skipped), sendMessage takes an optional inline keyboard (attached to the last chunk only), + answerCallback acks the tap. channel.ts threads keyboard + answerCallback (console ignores them). schedule-runner attaches buttonsForTask(s.task) to every alert/digest/recipe ping (plain reminders get none). handler routes a callback FIRST: rate-limited, acked, decoded -> alert Refresh (re-check now via alertRunNow, send result+buttons, commit), Snooze (pause 1 day), Stop (forget the watch), digest/recipe Run again (recipeRunByName mirrors the scheduler chain/slot path). index wires answerCallback + recipeRunByName. HELP + 19 new tests (codec/builders, callback routing, parseUpdates callback, runner button pass-through). suite 1693 green, tsc clean. Offline-tested (no new data source); anvil-independent."
+    },
+    {
+      "item": "inline-result-picker",
+      "note": "One-tap pick buttons on numbered/bulleted answers (inline-result-picker). New src/lib/result-list.ts: parseResultList detects a genuine 2+ item numbered (ascending from 1, stops at a gap) or bulleted list in a reply — conservative so prose with an incidental '1.' or 'the answer is 42' never sprouts buttons; firstUrl pulls an item's link. Extended callbacks.ts with a 'pick' op (opcode pk|<index>, index-carrying not name, rejects non-integer/negative) + pickButtons(count) building a capped '1 2 3…' row. handler: a clean non-degraded text reply that's a list caches its items per-chat + attaches the pick row; a pick tap resends '<n>. <item>' with a 🔗 link line when the URL is mid-text (deduped when it already trails). Stale/out-of-range/no-cached-list taps give an honest 'not available' note. HELP updated. 14 new tests (parser incl. no-false-fire/gap-stop/start-at-1, pick codec cap+reject, handler list-attaches-buttons + pick-resend + link + stale). suite 1707 green, tsc clean. Offline (no data source); anvil-independent."
     }
   ],
   "audits": [

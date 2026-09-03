@@ -21,9 +21,13 @@ export type InlineKeyboard = InlineButton[][];
 export type CallbackAction =
   | { kind: "alert"; action: "refresh" | "snooze" | "stop"; name: string }
   | { kind: "digest"; action: "run"; name: string }
-  | { kind: "recipe"; action: "run"; name: string };
+  | { kind: "recipe"; action: "run"; name: string }
+  // Pick one result from a numbered list the bot just sent (inline-result-picker). Carries the 0-based
+  // index into the cached list, not a name — so the payload stays tiny regardless of the item's text.
+  | { kind: "pick"; index: number };
 
-// Opcode <-> action. 2-char ops keep the payload short so long-ish names still fit the 64-byte cap.
+// Opcode <-> action for the NAME-carrying actions. 2-char ops keep the payload short so long-ish
+// names still fit the 64-byte cap. The pick action (index-carrying) uses opcode "pk" handled separately.
 const OP: Record<string, { kind: CallbackAction["kind"]; action: string }> = {
   ar: { kind: "alert", action: "refresh" },
   az: { kind: "alert", action: "snooze" },
@@ -34,31 +38,53 @@ const OP: Record<string, { kind: CallbackAction["kind"]; action: string }> = {
 const OP_FOR = new Map<string, string>(
   Object.entries(OP).map(([op, v]) => [`${v.kind}:${v.action}`, op]),
 );
+const PICK_OP = "pk";
 
 const utf8Len = (s: string): number => new TextEncoder().encode(s).length;
 
 /** Encode an action to callback_data, or null if it wouldn't fit Telegram's 64-byte cap (caller omits
  * the button). The name is passed through verbatim (may contain any char except we never split on it
- * again beyond the FIRST delimiter, so a name containing "|" round-trips fine). */
+ * again beyond the FIRST delimiter, so a name containing "|" round-trips fine). A pick carries a
+ * 0-based index instead of a name. */
 export function encodeCallback(a: CallbackAction): string | null {
-  const op = OP_FOR.get(`${a.kind}:${a.action}`);
-  if (!op) return null;
-  const data = `${op}|${a.name}`;
+  const data = a.kind === "pick"
+    ? `${PICK_OP}|${a.index}`
+    : (() => { const op = OP_FOR.get(`${a.kind}:${a.action}`); return op ? `${op}|${a.name}` : null; })();
+  if (data === null) return null;
   return utf8Len(data) <= CALLBACK_MAX_BYTES ? data : null;
 }
 
 /** Decode callback_data back to an action, or null if it's unrecognized/malformed (so a stale button
  * from an old deploy, or a spoofed payload, is ignored rather than mis-routed). Splits on the FIRST
- * "|" only, so a name with a "|" survives. */
+ * "|" only, so a name with a "|" survives. A pick decodes its index (rejects a non-integer/negative). */
 export function decodeCallback(data: string | undefined | null): CallbackAction | null {
   if (!data) return null;
   const i = data.indexOf("|");
   if (i < 0) return null;
   const op = data.slice(0, i);
-  const name = data.slice(i + 1);
+  const rest = data.slice(i + 1);
+  if (op === PICK_OP) {
+    if (!/^\d+$/.test(rest)) return null; // index must be a non-negative integer
+    return { kind: "pick", index: Number(rest) };
+  }
   const spec = OP[op];
-  if (!spec || !name) return null;
-  return { kind: spec.kind, action: spec.action, name } as CallbackAction;
+  if (!spec || !rest) return null;
+  return { kind: spec.kind, action: spec.action, name: rest } as CallbackAction;
+}
+
+/** Buttons for a numbered result list (inline-result-picker): a compact row of "1" "2" "3"… pick
+ * buttons, one per result, each carrying its index. Telegram wraps a long row across lines, but cap
+ * the count so we don't build an unusable 40-button grid; extra results stay text-only (the message
+ * still lists them). Returns undefined for an empty/1-item list (nothing to disambiguate with a tap). */
+export function pickButtons(count: number, max = 8): InlineKeyboard | undefined {
+  const n = Math.min(count, max);
+  if (n < 2) return undefined;
+  const row: InlineButton[] = [];
+  for (let i = 0; i < n; i++) {
+    const data = encodeCallback({ kind: "pick", index: i });
+    if (data) row.push({ text: String(i + 1), callback_data: data });
+  }
+  return row.length ? [row] : undefined;
 }
 
 /** Buttons for an ALERT/watch ping: Refresh (re-check now), Snooze 1 day, Stop watching. Any button
