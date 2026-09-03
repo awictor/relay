@@ -1,6 +1,42 @@
 {
   "items": [
     {
+      "id": "matchByRef-word-boundary",
+      "title": "snooze/pause substring-matches, silently freezing the wrong automation",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "matchByRef used label.includes(w) with no tiering, so 'pause news' could also freeze a reminder to 'call about the news story' or any task merely containing the word — the user quiets one thing and unknowingly silences others (audit 24 B).",
+      "how": "Tier the match: exact id/label wins; else whole-word (\\bword\\b) match; only fall back to raw substring when nothing matches on a word boundary. Surgical pause; keeps the btc->btcusd substring convenience."
+    },
+    {
+      "id": "snooze-zero-duration-guard",
+      "title": "'snooze btc for 0 hours' pauses forever instead of not at all",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "parseSnoozeCommand's duration regex matches 'for 0 hours' but the n>=1 guard leaves untilMs undefined + doesn't strip the duration, so 'which' becomes 'btc 0 hours' (no match) or falls through to an indefinite PAUSE_INDEFINITE — a fat-fingered short snooze silently goes dark forever (audit 24 B).",
+      "how": "Treat a parsed duration of 0 (or negative) as an explicit no-op or reject it — don't fall through to the indefinite-pause branch. Strip the duration clause regardless of n so the name is clean, then either refuse (ask for a positive duration) or skip. Add a test."
+    },
+    {
+      "id": "background-errand-progress-ping",
+      "title": "a long background errand goes silent for minutes with no 'still working' ping",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "dispatchBackground ACKs 'on it' then runs detached with NO progress ping, so the LONGEST tasks (the ones most likely to look hung) are the only ones with zero mid-run reassurance — a first-timer assumes it died and gives up (audit 24 A#1). The sync agent + chain paths already arm the progressDelayMs timer; the background path doesn't.",
+      "how": "Arm the same one-shot progress timer in dispatchBackground (or its resumeErrand path): after progressDelayMs, send one 'still working on it' line, cleared when the errand settles. Reuse the handler's setTimer/clearTimer deps. Test: a background run that outlasts the delay sends the interim ping."
+    },
+    {
+      "id": "package-tracking-watcher",
+      "title": "package / order / flight tracking watcher",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "'where's my package 1Z999...' / 'track my flight UA123' is a top-frequency consumer errand + a natural recurring proactive hook; today it browses a carrier page logged-out and flounders, and there's no set-and-forget watch. Unanimous power pick across audits; the #1 headline capability Instinct-class assistants lead with (audit 24 C).",
+      "how": "Reuse the existing feed/change-alert + extract infra over keyless public carrier/flight-status pages: parse a tracking-number/flight shape, scrape the status, alert only on a status change until delivered/landed. Likely a lightweight parse helper + a specialized alert kind (or a recipe template) so it slots into the alert-runner. Offline-testable against fixtures."
+    },
+    {
       "id": "capability-regex-opener-phrasings",
       "title": "\"what's this?\" / \"what does this do?\" miss the greeting regex -> slow browse on the first message",
       "impact": "high",
@@ -1896,6 +1932,10 @@
     {
       "id": "sendcap-drops-alert-checks",
       "note": "The anti-spam send-cap dropped alert CHECKS, not just sends: an over-cap recurring schedule was safeComplete'd + advanced, so for an 'alert:'-marked schedule the whole check was skipped and a 'below 50k' crossing during a capped hour was never evaluated and never re-fired (a below->above->below bounce lost). The headline watch feature silently missed the exact event it promised. Fixed: an alert: marker now bypasses the send-cap gate and falls through to fireOne — alertCheck is edge-triggered (sends ONLY on a real change) so it self-throttles and can't storm; a resulting send still calls noteSend so cap accounting stays honest, and the baseline commit still gates on a successful send. Dailies/reminders stay capped. 2 tests (over-cap alert still checks + sends its crossing / over-cap unchanged alert checks but stays silent). call-tested: false (offline unit). 1166 tests green."
+    },
+    {
+      "id": "matchByRef-word-boundary",
+      "note": "Made snooze/pause surgical: matchByRef used label.includes(w) with no tiering, so 'pause news' could also freeze a reminder that merely mentioned 'news' — the user silences the wrong automation. Now tiered: an exact id/label wins outright; else a whole-word (\\bword\\b) match ('news' hits 'news'/'morning news', not 'call about the news story'); only if nothing matches on a word boundary does it fall back to a raw substring (keeping the btc->btcusd convenience). Regex-escaped the term. 3 tests (word-boundary beats unrelated substring / exact label beats longer label / substring fallback when no word hit). call-tested: false (pure store logic). 1169 tests green. NOTE: backlog was dry except owner-gated confirm-to-act, so instead of a fresh 3-agent audit (would duplicate audit 24's still-unbuilt findings) I refilled from audit 24's deferred set — seeded snooze-zero-duration-guard(S), background-errand-progress-ping(S), package-tracking-watcher(M)."
     }
   ],
   "audits": [

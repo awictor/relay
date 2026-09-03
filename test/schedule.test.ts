@@ -510,6 +510,29 @@ describe("ScheduleStore pause/resume (snooze-automations)", () => {
     s.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW + HR, hourMin: "09:00" }, NOW);
     expect(s.resume(1, "nonesuch", NOW)).toBe(0);
   });
+  it("pause is surgical: a whole-word match wins over an unrelated task that merely contains the word (matchByRef-word-boundary)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "daily", task: "alert:news", dueMs: NOW + HR, hourMin: "09:00" }, NOW);
+    s.add(1, { kind: "once", task: "call about the news story", dueMs: NOW + 2 * HR }, NOW);
+    expect(s.pause(1, "news", PAUSE_INDEFINITE)).toBe(1); // only the news watch, not the reminder
+    const paused = s.list(1).filter((x) => x.pausedUntil !== undefined);
+    expect(paused).toHaveLength(1);
+    expect(paused[0]!.task).toBe("alert:news");
+  });
+  it("an exact label wins over a longer label containing the word", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "daily", task: "digest:news", dueMs: NOW + HR, hourMin: "07:00" }, NOW);
+    s.add(1, { kind: "daily", task: "digest:morning news", dueMs: NOW + HR, hourMin: "08:00" }, NOW);
+    expect(s.pause(1, "news", PAUSE_INDEFINITE)).toBe(1); // exact "news", not "morning news"
+    expect(s.list(1).find((x) => x.task === "digest:news")!.pausedUntil).toBe(PAUSE_INDEFINITE);
+    expect(s.list(1).find((x) => x.task === "digest:morning news")!.pausedUntil).toBeUndefined();
+  });
+  it("still falls back to a substring when nothing matches on a word boundary", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "daily", task: "alert:btcusd", dueMs: NOW + HR, hourMin: "09:00" }, NOW);
+    expect(s.pause(1, "btc", PAUSE_INDEFINITE)).toBe(1); // no word-boundary hit -> substring fallback
+  });
+
   it("clearExpiredPause clears an elapsed pause, keeps an active one", () => {
     const s = new ScheduleStore({ file: tmpFile() });
     const rec = s.add(1, { kind: "daily", task: "a", dueMs: NOW + HR, hourMin: "09:00" }, NOW)!;

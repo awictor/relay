@@ -447,12 +447,20 @@ export class ScheduleStore {
     const w = which.trim().toLowerCase();
     if (!w) return [];
     if (w === "all") return mine;
-    return mine.filter((s) => {
-      if (s.id.toLowerCase() === w) return true;
+    const labelOf = (s: Schedule) => {
       const marker = s.task.match(/^(?:alert|digest|recipe):(.+)$/i);
-      const label = (marker ? marker[1]! : s.task).toLowerCase();
-      return label === w || label.includes(w);
-    });
+      return (marker ? marker[1]! : s.task).toLowerCase();
+    };
+    // Tiered so a snooze/pause is SURGICAL, not a broad substring sweep (matchByRef-word-boundary): an
+    // EXACT id or label wins outright; else a WHOLE-WORD match ("news" hits "news" / "morning news", not
+    // "call about the news story"); only if nothing matches on a word boundary do we fall back to a raw
+    // substring. So "pause news" freezes the news watch, not an unrelated reminder that mentions news.
+    const exact = mine.filter((s) => s.id.toLowerCase() === w || labelOf(s) === w);
+    if (exact.length) return exact;
+    const wordRe = new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+    const word = mine.filter((s) => wordRe.test(labelOf(s)));
+    if (word.length) return word;
+    return mine.filter((s) => labelOf(s).includes(w));
   }
 
   /** Remove every schedule for a chat whose task exactly matches `task`. Returns how many were
