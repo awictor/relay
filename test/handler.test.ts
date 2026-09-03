@@ -42,6 +42,22 @@ function harness(over: Partial<HandlerDeps> = {}) {
 
 const msg = (text: string, chatId = 1): InboundMessage => ({ chatId, from: "u", text } as InboundMessage);
 
+describe("createHandler — memory-write hedge (memory-write-silent-fail)", () => {
+  it("warns ONCE when a memory persist fails, silent when it succeeds", async () => {
+    const { handle, sent } = harness({ memorySaveOk: () => false });
+    await handle(msg("what's the weather"));
+    await handle(msg("and tomorrow"));
+    const warns = sent.filter((s) => /couldn't save our conversation/i.test(s.text));
+    expect(warns).toHaveLength(1); // once, not per-turn
+  });
+
+  it("no warning when memory saves cleanly", async () => {
+    const { handle, sent } = harness({ memorySaveOk: () => true });
+    await handle(msg("hi"));
+    expect(sent.some((s) => /couldn't save our conversation/i.test(s.text))).toBe(false);
+  });
+});
+
 describe("createHandler", () => {
   it("a slash command short-circuits: replies canned, no agent/memory/metrics", async () => {
     let agentCalled = false;

@@ -46,6 +46,10 @@ export interface HandlerDeps {
   handleCommand: (text: string) => string | null;
   // Clear this chat's stored history (/reset). Returns true if there was anything to clear.
   memoryClear: (chatId: number) => boolean;
+  // Did the last memory persist reach disk? (memory-write-silent-fail) Optional; when wired, the handler
+  // warns ONCE per chat after a failed write so a full/unwritable disk silently losing conversation on
+  // the next restart isn't invisible. Absent -> no check (previous behavior).
+  memorySaveOk?: () => boolean;
   // One-line health reply for /status (uptime + turns + browser reachability). Optional:
   // when absent, /status falls through to the agent (older wiring stays valid).
   statusLine?: () => string;
@@ -304,6 +308,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   // a feed of new listings) is pickable too — the schedule-runner writes its list items here and a tap
   // resolves against them; else a private in-memory map (inbound-only). Overwritten on the next list.
   const pickLists = deps.pickListStore ?? new Map<number, ResultItem[]>();
+  // Chats already warned that a memory write failed (memory-write-silent-fail) — warn ONCE so a
+  // persistently unwritable disk doesn't append the notice to every turn. In-memory; re-warns after a
+  // restart, which is fine (a restart is exactly when the lost context would surface).
+  const memWarnedChats = new Set<number>();
   const handle = ((msg: InboundMessage): Promise<void> => {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -1512,6 +1520,13 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       const cur = deps.memoryGet(msg.chatId);
       const next: LLMMessage[] = [...cur, { role: "user", content: msg.text }, { role: "assistant", content: out }];
       deps.memorySet(msg.chatId, next);
+      // Memory-write hedge (memory-write-silent-fail): if the persist didn't reach disk, tell the user
+      // ONCE — otherwise a full/unwritable disk silently forgets this conversation on the next restart
+      // with no warning (every other store already hedges its writes). Best-effort + after the answer.
+      if (deps.memorySaveOk && !deps.memorySaveOk() && !memWarnedChats.has(msg.chatId)) {
+        memWarnedChats.add(msg.chatId);
+        await deps.sendMessage(msg.chatId, "⚠️ Heads up — I couldn't save our conversation to disk just now, so I may forget the recent context if I restart. Your reminders/watches are stored separately and unaffected.").catch(() => {});
+      }
       // Log a CLEAN answer to the searchable history (answer-history-recall) so "what was that X you
       // found" works later. Skip degraded (partial) replies + binaries (no text answer to recall).
       if (!degraded && !photo && !doc) deps.logAnswer?.(msg.chatId, msg.text, body);

@@ -245,6 +245,9 @@ const handle = createHandler({
   memoryGet: (id) => memory.get(id) as LLMMessage[],
   memorySet: (id, history) => memory.set(id, history),
   memoryClear: (id) => memory.delete(id),
+  // Did the last memory write reach disk? (memory-write-silent-fail) The handler warns ONCE per chat if
+  // a persist failed, so a full/unwritable disk silently dropping conversation isn't invisible.
+  memorySaveOk: () => memory.lastSaveOk(),
   statusLine: () => {
     const sum = metrics.summary();
     const cmds = Object.entries(sum.commands);

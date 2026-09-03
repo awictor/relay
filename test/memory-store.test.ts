@@ -28,6 +28,19 @@ describe("MemoryStore persistence", () => {
     expect(s.get(999)).toEqual([]);
   });
 
+  it("lastSaveOk reflects a good write, false on a failed one (memory-write-silent-fail)", () => {
+    const s = new MemoryStore({ file: tmpFile() });
+    s.set(1, [{ role: "user", content: "x" }]);
+    expect(s.lastSaveOk()).toBe(true);
+    // Point the store under a path whose PARENT is a regular FILE (mkdir can't create a dir beneath a
+    // file), so atomicWriteJson fails, and confirm the failure is recorded instead of silently swallowed.
+    const asFile = tmpFile();
+    writeFileSync(asFile, "iamafile");
+    const bad = new MemoryStore({ file: join(asFile, "mem.json") });
+    bad.set(2, [{ role: "user", content: "y" }]);
+    expect(bad.lastSaveOk()).toBe(false);
+  });
+
   it("trims each chat to maxTurns", () => {
     const file = tmpFile();
     const s = new MemoryStore({ file, maxTurns: 4 });

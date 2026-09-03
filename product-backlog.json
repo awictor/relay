@@ -2498,7 +2498,7 @@
       "title": "MemoryStore write failures are silent (no hedge, unlike every other store)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "After a restart on a full/unwritable disk the bot has silently forgotten recent conversation, with no 'couldn't save' notice — the one store left un-hedged.",
       "how": "memory-store.ts persist() ignores atomicWriteJson's boolean; track lastWriteOk + expose lastSaveOk() like schedule/alert/recipe stores, and surface a one-time heads-up via the corrupt-notice path."
     },
@@ -3501,6 +3501,10 @@
     {
       "item": "onboarding-tap-to-try",
       "note": "Onboarding tap-to-try (onboarding-tap-to-try): the first /start (or greeting) reply now carries a row of one-tap example buttons (☀️ Weather, 📖 Define a word, 💸 Tip split, 🎲 Flip a coin) so a brand-new user gets an instant first success instead of reading the START wall + hand-typing. New TRY_EXAMPLES list (keyless/instant errands only, no anvil dependency so the first tap can't dead-end on a down browser) + tryButtons() (2 per row) + a 'try' callback op (ty|<index>) in callbacks.ts. Handler attaches the buttons ONLY on the START reply (opens with the wave), on a channel with callbacks, and on FIRST contact (empty history) so a returning user's /start isn't re-badged; a try tap runs the canned text through handleOne exactly as if typed (command/agent routing). 7 new tests (try codec cap+reject, buttons shape, first-start attaches, returning-user no-buttons, tap runs example). suite 1714 green, tsc clean. Offline (no data source); anvil-independent (examples are keyless)."
+    },
+    {
+      "item": "memory-write-silent-fail",
+      "note": "Hedged MemoryStore write failures (memory-write-silent-fail) — the one store that ignored its disk-write result. memory-store.ts persist() now records atomicWriteJson's boolean into lastWriteOk + exposes lastSaveOk() (matching schedule/alert/recipe/profile/lists). Wired a memorySaveOk dep through index -> handler; after the main-path memorySet, if the write didn't reach disk the handler warns the user ONCE per chat ('couldn't save our conversation... may forget recent context if I restart; reminders/watches unaffected') so a full/unwritable disk isn't invisible. 4 new tests (store lastSaveOk true on good write + false when a parent path is a file so mkdir fails; handler warns once not per-turn; silent when clean). suite 1717 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [

@@ -27,6 +27,15 @@ export class MemoryStore {
   private maxChats: number;
   private maxTurns: number;
   private map = new Map<ChatId, Entry>();
+  // Did the most recent write to disk succeed? (memory-write-silent-fail) Every OTHER store tracks this
+  // + exposes lastSaveOk() so the caller can hedge; conversation memory was the one store that ignored
+  // atomicWriteJson's boolean, so a full/unwritable disk silently dropped the chat's context with no
+  // notice to user or operator. Starts true (nothing written yet is not a failure).
+  private lastWriteOk = true;
+
+  /** Did the most recent persist reach disk? False after a failed write — the in-memory history is
+   * live this session but won't survive a restart, so the caller can warn once (like the other stores). */
+  lastSaveOk(): boolean { return this.lastWriteOk; }
 
   constructor(opts: MemoryStoreOptions) {
     this.file = opts.file;
@@ -54,7 +63,9 @@ export class MemoryStore {
   private persist(): void {
     const chats: Record<string, Entry> = {};
     for (const [k, v] of this.map) chats[String(k)] = v;
-    atomicWriteJson(this.file, { v: 1, chats }); // atomic temp+rename — a crash mid-write can't truncate memory
+    // atomic temp+rename — a crash mid-write can't truncate memory. Track the result so a failed write
+    // (full/unwritable disk) is visible via lastSaveOk() instead of being silently swallowed.
+    this.lastWriteOk = atomicWriteJson(this.file, { v: 1, chats });
   }
 
   get(chatId: ChatId): unknown[] {
