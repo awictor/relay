@@ -233,6 +233,23 @@ describe("parseSchedule — recurring (weekly / interval)", () => {
   it("a bare weekday inside a task is NOT a weekly schedule", () => {
     expect(parseSchedule("email bob the monday report", NOW)).toBeNull();
   });
+  it("a SINGLE weekday + time with no 'every' is a ONE-SHOT, not recurring (weekly-single-weekday-once)", () => {
+    const s = parseSchedule("remind me Friday at 3pm to submit taxes", NOW)!;
+    expect(s.kind).toBe("once");                 // NOT weekly — must not ping every Friday forever
+    expect(s.weekdays).toBeUndefined();
+    expect(new Date(s.dueMs).getUTCDay()).toBe(5); // lands on a Friday
+    expect(s.task).toMatch(/submit taxes/);
+  });
+  it("'every friday at 3pm' stays recurring weekly", () => {
+    const s = parseSchedule("every friday at 3pm submit the report", NOW)!;
+    expect(s.kind).toBe("weekly");
+    expect(s.weekdays).toEqual([5]);
+  });
+  it("multiple named days (no 'every') is still recurring weekly", () => {
+    const s = parseSchedule("mon and thu at 8am standup", NOW)!;
+    expect(s.kind).toBe("weekly");
+    expect(s.weekdays).toEqual([1, 4]);
+  });
 });
 
 describe("parseSchedule — absolute", () => {

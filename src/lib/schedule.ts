@@ -200,7 +200,17 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
       const hourMin = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
       const task = cleanTask(raw, weeklyClause[0]!);
       if (!task) return null;
-      return { kind: "weekly", task, dueMs: nextWeeklyMs(now, hh, mm, weekdays, offsetMin), hourMin, offsetMin, weekdays, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+      const dueMs = nextWeeklyMs(now, hh, mm, weekdays, offsetMin);
+      // "Friday at 3pm" (a SINGLE weekday, no "every", not a weekday/weekend group) is a ONE-SHOT next-
+      // occurrence reminder, NOT a standing weekly — turning it recurring made "remind me Friday at 3pm
+      // to submit taxes" ping every Friday forever (weekly-single-weekday-once). Recurring only when the
+      // user signalled repetition: "every", a weekday/weekend group, or more than one named day.
+      const isGroup = /weekday|weekend/.test(grp);
+      const recurring = /\bevery\b/.test(weeklyClause[0]!) || isGroup || weekdays.length > 1;
+      if (!recurring) {
+        return { kind: "once", task, dueMs, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+      }
+      return { kind: "weekly", task, dueMs, hourMin, offsetMin, weekdays, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
     }
   }
 

@@ -1,6 +1,42 @@
 {
   "items": [
     {
+      "id": "weekly-single-weekday-once",
+      "title": "'remind me Friday at 3pm' becomes a recurring weekly, pings every Friday forever",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "The weekly branch guard accepts any '\\bat\\b', so a SINGLE weekday + time with no 'every' ('remind me Friday at 3pm to submit taxes') was parsed kind:weekly and fired every Friday forever — the opposite of a one-shot promise, and there was no phrasing for a single next-weekday reminder (audit B#1).",
+      "how": "In the weekly branch, treat it as recurring ONLY when the user signalled repetition: 'every', a weekday/weekend group, or >1 named day. A lone weekday+time returns kind:once at the next occurrence (nextWeeklyMs already gives the right instant)."
+    },
+    {
+      "id": "one-shot-location-button",
+      "title": "first 'weather'/'near me' dead-ends on a typed location ask; no one-tap share",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "A cold user's two most common instant errands (near-me, weather) both stop on location: they get a text prompt to hunt for 📎→Location or type a city. The inbound location-pin path is already wired, so a Telegram request_location reply-keyboard button turns it into one tap (audit A#1).",
+      "how": "When the handler asks for location (near-me / weather with no profile), attach a reply-keyboard with a request_location button (telegram.ts sendMessage gains an optional reply_markup). Removes the one manual step between a cold user and their first geo answer."
+    },
+    {
+      "id": "multi-slot-multiword-value",
+      "title": "multi-slot recipe with a multi-word first value silently mis-splits",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "applySlots whitespace-splits a no-comma multi-slot arg positionally, so '/run track oat milk HEB' on 'track {item} at {store}' fills item='oat', store='milk', drops 'HEB' — a confident WRONG run on a saved automation, no error (audit B#2).",
+      "how": "When positional filling a multi-slot recipe from a no-comma arg string and token count != slot count, either require name=value pairs (ask for them) or assign the LAST token to the last slot and the remainder to the first, or reply asking to use 'slot=value' form. Add tests for the multi-word case."
+    },
+    {
+      "id": "empty-digest-fires-noise",
+      "title": "a scheduled digest with all members removed keeps firing an empty ping",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "runDigest returns '📋 <name>\\n' with no sections when members is empty (non-null), so a digest whose recipes were all deleted (but the digest kept) fires a contentless proactive ping on schedule — recurring noise from a dead automation (audit B#4).",
+      "how": "In runDigest, when no member produced a section (all removed/unknown), return null (or a sentinel) so the schedule-runner stays silent instead of sending an empty briefing; optionally note it once. Add a test."
+    },
+    {
       "id": "interval-days-weeks-reminders",
       "title": "'every 2 days' / 'every other week' / 'in 3 weeks' silently don't schedule",
       "impact": "high",
@@ -1805,9 +1841,16 @@
     {
       "id": "chain-ifgate-far-negation",
       "note": "Fixed a chain if-gate firing on the OPPOSITE condition: containsUnnegated only inspected the 12 chars before the keyword, so 'not currently in stock' ('not' 14 chars out) read as un-negated and an 'if in stock: buy/notify' chain ran on the inverse. Replaced the fixed window with a clause scan — from the nearest boundary (. ! ? ; : newline, or a ' but '/' and ' conjunction) up to the keyword — looking for any negation (not/no/never/without/out of/no longer/isn't/aren't/won't/can't/n't). So 'no longer available', 'never got it back in stock', \"isn't currently in stock\" all correctly fail the gate, while a negation in a DIFFERENT clause ('sold out online but in stock at the store') still passes. 2 tests (far-negation fails gate / different-clause negation still matches). call-tested: false (pure predicate logic). 1149 tests green."
+    },
+    {
+      "id": "weekly-single-weekday-once",
+      "note": "Fixed a one-shot reminder silently becoming permanent spam: the weekly branch guard accepted any '\\bat\\b', so 'remind me Friday at 3pm to submit taxes' (a single weekday + time, no 'every') parsed kind:weekly and pinged every Friday forever — and there was no way to get a single next-weekday reminder. The weekly branch now recurs ONLY when the user signalled repetition ('every', a weekday/weekend group, or >1 named day); a lone weekday+time returns kind:once at the next occurrence (nextWeeklyMs already computes the right instant). 3 tests ('Friday at 3pm' -> once on a Friday / 'every friday' stays weekly / 'mon and thu' stays weekly). call-tested: false (pure parse). 1152 tests green."
     }
   ],
   "audits": [
+    {
+      "note": "Audit 23 (backlog dry except owner-gated confirm-to-act). A/new-user: one-tap location-share button (near-me/weather dead-end on typed location; pin path already wired), inline action buttons (power features gated behind typed magic phrases; no callback_query handling — L), /help firehose split, bare-URL default-to-summary, world-clock tool, teach-recovery on error replies, group-chat runs every message. B/reliability: 'remind me Friday at 3pm' -> recurring weekly forever (TOP — built), multi-slot multi-word value mis-split, parseRunWithArgs first-token-only vs parseRunCommand full-name mismatch (needs index check), empty-members digest fires contentless ping, atomicWriteJson swallows write errors (silent loss/dup), parseTrendRequest over-broad fallback. C/power: self-service site-login/session-capture (L, the Instinct battleground), package/flight/order tracking watcher, computed-trigger-alerts, generic page-change monitor, multi-retailer price-drop, user-authored trigger->chain, RSS-subscribe, voice-replies-TTS. Built weekly-single-weekday-once (B#1); seeded one-shot-location-button(S), multi-slot-multiword-value(S), empty-digest-fires-noise(S). Deferred: inline-keyboards(L), help-split(S), bare-url-summary(S), world-clock(S/M), retry-affordance(S), group-gating(M), parseRunWithArgs-multiword(S, verify index), atomic-store-errors(M), trend-fallback-overbroad(S), site-login-capture(L), tracking-watcher(M), computed-trigger(M), page-change-monitor(M), price-drop(M), RSS(S), TTS(M). NOTE confirmed: photo/voice/PDF inbound ARE built (audits keep mis-flagging as missing — they're just unadvertised; onboarding-copy deferred item covers surfacing them)."
+    },
     {
       "note": "Audit 22 (backlog dry except owner-gated confirm-to-act). A/new-user: onboarding /start teaches scraping not instant errands (weather/near-me/convert/quote/directions/remind absent from Try list), photo+voice inbound invisible in help, sports-scores flaky via scrape, near-me no open-now filter, paywall read fails confusingly, flight-status flaky, first-msg clock-reminder becomes a city-question. B/reliability: interval 'every 2 days'/'every other week'/'in 3 weeks' silently don't schedule (TOP — built), watchlist member fails-first-check-then-recovers-on-quiet-tick never seeds/alerts, digest member that's a >>chain runs literal string, feed-watch re-notifies at 200-key cap, resume of a paused daily fires at wrong wall-clock hour, chain if-gate far-negation (>12 chars) passes opposite condition. C/power: photo/voice/PDF inbound + one-tap inline-keyboard buttons + time-series chart image + location-pin inbound + deep-research pagination + group-chat. Built interval-days-weeks-reminders (B#2); seeded digest-chain-member-literal(S), watchlist-member-never-seeds(S), chain-ifgate-far-negation(S). Deferred: onboarding-copy(S), photo/voice-inbound-advertise(S), sports-scores(M), near-me-open-now(S), paywall-detect(M), feed-watch-cap-refire(S), resume-wrong-hour(S), inline-keyboards(M), chart-image(S), location-pin(S), pagination(M). NOTE: 3 audits have flagged photo/voice inbound as MISSING but code + prior history say it's BUILT — likely just unadvertised; verify before building."
     },
