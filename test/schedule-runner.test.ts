@@ -747,7 +747,7 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
     expect(sent.some((t) => /morning/.test(t))).toBe(true);
   });
 
-  it("a plain daily (not a digest) still drops its occurrence when over cap (no storm)", async () => {
+  it("a plain daily is DEFERRED (kept), not dropped, when over cap (chatty-watch-starves-daily)", async () => {
     const clock = { t: NOW };
     const sent: string[] = [];
     const { store, runner } = harness(clock, {
@@ -758,9 +758,13 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
     store.add(1, { kind: "once", task: "filler", dueMs: NOW - 1 }, NOW);          // consumes the slot
     store.add(1, { kind: "daily", task: "weather", dueMs: NOW - 1, hourMin: "09:00" }, NOW); // over cap
     await runner.tick();
-    expect(sent).toHaveLength(1);                         // filler only
+    expect(sent).toHaveLength(1);                         // filler only; the daily briefing deferred, not lost
     const daily = store.list(1).find((s) => s.task === "weather")!;
-    expect(daily.dueMs).toBeGreaterThan(NOW);             // advanced to tomorrow (dropped this occurrence)
+    expect(daily.dueMs).toBeLessThanOrEqual(NOW);         // left DUE (grace) so a later tick delivers it — NOT advanced a day out
+    // once a slot frees, the relied-upon daily finally sends instead of silently no-showing.
+    clock.t = NOW + 3_600_001;
+    await runner.tick();
+    expect(sent.some((t) => /weather/.test(t))).toBe(true);
   });
 
   it("an over-cap once-reminder is delivered anyway once overdue past the grace window (once-reminder-cap-starvation)", async () => {
@@ -802,7 +806,7 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
     expect(monthly.dueMs).toBeLessThanOrEqual(NOW);  // left DUE (grace) so a later tick delivers it — NOT advanced a month out
   });
 
-  it("an over-cap DAILY occurrence is still dropped (advances), not deferred — it must not storm", async () => {
+  it("an over-cap INTERVAL occurrence is still dropped (advances), not deferred — a sticky nag must not storm", async () => {
     const clock = { t: NOW };
     const sent: unknown[] = [];
     const { store, runner } = harness(clock, {
@@ -811,12 +815,34 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
       send: async () => { sent.push(1); },
     });
     store.add(1, { kind: "once", task: "a", dueMs: NOW - 1 }, NOW);                    // consumes the 1 slot
-    store.add(1, { kind: "daily", task: "d", dueMs: NOW - 1, hourMin: "09:00" }, NOW); // over cap -> daily drops this occurrence
+    // interval is the storm case the cap exists for (a "nag me every 15 min") — it stays droppable.
+    store.add(1, { kind: "interval", task: "d", dueMs: NOW - 1, intervalMs: 15 * 60_000 }, NOW); // over cap -> drops this occurrence
     await runner.tick();
     expect(sent).toHaveLength(1);
-    const daily = store.list(1).find((s) => s.kind === "daily")!;
-    expect(daily).toBeTruthy();                    // daily stays in the store
-    expect(daily.dueMs).toBeGreaterThan(NOW);      // advanced to its next occurrence, not fired now
+    const iv = store.list(1).find((s) => s.kind === "interval")!;
+    expect(iv).toBeTruthy();                        // interval stays in the store
+    expect(iv.dueMs).toBeGreaterThan(NOW);          // advanced to its next occurrence, not fired now
+  });
+
+  it("a chatty alert burning the hourly budget no longer starves the user's daily briefing (chatty-watch-starves-daily)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    const { store, runner } = harness(clock, {
+      maxPerChatPerHour: 1,
+      runAgent: async (task) => ({ reply: `did:${task}` }),
+      send: async (_c, text) => { sent.push(text); },
+      alertCheck: async () => ({ message: "🔔 btc moved", commit: () => {} }), // a noisy watch that keeps firing
+    });
+    // The alert fires (cap-exempt) and consumes the 1 send slot via noteSend; the daily briefing is over cap.
+    store.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    store.add(1, { kind: "daily", task: "weather + news", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    expect(sent).toContain("🔔 btc moved");                       // the alert sent
+    const daily = store.list(1).find((s) => s.task === "weather + news")!;
+    expect(daily.dueMs).toBeLessThanOrEqual(NOW);                  // briefing DEFERRED (kept), not dropped for the day
+    clock.t = NOW + 3_600_001;                                     // hour clears
+    await runner.tick();
+    expect(sent.some((t) => /weather \+ news/.test(t))).toBe(true); // and then it delivers
   });
 
   it("an over-cap ALERT check still RUNS (edge-triggered, self-throttling) — a crossing isn't lost (sendcap-drops-alert-checks)", async () => {

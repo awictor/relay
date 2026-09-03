@@ -387,10 +387,23 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // not the plain-daily drop. A plain daily/weather still drops its occurrence (it re-fires on its
         // own cadence + isn't a bundle the user explicitly assembled).
         const isDigest = /^digest:/.test(s.task);
+        // A scheduled recipe ("recipe:<name>", e.g. a saved "morning brief" run every morning) is
+        // user-assembled CONTENT just like a digest — not spammy repetition. Give it the same defer-then-
+        // force grace so a noisy watch that filled the hour doesn't silently drop the briefing the user
+        // relies on (chatty-watch-starves-daily).
+        const isRecipe = /^recipe:/.test(s.task);
         // monthly/yearly are single high-stakes promises per period (rent, a birthday) — like a "once",
         // not a droppable daily (monthly-yearly-cap-drop). Give them the defer-then-force grace so an
         // over-cap morning doesn't lose THIS month's/year's reminder (next is 30/365 days out).
-        const graceEligible = s.kind === "once" || s.kind === "monthly" || s.kind === "yearly" || isDigest;
+        // A plain daily/weekly is ALSO relied-upon content ("every morning: weather + top news") — the
+        // old code DROPPED its occurrence over-cap, so a single chatty alert (which is cap-EXEMPT yet
+        // still burns the hourly budget via noteSend) could silently no-show the user's morning briefing
+        // for the day with only a log line (chatty-watch-starves-daily). Give daily/weekly the same
+        // defer-then-force grace: delayed to a free slot, then forced past the grace window rather than
+        // lost. A misfiring daily can't self-storm (each fires once then advances +24h). interval stays
+        // droppable — a sticky "nag me every 15 min" IS the storm case the cap exists to throttle.
+        const graceEligible = s.kind === "once" || s.kind === "monthly" || s.kind === "yearly"
+          || s.kind === "daily" || s.kind === "weekly" || isDigest || isRecipe;
         if (overCap(s.chatId, deps.now()) && !isAlertCheck) {
           if (graceEligible) {
             // Defer past the cap rather than drop it. BUT a chat with many recurring watches can stay

@@ -2516,7 +2516,7 @@
       "title": "a noisy watch silently drops the user's plain daily briefing when the hourly cap is hit",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A relied-upon 'every morning: weather + news' silently no-shows because a spammy alert filled the per-chat hourly send counter.",
       "how": "In schedule-runner give a plain daily/recipe the same defer-then-force grace as once/monthly/digest (graceEligible) so it isn't dropped over-cap; or don't count edge-triggered alert sends toward the cap that starves content."
     }
@@ -3505,6 +3505,10 @@
     {
       "item": "memory-write-silent-fail",
       "note": "Hedged MemoryStore write failures (memory-write-silent-fail) — the one store that ignored its disk-write result. memory-store.ts persist() now records atomicWriteJson's boolean into lastWriteOk + exposes lastSaveOk() (matching schedule/alert/recipe/profile/lists). Wired a memorySaveOk dep through index -> handler; after the main-path memorySet, if the write didn't reach disk the handler warns the user ONCE per chat ('couldn't save our conversation... may forget recent context if I restart; reminders/watches unaffected') so a full/unwritable disk isn't invisible. 4 new tests (store lastSaveOk true on good write + false when a parent path is a file so mkdir fails; handler warns once not per-turn; silent when clean). suite 1717 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "chatty-watch-starves-daily",
+      "note": "Fixed a noisy watch silently dropping the user's daily briefing (chatty-watch-starves-daily). An alert check is cap-EXEMPT but still burns the per-chat hourly send budget via noteSend; the old code then DROPPED a plain daily/weekly/scheduled-recipe occurrence over-cap (only once/monthly/yearly/digest got the defer-then-force grace), so one chatty watch could no-show the relied-upon 'every morning: weather + news' for the day with only a log line. Extended graceEligible in schedule-runner to daily, weekly, and recipe: markers — they're user-assembled CONTENT, deferred to a free slot then forced past the grace window rather than lost. interval stays droppable (a sticky 'nag me every 15 min' IS the storm case the cap exists to throttle). Rewrote 2 tests to the new deferred-then-forced daily contract + added a chatty-alert-starves-daily regression + an interval-still-drops test. suite 1718 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
