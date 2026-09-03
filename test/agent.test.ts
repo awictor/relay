@@ -182,3 +182,50 @@ describe("runAgent", () => {
     expect(reply).toMatch(/ran out of steps/i);
   });
 });
+
+describe("runAgent convert_currency (fx-conversion-tool)", () => {
+  it("uses the convert_currency tool + reports the live rate, no browser", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "convert_currency", args: { amount: 200, from: "USD", to: "EUR" } } },
+      { toolCall: { name: "reply", args: { text: "200 USD is about 184.60 EUR." } } },
+    ]);
+    let seen: { amount: number; from: string; to: string } | null = null;
+    const backend = {
+      scrape: async (url: string) => ({ title: "", content: "", url }),
+      createSession: async () => ({ id: "s" }),
+      navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {},
+      readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {},
+      discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+      convertCurrency: async (amount: number, from: string, to: string) => { seen = { amount, from, to }; return { amount, from: "USD", to: "EUR", rate: 0.923, result: amount * 0.923 }; },
+    };
+    const { reply } = await runAgent("how much is 200 USD in EUR", { llm, backend });
+    expect(seen).toEqual({ amount: 200, from: "USD", to: "EUR" });
+    expect(reply).toMatch(/184\.60 EUR/);
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/200 USD = 184\.60 EUR/);
+  });
+  it("reports gracefully when a currency code is unrecognized", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "convert_currency", args: { from: "xxx", to: "EUR" } } },
+      { toolCall: { name: "reply", args: { text: "I couldn't recognize that currency." } } },
+    ]);
+    const backend = {
+      scrape: async (url: string) => ({ title: "", content: "", url }),
+      createSession: async () => ({ id: "s" }),
+      navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {},
+      readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {},
+      discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+      convertCurrency: async () => null,
+    };
+    const { reply } = await runAgent("convert 5 blorp to EUR", { llm, backend });
+    expect(reply).toMatch(/couldn't recognize/i);
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/Couldn't convert/i);
+  });
+});

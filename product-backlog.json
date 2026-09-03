@@ -986,7 +986,7 @@
       "title": "live FX / currency conversion via a JSON endpoint",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "\"200 USD in EUR right now\" improvises a slow web_search+scrape that is often stale/mis-parsed; should be instant.",
       "how": "Wire a keyless exchange-rate JSON API via fetch_json (same class as the open-meteo weather path); prompt/tool hint to use it for FX."
     },
@@ -1367,6 +1367,10 @@
     {
       "id": "csv-export-compare",
       "note": "A compare with a file cue (\"as a CSV\"/spreadsheet/export/download) now attaches a proper CSV document (via the existing sendDocument path) instead of pasting a truncated JSON blob — keepable, sortable, shareable. New rowsToCsv (RFC-4180 escaping, union header); agent threads doc+docName so a CSV is named comparison.csv not page.pdf; gated on a CSV_REQUEST_RE cue so a plain compare is unchanged. 954 tests green."
+    },
+    {
+      "id": "fx-conversion-tool",
+      "note": "Added a convert_currency tool backed by a keyless FX API (open.er-api.com) — \"200 USD in EUR\" is now instant + exact instead of a slow scrape. New src/lib/fx.ts (normalizeCurrency incl symbols/words, fxUrl, parseFxRate, convertCurrency with injected fetch) + backend.convertCurrency + agent tool/dispatch/prompt. Live-verified the API (result:success, real USD->EUR/GBP rates). 964 tests green."
     }
   ],
   "audits": [

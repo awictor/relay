@@ -13,6 +13,7 @@ import { intEnv } from "./lib/env.js";
 import { isDangerousAction } from "./safety.js";
 import { fetchYouTubeTranscript } from "./lib/youtube.js";
 import { rowsToCsv } from "./lib/to-csv.js";
+import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 
 // Does the user's task ask for a keepable file (csv-export-compare)? A compare/extract then attaches
 // a CSV document instead of only pasting a truncated JSON blob in chat.
@@ -84,6 +85,19 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL of a JSON API endpoint" } }, required: ["url"] },
   },
   {
+    name: "convert_currency",
+    description: "Convert an amount between two currencies at the live exchange rate (no key, instant). Use this — NOT web_search/scrape — for any \"X USD in EUR\", \"how much is £50 in dollars\", \"convert 100 CAD to JPY\" question. Currencies are 3-letter ISO codes (USD, EUR, GBP, JPY, CAD, AUD, INR, ...).",
+    parameters: {
+      type: "object",
+      properties: {
+        amount: { type: "number", description: "Amount to convert (default 1)" },
+        from: { type: "string", description: "3-letter source currency code, e.g. USD" },
+        to: { type: "string", description: "3-letter target currency code, e.g. EUR" },
+      },
+      required: ["from", "to"],
+    },
+  },
+  {
     name: "search",
     description: "Open a search or listing page and get back candidate result links (deduped, same-site preferred, capped). Use when the user names WHAT they want but not the exact URLs — then extract/compare across the returned links. Provide a search-results URL (build the site's query URL, e.g. https://news.ycombinator.com/newest or a site search).",
     parameters: {
@@ -145,6 +159,7 @@ Tools:
 - "screenshot" (url): capture a page as an IMAGE and send it. Use when the user wants to SEE a page ("show me", "screenshot", "what does X look like"), not read its text. Then call reply with a short caption.
 - "pdf" (url): render a page to a PDF and send it as a document. Use when the user wants to SAVE or KEEP a page ("save as PDF", "send me a PDF of X"). Then call reply with a short caption.
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
+- "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "reply" (text): finish.
 
 Rules:
@@ -153,7 +168,7 @@ Rules:
 - Take few steps. When you have enough, call "reply".
 - The user is on a phone. In "reply", write a short plain-text answer — never paste raw JSON. If you extracted/compared data, summarize it in a line or two (e.g. "A is $10, B is $20"). No markdown tables.
 - If something needs a login or a paid/irreversible action, call "reply" and say so plainly. Never invent data you didn't retrieve.
-- ANSWER DIRECTLY (call "reply" with NO tool first) when the answer is deterministic and needs no live data: arithmetic + tips + percentages ("20% tip on $47" = $9.40), unit/measure conversions ("how many oz in a cup" = 8), date/time math, and stable common knowledge ("capital of France"). Don't open a browser or search for these — it just adds 10-30s. Use tools ONLY when the answer is time-sensitive or uncertain: live prices, exchange rates that move (currency conversion needs a live rate — fetch it), news, weather, anything "current"/"today"/"now". When unsure whether a fact is stable, verify with a tool rather than guess.
+- ANSWER DIRECTLY (call "reply" with NO tool first) when the answer is deterministic and needs no live data: arithmetic + tips + percentages ("20% tip on $47" = $9.40), unit/measure conversions ("how many oz in a cup" = 8), date/time math, and stable common knowledge ("capital of France"). Don't open a browser or search for these — it just adds 10-30s. Use tools ONLY when the answer is time-sensitive or uncertain: live prices, exchange rates that move (use "convert_currency" for FX), news, weather, anything "current"/"today"/"now". When unsure whether a fact is stable, verify with a tool rather than guess.
 - If the task is genuinely UNDERSPECIFIED — a real answer depends on details the user didn't give and you'd otherwise have to guess (e.g. "find me a good laptop" with no budget/use, "cheap flights to Lisbon" with no dates/origin, "book a table" with no time/size) — do NOT burn steps on a guess. Call "reply" with ONE short question naming the 1-2 things you need, then stop. Ask at most once, only when a sensible default truly doesn't exist; if the request is clear or a reasonable default works ("weather" -> their location, "top HN story"), just do it.
 - CITE YOUR SOURCE: when the answer came from a page you fetched (scrape/extract/browse/search result), end "reply" with a final line "Source: <url>" — the single primary URL you got the fact from, exactly as fetched (never invent or guess a link). One source is enough. Skip it for direct calc/conversion/known-fact answers, and skip it if you genuinely didn't fetch a page. This lets the user verify the answer.`;
 
@@ -182,6 +197,9 @@ export interface BrowserBackend {
   // Absent -> the transcript tool reports it's unavailable. Returns null when the video has no
   // captions / isn't a YouTube URL.
   videoTranscript?(url: string): Promise<{ videoId: string; text: string } | null>;
+  // Optional: convert an amount between currencies at the live rate (fx-conversion-tool). Absent ->
+  // the convert_currency tool reports it's unavailable. Returns null on a bad code / fetch failure.
+  convertCurrency?(amount: number, from: string, to: string): Promise<import("./lib/fx.js").Conversion | null>;
 }
 
 const FETCH_JSON_MAX_BYTES = 200_000;
@@ -258,6 +276,7 @@ async function defaultFetchText(url: string): Promise<string> {
 const defaultBackend: BrowserBackend = {
   scrape: (url) => anvil.scrape(url, { format: "text" }),
   videoTranscript: (url) => fetchYouTubeTranscript(url, defaultFetchText),
+  convertCurrency: (amount, from, to) => fxConvert(amount, from, to, defaultFetchText),
   createSession: () => anvil.createSession().then((s) => ({ id: s.id })),
   navigate: (id, url) => anvil.navigate(id, url),
   click: (id, sel) => anvil.click(id, sel),
@@ -494,6 +513,21 @@ export async function runAgent(
           push("fetch_json", `JSON from ${url} (status ${r.status}):\n${truncateForModel(r.text)}`);
         } catch (e) {
           push("fetch_json", `ERROR fetching ${url}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "convert_currency") {
+        if (!backend.convertCurrency) { push("convert_currency", "ERROR: currency conversion isn't available."); continue; }
+        const amount = Number(call.args.amount);
+        const from = String(call.args.from ?? "");
+        const to = String(call.args.to ?? "");
+        try {
+          const c = await backend.convertCurrency(Number.isFinite(amount) ? amount : 1, from, to);
+          if (!c) { push("convert_currency", `Couldn't convert ${from} -> ${to} (check the currency codes, or try web_search for an unusual pair).`); continue; }
+          push("convert_currency", `${formatConversion(c)}. Report this to the user; the rate is live.`);
+        } catch (e) {
+          push("convert_currency", `ERROR converting: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }
