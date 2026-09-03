@@ -1,6 +1,42 @@
 {
   "items": [
     {
+      "id": "recurring-time-after-task",
+      "title": "'every day to take my meds at 8pm' fires at 9am default + leaves 'at 8pm' in the task",
+      "impact": "high",
+      "effort": "M",
+      "status": "done",
+      "why": "The daily/weekly time clause was only parsed when it sat right after the cadence word, so 'remind me every day to take my meds at 8pm' silently scheduled 9:00am (default) with 'at 8pm' left in the task — a critical evening reminder arriving 11h early every day, no error (audit 27 B#2).",
+      "how": "Added extractLooseAtTime(lower) — finds the LAST 'at HH[:MM][am/pm]' anywhere (am/pm or colon required, so 'at 5 tabs' doesn't match); the daily + weekly branches use it as a fallback when no adjacent time, and strip the clause from the task. Word-default (morning/evening/night) still applies when there's no time anywhere."
+    },
+    {
+      "id": "region-qualifier-tz-inference",
+      "title": "'Paris, TX' infers Paris-France timezone, firing reminders ~7h off",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "inferTzFromLocation loops the comma parts leftmost-first and returns on the first hit, so the CITY token ('paris'->UTC+1) beats the disambiguating REGION token ('tx'->UTC-6): a 'Paris, TX' / 'Dublin, OH' / 'Athens, GA' user gets every daily reminder at the foreign city's hour, silently + forever — reintroducing the wrong-hour class the codebase fought hard to fix. Non-ambiguous cities (Austin, TX) are unaffected, which is why it slips through (audit 27 B#1).",
+      "how": "Prefer the MOST-specific match: when a US state abbreviation / '<City>, <ST>' is present, resolve tz from the state (or the city+region pair) before falling back to the bare city-name table. Add tests for Paris TX / Dublin OH / Athens GA vs Paris FR / Dublin IE."
+    },
+    {
+      "id": "detect-carrier-bare-10-digit",
+      "title": "any bare 10-digit number is treated as a DHL tracking number",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "detectCarrier maps /^\\d{10}$/ -> 'dhl', so 'track my order 1234567890' (a merchant ref, a 10-digit phone) drives the agent to a DHL page + reports 'no DHL match / couldn't read it' — implying the shipment doesn't exist rather than that it wasn't a carrier number. Contradicts the module's stated 'conservative, non-match returns null so we ask' (audit 27 B#3).",
+      "how": "Drop the bare-10-digit -> DHL rule (keep JJD-prefixed DHL); a lone 10-digit number is too ambiguous — return null so track_package asks which carrier, OR only accept it under an explicitly-named DHL. Update the DHL detect test."
+    },
+    {
+      "id": "recall-answer-log-tool",
+      "title": "the agent can't recall what it told the user before (answer-log is write-only)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "The persistent answer-log (100 timestamped task+reply pairs/chat) has a search() method but NO agent tool exposes it — so 'what did you tell me that restaurant was?' / 'what was the flight price last week?' can't be answered from Relay's own memory; the agent re-fetches or shrugs. The long-term-memory moat Instinct markets is one ~30-line tool away (audit 27 C#2).",
+      "how": "Add a recall(query) agent tool that calls answerLog.search(chatId, keywords) + returns the top matching past answers for the model to relay. Keyless, offline-testable against a mock log. Note: an isAnswerRecall handler heuristic already exists — this exposes it as a first-class agent tool so the LLM can invoke it mid-reasoning."
+    },
+    {
       "id": "trigger-to-action-recipe-shape",
       "title": "an alert's 'then run <recipe>' runs a chained/slotted recipe as a literal task",
       "impact": "high",
@@ -2052,9 +2088,16 @@
     {
       "id": "bare-im-in-nonplace-corrupts-profile",
       "note": "Everyday 'I'm in trouble' / 'I'm in bed' / 'I'm in the office' / 'I'm in a mood' was saved as the home location AND the message was eaten (never reached the agent) — parseSetLocation's bare-form guard only rejected task/scheduling keywords + >5-word tails, so a short state-of-being noun passed, corrupting the profile + losing the user's real message. Added two rejects to the bare 'I'm in X' form: a leading article (a/an/the — a real place-name has none) and a NON_PLACE state-of-being word list (trouble/bed/love/class/court/traffic/hospital/...). A proper-noun place with no article ('I'm in Paris', 'I'm in San Diego') still saves; the explicit /setlocation form stays permissive for any odd case. 1 test (6 non-place forms fall through / 2 real places still save). call-tested: false (pure parse). 1193 tests green."
+    },
+    {
+      "id": "recurring-time-after-task",
+      "note": "Fixed a critical wrong-hour reminder: the daily/weekly time clause was only parsed when it sat right after the cadence word, so 'remind me every day to take my meds at 8pm' silently scheduled 9:00am (the default) AND left 'at 8pm' in the task — an evening reminder arriving 11h early every day. Added extractLooseAtTime(lower): finds the LAST 'at HH[:MM][am/pm]' anywhere in the message (am/pm or a colon-minute required, matching the main branches' discipline so 'look at 5 tabs' doesn't match). The daily + weekly branches use it as a fallback when no time sat adjacent, and strip the clause from the task; the morning/evening/night word-defaults still apply when there's no time anywhere. 2 tests (time-after-task on daily + weekly captured & stripped / word-default preserved). call-tested: false (pure parse). 1195 tests green."
     }
   ],
   "audits": [
+    {
+      "note": "Audit 27 (backlog dry except owner-gated confirm-to-act). A/new-user: /start examples dev-flavored (weather/package/currency hidden), no QR-code tool, can't edit/reschedule an existing reminder ('move it to 9'), 'today's headlines' not routed to top-news template, no image search, playful joke/fact asks fall to slow web_search. B/reliability: 'every day ... at 8pm' fires at 9am default + leaves 'at 8pm' in task (TOP — built), 'Paris, TX' infers Paris-FR tz (region qualifier ignored, ~7h off), detectCarrier bare-10-digit -> DHL false-positive, semicolon in an alert task silently -> watchlist + drops the trigger, parsePlaces name-dedup hides distinct same-name branches. C/power: inline-keyboard callback route (send-side half-wired, no callback_query parse — top retention unlock), recall tool (answer-log has search() but no agent tool exposes it — write-only memory), cross-session automation-coach over the log. Built recurring-time-after-task (B#2); seeded region-qualifier-tz-inference(M), detect-carrier-bare-10-digit(S), recall-answer-log-tool(S). Deferred: inline-keyboard-callbacks(M), automation-coach(M), semicolon-alert-watchlist-guard(S), parsePlaces-dedup-by-name+coords(S), edit-reschedule-reminder(S/M), qr-code-tool(S), headlines-routing(M), joke/fact-instant(S), image-search(M), + prior deferred set."
+    },
     {
       "note": "Audit 26 (backlog dry except owner-gated confirm-to-act). A/new-user: near-me/directions have no address or tappable maps link (dead-end on a phone), no stop/cancel for an in-flight or background task, 'best X near me' returns NEAREST not best (no rating), transit directions silently answered as driving, narrow near-me category table drops urgent-care/vet/ATM/post-office into a noisy search. B/reliability: trigger-to-action 'then' runs a chain/slot recipe literally (TOP — built, the one missed exec path), recurring near-me from a PIN dies after coords TTL (fires 'which city?' into the void), bare 'I'm in trouble/bed' saved as home location + message eaten, fetch_json truncates a valid >200KB JSON then reports 'not valid JSON', feedItemKey 120-char truncation collapses long-prefix items. C/power: inline-keyboard callback handling (send side half-wired, no callback_query route — turns every feature one-tap; top retention multiplier), automation-coach mining the persistent answer-log, shareable recipe export/import token (NET-NEW). Built trigger-to-action-recipe-shape (B#1); seeded recurring-near-me-pin-ttl-breaks(M), bare-im-in-nonplace-corrupts-profile(S), maps-link-on-nearby-directions(S). Deferred: inline-keyboard-callbacks(M, top power), automation-coach(M), stop-cancel-task(M), best-near-me-rating(M), transit-directions-honest(S), near-me-category-expand(S), fetch_json-oversize-honest(S), feedItemKey-prefix-collision(S), recipe-export-token(S), + prior deferred set."
     },

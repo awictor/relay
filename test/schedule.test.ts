@@ -150,6 +150,20 @@ describe("parseSchedule — daily", () => {
     expect(s.hourMin).toBe("20:00");
     expect(s.task).toMatch(/summarize my emails/);
   });
+  it("captures a time placed AFTER the task, not just after the cadence word (recurring-time-after-task)", () => {
+    const s = parseSchedule("remind me every day to take my meds at 8pm", NOW)!;
+    expect(s.kind).toBe("daily");
+    expect(s.hourMin).toBe("20:00");        // NOT the 9am default
+    expect(s.task).toBe("to take my meds"); // "at 8pm" stripped, not left dangling
+    const w = parseSchedule("every monday to submit the report at 9am", NOW)!;
+    expect(w.kind).toBe("weekly");
+    expect(w.hourMin).toBe("09:00");
+    expect(w.task).toBe("to submit the report");
+  });
+  it("a word-default daily with no time anywhere still uses the morning/evening default", () => {
+    expect(parseSchedule("every morning tell me the weather", NOW)!.hourMin).toBe("09:00");
+    expect(parseSchedule("every evening summarize my day", NOW)!.hourMin).toBe("18:00");
+  });
 
   it("an explicit offset stamps offsetMin + shifts dueMs into that zone (tz-from-location)", () => {
     // "every morning" == 09:00 local; with offsetMin=-300 (Eastern) that's 14:00 UTC.

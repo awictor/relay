@@ -202,9 +202,18 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     }
     if (weekdays.length) {
       let hh = 9, mm = 0;
+      let extraClause = "";
       if (weeklyClause[2]) { hh = to24h(parseInt(weeklyClause[2], 10), weeklyClause[4]); mm = weeklyClause[3] ? parseInt(weeklyClause[3], 10) : 0; }
+      else {
+        // No time right after the weekday clause — look for a detached "at 8pm" elsewhere ("every monday
+        // to submit the report at 9am") so it isn't defaulted to 9am + left in the task (recurring-time-
+        // after-task).
+        const loose = extractLooseAtTime(lower);
+        if (loose) { hh = loose.hh; mm = loose.mm; extraClause = loose.clause; }
+      }
       const hourMin = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
-      const task = cleanTask(raw, weeklyClause[0]!);
+      let task = cleanTask(raw, weeklyClause[0]!);
+      if (extraClause) task = cleanTask(task, extraClause);
       if (!task) return null;
       const dueMs = nextWeeklyMs(now, hh, mm, weekdays, offsetMin);
       // "Friday at 3pm" (a SINGLE weekday, no "every", not a weekday/weekend group) is a ONE-SHOT next-
@@ -228,13 +237,22 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
   const daily = lower.match(/\b(every day|daily|every morning|every evening|every night)\b(?:\s+at\s+([0-9]{1,2})(?::([0-9]{2}))?\s*(am|pm)?)?/);
   if (daily) {
     let hh: number, mm = 0;
+    let extraClause = "";
     if (daily[2]) { hh = parseInt(daily[2], 10); mm = daily[3] ? parseInt(daily[3], 10) : 0; hh = to24h(hh, daily[4]); }
-    else if (/morning/.test(daily[1]!)) hh = 9;
-    else if (/evening/.test(daily[1]!)) hh = 18;
-    else if (/night/.test(daily[1]!)) hh = 21;
-    else hh = 9;
+    else {
+      // No time right after "every day"/"daily" — look for a detached "at 8pm" ("remind me every day to
+      // take my meds at 8pm") before falling back to the morning/evening/night word default, so it isn't
+      // silently scheduled at 9am with "at 8pm" left in the task (recurring-time-after-task).
+      const loose = extractLooseAtTime(lower);
+      if (loose) { hh = loose.hh; mm = loose.mm; extraClause = loose.clause; }
+      else if (/morning/.test(daily[1]!)) hh = 9;
+      else if (/evening/.test(daily[1]!)) hh = 18;
+      else if (/night/.test(daily[1]!)) hh = 21;
+      else hh = 9;
+    }
     const hourMin = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
-    const task = cleanTask(raw, daily[0]!);
+    let task = cleanTask(raw, daily[0]!);
+    if (extraClause) task = cleanTask(task, extraClause);
     if (!task) return null;
     return { kind: "daily", task, dueMs: nextDailyMs(now, hh, mm, offsetMin), hourMin, offsetMin, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
   }
@@ -276,6 +294,29 @@ function to24h(h: number, ampm?: string): number {
   const pm = ampm.toLowerCase() === "pm";
   if (h === 12) return pm ? 12 : 0;
   return pm ? h + 12 : h;
+}
+
+/** Find a DETACHED clock time in a daily/weekly request whose time clause didn't sit right after the
+ * cadence word — "remind me every day to take my meds at 8pm" / "every morning check the news at 7am".
+ * Returns {hh, mm, clause} for the LAST "at HH[:MM][am/pm]" (or a 24h "at HH:MM") in the lowercased text,
+ * or null. The caller uses it as a fallback when the adjacent time was absent (defaulted to 9am), and
+ * strips `clause` from the task so "at 8pm" isn't left dangling (recurring-time-after-task). */
+function extractLooseAtTime(lower: string): { hh: number; mm: number; clause: string } | null {
+  // Scan all "at <time>" occurrences; take the last (most likely the intended fire time, after the task).
+  const re = /\bat\s+([0-9]{1,2})(?::([0-9]{2}))?\s*(am|pm)?\b/gi;
+  let m: RegExpExecArray | null, last: RegExpExecArray | null = null;
+  while ((m = re.exec(lower)) !== null) {
+    // Require am/pm OR a colon-minute (matching the main branches' discipline) so a bare "at 5 tabs"
+    // doesn't become a schedule time. Take the LAST such match.
+    if (m[3] || m[2] !== undefined) last = m;
+  }
+  if (!last) return null;
+  const rawH = parseInt(last[1]!, 10);
+  if (rawH > 23) return null;
+  const hh = to24h(rawH, last[3]);
+  const mm = last[2] ? parseInt(last[2], 10) : 0;
+  if (hh > 23 || mm > 59) return null;
+  return { hh, mm, clause: last[0] };
 }
 
 // Timezone offset (minutes EAST of UTC) the user's "9am" is measured in. Default 0 = UTC. Set
