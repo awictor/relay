@@ -15,9 +15,28 @@ describe("parseUnitPrice", () => {
       { qty: 12, unit: "", price: 6 }, { qty: 30, unit: "", price: 13 },
     ]);
   });
+  it("parses the connector-less '<qty><unit> $<price>' shelf phrasing (unitprice-spaceless-price)", () => {
+    expect(parseUnitPrice("12 rolls $6 vs 8 rolls $4.50")).toEqual([
+      { qty: 12, unit: "rolls", price: 6 }, { qty: 8, unit: "rolls", price: 4.5 },
+    ]);
+    expect(parseUnitPrice("20 oz $3.99 or 12 oz $2.50")).toEqual([
+      { qty: 20, unit: "oz", price: 3.99 }, { qty: 12, unit: "oz", price: 2.5 },
+    ]);
+    expect(parseUnitPrice("500g $4 vs 1.2kg $9")).toEqual([
+      { qty: 500, unit: "g", price: 4 }, { qty: 1.2, unit: "kg", price: 9 },
+    ]);
+  });
+  it("still needs a connector when the price isn't $-marked (a bare '12 rolls 6' is ambiguous)", () => {
+    expect(parseUnitPrice("12 rolls 6 vs 8 rolls 4")).toBeNull(); // 6/4 could be a second qty, not a price
+  });
   it("null when it isn't a compare (fewer than 2 parseable options)", () => {
     expect(parseUnitPrice("500g for $4")).toBeNull();
     expect(parseUnitPrice("what's the weather or the news")).toBeNull();
+  });
+  it("the connector-less form picks the right winner end-to-end (unitprice-spaceless-price)", () => {
+    const out = runUnitPrice("12 rolls $6 vs 8 rolls $4.50")!;
+    expect(out).toMatch(/Better buy/);
+    expect(out).toMatch(/✅ \$6\.00 for 12rolls = \$0\.50 each/); // 12-pack cheaper per roll
   });
 });
 

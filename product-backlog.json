@@ -2969,6 +2969,24 @@
       "status": "done",
       "why": "'what haven't I read' now works on demand + unread state is tracked, but a forgotten save still only resurfaces if the user thinks to ask; a gentle weekly proactive nudge would actually close the loop.",
       "how": "A scheduled reminder-style job (opt-in, reuse scheduler) that fires formatUnreadNudge(saved.unread(...)) once a week per chat if there are stale-unread pages, gated on the anti-spam cap + quiet hours + delivery like other proactive sends; skip silently when none."
+    },
+    {
+      "id": "unitprice-spaceless-price",
+      "title": "Unit-price compare missed the connector-less shelf phrasing",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "parseOption required a connector (for/at/@) between qty+unit and price, so '12 rolls $6 vs 8 rolls $4.50' — a natural grocery/shelf phrasing — returned null and dead-ended to the agent's forbidden mental math (silently-wrong per-unit comparison).",
+      "how": "Added a Form A2 in parseOption for '<qty><unit> $<price>', requiring the price to be $-prefixed so an ambiguous '12 rolls 6' (is 6 a price or a 2nd qty?) still needs an explicit connector."
+    },
+    {
+      "id": "unitprice-three-way-and-percent-savings",
+      "title": "Unit-price: verify 3+ options + the % savings wording",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "the comparator handles N options but the phrasing/tests focus on 2; a 3-way compare's 'better buy (X% cheaper)' line compares only to the runner-up, which may read oddly with 3+.",
+      "how": "Add 3-way tests; consider phrasing the savings vs the most-expensive or naming rank, so a 3-option compare reads clearly."
     }
   ],
   "history": [
@@ -4159,6 +4177,10 @@
     {
       "id": "weekly-unread-proactive-nudge",
       "note": "Opt-in weekly proactive reading-list nudge. 'nudge me about my reading list' adds a WEEKLY 'unread:reading-list' schedule (Mon 9am, one per chat, removeByTask-first so re-opt-in doesn't stack); 'stop reading list nudges' removes it (parseUnreadNudgeToggle, handler-routed before recall so it isn't shadowed). Scheduler fires it via a new unreadNudge dep — pure store read, null = nothing stale this week -> silent + reschedule (like an unchanged alert), never a failure; a message gets the same delivery-gated send/complete as any proactive. As kind:weekly it already inherits quiet-hours defer + anti-spam grace. Nudged pages are markRecalled so they don't re-surface next week. +4 tests, 1952 green. Live proactive fire needs the running bot (offline) — fire branch + toggle + store all unit-verified."
+    },
+    {
+      "id": "unitprice-spaceless-price",
+      "note": "Self-audit (agent spawn cap exhausted, no 3-agent AUDIT): probed calc/units-convert/unitprice/compose. calc + units-convert + compose all correct. Found unitprice dead-ended on the connector-less '12 rolls $6 vs 8 rolls $4.50' shelf phrasing (parseOption Form A needed for/at/@) -> fell to the agent's forbidden mental math. Added Form A2 ('<qty><unit> $<price>', $-required so bare '12 rolls 6' stays ambiguous). +3 tests, 1955 green."
     }
   ],
   "audits": [
@@ -4428,6 +4450,9 @@
     },
     {
       "note": "Agent spawn cap still exhausted (200/200) — no 3-agent audit. Built weekly-unread-proactive-nudge, completing the read-it-later arc (capture via command + agent tool, recall, digest recap, on-demand unread, now proactive weekly). Only save-page-confirm-dedupe-feedback (low/S) + owner/low remain — next run should self-audit for fresh findings."
+    },
+    {
+      "note": "Self-audit inline (agent cap 200/200). Swept common first-errand math surfaces: calc(ok), units-convert(ok incl offsets/negatives), unitprice(BUG: connector-less shelf phrasing -> null), compose(ok). Fixed the unitprice gap; seeded save-page-confirm-dedupe-feedback + unitprice-three-way follow-on."
     }
   ]
 }

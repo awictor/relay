@@ -17,6 +17,12 @@ function parseOption(s: string): { qty: number; unit: string; price: number } | 
   // Form A: "<qty><unit> for/at/@ $<price>"  e.g. "500g for $4", "12 oz @ 3.99", "1.2kg at $9"
   let m = t.match(/^(\d+(?:\.\d+)?)\s*([a-z ]*?)\s*(?:for|at|@|=|is|costs?)\s*\$?\s*(\d+(?:\.\d+)?)$/i);
   if (m) return { qty: parseFloat(m[1]!), unit: m[2]!.trim(), price: parseFloat(m[3]!) };
+  // Form A2: connector-less "<qty><unit> $<price>"  e.g. "12 rolls $6", "20 oz $3.99", "500g $4". A natural
+  // grocery/shelf phrasing that Form A's required connector (for/at/@) missed, so it silently fell to the
+  // agent's forbidden mental math (unitprice-spaceless-price). Requires the price to be $-prefixed so a
+  // bare "12 rolls 6" (ambiguous — is 6 a price or a second qty?) still needs an explicit connector.
+  m = t.match(/^(\d+(?:\.\d+)?)\s*([a-z ]*?)\s+\$\s*(\d+(?:\.\d+)?)$/i);
+  if (m) return { qty: parseFloat(m[1]!), unit: m[2]!.trim(), price: parseFloat(m[3]!) };
   // Form B: "$<price> for <qty><unit>"  or  "$<price> / <qty><unit>"  e.g. "$4 for 500g", "$5.49/20oz"
   m = t.match(/^\$?\s*(\d+(?:\.\d+)?)\s*(?:for|per|\/|a)\s*(\d+(?:\.\d+)?)\s*([a-z ]*)$/i);
   if (m) return { qty: parseFloat(m[2]!), unit: m[3]!.trim(), price: parseFloat(m[1]!) };
