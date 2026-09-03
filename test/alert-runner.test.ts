@@ -411,7 +411,9 @@ describe("checkAlert — follow-feed subscriptions (direct fetch, no agent)", ()
   const src = { kind: "rss" as const, url: "https://blog/feed", label: "blog" };
   const feedAlert = (over: Partial<Alert> = {}): Alert => ({ chatId: 1, name: "blog", task: "follow blog", feed: true, feedSource: src, created: NOW, ...over });
 
-  function feedDeps(items: string[]) {
+  // Title-keyed helper: pass plain titles; they become id-less FeedItems keyed as "t:<normTitle>".
+  const tk = (title: string) => `t:${normKey(title)}`;
+  function feedDeps(titles: string[]) {
     const seenWrites: string[][] = [];
     let ranAgent = false;
     return {
@@ -423,7 +425,7 @@ describe("checkAlert — follow-feed subscriptions (direct fetch, no agent)", ()
         formatReply: (t: string) => t,
         setLast: () => {},
         recordSeen: (_c: number, _n: string, keys: string[]) => seenWrites.push(keys),
-        fetchFeed: async () => items,
+        fetchFeed: async () => titles.map((title) => ({ title })), // id-less -> title-keyed
       },
     };
   }
@@ -437,25 +439,41 @@ describe("checkAlert — follow-feed subscriptions (direct fetch, no agent)", ()
   });
 
   it("notifies only about NEW items on a later check", async () => {
-    const seenA = normKey("Post A");
     const { d } = feedDeps(["Post C", "Post A"]); // A already seen, C is new
-    const r = await checkAlert(feedAlert({ seen: [seenA] }), d);
+    const r = await checkAlert(feedAlert({ seen: [tk("Post A")] }), d);
     expect(r.notify).toBe(true);
     expect(r.message).toMatch(/1 new/);
     expect(r.message).toMatch(/Post C/);
     expect(r.message).not.toMatch(/Post A/); // the already-seen item isn't re-reported
   });
 
+  it("keeps two same-titled items distinct by id, so a repeated headline still fires (feed-dedup-title-only)", async () => {
+    const seenWrites: string[][] = [];
+    const d = {
+      llm: {} as never,
+      runAgent: async () => ({ reply: "x" }),
+      formatReply: (t: string) => t,
+      setLast: () => {},
+      recordSeen: (_c: number, _n: string, keys: string[]) => seenWrites.push(keys),
+      // Same title, different ids — an id-less title key would collapse these into one.
+      fetchFeed: async () => [{ title: "Daily Discussion", id: "d2" }],
+    };
+    // "d1" already seen; "d2" (same title) is genuinely new and must fire.
+    const r = await checkAlert(feedAlert({ seen: ["id:d1"] }), d);
+    expect(r.notify).toBe(true);
+    expect(r.message).toMatch(/Daily Discussion/);
+  });
+
   it("stays silent (no baseline wipe) when the fetch returns nothing", async () => {
     const { d } = feedDeps([]);
-    const r = await checkAlert(feedAlert({ seen: [normKey("Post A")] }), d);
+    const r = await checkAlert(feedAlert({ seen: [tk("Post A")] }), d);
     expect(r.notify).toBe(false);
     expect(r.message).toBeNull();
   });
 
   it("records only the SHOWN items as seen when >10 are new, so the rest surface next check (feed-seen-swallows-overflow)", async () => {
-    const items = Array.from({ length: 15 }, (_, i) => `Post ${i + 1}`); // 15 new
-    const { d, seenWrites } = feedDeps(items);
+    const titles = Array.from({ length: 15 }, (_, i) => `Post ${i + 1}`); // 15 new
+    const { d, seenWrites } = feedDeps(titles);
     const r = await checkAlert(feedAlert({ seen: [] }), d); // seen defined (not first run) but empty
     expect(r.notify).toBe(true);
     expect(r.message).toMatch(/15 new/);
@@ -464,7 +482,7 @@ describe("checkAlert — follow-feed subscriptions (direct fetch, no agent)", ()
     r.commit();
     expect(seenWrites[0]!).toHaveLength(10);
     // The un-shown ones (Post 11..15) must NOT be in the seen set.
-    expect(seenWrites[0]!.some((k) => k === normKey("Post 15"))).toBe(false);
-    expect(seenWrites[0]!.some((k) => k === normKey("Post 1"))).toBe(true);
+    expect(seenWrites[0]!.some((k) => k === tk("Post 15"))).toBe(false);
+    expect(seenWrites[0]!.some((k) => k === tk("Post 1"))).toBe(true);
   });
 });

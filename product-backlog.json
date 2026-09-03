@@ -1715,7 +1715,7 @@
       "title": "Feed dedup keys on title only",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "feedItemKey = normalized title (no url/id/date), so a recurring \"Daily Discussion\" thread or any repeated-headline post hashes to an already-seen key and is dropped forever; long titles sharing first 120 chars collide.",
       "how": "Include a URL/id/guid in the feed item + key on (title+link). parseFeed/parseXmlTitles must return {title,link}; feedItemKey uses the link when present."
     },
@@ -2411,6 +2411,10 @@
     {
       "item": "digest-all-fail-silent-noshow",
       "note": "runDigest now distinguishes a transient all-fail from a structurally-dead digest. Replaced the boolean `real` per-section flag with a 3-way status: real | gone (deleted/slotted-skip, permanent) | failed (couldn't-fetch/degraded, transient). When no member is real: if any member FAILED -> return a '📋 name: couldn't put your briefing together this time (temporary blip), will try again' note so a relied-upon briefing never silently no-shows; only when ALL members are GONE -> return null (stay silent / 'empty or gone'), preserving empty-digest-fires-noise. 3 new tests (all-fail, all-degraded, mixed gone+failed). Suite 1342 green, tsc clean."
+    },
+    {
+      "item": "feed-dedup-title-only",
+      "note": "Feed items now dedup on a STABLE id (link/guid/objectID) not just the title. parseFeed returns FeedItem[] {title,id?}: RSS/Atom via new parseXmlItems (guid/id element or link href), Reddit .json (name/permalink), HN Algolia (objectID). alert-runner feedSource path keys on id:<id> when present, else t:<normTitle>, so a recurring 'Daily Discussion Thread' or two same-titled posts no longer collapse to one seen key and get dropped forever. parseXmlTitles kept as a titles-only back-compat wrapper. fetchFeed dep + wiring updated to FeedItem[]. 6 new/updated tests (id parsing, same-title-distinct-id fires). Suite 1344 green, tsc clean."
     }
   ],
   "audits": [
@@ -2539,6 +2543,9 @@
     },
     {
       "note": "AUDIT (backlog dry, only owner-gated). A/new-user: onboarding sells a scraper, compose draft-only surprises, no sports scores, no flight status, no transit directions. B/reliability: feed shows-10-but-marks-all-seen (bug in just-shipped feed code), feed dedup title-only drops recurring posts, digest all-transient-fail silent no-show, once-reminder not tz-restamped, once-reminder persist() ignores bool. C/power: shareable recipe codes, usage->automation nudge, accumulating datasets+CSV export, outbound voice-note TTS, deep-research mode. Seeded: feed-seen-swallows-overflow(built), feed-dedup-title-only, digest-all-fail-silent-noshow, once-reminder-tz-restamp, onboarding-copy-life-assistant."
+    },
+    {
+      "note": "No 3-agent audit this run (feed-dedup-title-only was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
     }
   ]
 }

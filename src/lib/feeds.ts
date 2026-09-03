@@ -10,6 +10,12 @@
 export type FeedKind = "rss" | "reddit" | "hn" | "youtube";
 export interface FeedSource { kind: FeedKind; url: string; label: string; }
 
+// A parsed feed entry. `id` is a STABLE per-item identity (link/guid/objectID) used for dedup so a
+// recurring headline ("Daily Discussion Thread") or two posts sharing a title aren't collapsed into one
+// (feed-dedup-title-only). `title` is what we show the user. When a source gives no id, dedup falls back
+// to the normalized title (prior behavior).
+export interface FeedItem { title: string; id?: string; }
+
 /** Resolve a "follow" target (a URL, subreddit, HN topic, or YouTube channel) to a keyless feed source,
  * or null if we can't map it (caller falls back to an agent-driven feed watch). Exported for tests. */
 export function resolveFeedSource(target: string): FeedSource | null {
@@ -56,35 +62,58 @@ function hostLabel(url: string): string {
 
 /** Parse a feed response body into a list of item strings (title, newest-ish first as the source
  * returns them), by kind. Returns [] on any parse failure. Exported for tests. */
-export function parseFeed(kind: FeedKind, body: string): string[] {
+export function parseFeed(kind: FeedKind, body: string): FeedItem[] {
   try {
     if (kind === "reddit") {
-      const obj = JSON.parse(body) as { data?: { children?: Array<{ data?: { title?: string } }> } };
-      return (obj.data?.children ?? []).map((c) => c.data?.title?.trim()).filter((s): s is string => !!s);
+      // (legacy .json path — the resolver now uses .rss, but keep JSON parsing for a direct .json feed)
+      const obj = JSON.parse(body) as { data?: { children?: Array<{ data?: { title?: string; id?: string; permalink?: string; name?: string } }> } };
+      return (obj.data?.children ?? [])
+        .map((c) => c.data)
+        .filter((d): d is NonNullable<typeof d> => !!d?.title?.trim())
+        .map((d) => ({ title: d.title!.trim(), id: d.name || d.permalink || d.id }));
     }
     if (kind === "hn") {
-      const obj = JSON.parse(body) as { hits?: Array<{ title?: string; story_title?: string }> };
-      return (obj.hits ?? []).map((h) => (h.title || h.story_title || "").trim()).filter(Boolean);
+      const obj = JSON.parse(body) as { hits?: Array<{ title?: string; story_title?: string; objectID?: string }> };
+      return (obj.hits ?? [])
+        .map((h) => ({ title: (h.title || h.story_title || "").trim(), id: h.objectID }))
+        .filter((it) => !!it.title);
     }
-    // rss / youtube: XML. Pull <title> out of each <item> (RSS) or <entry> (Atom); drop the channel
-    // title (the first <title> before any item/entry). No XML lib — a tolerant regex is enough for a
-    // title list, and a parse miss just yields [] (caller stays silent, no false "new").
-    return parseXmlTitles(body);
+    // rss / youtube: XML. Pull each <item>/<entry>'s title + a stable link/guid id.
+    return parseXmlItems(body);
   } catch { return []; }
 }
 
-/** Pull item/entry titles out of an RSS or Atom document, skipping the channel/feed-level title. */
-export function parseXmlTitles(xml: string): string[] {
-  const out: string[] = [];
-  // Match each <item>...</item> (RSS) or <entry>...</entry> (Atom) block, then its first <title>.
+/** Pull {title, id} out of each <item> (RSS) or <entry> (Atom) block, skipping the channel/feed title.
+ * id = <guid> / <id> / <link> (Atom link uses the href attribute), so a repeated headline still keys
+ * to a distinct item (feed-dedup-title-only). Exported for tests. */
+export function parseXmlItems(xml: string): FeedItem[] {
+  const out: FeedItem[] = [];
   const blocks = xml.match(/<(item|entry)\b[\s\S]*?<\/\1>/gi) ?? [];
   for (const block of blocks) {
-    const m = block.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
-    if (!m) continue;
-    const title = decodeXml(stripCdata(m[1]!)).trim();
-    if (title) out.push(title);
+    const tm = block.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
+    if (!tm) continue;
+    const title = decodeXml(stripCdata(tm[1]!)).trim();
+    if (!title) continue;
+    // id preference: <guid>/<id> element text, else an Atom <link href="..."> attr, else RSS <link> text.
+    let id: string | undefined;
+    const guid = block.match(/<(?:guid|id)\b[^>]*>([\s\S]*?)<\/(?:guid|id)>/i);
+    if (guid) id = decodeXml(stripCdata(guid[1]!)).trim();
+    if (!id) {
+      const linkHref = block.match(/<link\b[^>]*\bhref=["']([^"']+)["']/i);
+      if (linkHref) id = linkHref[1]!.trim();
+    }
+    if (!id) {
+      const linkText = block.match(/<link\b[^>]*>([\s\S]*?)<\/link>/i);
+      if (linkText) id = decodeXml(stripCdata(linkText[1]!)).trim();
+    }
+    out.push({ title, ...(id ? { id } : {}) });
   }
   return out;
+}
+
+/** Back-compat: titles only (some callers/tests want just the display strings). */
+export function parseXmlTitles(xml: string): string[] {
+  return parseXmlItems(xml).map((i) => i.title);
 }
 
 function stripCdata(s: string): string {
@@ -102,10 +131,16 @@ function decodeXml(s: string): string {
 export async function fetchFeedItems(
   src: FeedSource,
   fetchText: (url: string) => Promise<string>,
-): Promise<string[]> {
+): Promise<FeedItem[]> {
   try {
     return parseFeed(src.kind, await fetchText(src.url));
   } catch { return []; }
+}
+
+/** The dedup key for a feed item: its stable id when present (link/guid), else the normalized title
+ * (feedKey from alerts). Prefixed so an id can never collide with a title-keyed entry. Exported. */
+export function feedItemDedupKey(it: FeedItem, titleKey: (s: string) => string): string {
+  return it.id ? `id:${it.id}` : `t:${titleKey(it.title)}`;
 }
 
 /**

@@ -56,7 +56,7 @@ export interface AlertRunnerDeps {
   // Follow-feed subscriptions (follow-feed-subscriptions): fetch a keyless feed source's item titles
   // DIRECTLY (RSS/Reddit/HN/YouTube) instead of running the agent. Returns [] on any failure (the feed
   // path then stays silent, never a false "new item"). Absent -> a feedSource alert falls back to agent.
-  fetchFeed?: (src: NonNullable<Alert["feedSource"]>) => Promise<string[]>;
+  fetchFeed?: (src: NonNullable<Alert["feedSource"]>) => Promise<Array<{ title: string; id?: string }>>;
 }
 
 /**
@@ -137,21 +137,25 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // (never a false "new" and never wiping the seen-set on a transient outage). Falls back to the agent
   // path if fetchFeed isn't wired.
   if (alert.feedSource && deps.fetchFeed) {
-    let items: string[];
+    let items: Array<{ title: string; id?: string }>;
     try { items = await deps.fetchFeed(alert.feedSource); } catch { items = []; }
     if (!items.length) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
+    // Dedup by a STABLE id (link/guid) when the source gives one, else the normalized title
+    // (feed-dedup-title-only): keying on title alone dropped a recurring headline ("Daily Discussion")
+    // or two same-titled posts forever. Prefix so an id-key can't collide with a title-key.
+    const keyOf = (it: { title: string; id?: string }) => it.id ? `id:${it.id}` : `t:${feedItemKey(it.title)}`;
     const seen = new Set(alert.seen ?? []);
-    const freshByKey = new Map<string, string>();
+    const freshByKey = new Map<string, string>(); // dedupKey -> display title
     for (const it of items) {
-      const k = feedItemKey(it);
-      if (!k || seen.has(k) || freshByKey.has(k)) continue;
-      freshByKey.set(k, it);
+      const k = keyOf(it);
+      if (!it.title || seen.has(k) || freshByKey.has(k)) continue;
+      freshByKey.set(k, it.title);
     }
-    const allKeys = items.map(feedItemKey).filter(Boolean);
+    const allKeys = items.map(keyOf);
     if (alert.seen === undefined) {
       deps.recordSeen?.(alert.chatId, alert.name, allKeys);
-      deps.setLast(alert.chatId, alert.name, items[0] ?? ""); // mark checked (seen !== undefined next time)
-      return { notify: false, message: null, value: items[0] ?? "", commit: noop };
+      deps.setLast(alert.chatId, alert.name, items[0]?.title ?? ""); // mark checked (seen !== undefined next time)
+      return { notify: false, message: null, value: items[0]?.title ?? "", commit: noop };
     }
     if (freshByKey.size === 0) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
     const freshEntries = [...freshByKey.entries()]; // [key, displayText], insertion order
