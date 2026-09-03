@@ -21,7 +21,7 @@ Commands: /help  /start  /reset  /status  /sites  /setlocation  /profile  /sched
 const HELP = `Relay — what I can do:
 • Read a page: send a link, or name a site + what you want. ("top HN story", "weather in Paris")
 • Pull out data: "extract the price and rating from <link>" → clean values, not a wall of text.
-• Compare across pages: "compare the price of X across these links" → a side-by-side.
+• Compare across pages: "compare the price of X across these links" → a side-by-side. Add "as a CSV" and I'll send a spreadsheet file you can keep.
 • Find then fetch: "find newest listings for <thing>" → I open the search page, grab the results, and read them.
 • See a page: "screenshot the top of Hacker News" → I send you an image of it.
 • Save a page: "save this as a PDF: <link>" → I send you a PDF document.

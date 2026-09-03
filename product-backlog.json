@@ -1013,7 +1013,7 @@
       "title": "CSV/table export of compare & extract results",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A multi-item compare returns a JSON array truncated in chat; a keepable CSV is far more useful + reusable.",
       "how": "Format the compare/extract JSON array -> CSV, send via the existing sendDocument path (only pdf uses it today). Pure formatter, offline-testable."
     },
@@ -1363,6 +1363,10 @@
     {
       "id": "once-reminder-cap-starvation",
       "note": "An over-cap \"once\" reminder was deferred with no age limit, so a chat with many recurring watches (always over the hourly proactive cap) could starve an explicit promise (\"meds at 3pm\") past its time forever. Now once it is overdue by more than a grace window (RELAY_ONCE_CAP_GRACE_MS, default 15min) it is delivered ANYWAY — an explicit single promise outweighs anti-spam. Under the window it still defers for a free slot. 947 tests green."
+    },
+    {
+      "id": "csv-export-compare",
+      "note": "A compare with a file cue (\"as a CSV\"/spreadsheet/export/download) now attaches a proper CSV document (via the existing sendDocument path) instead of pasting a truncated JSON blob — keepable, sortable, shareable. New rowsToCsv (RFC-4180 escaping, union header); agent threads doc+docName so a CSV is named comparison.csv not page.pdf; gated on a CSV_REQUEST_RE cue so a plain compare is unchanged. 954 tests green."
     }
   ],
   "audits": [

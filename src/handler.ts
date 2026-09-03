@@ -160,7 +160,7 @@ export interface HandlerDeps {
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (h: unknown) => void;
   // Optional override so tests don't hit the real agent loop.
-  runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; degraded?: boolean }>;
+  runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; docName?: string; degraded?: boolean }>;
   // Background errands (async-background-errands): when true, a large "get back to me" task is ACKed
   // immediately and run DETACHED (off the per-chat chain) with a raised step budget, then delivered
   // unprompted — instead of blocking the reply and truncating at the normal step cap. Absent/false ->
@@ -913,7 +913,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         ? `The user is replying to this message I just sent them: "${cachedPing.full.slice(0, 600)}". Answer their follow-up in that context.`
         : "";
       const context = [profileCtx, pingCtx].filter(Boolean).join(" ") || undefined;
-      const { reply, steps, tools, photo, doc, degraded } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0 }, history);
+      const { reply, steps, tools, photo, doc, docName, degraded } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0 }, history);
       clearProgress();
       // A degraded reply is a soft-failure fallback (agent ran out of steps / produced no answer,
       // DEV-0176), not a real answer. Prepend a one-line hint so a live-bot user knows the result is
@@ -949,7 +949,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         await deps.sendPhoto(msg.chatId, photo, out.slice(0, 1024));
         if (out.length > 1024) await deps.sendMessage(msg.chatId, out);
       } else if (doc && deps.sendDocument) {
-        await deps.sendDocument(msg.chatId, doc, "page.pdf", out.slice(0, 1024));
+        await deps.sendDocument(msg.chatId, doc, docName ?? "page.pdf", out.slice(0, 1024));
         if (out.length > 1024) await deps.sendMessage(msg.chatId, out);
       } else {
         await deps.sendMessage(msg.chatId, out);

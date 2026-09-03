@@ -147,3 +147,35 @@ describe("runAgent multi-step browse", () => {
     expect(after.some((m) => m.role === "tool" && /no page open/i.test(m.content))).toBe(true);
   });
 });
+
+describe("compare CSV export (csv-export-compare)", () => {
+  it("attaches a CSV doc when the user asks for a spreadsheet/csv", async () => {
+    // Script: compare toolCall -> extract reply for url A -> extract reply for url B -> final reply.
+    const llm = new MockLLM([
+      { toolCall: { name: "compare", args: { urls: ["https://a.com", "https://b.com"], fields: ["price"] } } },
+      { text: '{"price": 10}' },
+      { text: '{"price": 20}' },
+      { toolCall: { name: "reply", args: { text: "A is $10, B is $20." } } },
+    ]);
+    const { backend } = mockBackend();
+    const { reply, doc, docName } = await runAgent("compare the price across these and give me a CSV", { llm, backend });
+    expect(reply).toBe("A is $10, B is $20.");
+    expect(docName).toBe("comparison.csv");
+    const csv = new TextDecoder().decode(doc!);
+    expect(csv).toMatch(/^url,price/);            // header
+    expect(csv).toMatch(/https:\/\/a\.com,10/);
+    expect(csv).toMatch(/https:\/\/b\.com,20/);
+  });
+  it("does NOT attach a CSV for a plain compare (no file cue) — pastes JSON as before", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "compare", args: { urls: ["https://a.com"], fields: ["price"] } } },
+      { text: '{"price": 10}' },
+      { toolCall: { name: "reply", args: { text: "A is $10." } } },
+    ]);
+    const { backend } = mockBackend();
+    const { doc } = await runAgent("compare the price across these", { llm, backend });
+    expect(doc).toBeUndefined();
+    // The compare tool result fed back to the model should carry the JSON blob.
+    expect(llm.calls.at(-1)!.some((m) => m.role === "tool" && /COMPARED 1 pages/.test(m.content))).toBe(true);
+  });
+});

@@ -12,6 +12,11 @@ import { isUrlSafe } from "./lib/url-validator.js";
 import { intEnv } from "./lib/env.js";
 import { isDangerousAction } from "./safety.js";
 import { fetchYouTubeTranscript } from "./lib/youtube.js";
+import { rowsToCsv } from "./lib/to-csv.js";
+
+// Does the user's task ask for a keepable file (csv-export-compare)? A compare/extract then attaches
+// a CSV document instead of only pasting a truncated JSON blob in chat.
+const CSV_REQUEST_RE = /\b(csv|spreadsheet|excel|\.xlsx?|export|download(?:able)?|as a (?:file|table|sheet)|to a (?:file|sheet))\b/i;
 import type { LLMClient, LLMMessage, ToolSpec, ToolCall } from "./llm.js";
 
 /** Resolve RELAY_MAX_STEPS to a valid positive integer, else the default 8. An unclamped
@@ -311,7 +316,7 @@ export async function runAgent(
   userText: string,
   deps: AgentDeps,
   history: LLMMessage[] = []
-): Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; degraded?: boolean }> {
+): Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; docName?: string; degraded?: boolean }> {
   const backend: BrowserBackend = deps.backend ?? {
     ...defaultBackend,
     ...(deps.scrapeFn ? { scrape: deps.scrapeFn } : {}),
@@ -319,6 +324,7 @@ export async function runAgent(
   const toolsUsed: string[] = []; // tool names invoked this turn (for observability)
   let photo: Uint8Array | undefined; // last screenshot captured this turn, sent by the handler
   let doc: Uint8Array | undefined; // last PDF rendered this turn, sent by the handler
+  let docName: string | undefined; // filename for the doc (csv-export vs the default page.pdf)
 
   const ctx = deps.context?.trim();
   // Current date/time in the user's zone, so "today"/"now"/"latest"/"days until X" reason from the
@@ -536,6 +542,18 @@ export async function runAgent(
         }));
         const note = skipped.length || rawUrls.length > MAX_COMPARE_URLS
           ? ` (skipped ${skipped.length} unsafe; capped at ${MAX_COMPARE_URLS})` : "";
+        // csv-export-compare: if the user asked for a file/CSV/spreadsheet, attach the rows as a CSV
+        // document (keepable + sortable) — the chat text still summarizes. Only when a doc isn't already
+        // pending (a screenshot/pdf this turn takes precedence).
+        if (!doc && CSV_REQUEST_RE.test(userText)) {
+          const csv = rowsToCsv(rows);
+          if (csv) {
+            doc = new TextEncoder().encode(csv);
+            docName = "comparison.csv";
+            push("compare", `COMPARED ${rows.length} pages${note} and attached a CSV (${rows.length} rows). It will be sent to the user; call reply with a short summary of the comparison.`);
+            continue;
+          }
+        }
         push("compare", `COMPARED ${rows.length} pages${note}:\n${JSON.stringify(rows, null, 2)}`);
         continue;
       }
@@ -584,7 +602,7 @@ export async function runAgent(
       push(call.name, `ERROR: unknown tool "${call.name}".`);
     }
 
-    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed, photo, doc, degraded };
+    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed, photo, doc, docName, degraded };
 
     // Ran out of the step budget without a final answer — a soft failure. Ask for a best-effort reply;
     // whether or not the model produces text, this path is degraded (never a clean value for an alert).
@@ -592,7 +610,7 @@ export async function runAgent(
       [...messages, { role: "user", content: "Step budget reached. Reply now with your best answer using what you have." }],
       []
     );
-    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: stepLimit, tools: toolsUsed, photo, doc, degraded: true };
+    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: stepLimit, tools: toolsUsed, photo, doc, docName, degraded: true };
   } finally {
     if (sessionId) await backend.releaseSession(sessionId).catch(() => {});
   }
