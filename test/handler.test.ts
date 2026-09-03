@@ -1176,3 +1176,32 @@ describe("chained recipe run (recipe-chaining)", () => {
     expect(ran).toBe("price of bitcoin");  // single task via the agent, chain runner untouched
   });
 });
+
+describe("/templates (starter-template-library)", () => {
+  it("lists the catalog with no argument", async () => {
+    const { handle, sent } = harness({ recipeSaveNamed: () => ({ ok: true, name: "x" }) });
+    await handle(msg("/templates", 5));
+    expect(sent[0]!.text).toMatch(/install one with/i);
+    expect(sent[0]!.text).toMatch(/morning —/);
+  });
+  it("installs a template under its recipe name via recipeSaveNamed", async () => {
+    const saved: Array<{ name: string; task: string }> = [];
+    const { handle, sent } = harness({
+      recipeSaveNamed: (_c, name, task) => { saved.push({ name, task }); return { ok: true, name }; },
+    });
+    await handle(msg("/templates morning", 5));
+    expect(saved[0]!.name).toBe("morning");
+    expect(saved[0]!.task).toContain(">>"); // the morning briefing is a chain
+    expect(sent[0]!.text).toMatch(/Installed "morning".*\/run morning/i);
+  });
+  it("a slotted template's confirm hints to pass a value", async () => {
+    const { handle, sent } = harness({ recipeSaveNamed: (_c, name) => ({ ok: true, name }) });
+    await handle(msg("/templates price", 5));
+    expect(sent[0]!.text).toMatch(/\/run price <value>/);
+  });
+  it("unknown template name -> points to the list", async () => {
+    const { handle, sent } = harness({ recipeSaveNamed: () => ({ ok: true, name: "x" }) });
+    await handle(msg("/templates nope", 5));
+    expect(sent[0]!.text).toMatch(/No template "nope"/);
+  });
+});

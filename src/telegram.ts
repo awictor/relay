@@ -43,6 +43,7 @@ export const BOT_COMMANDS: Array<{ command: string; description: string }> = [
   { command: "schedules", description: "List your reminders + scheduled tasks" },
   { command: "cancel", description: "Cancel a schedule: /cancel <id> or /cancel all" },
   { command: "recipes", description: "List saved recipes (/run <name> to use one)" },
+  { command: "templates", description: "Install a ready-made recipe (morning brief, price watch, ...)" },
   { command: "run", description: "Run a saved recipe or digest: /run <name>" },
   { command: "digests", description: "List your briefings (bundled recipes)" },
   { command: "alerts", description: "List your watch-and-notify alerts" },

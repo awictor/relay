@@ -18,6 +18,7 @@ import { needsLocationContext } from "./lib/profile.js";
 import { isBackgroundErrand, stripDispatchPhrasing, BACKGROUND_MAX_STEPS } from "./lib/background.js";
 import { isAnswerRecall, relativeAge } from "./lib/answer-log.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./lib/recipes.js";
+import { getTemplate, templateCatalog } from "./lib/templates.js";
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -387,7 +388,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // silently never schedules. If it's a bare mistyped command (one /token, no args) suggest the
     // nearest real one; otherwise strip the stray slash so the rest routes normally ("/remind me ..."
     // -> "remind me ..." reaches the schedule matcher; "/weather Paris" -> the agent as plain text).
-    const KNOWN_COMMANDS = new Set(["/start", "/help", "/menu", "/commands", "/reset", "/clear", "/status", "/sites", "/profile", "/setlocation", "/schedules", "/cancel", "/recipes", "/run", "/forget", "/forget-recipe", "/forget-alert", "/digests", "/forget-digest", "/alerts"]);
+    const KNOWN_COMMANDS = new Set(["/start", "/help", "/menu", "/commands", "/reset", "/clear", "/status", "/sites", "/profile", "/setlocation", "/schedules", "/cancel", "/recipes", "/templates", "/run", "/forget", "/forget-recipe", "/forget-alert", "/digests", "/forget-digest", "/alerts"]);
     if (first && first.startsWith("/") && !KNOWN_COMMANDS.has(first)) {
       const afterCmd = msg.text.trim().slice(first.length).trim(); // args after the /token
       if (!afterCmd) {
@@ -616,6 +617,21 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         return;
       }
       // otherwise fall through to the agent (it wasn't really a schedule request).
+    }
+
+    // /templates: browse + install a ready-made recipe (starter-template-library). "/templates" lists
+    // the catalog; "/templates <id>" installs it under its recipe name via recipeSaveNamed so a cold
+    // user gets a working automation in one tap without learning the "save X:" syntax. No agent run.
+    if (first === "/templates" && deps.recipeSaveNamed) {
+      const arg = msg.text.trim().split(/\s+/).slice(1).join(" ").trim();
+      if (!arg) { await deps.sendMessage(msg.chatId, templateCatalog()); return; }
+      const tpl = getTemplate(arg);
+      if (!tpl) { await deps.sendMessage(msg.chatId, `No template "${arg}". Send /templates for the list.`); return; }
+      const r = deps.recipeSaveNamed(msg.chatId, tpl.recipeName, tpl.task);
+      if (!r.ok) { await deps.sendMessage(msg.chatId, "You've hit the recipe limit — /forget one first."); return; }
+      const slotHint = /\{[a-z0-9_]+\}/i.test(tpl.task) ? ` (fill the {value} — e.g. /run ${tpl.recipeName} <value>)` : "";
+      await deps.sendMessage(msg.chatId, `Installed "${tpl.recipeName}". Run it with /run ${tpl.recipeName}${slotHint}.`);
+      return;
     }
 
     // /recipes: list saved recipes. No agent run.

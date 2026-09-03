@@ -1193,7 +1193,7 @@
       "title": "starter recipe/template library (/templates)",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The proactive retention flywheel (recipes/digests/alerts) never starts for a cold user — auto-suggest only fires on a REPEAT. A curated one-tap template pack seeds the first saved automation.",
       "how": "Static catalog (morning briefing, price watch, job-feed watch...) installed by name into the existing RecipeStore/DigestStore. Offline-testable."
     }
@@ -1614,6 +1614,10 @@
     {
       "id": "recipe-chaining",
       "note": "Recipes can now be multi-step workflows: a task with >>-separated steps runs each in order, feeding the PRIOR step output into the next as context (\"cheapest flight to {city} >> weather + news there >> summarize\"). An \"if <kw>: <step>\" gate stops the chain when the prior output lacks the keyword; a degraded/empty step also stops it. New parseChainSteps/isChain in recipes.ts + src/chain-runner.ts (runChain, injected agent, read-only — safety intact); handler routes a chained /run through runChainRecipe (rate-limited, cached for drilldown). 1064 tests green."
+    },
+    {
+      "id": "starter-template-library",
+      "note": "Added /templates — a cold user browses a curated catalog (morning briefing chain, price watch, top news, HN, job watch, commute) and installs one in a tap (/templates morning), seeding the first saved recipe so the recipe/digest/schedule retention flywheel actually starts. Static TEMPLATES + getTemplate/templateCatalog in lib/templates.ts; handler /templates branch installs via recipeSaveNamed; added to KNOWN_COMMANDS + the Telegram menu + help. 1071 tests green."
     }
   ],
   "audits": [

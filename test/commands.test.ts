@@ -135,6 +135,8 @@ describe("handleCommand", () => {
         recipeList: () => [],
         recipeForget: () => false,
         recipeResolve: () => null,
+        recipeSaveNamed: (_id, name) => ({ ok: true, name }), // /templates install branch
+
         alertList: () => [],
         alertForget: () => false,
         digestList: () => [],
