@@ -2831,7 +2831,7 @@
       "title": "Plain greeting skips the START menu, burns a cold agent turn",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "START/onboarding buttons only fire on /start; 'hi'/'hello'/'what can you do' route straight to the agent, so most users never see the tap-to-try examples on their real first message.",
       "how": "Detect a bare greeting/help-ask in the handler (before the agent dispatch) and reply with the START menu + try-buttons instead of a cold agent run."
     },
@@ -2840,9 +2840,27 @@
       "title": "Corrupt-store notice consumed even if its send fails",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "handler drains corruptNotice() on read but sends best-effort with .catch(()=>{}); a single failed send permanently loses the only signal that saved reminders/alerts/recipes vanished.",
       "how": "Gate the drain on delivery: only clear the pending corrupt-notice once the send resolves truthy (mirror the send-never-throws-dead-commit-guard pattern), else re-surface next inbound."
+    },
+    {
+      "id": "post-send-timeout-double-ping",
+      "title": "Slow send past the fire timeout double-pings a reminder",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "fireOne guards every side-effect with isCancelled() EXCEPT after await deps.send(...); a send that outlasts the 90s per-fire timeout is delivered once, then the timeout's catch retries the once -> 'take your meds' twice.",
+      "how": "Re-check isCancelled() immediately after the send resolves; if the fire already timed out, skip complete()/recordSend so the late-landing send isn't also retried. Mirror the existing pre-send isCancelled guards."
+    },
+    {
+      "id": "long-page-truncation-answered-as-fact",
+      "title": "6k-char page truncation answered from the top slice as fact",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "truncateForModel caps a fetched page at ~6000 chars + appends a hedge marker, but nothing forces the model to heed it, so a long listing/article yields a confident partial answer with an authoritative 'Source:' line while a price/score lower down is missed.",
+      "how": "Strengthen the truncation marker into an explicit instruction the model must surface ('I only saw the top of this page') OR chunk-and-scan when the answer isn't in the first slice; at minimum tag the reply as partial so it isn't shown as complete."
     }
   ],
   "history": [
@@ -3973,6 +3991,14 @@
     {
       "id": "no-threshold-watch-firehose",
       "note": "changed() no longer fires on any nonzero delta for a no-threshold numeric watch; requires clearing a relative deadband (default 0.5%, env RELAY_ALERT_DEADBAND_PCT). Kills sub-cent price-jitter pings (alerts skip quiet hours + anti-spam cap); small-int counts + moves off zero still fire; explicit threshold + text-diff unchanged. +4 tests, 1901 green. .env.example parity added."
+    },
+    {
+      "id": "bare-greeting-skips-menu",
+      "note": "NO-CHANGE (already shipped): handleCommand (commands.ts:203) already maps a bare greeting/capability question -> START, and the handler (1587-96) already attaches try-buttons on a 👋 reply for a first-contact channel. Audit finding was stale; verified + closed."
+    },
+    {
+      "id": "corrupt-notice-lost-if-send-fails",
+      "note": "Corrupt-store notice no longer lost if its send fails. corruptNotice() now PEEKS (no drain); handler gates a new corruptNoticeAck on delivery (send !== false), so a failed/thrown send re-surfaces the silent-wipe heads-up next inbound instead of swallowing the only signal that saved reminders/alerts/recipes were reset. index drains corruptedStores only in the ack. +1 test (failed-send re-surfaces), 1902 green."
     }
   ],
   "audits": [

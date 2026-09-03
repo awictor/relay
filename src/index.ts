@@ -861,12 +861,15 @@ const handle = createHandler({
   recordTurn,
   recordCommand: (name) => metrics.recordCommand(name),
   // Corrupt-store notice (corrupt-store-silent-wipe): one-time message naming which stores failed to
-  // load, drained on first read so it fires ONCE per startup (not on every message). Null when clean.
+  // load. PEEK-only (does NOT drain) so a failed send doesn't lose it (corrupt-notice-lost-if-send-fails)
+  // — the handler acks it via corruptNoticeAck only after a confirmed delivery. Null when clean.
   corruptNotice: () => {
     if (!corruptedStores.length) return null;
-    const which = corruptedStores.splice(0).join(", ");
+    const which = corruptedStores.join(", ");
     return `⚠️ Heads up — some of my saved data (${which}) couldn't be loaded and may have been reset (I kept a backup of the unreadable file). If something you set up is missing, please set it up again.`;
   },
+  // Drain the corrupt-store list once its notice was actually delivered, so it fires ONCE per startup.
+  corruptNoticeAck: () => { corruptedStores.splice(0); },
   now: () => Date.now(),
   // Interim "still working" ping if an errand outlasts this (product-loop). 0 disables. Default 6s.
   progressDelayMs: Number(process.env.RELAY_PROGRESS_DELAY_MS ?? 6000),

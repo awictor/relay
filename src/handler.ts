@@ -297,10 +297,15 @@ export interface HandlerDeps {
   // Count a slash-command invocation (DEV-0108). Optional so existing callers/tests need not pass it;
   // commands still short-circuit before the agent — this only tallies which are used.
   recordCommand?: (name: string) => void;
-  // Corrupt-store notice (corrupt-store-silent-wipe): a one-time heads-up (drained on read) naming any
-  // stores that failed to load at startup, so a user isn't silently missing reminders/alerts. Null =
-  // nothing corrupted. Sent once before the message is handled. Optional.
+  // Corrupt-store notice (corrupt-store-silent-wipe): a one-time heads-up naming any stores that failed
+  // to load at startup, so a user isn't silently missing reminders/alerts. Null = nothing corrupted.
+  // PEEK-only (does NOT drain): the notice is cleared via corruptNoticeAck AFTER a confirmed send, so a
+  // failed delivery doesn't permanently swallow the only silent-wipe signal (corrupt-notice-lost-if-send-
+  // fails). Sent once before the message is handled. Optional.
   corruptNotice?: () => string | null;
+  // Clear the pending corrupt-store notice once it's actually been delivered. Called only after send
+  // resolves truthy; a false/failed send leaves it pending so the next inbound re-surfaces it.
+  corruptNoticeAck?: () => void;
   now: () => number;
   // Progress ping (product-loop): a multi-step browse can take 30-60s and the bot otherwise goes
   // silent after the one ~5s typing indicator, so a user assumes it hung. If the agent run exceeds
@@ -578,8 +583,15 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // alerts reads as an honest heads-up, not the bot silently forgetting. Fire-and-continue: the notice
     // precedes normal handling of this same message.
     if (deps.corruptNotice) {
-      const notice = deps.corruptNotice();
-      if (notice) await deps.sendMessage(msg.chatId, notice).catch(() => {});
+      const notice = deps.corruptNotice(); // peek — does NOT drain
+      if (notice) {
+        // Gate the one-shot clear on ACTUAL delivery (corrupt-notice-lost-if-send-fails): only ack the
+        // notice once the send resolves truthy, so a failed send re-surfaces it on the next inbound
+        // instead of permanently losing the only signal that saved data was wiped. sendMessage returns
+        // false on a failed chunk (it doesn't throw); a thrown/rejected send also leaves it pending.
+        const delivered = await deps.sendMessage(msg.chatId, notice).catch(() => false);
+        if (delivered !== false) deps.corruptNoticeAck?.();
+      }
     }
 
     // Shared location pin (telegram-location-pin): a text-less pin used to be dropped silently. Save the

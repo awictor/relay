@@ -1146,17 +1146,36 @@ describe("long-term memory (remember-facts-store)", () => {
 });
 
 describe("corrupt-store notice (corrupt-store-silent-wipe)", () => {
-  it("sends a one-time heads-up before handling the message, then never again", async () => {
-    let drained = false;
+  it("sends a one-time heads-up before handling the message, then never again (acked after delivery)", async () => {
+    let pending = true; // the store-side "is a notice pending" flag; peek reads it, ack clears it
     const { handle, sent } = harness({
-      corruptNotice: () => { if (drained) return null; drained = true; return "⚠️ Heads up — some of my saved data (reminders) couldn't be loaded and may have been reset."; },
+      corruptNotice: () => pending ? "⚠️ Heads up — some of my saved data (reminders) couldn't be loaded and may have been reset." : null,
+      corruptNoticeAck: () => { pending = false; },
       handleCommand: () => "help text", // short-circuit so the message itself is trivial
     });
     await handle(msg("hi", 3));
     expect(sent[0]!.text).toMatch(/couldn't be loaded/);
-    // Next message: notice already drained -> no repeat.
+    // Next message: notice acked after the delivered send -> no repeat.
     await handle(msg("hi again", 3));
     expect(sent.filter((m) => /couldn't be loaded/.test(m.text))).toHaveLength(1);
+  });
+  it("a FAILED send does NOT ack the notice — it re-surfaces next inbound (corrupt-notice-lost-if-send-fails)", async () => {
+    let pending = true;
+    let sendOk = false; // first send fails, then recovers
+    const seen: string[] = [];
+    const { handle } = harness({
+      corruptNotice: () => pending ? "⚠️ couldn't be loaded — saved data reset" : null,
+      corruptNoticeAck: () => { pending = false; },
+      sendMessage: async (_c, text) => { if (/couldn't be loaded/.test(text)) { seen.push(text); return sendOk; } return undefined; },
+      handleCommand: () => "help text",
+    });
+    await handle(msg("hi", 5));            // send fails -> not acked, still pending
+    expect(seen).toHaveLength(1);
+    sendOk = true;
+    await handle(msg("hi again", 5));      // re-surfaces + now delivers -> acked
+    expect(seen).toHaveLength(2);
+    await handle(msg("third", 5));         // acked last time -> silent
+    expect(seen).toHaveLength(2);
   });
   it("says nothing when no store was corrupted", async () => {
     const { handle, sent } = harness({ corruptNotice: () => null, handleCommand: () => "help" });
