@@ -2354,7 +2354,7 @@
       "title": "re-defining a watch by name leaves stale pageUrl/series/flapCount -> wrong type + blended history",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "AlertStore.add's overwrite branch mutates a hand-picked subset (task/threshold/condition/then/feed/feedSource/members) and NEVER touches pageUrl, series, or flapCount. So: (a) re-defining an existing name AS a page-watch stores task=URL but pageUrl=undefined -> runner runs the LLM on a bare URL instead of page-diffing (confirmation says 'watching that page', does something else); (b) re-pointing a former page-watch to a value task leaves the stale pageUrl -> keeps diffing the OLD page forever; (c) 'watch price: bitcoin' redefined to 'silver' keeps the old BTC series so the chart/trend shows a phantom crash (60000->30). Confirmation contradicts behavior — the exact saved-but-broken trust failure guarded elsewhere.",
       "how": "In the overwrite branch set existing.pageUrl = a.pageUrl (undefined clears it), and when the task/trigger/pageUrl changes, reset lastValue + series + flapCount + seen so a redefine starts fresh (matches the feed/feedSource reset already there). Offline test: redefine name as page-watch -> pageUrl set + series cleared; redefine off page-watch -> pageUrl cleared."
     },
@@ -3306,6 +3306,10 @@
     {
       "item": "pollen-matched-not-fetched",
       "note": "'pollen today' / 'allergies' matched the air-quality intent but pollen was never fetched — the Open-Meteo query only requested AQI/PM/UV, so an allergy sufferer got AQI+UV + zero pollen. Now airQualityUrl requests grass/birch/alder/ragweed_pollen; parseAirQuality collects the numeric ones (Europe-only — null elsewhere -> pollenCovered stays false); formatAirQuality gained a lead mode ('pollen'|'uv'|'aqi') + a pollen line (peak level via new pollenRisk bands + which allergen is highest), and OUTSIDE Europe says 'I don't have pollen data for X (Europe only)' instead of implying none. Dispatch: a pollen/allergy ask leads with pollen, a sunscreen ask with UV, else AQI. isAirRequest also matches allergy/hayfever. Tool desc + prompt note pollen (Europe only). 7 new tests; live-probed Open-Meteo (Berlin returns pollen numbers, Austin null) so call-tested:true for the source, agent wiring offline-tested. suite 1645 green, tsc clean."
+    },
+    {
+      "item": "alert-redefine-stale-fields",
+      "note": "Fixed AlertStore.add overwrite branch leaving stale pageUrl/series/flapCount on a re-define. Root cause: it mutated a hand-picked field subset and never touched pageUrl/series/flapCount. So (a) re-defining a name AS a page-watch stored task=URL but pageUrl=undefined -> ran the LLM on a bare URL instead of page-diffing (confirmation said 'watching that page', did otherwise); (b) re-pointing a former page-watch to a value task kept the stale pageUrl -> diffed the OLD page forever; (c) 'watch price: bitcoin'->'silver' kept the old BTC series -> chart/trend showed a phantom crash. Now existing.pageUrl is synced from the command (undefined clears it), a pageUrl change counts as a trigger change, and a trigger change resets lastValue + series + flapCount so a re-pointed watch starts fresh. 2 new tests (page-watch set/clear round-trip; series dropped on re-point), suite 1647 green, tsc clean. call-tested:false (offline store)."
     }
   ],
   "audits": [

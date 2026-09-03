@@ -536,9 +536,21 @@ export class AlertStore {
       // is suppressed forever: the just-set alert is silently dead. The conversational-edit path
       // (updateTrigger) already clears it; this is the define-overwrite path doing the same.
       const condChanged = JSON.stringify(existing.condition) !== JSON.stringify(a.condition);
-      const triggerChanged = existing.task !== a.task || existing.threshold !== a.threshold || condChanged;
-      existing.task = a.task; existing.threshold = a.threshold; existing.condition = a.condition; existing.then = a.then;
-      if (triggerChanged) existing.lastValue = undefined; // re-evaluate the new trigger from scratch
+      // pageUrl must be re-synced from the new command (alert-redefine-stale-fields): the old overwrite
+      // branch never touched it, so re-defining a name AS a page-watch left pageUrl=undefined (ran the LLM
+      // on a bare URL instead of page-diffing), and re-pointing a former page-watch to a value task left a
+      // stale pageUrl (kept diffing the OLD page forever). The confirmation said one thing, the watch did
+      // another. Set it (undefined clears it) + treat a change as a trigger change so state resets.
+      const pageChanged = existing.pageUrl !== a.pageUrl;
+      const triggerChanged = existing.task !== a.task || existing.threshold !== a.threshold || condChanged || pageChanged;
+      existing.task = a.task; existing.threshold = a.threshold; existing.condition = a.condition; existing.then = a.then; existing.pageUrl = a.pageUrl;
+      if (triggerChanged) {
+        // Re-evaluate the new trigger from scratch AND drop the old series/flap so a re-pointed watch (e.g.
+        // 'watch price: bitcoin' -> '...silver') doesn't stitch two entities' history into one phantom trend.
+        existing.lastValue = undefined;
+        existing.series = undefined;
+        existing.flapCount = undefined;
+      }
       // Switching an existing alert to/from a feed watch resets its baseline so the new mode seeds fresh.
       if (!!existing.feed !== !!a.feed) { existing.feed = a.feed; existing.seen = undefined; existing.lastValue = undefined; }
       // Re-following the same name can change the source (e.g. r/x -> a blog); reset seen so it reseeds.

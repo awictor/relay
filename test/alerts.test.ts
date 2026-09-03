@@ -223,6 +223,25 @@ describe("AlertStore", () => {
     const r = s.add(1, { name: "btc", task: "price of bitcoin", threshold: 1000 }, NOW)!; // identical
     expect(r.lastValue).toBe("$65,000"); // unchanged trigger -> baseline kept, cumulative drift intact
   });
+
+  it("re-defining a name AS a page-watch sets pageUrl; re-pointing off it clears pageUrl (alert-redefine-stale-fields)", () => {
+    const s = new AlertStore({ file: tmpFile() });
+    s.add(1, { name: "w", task: "price of bitcoin", threshold: 1000 }, NOW); // starts a value watch
+    const asPage = s.add(1, { name: "w", task: "https://site/terms", pageUrl: "https://site/terms" }, NOW)!;
+    expect(asPage.pageUrl).toBe("https://site/terms"); // now a page-watch (was undefined before the fix)
+    const backToValue = s.add(1, { name: "w", task: "price of gold", threshold: 500 }, NOW)!;
+    expect(backToValue.pageUrl).toBeUndefined(); // stale pageUrl cleared, not diffing the old page forever
+  });
+
+  it("re-pointing a watch to a different entity drops the old series (no phantom cross-entity trend)", () => {
+    const s = new AlertStore({ file: tmpFile() });
+    s.add(1, { name: "price", task: "price of bitcoin" }, NOW);
+    s.recordPoint(1, "price", 60000, NOW);
+    s.recordPoint(1, "price", 61000, NOW + 1000);
+    expect(s.get(1, "price")!.series).toHaveLength(2);
+    const re = s.add(1, { name: "price", task: "price of silver" }, NOW)!; // different entity, same name
+    expect(re.series).toBeUndefined(); // old BTC points dropped -> chart/trend won't stitch a phantom crash
+  });
 });
 
 describe("parseAlertEdit (conversational retune, product-loop)", () => {
