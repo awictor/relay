@@ -1,6 +1,15 @@
 {
   "items": [
     {
+      "id": "schedule-date-parse-regressions",
+      "title": "date/alarm parser hijacks 'separate 3'/'next month'/'alarm for 20 min' + drops the alarm task",
+      "impact": "high",
+      "effort": "M",
+      "status": "done",
+      "why": "4 regressions in the just-shipped absolute-date + alarm branches (audit 29 B#1-4): (1) the month regex '(mar|sep|jun...)[a-z]*' had no word boundary so 'mark 5'/'separate 3'/'junk 4'/'may 6 people' became date reminders; (2) 'next month' matched 'next mon'+th -> next Monday (fired ~3 weeks early); (3) 'set an alarm for 20 minutes' read the bare number as an 8pm clock hour; (4) an alarm returned task 'wake up' unconditionally, dropping the user's purpose ('...to leave for the airport'). All silent-wrong on the flagship reminder path.",
+      "how": "Month regex -> full-name-or-bounded-3-letter-abbrev, bare 'may N' only after 'on'. next-weekday -> full weekday words (no 'month'). Alarm -> negative-lookahead on a following duration unit (timer, not clock) + cleanTask to keep the purpose. Mirror the tightened patterns in the handler scheduleCue."
+    },
+    {
       "id": "crypto-quote-tool",
       "title": "'price of bitcoin' (the flagship demo) has no tool — falls to slow flaky web_search",
       "impact": "high",
@@ -2156,9 +2165,16 @@
     {
       "id": "watchlist-then-dropped",
       "note": "A watchlist alert's 'then run <recipe>' was accepted by the parser but silently never ran — parseAlertCommand's semicolon/watchlist branch returned {name,task,members} without carrying `then`, and checkAlert's watchlist notify built its message without withThen. Fixed both: the watchlist branch now returns `then` (the then-clause was already stripped before the semicolon split, so members stay clean), and withThen was hoisted above the watchlist branch so a member-change ping runs the recipe + appends '▶ <recipe>: <output>' like the single-alert path. 2 tests (parse carries then through watchlist / checkAlert runs the then-recipe on a member change + appends output). call-tested: false (pure parse + alert logic). 1223 tests green."
+    },
+    {
+      "id": "schedule-date-parse-regressions",
+      "note": "Bundle-fixed 4 regressions the audit found in the just-shipped absolute-date + alarm branches: (1) the month regex had no word boundary after the 3-letter stem, so 'mark 5 emails'/'separate 3 files'/'junk 4 tabs'/'may 6 people' were hijacked into date reminders -> now a full month name OR a bounded 3-letter abbrev, and bare 'may N' only after 'on'; (2) 'next month' matched 'next mon'+th -> next Monday (~3 weeks early) -> next-weekday now matches full weekday words only; (3) 'set an alarm for 20 minutes' read 20 as an 8pm clock hour -> negative-lookahead skips a following min/hour/sec unit (it's a timer, falls through); (4) an alarm returned 'wake up' unconditionally, dropping the purpose -> cleanTask keeps 'to leave for the airport', bare alarm still 'wake up'. Mirrored the tightened patterns in the handler scheduleCue. 4 tests (prefix-collision / next-month / alarm-for-N-min / alarm-keeps-task). call-tested: false (pure parse). 1227 tests green."
     }
   ],
   "audits": [
+    {
+      "note": "Audit 29 (backlog dry except owner-gated confirm-to-act). A/new-user: no random/decision helper (coin flip/dice/pick — classic 'does it work' opener, slow or hallucinated), first-timed-reminder fires at UTC when no tz set (confirmation should state the assumed tz), no personal notes/lists/contacts store ('remember I parked in C', 'add eggs to my list', 'text mom'), pasted-text tasks (summarize/proofread this) nudged toward web_search. B/reliability: 4 REGRESSIONS in the new date/alarm code — month-prefix collision (mark/separate/junk/may), 'next month'->'next Monday', 'alarm for N min'->clock-hour, alarm-drops-task (ALL built this run); crypto full-name coin renders as UPPERCASED id (cosmetic). C/power: inline-keyboard callback route (STILL #1, unbuilt end-to-end), watch-a-tracking-number recurring, generic page-change monitor. Built schedule-date-parse-regressions (B#1-4); seeded random-decision-helper(S), personal-notes-lists-store(M), pasted-text-process(S). Deferred: inline-keyboard-callbacks(M, top power), watch-tracking-number(S/M), page-change-monitor(M), first-reminder-utc-confirm(S), crypto-fullname-symbol(S, cosmetic), automation-coach(M), form-autofill(M), + prior deferred set."
+    },
     {
       "note": "Audit 28 (backlog dry except owner-gated confirm-to-act). A/new-user: crypto price (the flagship 'price of bitcoin' demo) has NO tool -> slow flaky web_search (TOP — built), no absolute-date/'next Monday' reminders, worded-duration ('in an hour') + alarm ('set an alarm for 7am') phrasings bounce, English-only onboarding (no reply-language mirror), trimmed answers give no 'reply more' cue, no yearly/monthly recurrence. B/reliability: watchlist alert drops its 'then' action, feed-redefine keeps stale seen-set, numeric-redefine keeps old time-series (blended trend), 'then <word>' in ordinary prose misparsed as trigger-to-action. C/power: inline-keyboard callback route (confirmed UNBUILT end-to-end — sendMessage has no reply_markup arg, parseUpdates drops callback_query; still #1 unlock), automation-coach over answer-log, profile-driven form autofill (NET-NEW 'do it for me'). Built crypto-quote-tool (A#1, live-verified); seeded worded-duration-reminders(S), absolute-date-reminders(M), watchlist-then-dropped(M). Deferred: inline-keyboard-callbacks(M, top power), automation-coach(M), form-autofill(M), reply-language-mirror(M), trimmed-answer-more-cue(S), yearly/monthly-recurrence(M), feed-redefine-seen-reset(S), numeric-redefine-series-reset(S), then-word-misparse(S), + prior deferred set."
     },

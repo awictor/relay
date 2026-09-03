@@ -161,14 +161,20 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
   // "wake me": a bare 6 means 6am, a bare 9pm-ish stays as given) into a once at the next occurrence, with
   // a "wake up" reminder-only note. Handled here so a bare-hour alarm ("wake me at 6") that the generic
   // 'at' branch rejects (no am/pm) still works. ---
-  const alarm = lower.match(/\b(?:set\s+(?:an?\s+)?alarm(?:\s+for)?|wake\s+me(?:\s+up)?(?:\s+at)?)\s+([0-9]{1,2})(?::([0-9]{2}))?\s*(am|pm)?\b/);
+  // NOT when a duration unit follows ("alarm for 20 minutes" is a TIMER, handled by the relative branch
+  // below — the negative lookahead stops the bare number being read as an 8pm clock hour).
+  const alarm = lower.match(/\b(?:set\s+(?:an?\s+)?alarm(?:\s+for)?|wake\s+me(?:\s+up)?(?:\s+at)?)\s+([0-9]{1,2})(?::([0-9]{2}))?\s*(am|pm)?\b(?!\s*(?:min|hour|hr|sec))/);
   if (alarm) {
     let hh = parseInt(alarm[1]!, 10);
     const mm = alarm[2] ? parseInt(alarm[2], 10) : 0;
     if (alarm[3]) hh = to24h(hh, alarm[3]);            // explicit am/pm
     else if (hh >= 1 && hh <= 11) { /* bare morning hour: 6 -> 6am, keep as-is */ }
     if (hh <= 23 && mm <= 59) {
-      return { kind: "once", task: "wake up", dueMs: nextDailyMs(now, hh, mm, offsetMin), reminderOnly: true };
+      // Keep any purpose the user attached ("alarm for 6am to leave for the airport" -> task "leave for
+      // the airport"), else a plain "wake up" (alarm-drops-task).
+      const t = cleanTask(raw, alarm[0]!);
+      const task = t || "wake up";
+      return { kind: "once", task, dueMs: nextDailyMs(now, hh, mm, offsetMin), reminderOnly: true };
     }
   }
 
@@ -223,7 +229,8 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     const hh = loose ? loose.hh : 9, mm = loose ? loose.mm : 0;
     const stripTime = (s: string) => (loose ? cleanTask(s, loose.clause) : s);
     // "next <weekday>" -> that weekday's next occurrence (strip the "next" so it doesn't linger in task).
-    const nextDow = lower.match(/\bnext\s+(sun|mon|tue|tues|wed|weds|thu|thur|thurs|fri|sat)[a-z]*\b/);
+    // Match the FULL weekday word (bounded) so "next month" isn't read as "next mon" (next-month-not-monday).
+    const nextDow = lower.match(/\bnext\s+(sunday|sun|monday|mon|tuesday|tues|tue|wednesday|weds|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat)\b/);
     if (nextDow) {
       const dow = WEEKDAY[nextDow[1]!] ?? WEEKDAY[nextDow[1]!.slice(0, 3)];
       if (dow !== undefined) {
@@ -234,7 +241,12 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     }
     // "on <Month> <day>" / "<Month> <day>" (day 1-31, optional ordinal/comma-year).
     const MONTHS: Record<string, number> = { jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7, sep: 8, sept: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11 };
-    const md = lower.match(/\b(?:on\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+([0-9]{1,2})(?:st|nd|rd|th)?\b/);
+    // Match a FULL month name, OR a 3-letter abbrev that is NOT the prefix of a longer word (word-
+    // boundary or a trailing period) — so 'mark 5' / 'separate 3' / 'junk 4' / 'may 6 people' don't get
+    // hijacked into a date reminder (month-word-prefix-collision). 'may' the month still works after 'on'
+    // or with an ordinal; a bare 'may N' is too ambiguous (modal verb) so it's only accepted with 'on'.
+    const md = lower.match(/\b(?:on\s+)?(january|february|march|april|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\.|\b)\s+([0-9]{1,2})(?:st|nd|rd|th)?\b/)
+      ?? lower.match(/\bon\s+(may)\s+([0-9]{1,2})(?:st|nd|rd|th)?\b/); // bare "may N" only after "on"
     if (md) {
       const mon = MONTHS[md[1]!]; const day = parseInt(md[2]!, 10);
       if (mon !== undefined && day >= 1 && day <= 31) {

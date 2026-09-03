@@ -325,6 +325,29 @@ describe("parseSchedule — absolute calendar date (absolute-date-reminders)", (
   it("a month name with no day is NOT a date reminder (no hijack)", () => {
     expect(parseSchedule("email bob the march report", JUN1, 0)).toBeNull();
   });
+  it("a month-PREFIX word ('mark 5', 'separate 3', 'junk 4', 'may 6 people') is NOT hijacked into a date (month-word-prefix-collision)", () => {
+    expect(parseSchedule("separate 3 files", JUN1, 0)).toBeNull();
+    expect(parseSchedule("mark 5 emails as read", JUN1, 0)).toBeNull();
+    expect(parseSchedule("junk 4 tabs", JUN1, 0)).toBeNull();
+    expect(parseSchedule("may 6 people are coming", JUN1, 0)).toBeNull(); // bare 'may N' isn't a date
+    expect(parseSchedule("remind me on may 6 to call", JUN1, 0)!.kind).toBe("once"); // but 'on may 6' is
+  });
+  it("'next month' is NOT parsed as 'next Monday' (next-month-not-monday)", () => {
+    // 'next month' should fall through (no monthly recurrence yet), NOT fire ~3 weeks early on a Monday.
+    const p = parseSchedule("remind me next month to pay rent", JUN1, 0);
+    expect(p === null || p.kind !== "once" || new Date(p.dueMs).getUTCDay() !== 1).toBe(true);
+  });
+  it("'set an alarm for N minutes' is NOT a clock-hour alarm (alarm-duration-not-hour)", () => {
+    // 'alarm for 20 minutes' must NOT become an 8pm alarm; it falls through (a timer, no 'in') -> not 20:00.
+    const p = parseSchedule("set an alarm for 20 minutes", JUN1, 0);
+    expect(p === null || new Date(p.dueMs).getUTCHours() !== 20).toBe(true);
+  });
+  it("an alarm keeps the user's purpose as the task (alarm-drops-task)", () => {
+    const s = parseSchedule("set an alarm for 6am to leave for the airport", JUN1, 0)!;
+    expect(new Date(s.dueMs).getUTCHours()).toBe(6);
+    expect(s.task).toMatch(/leave for the airport/);
+    expect(parseSchedule("wake me at 7", JUN1, 0)!.task).toBe("wake up"); // bare alarm still 'wake up'
+  });
 });
 
 describe("parseSchedule — absolute", () => {
