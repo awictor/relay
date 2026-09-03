@@ -500,7 +500,13 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
             // fall through to fire it despite the cap
           } else {
             log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, skipped: "rate_cap" })}`);
-            safeComplete(s); // plain daily: drop this occurrence, it advances to the next
+            // Drop this occurrence (advance to the next), but with fired:false so a STICKY interval's
+            // anti-nag budget isn't burned by a ping that never sent (sticky-cap-drop-burns-budget): a
+            // sticky is kind:"interval" (not graceEligible), so a busy/capped hour hit this branch and
+            // complete()'s default fired:true incremented stickyFired toward stickyMax for an unsent
+            // ping — silently retiring a "nag me to take my meds" safety-net early. Mirrors the
+            // sticky-send-fail-burns-budget guard on the thrown-failure path.
+            safeComplete(s, false);
             continue;
           }
         }

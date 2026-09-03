@@ -974,6 +974,24 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
     expect(iv.dueMs).toBeGreaterThan(NOW);          // advanced to its next occurrence, not fired now
   });
 
+  it("an over-cap STICKY drop does NOT burn its anti-nag budget (sticky-cap-drop-burns-budget)", async () => {
+    const clock = { t: NOW };
+    const sent: unknown[] = [];
+    const { store, runner } = harness(clock, {
+      maxPerChatPerHour: 1,
+      runAgent: async () => ({ reply: "x" }),
+      send: async () => { sent.push(1); },
+    });
+    store.add(1, { kind: "once", task: "filler", dueMs: NOW - 1 }, NOW); // consumes the 1 slot
+    // A sticky "nag me to take my meds" with stickyMax 2. Over cap this tick -> dropped (not sent).
+    store.add(1, { kind: "interval", task: "meds", dueMs: NOW - 1, intervalMs: 15 * 60_000, reminderOnly: true, sticky: true, stickyMax: 2 }, NOW);
+    await runner.tick();
+    expect(sent).toHaveLength(1);                                   // only the filler; the sticky was cap-dropped
+    const sticky = store.list(1).find((s) => s.task === "meds")!;
+    expect(sticky).toBeTruthy();                                    // still alive
+    expect(sticky.stickyFired ?? 0).toBe(0);                        // budget NOT burned by the unsent ping
+  });
+
   it("a watch that keeps SOFT-failing (can't read its source) earns a failed-watch receipt, not silent death (silent-watch-death)", async () => {
     const clock = { t: NOW };
     const sent: string[] = [];

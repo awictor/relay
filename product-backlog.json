@@ -2654,6 +2654,51 @@
       "status": "done",
       "why": "to-csv.ts (rowsToCsv) is already built but wired to NO tool; a compare/extract/watchlist/list result is lost the moment the chat scrolls.",
       "how": "Wire a to_csv tool (or an 'as a CSV' modifier on compare/extract) that turns rows into a .csv sent via the existing sendDocument path. Reuse rowsToCsv."
+    },
+    {
+      "id": "sticky-cap-drop-burns-budget",
+      "title": "an over-cap sticky nag silently retires early (budget burned by an unsent ping)",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "A 'nag me to take my meds every 15 min until done' sticky is kind:interval (not graceEligible), so a busy/capped hour dropped it via safeComplete(s) with the default fired:true — incrementing stickyFired toward stickyMax for a ping that never sent, silently retiring the safety-net.",
+      "how": "Drop the over-cap occurrence with fired:false so the anti-nag budget isn't burned by an unsent ping (mirror the send-fail-burns-budget guard)."
+    },
+    {
+      "id": "dangerous-action-false-refuse",
+      "title": "benign browse clicks refused by the destructive-action guard",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "DANGEROUS_ACTION_RE matches bare nouns order|book|send|reset|remove|close|confirm against label+selector, so legit navigation ('Order status', 'Bookings', a .remove-filter selector) dead-ends a multi-step browse with 'that looks destructive' — the core browse differentiator silently stalls.",
+      "how": "Require committing-verb CONTEXT ('place order', 'confirm booking', 'delete account') rather than the bare noun; keep the guard strict on genuine commit phrasing."
+    },
+    {
+      "id": "unthrottled-change-watch",
+      "title": "a plain 'watch X: price of Y' fires on every check, all hours",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "A no-threshold change-watch on a volatile value (BTC/stock/temp) is level-triggered (changed() true on any delta>0), and value alerts skip BOTH the anti-spam cap AND quiet hours — so the headline watch feature can spam the user overnight with no way to know they needed a threshold.",
+      "how": "Give a no-threshold change alert a minimum re-notify interval (e.g. once/6h unless it crosses a magnitude), OR treat a plain change-watch as quiet-deferrable so it batches to morning."
+    },
+    {
+      "id": "watchlist-member-dead-no-receipt",
+      "title": "a permanently-erroring watchlist member never alerts + never warns",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "A watchlist member whose source errors EVERY tick (bad ticker, login wall) is dropped via looksLikeErrorReply->continue before it's seeded, so its last stays undefined + it's excluded from changedLines forever; other readable members keep anyReadable true, so no per-member failed-watch receipt ever fires — the user believes all N items are tracked.",
+      "how": "Track per-member consecutive-fail streaks in the watchlist branch + surface a receipt naming the persistently-dead member (the soft-fail streak currently only covers an ALL-dead basket)."
+    },
+    {
+      "id": "good-deal-price-verdict",
+      "title": "price checks give a bare number, not a 'good deal?' verdict from history",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "chart.ts already draws a series + alerts store lastValue, but a price check/watch answers with just the number — no 'lowest in 60 days, buy' verdict, the stickiest recurring reason to re-check.",
+      "how": "Persist a per-item price history + compute a verdict string (lowest/highest/median over N days) appended to a price answer + watch ping. Reuse the alert series machinery."
     }
   ],
   "history": [
@@ -3708,6 +3753,10 @@
     {
       "item": "csv-export-tabular",
       "note": "Named-list CSV export (csv-export-tabular). Audit finding was partly stale — rowsToCsv was ALREADY wired to the compare tool (CSV_REQUEST_RE -> comparison.csv), and extract is inherently single-record-per-URL (extractFieldsResult coerces to one object) so an extract-CSV branch was dead code (built + reverted). The real remaining keepable-tabular gap was NAMED LISTS, read back only as bullets + lost on scroll. Added parseListExport ('export/download/send/save my <name> list [as csv/spreadsheet/file]', requires an export verb + a 'list' target so 'download my invoice'/'my grocery list' show don't hijack) + a listExport handler dep (returns the list's items) + handler routing BEFORE listCommand that builds a CSV via the existing rowsToCsv + sends it through sendDocument (falls back to bullet text on a channel w/o documents; empty/unknown list -> honest note). index wires listExport via lists.show. HELP line. 4 new tests (parseListExport parse/reject; handler sends grocery.csv; empty-list note no-doc). suite 1798 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "sticky-cap-drop-burns-budget",
+      "note": "Fixed a sticky nag silently retiring early when the hourly cap drops it (sticky-cap-drop-burns-budget). A sticky 'nag me every 15 min until done' is kind:interval (not graceEligible), so a busy/over-cap hour hit the drop branch which called safeComplete(s) with complete()'s default fired:true — incrementing stickyFired toward stickyMax for a ping that was NEVER sent, so a few capped hours silently exhausted the budget + dropped the meds/water safety-net with no message. Changed the over-cap drop to safeComplete(s,false) so only a CONFIRMED ping counts toward the anti-nag cap (mirrors the sticky-send-fail-burns-budget guard on the thrown-failure path). fired only gates the sticky increment; plain daily/weekly/interval still advance normally. 1 new test (over-cap sticky drop keeps stickyFired at 0, stays alive). suite 1799 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
@@ -3926,6 +3975,9 @@
     },
     {
       "note": "Backlog dry (low/M+owner-gated) -> 3-agent audit. A(new-user): wikipedia fast-fact [SEEDED], nutrition/calorie lookup, movie/streaming where-to-watch, non-US holidays. B(reliability): send-never-throws dead commit-guard [SEEDED+BUILT], softFail-missing-on-feed/watchlist [SEEDED], partial-multichunk-send hole, per-chat map leak(infra). C(power): csv-export unused rowsToCsv [SEEDED], deliver-anywhere webhooks, event-triggered actions (alert->recipe, partly exists), deep-research brief. Seeded: send-never-throws(built), softfail-missing-feed-watchlist, wikipedia-fast-fact, csv-export-tabular."
+    },
+    {
+      "note": "Backlog dry (low/M+owner-gated) -> 3-agent audit. A(new-user): nutrition/calorie lookup, reservation deep-link bridge, movie rating+where-to-stream, local events, gas prices. B(reliability): sticky-cap-drop-burns-budget [SEEDED+BUILT], unthrottled plain change-watch [SEEDED], dangerous-action false-refuse [SEEDED], watchlist-member-dead-no-receipt [SEEDED]. C(power): good-deal price-history verdict [SEEDED], multi-source cheapest-price watch, availability/slot-open watcher, proactive look-ahead, per-alert cadence/snooze. Seeded: sticky-cap-drop(built), dangerous-action-false-refuse, unthrottled-change-watch, watchlist-member-dead-no-receipt, good-deal-price-verdict."
     }
   ]
 }
