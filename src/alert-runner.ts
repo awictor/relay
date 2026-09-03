@@ -101,6 +101,10 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     const changedLines: string[] = [];
     for (const { mem, value } of results) {
       if (value === null) continue; // couldn't read this member this tick — leave its baseline
+      // An error-shaped member reply ("404", "couldn't load") is a soft failure — hold its baseline +
+      // stay silent for it, mirroring the single-value guard (error-reply-false-fires-alerts). Otherwise a
+      // stray number in the error text could flag it changed + overwrite the last good value.
+      if (looksLikeErrorReply(value)) continue;
       // Numberless-reply guard (alert-numberless-flap): if this member's prior value tracked a NUMBER but
       // the new reply has none ("N/A", "price unavailable" — real, not degraded), don't flag it changed
       // and DON'T overwrite its baseline. Otherwise changed() falls back to text-diff, false-pings, and
@@ -181,6 +185,14 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   } catch {
     return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
   }
+
+  // An error-SHAPED reply ("the page returned a 404", "couldn't load the price right now") is a soft
+  // failure the model didn't flag as degraded (error-reply-false-fires-alerts). Treated as a real value it
+  // would: (a) extract a stray number (404) that satisfies a "below 50000" predicate/threshold and pings a
+  // FALSE alarm showing an error string, and (b) poison the baseline so the next real check re-fires. Guard
+  // it exactly like `degraded` — hold, keep the last GOOD baseline, stay silent — across every value path
+  // (condition / threshold / change / feed / series). The series already skips it separately (line below).
+  if (looksLikeErrorReply(value)) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
 
   const firstRun = alert.lastValue === undefined;
 

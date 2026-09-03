@@ -2174,7 +2174,7 @@
       "title": "error-shaped agent replies false-fire alert triggers + poison the baseline",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "alert-runner imports looksLikeErrorReply but only uses it to skip recording a time-series point — NOT in the trigger decision. A soft-failure reply like 'the page returned a 404' yields extractValue()=404 (not null, so the numberless guard misses it), satisfies a 'below 50000' predicate/threshold, and pings a false alarm showing an error string as the value; on a threshold it poisons the baseline so the next check re-fires. Hits watchlist members + follow-feed value paths too.",
       "how": "Treat looksLikeErrorReply(value) as indeterminate (hold, keep last-good baseline, don't fire) in the same spots the degraded flag is already checked — conditionHolds predicate eval + the threshold changed()/numberless block + the watchlist changed() path. Offline test: an error-shaped reply doesn't fire + doesn't advance the baseline."
     },
@@ -3058,6 +3058,10 @@
     {
       "item": "feed-key-collision",
       "note": "Fixed feedItemKey truncating to 120 chars, which collided distinct long titles. Two different feed entries (verbose news/marketplace/job titles) sharing a 120-char prefix got the same dedup key, so the second was treated as already-seen + a genuinely-new item silently never pinged (read as 'nothing new'). feedItemKey now appends a short FNV-1a hash of the FULL normalized text when it exceeds 120 chars, so distinct long titles get distinct keys; a short title is unchanged (no hash) so existing phrasing-drift stability holds; a genuine repeat still keys identically. Both feed paths (alert-runner id-or-title key + the checkAlert list path) use feedItemKey so both are covered. 1 new test, suite 1583 green, tsc clean. call-tested:false (pure key fn)."
+    },
+    {
+      "item": "error-reply-false-fires-alerts",
+      "note": "Error-shaped agent replies no longer false-fire alerts or poison the baseline. looksLikeErrorReply was only used to skip the time-series point, NOT the trigger decision — so a soft failure like 'the page returned a 404' yielded extractValue()=404, satisfied a 'below 50000' predicate/threshold, pinged a FALSE alarm showing an error string, and on a threshold poisoned the baseline so the next check re-fired. Added a single guard right after value is computed (mirrors the degraded guard): looksLikeErrorReply(value) -> hold, keep last-good baseline, stay silent — covering condition/threshold/change/feed/series paths at once. Also guarded the watchlist member loop so an error-shaped member holds its baseline. 2 new tests (error-shaped reply holds baseline + doesn't fire; first-run seed test switched to a non-error numberless value), suite 1584 green, tsc clean. call-tested:false (offline runner tests)."
     }
   ],
   "audits": [

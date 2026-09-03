@@ -95,12 +95,22 @@ describe("checkAlert", () => {
     expect(r.notify).toBe(true);          // real change fires
   });
 
-  it("first run with no number still seeds (nothing to protect yet)", async () => {
-    const { d, lastSet } = deps("Price unavailable");
+  it("first run with a numberless (non-error) reply still seeds (nothing to protect yet)", async () => {
+    const { d, lastSet } = deps("Trading paused pending listing"); // no number, not error-shaped
     const r = await checkAlert(alert({ threshold: 1000 }), d); // no lastValue
     expect(r.notify).toBe(true); // first run notifies (baseline)
     r.commit();
-    expect(lastSet).toEqual([{ name: "btc", value: "Price unavailable" }]);
+    expect(lastSet).toEqual([{ name: "btc", value: "Trading paused pending listing" }]);
+  });
+
+  it("an error-shaped reply holds the baseline + stays silent, never a false fire (error-reply-false-fires-alerts)", async () => {
+    // "below 50000" predicate: a soft error whose text contains a stray number must NOT fire the edge.
+    const { d, lastSet } = deps("the page returned a 404 error");
+    const r = await checkAlert(alert({ lastValue: "$67,000", condition: { op: "below", operand: 50000 } }), d);
+    expect(r.notify).toBe(false);        // no false alarm
+    expect(r.value).toBe("$67,000");     // last GOOD value kept
+    r.commit();
+    expect(lastSet).toEqual([]);         // baseline NOT poisoned by the error reply
   });
 
   it("a notify's baseline advance is DEFERRED until commit (alert-notify-send-fail)", async () => {
