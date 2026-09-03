@@ -1,6 +1,42 @@
 {
   "items": [
     {
+      "id": "trigger-to-action-recipe-shape",
+      "title": "an alert's 'then run <recipe>' runs a chained/slotted recipe as a literal task",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "runThen (the trigger-to-action path) called runAgent(rec.task) directly — no isChain/runChain, no hasSlots guard — the ONE recipe-execution path missed when those guards were added to /run + schedule + digest. So 'watch jobs: ... then run summarize-jobs' where summarize-jobs is a '>>' chain or has a {slot} appended confused garbage (the literal 'a >> b' / unfilled '{slot}') to the ping — silently degrading a watch-and-DO feature the user explicitly set up to trust (audit 26 B#1).",
+      "how": "In index runThen: skip a slotted recipe (no per-fire value here), run a chain via runChain like every other path, else the single runAgent. Mirror the digest-member guard."
+    },
+    {
+      "id": "recurring-near-me-pin-ttl-breaks",
+      "title": "a daily 'weather near me' set from a pin silently dies after the coords TTL",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "agentEnvFor uses profiles.freshCoords which returns undefined past COORDS_TTL_MS (6h), so a 'weather near me every morning' set up by a user who only shared a location PIN (no saved home city) starts firing a useless 'which city?' into the void the same day — a standing automation the user believes works degrades silently (audit 26 B#2).",
+      "how": "For a RECURRING schedule/alert, fall back to the last-known coords (or a persisted home city derived from the pin at set time) rather than only fresh-within-TTL coords — the privacy TTL is about not leaking coords to the LLM on ad-hoc turns, but a standing location automation the user set needs a durable anchor. Or: at set time, if only a pin exists, reverse-geocode to a city + save it. Test: a daily near-me run past the TTL still resolves a location."
+    },
+    {
+      "id": "bare-im-in-nonplace-corrupts-profile",
+      "title": "'I'm in trouble' / 'I'm in bed' saved as home location + the message eaten",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "parseSetLocation's bare 'I'm in X' guard only rejects tails with scheduling/task keywords or >5 words, so a short non-place noun ('trouble', 'bed', 'the office', 'a meeting') is stored as the home location AND the message is swallowed (never reaches the agent) — later weather/near-me resolve against nonsense + the user's real message is lost (audit 26 B#3).",
+      "how": "Tighten the bare-form: require the tail to look like a place (not a common non-place noun / state-of-being), or only accept 'I'm in X' as a location when X geocodes / is title-cased / matches a place shape. Prefer the explicit /setlocation + 'set my location to' forms. Add false-positive tests ('I'm in trouble', 'I'm in a meeting')."
+    },
+    {
+      "id": "maps-link-on-nearby-directions",
+      "title": "'near me' / directions results have no address or tappable map link",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "formatPlaces + formatRoute emit text only (name + straight-line distance, maybe hours) — no street address, no Google/Apple Maps link — so a 'coffee near me' / 'directions to X' answer locates a place the user still can't navigate to or find, on a phone. 'best sushi near me' is literally a system-prompt example (audit 26 A#1).",
+      "how": "Add a maps deep-link per place row (https://www.google.com/maps/search/?api=1&query=<name+coords> or a geo: URI) + per route (maps dir link), and surface the address when the data source has it. Turns a lookup into a tap-to-navigate action. Reuse the lat/lng already in the Place/Route model."
+    },
+    {
       "id": "tracking-page-shell-guard",
       "title": "track_package summarizes a JS-shell carrier page as a confident-but-bogus status",
       "impact": "high",
@@ -2000,9 +2036,16 @@
     {
       "id": "parse-tracking-spaced-number",
       "note": "A tracking number pasted the way carriers PRINT it ('9400 1118 9922 3817 6123 45', '1Z 999 AA1 ...', '1234-5678-9012') failed to parse — parseTrackingRequest tokenized the raw text on \\b[0-9A-Z]{10,}\\b before norm() stripped separators, so a spaced number split into sub-10-char fragments matching nothing -> 'couldn't tell which carrier', despite the module's premise being 'users paste them'. Now also matches a spaced/dashed run of alnum GROUPS (each group required to contain a digit, so a leading 'TRACK'/'PACKAGE' word isn't swallowed), collapses the separators, and detects on the joined form; the single-run + 1Z patterns still catch no-space forms. 3 tests (spaced USPS + spaced UPS + dashed FedEx all resolve). call-tested: false (pure parse). 1189 tests green."
+    },
+    {
+      "id": "trigger-to-action-recipe-shape",
+      "note": "Closed the last recipe-execution path that ran a chain/slot recipe literally: an alert's 'then run <recipe>' (index runThen) called runAgent(rec.task) directly — no isChain/runChain, no hasSlots — so a 'then' recipe that was a '>>' chain or had a {slot} appended garbage (literal 'a >> b' / unfilled '{slot}') to the ping, degrading the watch-and-DO feature. runThen now skips a slotted recipe (no per-fire value) and runs a chain via runChain like /run + schedule + digest do, else the single runAgent. tsc-verified; relies on the existing trigger-to-action dep-contract tests + the digest-runner chain tests (same runChain integration) — the guard is a direct mirror of the tested digest-member path, and index's inline runThen isn't separately unit-harnessed. call-tested: false. 1189 tests green."
     }
   ],
   "audits": [
+    {
+      "note": "Audit 26 (backlog dry except owner-gated confirm-to-act). A/new-user: near-me/directions have no address or tappable maps link (dead-end on a phone), no stop/cancel for an in-flight or background task, 'best X near me' returns NEAREST not best (no rating), transit directions silently answered as driving, narrow near-me category table drops urgent-care/vet/ATM/post-office into a noisy search. B/reliability: trigger-to-action 'then' runs a chain/slot recipe literally (TOP — built, the one missed exec path), recurring near-me from a PIN dies after coords TTL (fires 'which city?' into the void), bare 'I'm in trouble/bed' saved as home location + message eaten, fetch_json truncates a valid >200KB JSON then reports 'not valid JSON', feedItemKey 120-char truncation collapses long-prefix items. C/power: inline-keyboard callback handling (send side half-wired, no callback_query route — turns every feature one-tap; top retention multiplier), automation-coach mining the persistent answer-log, shareable recipe export/import token (NET-NEW). Built trigger-to-action-recipe-shape (B#1); seeded recurring-near-me-pin-ttl-breaks(M), bare-im-in-nonplace-corrupts-profile(S), maps-link-on-nearby-directions(S). Deferred: inline-keyboard-callbacks(M, top power), automation-coach(M), stop-cancel-task(M), best-near-me-rating(M), transit-directions-honest(S), near-me-category-expand(S), fetch_json-oversize-honest(S), feedItemKey-prefix-collision(S), recipe-export-token(S), + prior deferred set."
+    },
     {
       "note": "Audit 25 (backlog dry except owner-gated confirm-to-act). A/new-user: read-a-PDF-URL isn't a tool (scrape opens the browser PDF viewer -> garbage; describeDocument is upload-only), /start hides the instant keyless tools (track/quote/convert/weather absent from START, present only in HELP), location-PIN sets coords but not tz (first daily still fires UTC), no dictionary/define tool, background-ACK gives no ETA. B/reliability: track_package skips the formatPageForModel shell/paywall guard -> bogus status on a JS-shell carrier page (TOP — built, a regression in the new tool), watch-redefine doesn't reset baseline (re-set alert never fires), extractValue currency-branch returns FIRST not nearest when hint doesn't match, plural-weekday 'mondays' -> one-shot not weekly (regression in single-weekday-once), parseTrackingRequest fails on spaced/dashed numbers, time-series+then re-run un-gated on failed-send re-fire. C/power: automation-coach mining the PERSISTENT answer-log (top flywheel, 80% infra exists), geofence/location-triggered reminders (NET-NEW), inline-keyboard one-tap accept for suggestions. Built tracking-page-shell-guard (B#1); seeded watch-redefine-baseline-reset(S), plural-weekday-recurring(S), parse-tracking-spaced-number(S). Deferred: automation-coach(M), geofence-reminders(M), inline-keyboards(S/M), read-pdf-url(M), start-copy-instant-tools(S), pin-derives-tz(M), dictionary-tool(S), extractValue-currency-first(S), timeseries-then-ungated(S), + prior deferred set."
     },

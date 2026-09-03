@@ -25,7 +25,7 @@ import { ScheduleStore, parseSchedule, parseSnoozeCommand, tzOffsetMin, quietUnt
 import { formatWhen } from "./lib/format-when.js";
 import { formatDashboard, type DashboardData } from "./lib/dashboard.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
-import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots, slotsAmbiguous, slotNames } from "./lib/recipes.js";
+import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots, slotsAmbiguous, slotNames, isChain } from "./lib/recipes.js";
 import { matchRecipe } from "./lib/task-suggest.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
@@ -139,6 +139,15 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
     runThen: async (c, recipeName) => {
       const rec = recipes.get(c, recipeName);
       if (!rec) return null;
+      // A slotted recipe ('{item}') has no per-fire value here, and a '>>' chain is a workflow — running
+      // either as one literal agent task appends garbage to the ping (trigger-to-action-recipe-shape,
+      // the one recipe-execution path missed when the chain/slot guards were added to /run + schedule +
+      // digest). Skip a slotted recipe; run a chain via runChain like every other path.
+      if (hasSlots(rec.task)) return null;
+      if (isChain(rec.task)) {
+        const chained = (await runChain(c, rec.task, { llm, runAgent, formatReply, contextFor: (cc) => profiles.contextLine(cc, Date.now()), agentEnv: agentEnvFor })).final;
+        return chained?.trim() ? chained : null;
+      }
       const out = await runAgent(rec.task, { llm, context: profiles.contextLine(c, Date.now()) || undefined, ...agentEnvFor(c) }, []);
       return out.degraded ? null : formatReply(out.reply);
     },
