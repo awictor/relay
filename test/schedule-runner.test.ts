@@ -838,3 +838,27 @@ describe("makeScheduleRunner — profile context (product-loop)", () => {
     expect(gotContext).toBe("home location is Reykjavik");
   });
 });
+
+describe("makeScheduleRunner — sticky reminders (sticky-acknowledged-reminders)", () => {
+  const MIN = 60_000;
+  it("a confirmed sticky ping is stamped fired + the anti-nag budget only counts real sends", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock);
+    const r = store.add(1, { kind: "interval", task: "take meds", dueMs: NOW - 1, intervalMs: 15 * MIN, reminderOnly: true, sticky: true, stickyMax: 5 }, NOW)!;
+    await runner.tick();
+    expect(sent[0]!.text).toMatch(/take meds/);
+    expect(sent[0]!.text).toMatch(/reply "done"/i);      // off-switch shown
+    const after = store.list(1).find((x) => x.id === r.id)!;
+    expect(after.lastFiredMs).toBe(NOW);                 // stamped so a "done" scopes to it
+    expect(after.stickyFired).toBe(1);                   // confirmed send counted
+  });
+  it("a FAILED sticky send does not burn the anti-nag budget (sticky-send-fail-burns-budget)", async () => {
+    const clock = { t: NOW };
+    const { store, runner } = harness(clock, { send: async () => { throw new Error("telegram down"); } });
+    const r = store.add(1, { kind: "interval", task: "meds", dueMs: NOW - 1, intervalMs: 15 * MIN, reminderOnly: true, sticky: true, stickyMax: 2 }, NOW)!;
+    await runner.tick(); // the send throws -> tick catch -> safeComplete(fired:false)
+    const after = store.list(1).find((x) => x.id === r.id);
+    expect(after).toBeDefined();                 // NOT self-dropped by a failed send
+    expect(after!.stickyFired ?? 0).toBe(0);     // budget untouched — the user saw nothing, so it doesn't count
+  });
+});

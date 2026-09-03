@@ -489,6 +489,28 @@ describe("ScheduleStore — sticky reminders (sticky-acknowledged-reminders)", (
     expect(s.acknowledgeSticky(1)).toEqual([]);
     expect(s.list(1)).toHaveLength(1);
   });
+  it("a 'done' ack scopes to the MOST-RECENTLY-FIRED sticky, sparing the others (sticky-ack-scopes-to-one)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const meds = s.add(1, { kind: "interval", task: "take meds", dueMs: NOW, intervalMs: 15 * MIN, reminderOnly: true, sticky: true }, NOW)!;
+    const water = s.add(1, { kind: "interval", task: "drink water", dueMs: NOW, intervalMs: 30 * MIN, reminderOnly: true, sticky: true }, NOW)!;
+    s.markStickyFired(water.id, NOW + 1000); // water pinged most recently
+    s.markStickyFired(meds.id, NOW + 500);
+    const acked = s.acknowledgeSticky(1);
+    expect(acked.map((x) => x.task)).toEqual(["drink water"]); // only the one the user replied to
+    expect(s.list(1).map((x) => x.task)).toEqual(["take meds"]); // the other survives
+    // A second "done" then clears the remaining (now the only) sticky.
+    expect(s.acknowledgeSticky(1).map((x) => x.task)).toEqual(["take meds"]);
+  });
+  it("a sticky whose fire keeps FAILING to send does not burn its cap budget (sticky-send-fail-burns-budget)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const r = s.add(1, { kind: "interval", task: "meds", dueMs: NOW - 1, intervalMs: 15 * MIN, reminderOnly: true, sticky: true, stickyMax: 2 }, NOW)!;
+    // Simulate 5 failed fires (fired=false): the interval advances but stickyFired must NOT climb.
+    for (let i = 0; i < 5; i++) s.complete(r.id, NOW, false);
+    expect(s.list(1)).toHaveLength(1); // never hit the cap, never self-dropped
+    // A real (confirmed) fire finally counts; the SECOND confirmed fire hits stickyMax=2 and drops it.
+    expect(s.complete(r.id, NOW, true)).toBe(true); expect(s.list(1)).toHaveLength(1);
+    expect(s.complete(r.id, NOW, true)).toBe(true); expect(s.list(1)).toHaveLength(0);
+  });
 });
 
 describe("ScheduleStore.restampTz (tz-restamp-on-setlocation)", () => {

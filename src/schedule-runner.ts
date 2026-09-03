@@ -227,7 +227,10 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // A sticky reminder (sticky-acknowledged-reminders) re-pings until acknowledged — tell the user
         // how to stop it so the nag has an off switch. Plain reminders echo as before.
         const echo = s.sticky ? `⏰ Reminder: ${taskToRun}\n(reply "done" when you've handled it and I'll stop)` : `⏰ Reminder: ${taskToRun}`;
-        await deps.send(s.chatId, echo);
+        await deps.send(s.chatId, echo); // throws on failure -> tick catch -> safeComplete(fired:false), no budget burn
+        // The send landed: stamp this sticky as the most-recently-fired so a "done" ack scopes to it
+        // (sticky-ack-scopes-to-one), and count the confirmed ping toward the anti-nag cap via complete().
+        if (s.sticky) deps.store.markStickyFired(s.id, deps.now());
         deps.recordSend?.(s.chatId, echo);
         noteSend(s.chatId, deps.now());
         deps.store.complete(s.id, deps.now());
@@ -289,8 +292,8 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   // m14 degrade-2: completing a schedule persists to disk; if that throws (unwritable store),
   // it must NOT escape the per-schedule handling and abort the rest of the due batch. Swallow +
   // log so one bad write can't lose every other due task this tick.
-  function safeComplete(s: Schedule): void {
-    try { deps.store.complete(s.id, deps.now()); }
+  function safeComplete(s: Schedule, fired = true): void {
+    try { deps.store.complete(s.id, deps.now(), fired); }
     catch (e) {
       deps.onError?.(e);
       log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, error: "complete_failed:" + (e instanceof Error ? e.message : String(e)).slice(0, 80) })}`);
@@ -432,7 +435,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
               }
               deps.store.resetFailures(s.id); // re-notify only after another N failures
             }
-            safeComplete(s); // advance the recurring schedule to its next occurrence
+            safeComplete(s, false); // advance the recurring schedule; fired:false so a sticky's failed fire doesn't burn its anti-nag budget (sticky-send-fail-burns-budget)
             continue;        // handled here; skip the shared failureNotice/safeComplete below
           }
           // m14 degrade-4: tell the user the run failed (default silent). For a "once" this fires only

@@ -2102,7 +2102,7 @@
       "title": "a single \"done\" cancels EVERY sticky reminder, not the one that pinged",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "acknowledgeSticky removes ALL of a chat's sticky reminders on any ack; a user who replies 'done' to the meds nag silently loses their unrelated 'drink water every 30m' sticky too. Regression in the just-shipped sticky feature — exactly the black hole it was meant to prevent.",
       "how": "Track the most-recently-FIRED sticky per chat (store lastFiredMs or a fired-order marker); scope the ack to it (or match by task text when the ack names one). Fall back to all only if there's a single sticky. Offline test: two stickies, ack after one fires -> only that one removed."
     },
@@ -2111,7 +2111,7 @@
       "title": "transient send outage burns a sticky reminder’s fire budget + can self-drop it unseen",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "On a send throw the tick catch treats an interval sticky like any recurring: complete() increments stickyFired and can reach stickyMax + splice it. Unlike a 'once' (which retries on transient failure), a sticky's count advances on DELIVERY failure — so a brief Telegram/anvil outage can silently exhaust + delete a 'nag me until done' the user never saw ping once.",
       "how": "Only advance stickyFired after a CONFIRMED send (mirror the once transient-retry path): on a failed fire, don't count it toward the cap; retry next tick. Offline test: a sticky whose send throws N times doesn't lose fire budget + survives."
     },
@@ -2958,6 +2958,10 @@
     {
       "item": "sticky-acknowledged-reminders",
       "note": "Added acknowledged/escalating reminders — the daily-habit hook (meds/water/standup). 'keep reminding me to take my meds every 15 min' / 'nag me to stretch every 20 min' / 'remind me to X every 30 min until I say done' now create a sticky reminder: an interval + reminderOnly + sticky flag. It re-pings on the interval, each fire appends '(reply \"done\" when you've handled it and I'll stop)'; a bare 'done'/'stop'/'ok'/'got it'/✅ reply removes it (isStickyAck + acknowledgeSticky, scoped to sticky only so a normal 'done' can't wipe real schedules and only fires when hasSticky). Self-caps after DEFAULT_STICKY_MAX (8, env RELAY_STICKY_MAX_FIRES) fires in complete() so a forgotten nag can't ping forever. Requires an explicit re-ping cue (keep/nag/until-done) so a plain 'every 15 min' stays a normal interval. Wired: schedule.ts (fields+parse+complete cap+ack/hasSticky methods), runner echo hint, handler ack-catch (before snooze), index stickyAck dep + sticky confirm wording + scheduleCue, HELP + .env.example. 10 new tests, suite 1543 green, tsc clean. call-tested:false (offline parse/store/handler tests)."
+    },
+    {
+      "item": "sticky-ack-scopes-to-one + sticky-send-fail-burns-budget",
+      "note": "Fixed 2 regressions the audit found in the just-shipped sticky reminders. (1) SCOPE: a 'done' reply wiped EVERY sticky reminder, so acking the meds nag silently deleted an unrelated 'drink water every 30m' too. Now the runner stamps lastFiredMs on each confirmed sticky ping (markStickyFired) and acknowledgeSticky removes only the MOST-RECENTLY-FIRED one (falls back to all only if several exist and none has fired yet). (2) BUDGET: a transient send/anvil outage counted each failed fire toward the anti-nag cap via complete(), so a brief Telegram outage could exhaust stickyMax and self-delete a 'nag me until done' the user never saw ping. complete() now takes a `fired` flag; the runner's failure path passes fired:false so a failed send advances the interval to retry WITHOUT burning budget — only a confirmed send counts (mirrors the once transient-retry contract). 4 new tests (2 store scope/budget + 2 runner fired-stamp/fail-no-burn), suite 1547 green, tsc clean. call-tested:false (offline store + runner tests)."
     }
   ],
   "audits": [

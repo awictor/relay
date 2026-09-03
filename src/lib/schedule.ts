@@ -28,6 +28,8 @@ export interface Schedule {
                        // nag forever, and an ack removes it outright.
   stickyMax?: number;  // max total fires for a sticky reminder before it gives up on its own (anti-nag cap)
   stickyFired?: number; // how many times this sticky reminder has fired so far (advanced by complete())
+  lastFiredMs?: number; // when a sticky last actually pinged — so a "done" ack scopes to the one that just
+                        // fired (sticky-ack-scopes-to-one), not every sticky the chat has
   clockTime?: boolean; // a "once" tied to a WALL-CLOCK time ("at 8am", "tomorrow 9:30", "on May 6") — as
                        // opposed to a relative "in 3 hours". Only clock-time onces get tz-restamped on a
                        // later /setlocation (once-reminder-tz-restamp); a relative once has no hour to shift.
@@ -688,16 +690,36 @@ export class ScheduleStore {
     return removed;
   }
 
-  /** Acknowledge sticky reminders (sticky-acknowledged-reminders): remove this chat's sticky reminders so
-   * a "done"/"stop" reply stops the nagging. Returns the removed sticky reminders (their tasks let the
-   * caller confirm WHICH stopped). Removes only sticky ones — a normal "done" can't wipe real schedules. */
+  /** Acknowledge a sticky reminder (sticky-acknowledged-reminders): a "done"/"stop" reply stops the one
+   * that just pinged. Scopes to the MOST-RECENTLY-FIRED sticky (sticky-ack-scopes-to-one) so replying
+   * "done" to the meds nag doesn't also silently delete an unrelated "drink water every 30m" sticky. When
+   * only ONE sticky exists (nothing has fired yet, or they're tied) it removes that one; if somehow none
+   * has a fire time and there are several, it can't tell them apart, so it stops all (better than leaving
+   * a nag the user just tried to dismiss). Removes only sticky ones — a normal "done" can't wipe a real
+   * schedule. Returns the removed reminders (their tasks let the caller confirm WHICH stopped). */
   acknowledgeSticky(chatId: number): Schedule[] {
-    const acked = this.items.filter((s) => s.chatId === chatId && s.sticky);
-    if (acked.length) {
-      this.items = this.items.filter((s) => !(s.chatId === chatId && s.sticky));
+    const mine = this.items.filter((s) => s.chatId === chatId && s.sticky);
+    if (!mine.length) return [];
+    if (mine.length === 1) { this.items = this.items.filter((s) => s !== mine[0]); this.persist(); return mine; }
+    // Several stickies: target the one that fired most recently (the one the user is replying to).
+    const fired = mine.filter((s) => typeof s.lastFiredMs === "number");
+    if (fired.length) {
+      const latest = fired.reduce((a, b) => (b.lastFiredMs! > a.lastFiredMs! ? b : a));
+      this.items = this.items.filter((s) => s !== latest);
       this.persist();
+      return [latest];
     }
-    return acked;
+    // None has fired yet (all just scheduled) — can't disambiguate; stop all rather than ignore the ack.
+    this.items = this.items.filter((s) => !(s.chatId === chatId && s.sticky));
+    this.persist();
+    return mine;
+  }
+
+  /** Mark a sticky reminder as having just pinged (sets lastFiredMs) so a later "done" ack scopes to it.
+   * Called by the runner right after a successful sticky send. No-op if not found / not sticky. */
+  markStickyFired(id: string, now: number): void {
+    const s = this.items.find((x) => x.id === id);
+    if (s && s.sticky) { s.lastFiredMs = now; this.persist(); }
   }
 
   /** True if a chat has any active sticky reminder (so the handler only treats a bare "done" as an ack
@@ -770,7 +792,7 @@ export class ScheduleStore {
   /** After firing: drop a "once", or advance a recurring schedule to its next occurrence. Returns
    * whether the state reached disk — the caller can't undo a send, but a `false` means a once might be
    * re-read after a restart, so it's worth logging (once-complete-ignores-persist). */
-  complete(id: string, now: number): boolean {
+  complete(id: string, now: number, fired = true): boolean {
     const s = this.items.find((x) => x.id === id);
     if (!s) return true;
     const [hh, mm] = (s.hourMin ?? "9:0").split(":").map((n) => parseInt(n, 10));
@@ -786,8 +808,11 @@ export class ScheduleStore {
     } else if (s.kind === "interval" && s.intervalMs) {
       // A sticky reminder (sticky-acknowledged-reminders) counts its fires and gives up on its own once it
       // hits stickyMax, so a never-acknowledged "nag me every 15 min" can't ping forever. Otherwise it
-      // advances like any interval; an explicit "done"/"stop" removes it early (acknowledgeSticky).
-      if (s.sticky) {
+      // advances like any interval; an explicit "done"/"stop" removes it early (acknowledgeSticky). Only a
+      // CONFIRMED ping counts toward the cap (fired) — a transient send/anvil failure (fired=false) must
+      // not burn the budget and silently delete a reminder the user never actually saw
+      // (sticky-send-fail-burns-budget). On a failure we just advance the interval to retry next fire.
+      if (s.sticky && fired) {
         s.stickyFired = (s.stickyFired ?? 0) + 1;
         if (s.stickyFired >= (s.stickyMax ?? DEFAULT_STICKY_MAX)) {
           this.items = this.items.filter((x) => x.id !== id); // hit the cap: stop nagging + drop it
