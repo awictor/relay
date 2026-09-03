@@ -154,11 +154,19 @@ export function resolveWhen(text: string, todayDow: number, maxDays: number): nu
   if (/\bthis week\b|\bnext (?:few days|7 days|week)\b|\bweek(?:'s)? (?:forecast|weather)\b/.test(t)) {
     return Array.from({ length: Math.min(maxDays, 7) }, (_, i) => i);
   }
-  // A named weekday -> its next occurrence within the window.
+  // A named weekday -> a day index (0=today). "next <weekday>" means the occurrence in the FOLLOWING
+  // week, so "next Monday" said ON a Monday resolves to +7, NOT today (the old code returned [0] -> the
+  // caller silently showed today's weather for a future question). A bare "<weekday>" is the soonest
+  // occurrence today-or-later. The index may exceed the window; formatWeatherWhen turns an out-of-window
+  // day into an honest "beyond my N-day forecast" note rather than falling back to today.
   for (let d = 0; d < 7; d++) {
-    if (new RegExp(`\\b${DOW[d]!.toLowerCase()}\\b`).test(t)) {
-      for (let i = 0; i < maxDays; i++) { if ((todayDow + i) % 7 === d) return i === 0 ? [0] : [i]; }
-      return null;
+    const dayName = DOW[d]!.toLowerCase();
+    if (new RegExp(`\\b${dayName}\\b`).test(t)) {
+      let target = -1;
+      for (let i = 0; i < 7; i++) { if ((todayDow + i) % 7 === d) { target = i; break; } } // soonest, 0..6
+      const wantsNext = new RegExp(`\\bnext\\s+${dayName}\\b`).test(t);
+      if (wantsNext && target === 0) target = 7; // "next Monday" on a Monday -> next week, not today
+      return target < 0 ? null : [target];
     }
   }
   return null;
@@ -184,8 +192,16 @@ export function formatWeatherWhen(w: WeatherResult, question: string, units: "me
   const idx = resolveWhen(question, todayDow, w.days.length);
   if (!idx || !idx.length) return null;
   if (idx.length === 1 && idx[0] === 0) return null; // "today" -> use the richer current-weather line
-  const lines = idx.map((i) => formatDay(w.days![i]!, dayLabel(i, todayDow), units));
-  return `${w.place}:\n${lines.join("\n")}`;
+  // A requested day BEYOND the forecast window (e.g. "next Monday" when the API only returned 7 days)
+  // must NOT silently render today's numbers (weather-future-day-falls-back-to-today). Say so honestly.
+  const inWindow = idx.filter((i) => i < w.days!.length);
+  if (!inWindow.length) {
+    const label = dayLabel(idx[0]!, todayDow);
+    return `${w.place}: ${label} is beyond my ${w.days.length}-day forecast — ask again closer to then.`;
+  }
+  const lines = inWindow.map((i) => formatDay(w.days![i]!, dayLabel(i, todayDow), units));
+  const dropped = inWindow.length < idx.length ? `\n(Some days you asked about are beyond my ${w.days.length}-day forecast.)` : "";
+  return `${w.place}:\n${lines.join("\n")}${dropped}`;
 }
 
 /**

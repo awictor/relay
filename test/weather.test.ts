@@ -155,6 +155,16 @@ describe("multi-day forecast (weather-multi-day)", () => {
     expect(resolveWhen("how hot is it right now", 6, 7)).toBeNull();    // no future day
   });
 
+  it("resolveWhen handles 'next <weekday>' as the following week, not today (weather-future-day-falls-back-to-today)", () => {
+    // todayDow=1 (Monday). "next Monday" must be +7, NOT [0]/today.
+    expect(resolveWhen("weather next monday", 1, 14)).toEqual([7]);
+    // a bare "monday" on Monday is today-or-soonest = today (0); "next monday" is the one after.
+    expect(resolveWhen("weather monday", 1, 14)).toEqual([0]);
+    // "next friday" on Monday = +4 (soonest Fri, no today collision so "next" doesn't add a week here...
+    // it's the coming Friday). Index returned regardless of window; formatWeatherWhen handles overflow.
+    expect(resolveWhen("weather next friday", 1, 7)).toEqual([4]);
+  });
+
   it("dayLabel names Today/Tomorrow/weekday", () => {
     expect(dayLabel(0, 6)).toBe("Today");
     expect(dayLabel(1, 6)).toBe("Tomorrow");
@@ -179,6 +189,17 @@ describe("multi-day forecast (weather-multi-day)", () => {
     const w = parseForecast(body, "Austin")!;
     expect(formatWeatherWhen(w, "weather right now", "imperial")).toBeNull();
     expect(formatWeatherWhen(w, "weather today", "imperial")).toBeNull();
+  });
+
+  it("formatWeatherWhen says a beyond-window day is out of range, NOT today's weather (weather-future-day-falls-back-to-today)", () => {
+    // body has 3 days (indices 0-2). "next monday" from that day resolves past the window.
+    const w = parseForecast(body, "Austin")!;
+    const todayDow = new Date(`${w.days![0]!.date}T00:00:00Z`).getUTCDay();
+    // Build a question that lands beyond w.days.length: pick the weekday == today so "next <it>" = +7.
+    const dow = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][todayDow];
+    const out = formatWeatherWhen(w, `weather next ${dow}`, "imperial");
+    expect(out).toMatch(/beyond my \d+-day forecast/);
+    expect(out).not.toMatch(/high 77|High 77/); // did NOT silently show today
   });
 
   it("formatWeatherWhen returns null when there's no days array", () => {

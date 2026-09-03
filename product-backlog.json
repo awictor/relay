@@ -1844,6 +1844,51 @@
       "status": "done",
       "why": "inferTzFromLocation falls back to the leftmost known city token when the region tail is not in the table, so \"San Jose, Costa Rica\" resolves to California (UTC-8) and reminders fire 2h off — the fn contract promised \"never guesses wrong\".",
       "how": "When a comma region tail is present but unknown, do NOT fall back to a bare city token that is a US-city collision; leave tz unset (ask) instead."
+    },
+    {
+      "id": "weather-future-day-falls-back-to-today",
+      "title": "Future-day weather silently shows today",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "resolveWhen ignored \"next\" + returned [0] when the named weekday == today, and formatWeatherWhen returned null for an out-of-window day -> agent silently rendered TODAY for a future question. The tool literally advertises \"the RIGHT day, not today\".",
+      "how": "resolveWhen: \"next <weekday>\" -> +7 (no today collision); return the index even past the window. formatWeatherWhen: an out-of-window day returns an honest \"beyond my N-day forecast\" note, never today."
+    },
+    {
+      "id": "scores-ambiguous-team-wrong-sport",
+      "title": "Ambiguous team name returns the wrong sport confidently",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "TEAM_LEAGUE maps giants->mlb, rangers->nhl, kings->nba unconditionally, so \"did the Giants win\" always answers SF Giants (never NFL), \"Rangers\" always NHL (never Texas Rangers MLB) — a confident wrong answer, no hedge.",
+      "how": "Drop the genuinely-ambiguous team names from TEAM_LEAGUE (or require the league/sport word in-query); resolveLeague then returns null for a bare ambiguous team -> agent asks which."
+    },
+    {
+      "id": "digest-dropped-over-cap",
+      "title": "A due daily digest is silently dropped when over the hourly cap",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Only once-reminders (grace-defer) + alert-checks are cap-exempt; a daily/digest: over the cap hits safeComplete+continue and vanishes for the day with only an operator log — the relied-upon morning briefing just no-shows.",
+      "how": "Give a daily/digest the same defer-past-cap grace as a once (leave due, retry next tick) instead of dropping the occurrence; or exempt digests like alert-checks."
+    },
+    {
+      "id": "sync-turn-clobbers-errand-memory",
+      "title": "Concurrent sync turn erases a background errand's memory",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "The errand-completion path now re-reads memory, but the INBOUND sync turn still writes [...snapshot] captured before its agent ran; if an errand finishes mid-turn (the ack invites more texts), the sync write erases the errand turn -> a follow-up has no memory of it.",
+      "how": "Apply the same re-read-before-write discipline on the sync path (or serialize via the per-chat chain), so neither side clobbers the other."
+    },
+    {
+      "id": "chart-it-tool",
+      "title": "chart_it — texted graph of tracked/numeric data",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Watch/alert trend series + any numeric answer come back as a wall of numbers; a chart image is the natural payoff for stored history + a free-infra edge no vendor-browser competitor matches.",
+      "how": "Keyless quickchart.io URL -> image via the existing screenshot/doc attachment path; a chart tool + dispatch that plots a watch series or an ad-hoc number set."
     }
   ],
   "history": [
@@ -2558,6 +2603,10 @@
     {
       "item": "safe-store-no-fsync",
       "note": "atomicWriteJson now fsyncs the temp file's contents before the rename (openSync/writeSync/fsyncSync/closeSync -> renameSync), so a hard crash/power-loss can't persist the rename while the bytes are still in the page cache (which produced the torn/empty file that trips the corrupt path + wipes a store). The module header claimed 'temp + fsync + rename' but there was no fsync — now true. Still never-throws + returns the success bool. 1 new test (durable overwrite, no torn state). Suite 1404 green, tsc clean."
+    },
+    {
+      "item": "weather-future-day-falls-back-to-today",
+      "note": "Fixed future-day weather silently showing today. resolveWhen: 'next <weekday>' now resolves to the following week (+7, no today collision), and returns the day index even when it's past the forecast window. formatWeatherWhen: a beyond-window day returns an honest 'that day is beyond my N-day forecast' note (+ a partial note when only some requested days are out of range) instead of null -> which had made the agent render TODAY's numbers for a future question, the exact opposite of what the tool advertises. 3 new tests. Suite 1406 green, tsc clean."
     }
   ],
   "audits": [
@@ -2701,6 +2750,9 @@
     },
     {
       "note": "No 3-agent audit this run (safe-store-no-fsync was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
+    },
+    {
+      "note": "AUDIT (backlog dry, only owner-gated). A/new-user: no calculator (financial/chained math wrong), transit directions, flight status, local showtimes, translation tool. B/reliability: weather future-day->today (S, fixed), scores ambiguous-team wrong-sport (S), daily-digest dropped over cap (S), sync-turn clobbers errand memory (M). C/power: chart_it, live-watch MJPEG link, fetch-and-send-file, visual-diff watch, aggregate-and-rank. Seeded: weather-future-day(built), scores-ambiguous-team-wrong-sport, digest-dropped-over-cap, sync-turn-clobbers-errand-memory, chart-it-tool."
     }
   ]
 }
