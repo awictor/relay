@@ -3005,6 +3005,24 @@
       "status": "todo",
       "why": "applySlots fills a SINGLE slot with the whole arg string verbatim, so '/run greet name=Sam' on 'hi {name}' yields 'hi name=Sam' instead of 'hi Sam' — a user who mirrors the multi-slot name=value form gets the literal pair.",
       "how": "In the single-slot branch, if the arg is a lone 'slotname=value' matching the slot, use just the value; else keep the whole-string fill (a bare 'oat milk' still works)."
+    },
+    {
+      "id": "dangerous-send-amount",
+      "title": "Dangerous-action guard missed 'Send $50 to John' + 'empty trash'",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "isDangerousAction caught 'send money' by the word 'money' but NOT a currency AMOUNT ('Send $50 to John', 'transfer £200', 'pay 100 usd', 'Venmo $20') — a real money-movement commit the agent could click autonomously — and 'empty trash'/'clear my cart' (bulk-destructive) also passed. A safety false-negative on the exact irreversible actions the guard exists to block.",
+      "how": "Added CONTEXTUAL_RE branches: send/transfer/wire/pay/venmo/zelle/paypal + a $/€/£ or number+currency-word amount, and empty|clear (the) trash/bin/cart/basket/inbox. Verified no overblock of send search / send email / send the link / clear filters / empty state."
+    },
+    {
+      "id": "dangerous-action-more-verbs",
+      "title": "Sweep the dangerous-action guard for more money/destroy verbs",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "the send-amount fix covers the common payment phrasings, but adjacent commits may still slip: 'apply for', 'accept offer', 'agree and continue', 'delete all', 'unfriend/block', 'cash out', a bare 'send' to a @handle.",
+      "how": "Adversarially probe isDangerousAction with a list of real commit/destroy button labels; add the misses to CONTEXTUAL_RE, re-verifying benign navigation isn't overblocked (keep the two-tier discipline)."
     }
   ],
   "history": [
@@ -4203,6 +4221,10 @@
     {
       "id": "alert-colon-in-url",
       "note": "Self-audit (agent cap exhausted): probed recipes (chain/slot logic ok, one low papercut noted) + alert parsing. Found parseAlertCommand split name:task on the first colon, so 'watch this page https://ex.com for changes' made a garbage alert ('this page https' / '//ex.com ...'). Added (?!//) to the separator so a URL-scheme colon isn't a boundary; genuine 'name: <url>' still splits. +1 test, 1956 green."
+    },
+    {
+      "id": "dangerous-send-amount",
+      "note": "Self-audit (agent cap exhausted) swept chain-runner (containsUnnegated ok), telegram parseUpdates (ok), last-result chunkFrom/extractLinks (ok), safety.ts. Found the dangerous-action guard let 'Send $50 to John' / 'transfer £200' / 'pay 100 usd' / 'Venmo $20' + 'empty trash' / 'clear cart' through — a SAFETY false-negative (agent could autonomously click a real payment/destroy). Added money-amount + empty/clear-container branches to CONTEXTUAL_RE; no overblock of send-search/email/link, clear-filters, empty-state. +2 tests, 1958 green."
     }
   ],
   "audits": [
@@ -4478,6 +4500,9 @@
     },
     {
       "note": "Self-audit inline (agent cap 200/200). Swept recipes (parseChainSteps/slotNames/applySlots/slotsAmbiguous ok; single-slot name=value papercut seeded) + parseAlertCommand (BUG: URL-scheme colon split -> garbage watch). Fixed the alert bug; seeded single-slot-named-arg-literal + carried save-page-confirm-dedupe-feedback."
+    },
+    {
+      "note": "Self-audit inline (agent cap 200/200). Swept chain-runner + telegram parse + last-result + safety. First 3 clean; safety guard had a HIGH-impact false-negative (money-send-by-amount + empty/clear-container). Fixed; seeded dangerous-action-more-verbs (adversarial guard sweep) + carried single-slot papercut."
     }
   ]
 }

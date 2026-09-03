@@ -46,6 +46,19 @@ describe("isDangerousAction", () => {
       expect(isDangerousAction(t)).toBe(false);
     }
   });
+  it("flags a money send/transfer with a currency AMOUNT, not just the word 'money' (dangerous-send-amount)", () => {
+    for (const t of ["Send $50 to John", "transfer £200", "pay 100 usd", "wire $1,000", "Venmo $20 to Sam", "send 50 dollars"]) {
+      expect(isDangerousAction(t), `${t} should be dangerous`).toBe(true);
+    }
+    // a bulk destructive clear is caught too
+    expect(isDangerousAction("empty trash")).toBe(true);
+    expect(isDangerousAction("clear my cart")).toBe(true);
+  });
+  it("does NOT overblock benign send/clear phrasings", () => {
+    for (const t of ["send search", "send me the results", "send email", "Send the link", "clear filters", "empty state"]) {
+      expect(isDangerousAction(t), `${t} should be allowed`).toBe(false);
+    }
+  });
 });
 
 describe("redactText", () => {

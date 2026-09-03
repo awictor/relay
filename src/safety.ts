@@ -72,7 +72,13 @@ const CONTEXTUAL_RE = new RegExp(
   // "book (a) <thing>" / "book now" — a reservation commitment (but not "bookings"/"booking reference")
   + "|\\bbook\\s+(?:now|a\\s+|the\\s+|your\\s+|this\\s+)"
   // "confirm <commit>" collocations Excel/checkout use ("confirm and pay", "confirm order")
-  + "|\\bconfirm\\s+(?:and\\s+)?(?:order|purchase|payment|booking|and\\s+pay|subscription|reservation)\\b",
+  + "|\\bconfirm\\s+(?:and\\s+)?(?:order|purchase|payment|booking|and\\s+pay|subscription|reservation)\\b"
+  // send/transfer/pay/wire + a CURRENCY AMOUNT ("Send $50 to John", "transfer £200", "pay 100 usd") — a
+  // money-movement commit that named-object matching missed because the object is a bare amount, not the
+  // word "money" (dangerous-send-amount). Catches a $/€/£-prefixed or a number + currency word.
+  + "|\\b(?:send|transfer|wire|pay|venmo|zelle|paypal)\\s+(?:\\w+\\s+){0,2}?(?:[$€£]\\s?\\d|\\d+(?:\\.\\d+)?\\s?(?:usd|eur|gbp|dollars?|euros?|pounds?|bucks?))"
+  // "empty/clear (the) trash/cart/basket" — a destructive bulk action with no commit-object noun match.
+  + "|\\b(?:empty|clear)\\s+(?:the\\s+|my\\s+|your\\s+)?(?:trash|bin|cart|basket|inbox)\\b",
   "i",
 );
 
