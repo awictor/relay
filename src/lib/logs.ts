@@ -23,19 +23,24 @@ const DAY = 86_400_000;
  * "log <tag> <value>" tags by the given word. Exported for tests. */
 export function parseLogCommand(text: string): { tag: string; value: number; unit?: string } | null {
   const t = text.trim();
-  // Money: "spent $14 on lunch" / "spent 14 on food" / "paid $9 for parking".
-  const money = t.match(/^\s*(?:spent|paid|logged?\s+spending)\s+\$?(\d+(?:\.\d+)?)\s*(?:on|for)\s+(.+?)\s*$/i);
+  // A number that may carry thousands separators ("1,250", "$1,250.50") — commas stripped before
+  // parseFloat (quick-log-thousands-comma): a rent/salary/bill log is exactly where the comma appears, and
+  // the old \d+ pattern dropped the whole command silently on "spent $1,250 on rent".
+  const num = (s: string) => parseFloat(s.replace(/,/g, ""));
+  const NUM = "(-?\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|-?\\d+(?:\\.\\d+)?)";
+  // Money: "spent $14 on lunch" / "spent 14 on food" / "paid $9 for parking" / "spent $1,250 on rent".
+  const money = t.match(new RegExp(`^\\s*(?:i\\s+)?(?:spent|paid|logged?\\s+spending)\\s+\\$?${NUM}\\s*(?:on|for)\\s+(.+?)\\s*$`, "i"));
   if (money) {
     const tag = normalizeTag(money[2]!);
-    if (tag) return { tag, value: parseFloat(money[1]!), unit: "$" };
+    if (tag) return { tag, value: num(money[1]!), unit: "$" };
   }
   // Generic: "log <tag> <value> [unit]" / "track <tag> <value>" — tag is a word(s), value a number.
-  const gen = t.match(/^\s*(?:log|track|record)\s+(?:my\s+)?([a-z][\w -]*?)\s+(-?\d+(?:\.\d+)?)\s*([a-z$%°]+)?\s*$/i);
+  const gen = t.match(new RegExp(`^\\s*(?:log|track|record)\\s+(?:my\\s+)?([a-z][\\w -]*?)\\s+${NUM}\\s*([a-z$%°]+)?\\s*$`, "i"));
   if (gen) {
     const tag = normalizeTag(gen[1]!);
     if (!tag) return null;
     const unit = gen[3]?.trim();
-    return { tag, value: parseFloat(gen[2]!), ...(unit ? { unit: unit.toLowerCase() } : {}) };
+    return { tag, value: num(gen[2]!), ...(unit ? { unit: unit.toLowerCase() } : {}) };
   }
   return null;
 }

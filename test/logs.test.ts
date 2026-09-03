@@ -20,9 +20,17 @@ describe("parseLogCommand", () => {
     expect(parseLogCommand("spent $14 on lunch")).toEqual({ tag: "lunch", value: 14, unit: "$" });
     expect(parseLogCommand("paid 9 for parking")).toEqual({ tag: "parking", value: 9, unit: "$" });
   });
+  it("parses amounts with thousands commas + a leading 'I' (quick-log-thousands-comma)", () => {
+    expect(parseLogCommand("I spent $1,250 on rent")).toEqual({ tag: "rent", value: 1250, unit: "$" });
+    expect(parseLogCommand("spent $1,250.50 on rent")).toEqual({ tag: "rent", value: 1250.5, unit: "$" });
+    expect(parseLogCommand("i paid 30 for gas")).toEqual({ tag: "gas", value: 30, unit: "$" });
+    expect(parseLogCommand("log salary 5,000")).toEqual({ tag: "salary", value: 5000 });
+    expect(parseLogCommand("log steps 10,000")).toEqual({ tag: "steps", value: 10000 });
+  });
   it("null when it isn't a log command", () => {
     expect(parseLogCommand("what's the weather")).toBeNull();
     expect(parseLogCommand("log in to my account")).toBeNull(); // no number
+    expect(parseLogCommand("independent 5 on x")).toBeNull();   // 'i' prefix needs a word boundary, not 'independent'
   });
 });
 

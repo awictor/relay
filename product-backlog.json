@@ -3113,6 +3113,15 @@
       "status": "todo",
       "why": "Every recent change is unit-verified offline (anvil DOWN for many runs); the data-source + scrape/click paths have never been call-tested in this streak, so a live regression could hide behind green units.",
       "how": "When ctx_execute shows anvil localhost:3000/v1/live = 200, drive one real errand end-to-end via the console channel (e.g. a scrape + a get_weather) + assert a coherent reply; report call-tested:true. Owner-gated only in that it needs anvil started."
+    },
+    {
+      "id": "quick-log-thousands-comma",
+      "title": "'spent $1,250 on rent' silently failed to log (thousands comma)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "parseLogCommand's amount pattern was \\d+(\\.\\d+)? — no thousands comma — so a rent/salary/bill log with a comma ('spent $1,250 on rent', 'log salary 5,000') returned null and nothing was recorded, while the user thought it logged. A comma is exactly where big-ticket expenses appear.",
+      "how": "Accept a thousands-separated NUM in both the money + generic branches, strip commas before parseFloat. Also allowed an optional leading 'I ' ('I spent $1,250 on rent') — a natural phrasing that also failed. Guarded so 'independent 5 on x' doesn't false-match the 'i' prefix."
     }
   ],
   "history": [
@@ -4371,6 +4380,10 @@
     {
       "id": "callback-edit-terminal-actions-more",
       "note": "Extended the retire-buttons-in-place fix beyond Stop: a Snooze tap now strips the tapped ping's buttons (a Refresh would defeat the snooze the user just set; reply says how to resume), and a Run-again tap on a GONE digest/recipe (null result) strips its stale button so a re-tap can't keep hitting a dead automation. A SUCCESSFUL run keeps its Run-again button. Reuses the wired editReplyMarkup. +4 tests, 2017 green."
+    },
+    {
+      "id": "quick-log-thousands-comma",
+      "note": "Self-audit (anvil DOWN, both todos gated): probed logs.ts. parseLogQuery + sumSeries clean; parseLogCommand dropped any amount with a thousands comma ('spent $1,250 on rent' -> null, silently unlogged) — the exact shape a rent/salary/bill takes. Fixed: comma-tolerant NUM in money+generic branches (strip before parseFloat) + optional leading 'I '. +1 test, 2018 green."
     }
   ],
   "audits": [
@@ -4691,6 +4704,9 @@
     },
     {
       "note": "anvil DOWN -> anvil-live-e2e-when-up still blocked (long offline streak, nothing call-tested — the one real gap). Built callback-edit-terminal-actions-more. Non-owner backlog now empty except the anvil-gated e2e; confirm-to-act (high) owner-gated. The product surface is converged: remaining levers are confirm-to-act (owner product decision) + a live e2e pass (needs anvil started). Worth surfacing both to Alex rather than mining further."
+    },
+    {
+      "note": "anvil DOWN -> confirm-to-act (owner) + anvil-live-e2e (anvil) both still gated. Self-audit found + fixed quick-log-thousands-comma (silent expense-log failure) — a genuine medium, not filler. Remaining backlog = the two gated items; product surface converged, awaiting Alex's confirm-to-act decision + anvil start for the live e2e."
     }
   ]
 }
