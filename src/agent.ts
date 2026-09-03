@@ -544,7 +544,7 @@ export async function runAgent(
         try {
           const c = await backend.convertCurrency(Number.isFinite(amount) ? amount : 1, from, to);
           if (!c) { push("convert_currency", `Couldn't convert ${from} -> ${to} (check the currency codes, or try web_search for an unusual pair).`); continue; }
-          push("convert_currency", `${formatConversion(c)}. Report this to the user; the rate is live.`);
+          push("convert_currency", `${formatConversion(c)}. Report this to the user, including the "as of" date if shown (the rate refreshes about daily, not to the second).`);
         } catch (e) {
           push("convert_currency", `ERROR converting: ${e instanceof Error ? e.message : String(e)}`);
         }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeCurrency, formatConversion, fxUrl, parseFxRate, convertCurrency } from "../src/lib/fx.js";
+import { normalizeCurrency, formatConversion, fxUrl, parseFxRate, parseFx, convertCurrency } from "../src/lib/fx.js";
 
 describe("normalizeCurrency (fx-conversion-tool)", () => {
   it("maps codes, symbols, and words to ISO codes", () => {
@@ -28,10 +28,29 @@ describe("parseFxRate", () => {
   });
 });
 
+describe("parseFx (fx-live-claim-timestamp)", () => {
+  it("returns rate + a YYYY-MM-DD asOf from time_last_update_utc", () => {
+    const body = JSON.stringify({ result: "success", rates: { EUR: 0.923 }, time_last_update_utc: "Sat, 01 Jun 2024 00:00:01 +0000" });
+    expect(parseFx(body, "EUR")).toEqual({ rate: 0.923, asOf: "2024-06-01" });
+  });
+  it("rate with no date -> asOf undefined; bad -> null", () => {
+    expect(parseFx(JSON.stringify({ result: "success", rates: { EUR: 0.9 } }), "EUR")).toEqual({ rate: 0.9, asOf: undefined });
+    expect(parseFx(JSON.stringify({ result: "error" }), "EUR")).toBeNull();
+  });
+});
+
 describe("formatConversion", () => {
-  it("renders a short human line", () => {
+  it("renders a short human line (no date when absent)", () => {
     expect(formatConversion({ amount: 200, from: "USD", to: "EUR", rate: 0.923, result: 184.6 }))
       .toBe("200 USD = 184.60 EUR (rate 0.9230)");
+  });
+  it("includes the as-of date when present (not claiming 'live')", () => {
+    expect(formatConversion({ amount: 200, from: "USD", to: "EUR", rate: 0.923, result: 184.6, asOf: "2024-06-01" }))
+      .toBe("200 USD = 184.60 EUR (rate 0.9230, as of 2024-06-01)");
+  });
+  it("renders a tiny inverse rate at adaptive precision, not 0.0000", () => {
+    const line = formatConversion({ amount: 1000, from: "IDR", to: "USD", rate: 0.0000238, result: 0.0238 });
+    expect(line).toMatch(/rate 0\.0000238/); // ~4 sig figs, not "0.0000"
   });
 });
 

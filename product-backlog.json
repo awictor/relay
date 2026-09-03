@@ -1058,7 +1058,7 @@
       "title": "convert_currency claims \"live\" but rate is ~daily + tiny rates render 0.0000",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The FX source refreshes ~daily; the tool tells the user \"the rate is live\" (misrepresentation for a money decision) and a small inverse rate shows \"rate 0.0000\".",
       "how": "Surface the API time_last_update_utc + drop the \"live\" wording (say \"as of <date>\"); format the rate with adaptive precision so a <0.01 rate is not 0.0000."
     },
@@ -1441,6 +1441,10 @@
     {
       "id": "coords-privacy-ttl",
       "note": "A shared location pin used to send ~1m coords to the LLM on EVERY later message forever + near-me resolved against a stale spot. Coords now carry coordsAt + expire after COORDS_TTL_MS (RELAY_COORDS_TTL_MS, default 6h): profiles.freshCoords + contextLine(now) omit expired coords, so a one-time pin informs only near-term near-me/weather then stops leaking. Home location stays durable. All coord-reading sites (profileContext, weatherCoords, hasLocation, proactive contextFor) now freshness-gated. 983 tests green."
+    },
+    {
+      "id": "fx-live-claim-timestamp",
+      "note": "convert_currency no longer claims a money figure is \"live\" (the source refreshes ~daily): parseFx now returns the API time_last_update_utc as a YYYY-MM-DD asOf, formatConversion appends \"as of <date>\" + the prompt says report it. Also fmtRate renders a tiny inverse rate at adaptive precision (IDR->USD 0.0000238, not \"0.0000\"). parseFxRate kept as a back-compat shim. 987 tests green."
     }
   ],
   "audits": [
