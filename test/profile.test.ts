@@ -42,6 +42,18 @@ describe("parseSetLocation", () => {
     // explicit forms stay permissive (a comma place is fine there)
     expect(parseSetLocation("set my location to Austin, TX")).toEqual({ location: "Austin, TX", tzOffsetMin: -360 });
   });
+  it("does NOT save a bare 'I'm in <state>' non-place as a location (bare-im-in-nonplace-corrupts-profile)", () => {
+    // Everyday "I'm in X" where X is a state-of-being, not a place — must fall through, not corrupt the profile.
+    expect(parseSetLocation("I'm in trouble")).toBeNull();
+    expect(parseSetLocation("I'm in bed")).toBeNull();
+    expect(parseSetLocation("I'm in the office")).toBeNull();      // article -> not a place
+    expect(parseSetLocation("I'm in a mood")).toBeNull();          // article
+    expect(parseSetLocation("I am in love")).toBeNull();
+    expect(parseSetLocation("I'm in class")).toBeNull();
+    // A real proper-noun place with no article still saves.
+    expect(parseSetLocation("I'm in Paris")).toEqual({ location: "Paris", tzOffsetMin: 60 });
+    expect(parseSetLocation("I'm in San Diego")).toMatchObject({ location: "San Diego" });
+  });
   it("returns null for a non-location message", () => {
     expect(parseSetLocation("what's the weather")).toBeNull();
     expect(parseSetLocation("/setlocation")).toBeNull(); // no place

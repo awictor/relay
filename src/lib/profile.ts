@@ -67,6 +67,13 @@ export function parseSetLocation(text: string): { location: string; units?: "met
       || /\bin\s+\d/.test(tail) || /\bat\s+\d/.test(tail)  // "...in 10", "...at 3pm"
       || loc.split(/\s+/).length > 5;                      // a place is a few words, not a sentence
     if (looksLikeTask) return null; // not a location-set — let it fall through to scheduling/agent
+    // "I'm in X" is also everyday chat where X is a STATE, not a place: "I'm in trouble / bed / a rush /
+    // the office / a meeting / love". Reject when the tail starts with an article (a/an/the — a real
+    // place-name doesn't) or is a known non-place state-of-being word. A bare "I'm in Paris" (a proper
+    // noun, no article) still saves; the explicit /setlocation form covers any odd case this misses.
+    const startsWithArticle = /^(?:a|an|the)\s+/i.test(loc);
+    const NON_PLACE = /^(?:trouble|bed|love|charge|pain|class|court|jail|labor|labour|shock|denial|control|between|luck|debt|awe|sync|line|session|surgery|transit|traffic|hospital)\b/i;
+    if (startsWithArticle || NON_PLACE.test(tail)) return null;
   }
   let units: "metric" | "imperial" | undefined;
   let tzOffsetMin: number | undefined;

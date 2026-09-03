@@ -23,7 +23,7 @@
       "title": "'I'm in trouble' / 'I'm in bed' saved as home location + the message eaten",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "parseSetLocation's bare 'I'm in X' guard only rejects tails with scheduling/task keywords or >5 words, so a short non-place noun ('trouble', 'bed', 'the office', 'a meeting') is stored as the home location AND the message is swallowed (never reaches the agent) — later weather/near-me resolve against nonsense + the user's real message is lost (audit 26 B#3).",
       "how": "Tighten the bare-form: require the tail to look like a place (not a common non-place noun / state-of-being), or only accept 'I'm in X' as a location when X geocodes / is title-cased / matches a place shape. Prefer the explicit /setlocation + 'set my location to' forms. Add false-positive tests ('I'm in trouble', 'I'm in a meeting')."
     },
@@ -2048,6 +2048,10 @@
     {
       "id": "recurring-near-me-pin-ttl-breaks",
       "note": "A standing 'weather near me every morning' set by a user who only shared a location PIN (no typed home city) silently died the same day: agentEnvFor (the proactive env) used profiles.freshCoords, which returns undefined past the 6h COORDS_TTL_MS, so the scheduled get_weather hit its 'no place, no location' branch and fired 'which city?' into the void forever. Added profiles.homeCoords (durable, TTL-ignoring) + switched agentEnvFor to it — a standing automation the user opted into keeps its location anchor, while the ad-hoc INBOUND path still uses freshCoords so the privacy TTL (don't leak a ~1m pin to the LLM on every later message) is unchanged. 1 profile test (homeCoords ignores TTL / undefined w/ no coords) + the existing freshCoords-expiry test still green. call-tested: false (pure store + wiring). 1192 tests green."
+    },
+    {
+      "id": "bare-im-in-nonplace-corrupts-profile",
+      "note": "Everyday 'I'm in trouble' / 'I'm in bed' / 'I'm in the office' / 'I'm in a mood' was saved as the home location AND the message was eaten (never reached the agent) — parseSetLocation's bare-form guard only rejected task/scheduling keywords + >5-word tails, so a short state-of-being noun passed, corrupting the profile + losing the user's real message. Added two rejects to the bare 'I'm in X' form: a leading article (a/an/the — a real place-name has none) and a NON_PLACE state-of-being word list (trouble/bed/love/class/court/traffic/hospital/...). A proper-noun place with no article ('I'm in Paris', 'I'm in San Diego') still saves; the explicit /setlocation form stays permissive for any odd case. 1 test (6 non-place forms fall through / 2 real places still save). call-tested: false (pure parse). 1193 tests green."
     }
   ],
   "audits": [
