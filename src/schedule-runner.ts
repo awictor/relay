@@ -214,7 +214,12 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     alertCommit?.(); // send succeeded -> NOW advance the alert baseline (a throw above skips this)
     deps.recordSend?.(s.chatId, sendText!); // cache for a "more"/"send the link" reply to this ping
     noteSend(s.chatId, deps.now());
-    deps.store.complete(s.id, deps.now());
+    // complete() returns whether the state reached disk. A false for a "once" means its delivered-mark
+    // may not have persisted, so it could be re-read after a restart (once-complete-ignores-persist) —
+    // it's guarded against re-firing THIS session by the in-memory delivered flag, but log so a bad disk
+    // is visible to an operator rather than silently risking a duplicate ping.
+    const completed = deps.store.complete(s.id, deps.now());
+    if (!completed) log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: true, warn: "complete_persist_failed" })}`);
     // Observability (m8): structured proactive-run line + Metrics record (same as inbound).
     const elapsedMs = deps.now() - startedAt;
     const steps = res.steps ?? 0;

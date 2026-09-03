@@ -25,6 +25,9 @@ export interface Schedule {
   clockTime?: boolean; // a "once" tied to a WALL-CLOCK time ("at 8am", "tomorrow 9:30", "on May 6") — as
                        // opposed to a relative "in 3 hours". Only clock-time onces get tz-restamped on a
                        // later /setlocation (once-reminder-tz-restamp); a relative once has no hour to shift.
+  delivered?: boolean; // a "once" that already fired but whose removal-write may have failed
+                       // (once-complete-ignores-persist). dueNow() excludes it so it can't double-fire
+                       // this session even if the disk splice didn't land; a later successful persist drops it.
   pausedUntil?: number; // snooze (snooze-automations): while now < this, the runner skips it WITHOUT firing
                         // or completing; auto-clears when it passes. Number.MAX_SAFE_INTEGER = indefinite.
   created: number;
@@ -645,7 +648,9 @@ export class ScheduleStore {
 
   /** Schedules due at/before now. */
   dueNow(now: number): Schedule[] {
-    return this.items.filter((s) => s.dueMs <= now);
+    // Exclude a once whose fire already completed but whose removal-write may have failed
+    // (once-complete-ignores-persist) — never re-fire a delivered promise this session.
+    return this.items.filter((s) => s.dueMs <= now && !s.delivered);
   }
 
   /** Record a failed fire attempt for a schedule; returns the new attempt count (0 if not found).
@@ -702,26 +707,37 @@ export class ScheduleStore {
     return moved;
   }
 
-  /** After firing: drop a "once", or advance a recurring schedule to its next occurrence. */
-  complete(id: string, now: number): void {
+  /** After firing: drop a "once", or advance a recurring schedule to its next occurrence. Returns
+   * whether the state reached disk — the caller can't undo a send, but a `false` means a once might be
+   * re-read after a restart, so it's worth logging (once-complete-ignores-persist). */
+  complete(id: string, now: number): boolean {
     const s = this.items.find((x) => x.id === id);
-    if (!s) return;
+    if (!s) return true;
     const [hh, mm] = (s.hourMin ?? "9:0").split(":").map((n) => parseInt(n, 10));
     // Reschedule in the SAME zone the schedule was created in (per-chat offset stamped at add time),
     // falling back to the global default for schedules created before offsets existed.
     const off = s.offsetMin ?? tzOffsetMin();
     if (s.kind === "daily" && s.hourMin) {
       s.dueMs = nextDailyMs(now, hh!, mm!, off);
+      return this.persist();
     } else if (s.kind === "weekly" && s.hourMin && s.weekdays?.length) {
       s.dueMs = nextWeeklyMs(now, hh!, mm!, s.weekdays, off);
+      return this.persist();
     } else if (s.kind === "interval" && s.intervalMs) {
       // Advance by whole intervals past now so a missed tick (downtime) doesn't fire a burst of backlog.
       const next = s.dueMs + Math.max(1, Math.ceil((now - s.dueMs) / s.intervalMs)) * s.intervalMs;
       s.dueMs = next > now ? next : now + s.intervalMs;
-    } else {
-      this.items = this.items.filter((x) => x.id !== id);
+      return this.persist();
     }
-    this.persist();
+    // A "once": mark delivered FIRST (so dueNow excludes it this session even if the write below fails —
+    // no double-fire), then persist, then splice from memory only on a successful write. If the write
+    // failed the item stays in memory (delivered=true guards it) and a later persist drops it; a restart
+    // re-reads the disk, which only lacks the delivery if the write genuinely never landed (can't-write
+    // = can't-remember, the irreducible case) — much narrower than the old unconditional splice+drop-bool.
+    s.delivered = true;
+    const ok = this.persist();
+    if (ok) { this.items = this.items.filter((x) => x.id !== id); this.persist(); }
+    return ok;
   }
 
   size(): number { return this.items.length; }

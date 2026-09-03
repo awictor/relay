@@ -410,6 +410,33 @@ describe("ScheduleStore.lastSaveOk (persist-bool-all-stores)", () => {
   });
 });
 
+describe("ScheduleStore.complete persist (once-complete-ignores-persist)", () => {
+  it("returns true and removes a once on a successful write", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const o = s.add(1, { kind: "once", task: "meds", dueMs: NOW - 1, offsetMin: 0 }, NOW)!;
+    expect(s.complete(o.id, NOW)).toBe(true);
+    expect(s.list(1)).toHaveLength(0); // dropped clean
+  });
+  it("returns false and does NOT re-fire the once this session when the write fails", () => {
+    const { writeFileSync } = require("fs");
+    const d = mkdtempSync(join(tmpdir(), "relay-cfail-")); dirs.push(d);
+    const asFile = join(d, "afile"); writeFileSync(asFile, "x");
+    const s = new ScheduleStore({ file: join(asFile, "cant.json") }); // parent is a file -> writes fail
+    const o = s.add(1, { kind: "once", task: "meds", dueMs: NOW - 1, offsetMin: 0 }, NOW)!;
+    expect(s.complete(o.id, NOW)).toBe(false); // persist failed
+    // The once stays in the store (write failed) BUT is marked delivered -> dueNow excludes it, so it
+    // can't double-fire this session.
+    expect(s.dueNow(NOW)).toHaveLength(0);
+  });
+  it("returns true for a recurring advance (daily reschedules, stays in store)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const daily = s.add(1, { kind: "daily", task: "brief", dueMs: NOW - 1, hourMin: "09:00", offsetMin: 0 }, NOW)!;
+    expect(s.complete(daily.id, NOW)).toBe(true);
+    expect(s.list(1)).toHaveLength(1);
+    expect(s.list(1)[0]!.dueMs).toBeGreaterThan(NOW);
+  });
+});
+
 describe("ScheduleStore.restampTz (tz-restamp-on-setlocation)", () => {
   it("re-stamps daily/weekly to the new tz + recomputes dueMs; skips interval/once; returns the count", async () => {
     const { nextDailyMs } = await import("../src/lib/schedule.js");

@@ -1760,7 +1760,7 @@
       "title": "complete() ignores persist() bool -> once can double-fire after restart",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "On a full/unwritable disk a once reminder sends, is dropped only in memory, then re-fires after the next restart. Every other store hedges on lastSaveOk() but the proactive complete() path does not.",
       "how": "Have complete() surface the persist result; on a failed persist after a once fire, log + optionally flag so the runner can avoid a duplicate (or at least record it)."
     },
@@ -2481,6 +2481,10 @@
     {
       "item": "contacts-book-compose",
       "note": "Added a contacts book so compose drafts to a saved recipient. New src/lib/contacts.ts (ContactStore + parseSaveContact/parseForgetContact/normalizeContactName): 'save mom's number is 555-1234' / 'my boss's email is b@co.com' stores a name->handle; exact + fuzzy (word-overlap, longest-name-wins) lookup. agent.ts compose dispatch resolves a `to` that's a NAME (not a valid handle) via a new resolveContact AgentDep, threaded through both runIt calls; handler save/forget/'/contacts' branches before the scheduler; index wiring + RELAY_CONTACTS_FILE + START Commands + HELP + .env.example + KNOWN_COMMANDS. 'text mom I'm late' now drafts to her number instead of dead-ending. 29 new tests, suite 1377 green, tsc clean. call-tested:false (offline unit + dispatch + handler routing)."
+    },
+    {
+      "item": "once-complete-ignores-persist",
+      "note": "complete() now returns the persist bool + guards a once against double-firing on a failed disk write. A once is marked delivered=true BEFORE the removal write; dueNow() excludes delivered items so it can't re-fire this session even if the splice-write failed; the item is spliced from memory only on a successful persist (a later persist drops it). schedule-runner logs a complete_persist_failed warn when complete() returns false. Was: complete() spliced the once then discarded persist()'s result, so on a full/unwritable disk the once vanished in memory but survived on disk -> duplicate ping after restart. 3 new tests. Suite 1380 green, tsc clean."
     }
   ],
   "audits": [
