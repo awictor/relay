@@ -129,8 +129,20 @@ export function isUrlSafe(urlString: string): { safe: boolean; reason?: string }
  * SSRF-safe fetch: validates the initial URL AND every redirect hop against
  * isUrlSafe(). Throws "Blocked request: ..." if any hop fails validation.
  */
+// A default User-Agent for outbound requests (DEV-0332). Several public APIs (Reddit's .json, some
+// GitHub/registry endpoints) reject a missing/default-runtime UA from datacenter IPs with 403/429.
+// Only applied when the caller/template didn't set its own User-Agent, so an explicit one still wins.
+const DEFAULT_USER_AGENT = "datafaucet-mcp/1.0 (+https://datafaucet.dev)";
+
+function withDefaultUserAgent<T extends RequestInit>(init: T): T {
+  const h = new Headers(init.headers);
+  if (!h.has("user-agent")) h.set("User-Agent", DEFAULT_USER_AGENT);
+  return { ...init, headers: h };
+}
+
 export async function safeFetch(url: string, init: RequestInit & { signal?: AbortSignal }, maxRedirects = 5): Promise<Response> {
   let current = url;
+  init = withDefaultUserAgent(init);
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const check = isUrlSafe(current);
     if (!check.safe) throw new Error(`Blocked request: ${check.reason}`);
