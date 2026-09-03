@@ -399,7 +399,13 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // clock time. clockTime marks the wall-clock onces; a relative "in 20 min" once has no such flag
         // and still defers (its instant is incidental, not chosen).
         const isClockOnce = s.kind === "once" && s.clockTime === true;
-        if (deps.quietUntil && deps.deferTo && !isAlertCheck && !isClockOnce) {
+        // A SHORT-HORIZON once (a timer, or "remind me in 20 min") is ALSO exempt (timer-quiet-hours-defer):
+        // its fire instant is deliberate + near-term, so deferring "timer for 20 minutes" set at 11pm to the
+        // 7am quiet-end silently breaks it by hours. Gauge by how soon it was set to fire (dueMs - created);
+        // a genuinely long relative once ("in 2 days") still defers (its late-night instant is incidental).
+        const SHORT_ONCE_MS = 3 * 3_600_000; // 3h: covers timers + "in a couple hours", not multi-day onces
+        const isShortOnce = s.kind === "once" && !s.clockTime && (s.dueMs - s.created) <= SHORT_ONCE_MS;
+        if (deps.quietUntil && deps.deferTo && !isAlertCheck && !isClockOnce && !isShortOnce) {
           const until = deps.quietUntil(s.chatId, deps.now());
           if (until > deps.now() && s.dueMs < until) {
             deps.deferTo(s.id, until);

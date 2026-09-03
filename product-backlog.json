@@ -2435,7 +2435,7 @@
       "title": "a timer / short reminder is deferred hours by quiet-hours",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The timer + relative-once branches return {kind:'once', dueMs:now+ms, reminderOnly:true} with NO clockTime flag, and schedule-runner only exempts isClockOnce from the quiet-hours defer. So with quiet hours on, 'timer for 20 minutes' at 11pm (or 'remind me in 30 min') is pushed to the window end (e.g. 7am) — the most common errand silently breaks by hours. Gated on RELAY_QUIET_START/END being set (off by default), so latent.",
       "how": "Exempt a SHORT-HORIZON once (timer, or a relative 'in N min/hours' due within the quiet window's start) from the quiet defer, mirroring the clock-once alarm exemption — the fire instant is deliberate + near-term. Offline test: a timer inside the quiet window fires at its time, not deferred."
     },
@@ -3414,6 +3414,10 @@
     {
       "item": "extractvalue-bare-kb-overscale",
       "note": "Fixed extractValue over-scaling a plain count by 1000-1e9. The untagged magnitude scan had the suffix (k|bn|b|thousand|...) with NO trailing boundary, so a bare k/b glued to a WORD matched: 'only 4 boxes left'->4e9 (the 'b'), '3 km'->3000, '2 kg'->2000, '3 bedrooms'->3e9 — false-firing 'below/above' predicates + logging phantom multi-billion chart points across count/inventory/rental watches. (Bare m/t were already excluded; k/b were the leftover gap.) Added a (?![a-z]) boundary to the suffix group so a letter-glued k/b does NOT scale, while a true token-end magnitude ('$60k','1.3bn') + the count-noun path ('900k downloads') still do. 8 new assertions (boxes/km/kg/bedrooms not scaled; $60k/900k downloads/1.3bn still scaled; below-10 inventory predicate correct), suite 1663 green, tsc clean. call-tested:false (pure extractValue)."
+    },
+    {
+      "item": "timer-quiet-hours-defer",
+      "note": "A timer / short 'in N min' reminder no longer gets deferred hours by quiet-hours. The runner only exempted a wall-clock 'once' (clockTime) from the quiet defer, so 'timer for 20 minutes' at 11pm (or 'remind me in 30 min') was pushed to the window end (e.g. 7am) — the most common errand silently broken by hours (latent: gated on RELAY_QUIET_START/END being set). Added a SHORT-HORIZON exemption: a once with no clockTime whose dueMs-created <= 3h is a deliberate near-term instant (timer / 'in a couple hours') and fires on time; a LONG relative once ('in 2 days', incidental late-night instant) still defers. 2 new runner tests (short once fires in quiet hours; long relative once still defers) + updated 2 existing quiet-defer tests to use a long-horizon once. suite 1664 green, tsc clean. call-tested:false (offline runner, injected clock+quietUntil)."
     }
   ],
   "audits": [

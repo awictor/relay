@@ -309,7 +309,9 @@ describe("makeScheduleRunner.tick", () => {
       quietUntil: () => NOW + 8 * 3_600_000, // in quiet window -> defer 8h out
       deferTo: (id, when) => { store.deferTo(id, when); },
     });
-    store.add(1, { kind: "once", task: "meds", dueMs: NOW - 1 }, NOW);
+    // A long-horizon relative once (set a day ago) landing in quiet hours defers; a just-set near-term
+    // timer would not (see the short-once test below).
+    store.add(1, { kind: "once", task: "meds", dueMs: NOW - 1 }, NOW - 86_400_000);
     const n = await runner.tick();
     expect(n).toBe(0);                               // nothing fired
     expect(sent).toHaveLength(0);                    // no 3am ping
@@ -332,7 +334,7 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.list(1)).toHaveLength(0); // once delivered + dropped, not deferred
   });
 
-  it("a RELATIVE 'once' (no clockTime) still defers in quiet hours — its instant is incidental", async () => {
+  it("a LONG relative 'once' (set days ahead, no clockTime) still defers in quiet hours — its instant is incidental", async () => {
     const clock = { t: NOW };
     const sent: string[] = [];
     const { store, runner } = harness(clock, {
@@ -340,11 +342,27 @@ describe("makeScheduleRunner.tick", () => {
       quietUntil: () => NOW + 8 * 3_600_000,
       deferTo: (id, when) => { store.deferTo(id, when); },
     });
-    store.add(1, { kind: "once", task: "check the thing", dueMs: NOW - 1 }, NOW); // no clockTime
+    // Created 2 days ago, due now — a long-horizon relative once, NOT a just-set near-term timer.
+    store.add(1, { kind: "once", task: "check the thing", dueMs: NOW - 1 }, NOW - 2 * 86_400_000);
     const n = await runner.tick();
     expect(n).toBe(0);                                          // deferred, not fired
     expect(sent).toHaveLength(0);
     expect(store.list(1)[0]!.dueMs).toBe(NOW + 8 * 3_600_000);  // pushed to window end
+  });
+
+  it("a SHORT-horizon once (timer / 'in 20 min') fires in quiet hours, not deferred (timer-quiet-hours-defer)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    const { store, runner } = harness(clock, {
+      send: async (_c, text) => { sent.push(text); },
+      quietUntil: () => NOW + 8 * 3_600_000, // deep in the quiet window
+      deferTo: (id, when) => { store.deferTo(id, when); },
+    });
+    // "timer for 20 minutes" set just now, now due — a deliberate near-term instant.
+    store.add(1, { kind: "once", task: "timer's up ⏰", dueMs: NOW - 1, reminderOnly: true }, NOW - 20 * 60_000);
+    const n = await runner.tick();
+    expect(n).toBe(1);                 // fired on time despite quiet hours
+    expect(sent[0]).toMatch(/timer/i);
   });
 
   it("an alert CHECK runs during quiet hours (not deferred) so an overnight crossing isn't lost (quiet-hours-defers-alert-check)", async () => {
