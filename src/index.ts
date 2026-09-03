@@ -29,7 +29,7 @@ import { ScheduleStore, parseSchedule, parseSnoozeCommand, tzOffsetMin, quietUnt
 import { formatWhen } from "./lib/format-when.js";
 import { formatDashboard, type DashboardData } from "./lib/dashboard.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
-import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots, slotsAmbiguous, slotNames, isChain } from "./lib/recipes.js";
+import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots, slotsAmbiguous, slotNames, isChain, chainOverflow, MAX_CHAIN_STEPS } from "./lib/recipes.js";
 import { matchRecipe } from "./lib/task-suggest.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest, type DigestOutcome } from "./digest-runner.js";
@@ -767,13 +767,15 @@ const handle = createHandler({
     if (!p) return { ok: false, reason: "unparsed" };
     const rec = recipes.add(chatId, p, Date.now());
     if (!rec) return { ok: false, reason: "capped" };
-    return { ok: true, name: rec.name, saved: recipes.lastSaveOk() };
+    const droppedSteps = chainOverflow(p.task); // chain steps past the cap (chain-step-cap-silent-drop)
+    return { ok: true, name: rec.name, saved: recipes.lastSaveOk(), ...(droppedSteps ? { droppedSteps } : {}) };
   },
   // "save that as <name>" (product-loop): store a name + the handler-supplied prior task.
   recipeSaveNamed: (chatId, name, task) => {
     const rec = recipes.add(chatId, { name, task }, Date.now());
     if (!rec) return { ok: false, reason: "capped" };
-    return { ok: true, name: rec.name, saved: recipes.lastSaveOk() };
+    const droppedSteps = chainOverflow(task);
+    return { ok: true, name: rec.name, saved: recipes.lastSaveOk(), ...(droppedSteps ? { droppedSteps } : {}) };
   },
   recipeResolve: (chatId, text) => {
     // Parse name + args so a recipe with {slots} runs with the user's values (product-loop).

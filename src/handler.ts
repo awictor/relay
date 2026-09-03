@@ -250,10 +250,10 @@ export interface HandlerDeps {
   // Saved recipes (m7 recipe-2). All optional so older wiring stays valid. recipeSave parses a
   // "save <name>: <task>" message (null if it isn't one); recipeResolve returns a saved task by
   // name (null if unknown); recipeList/recipeForget manage them.
-  recipeSave?: (chatId: number, text: string) => { ok: true; name: string; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" };
+  recipeSave?: (chatId: number, text: string) => { ok: true; name: string; saved?: boolean; droppedSteps?: number } | { ok: false; reason: "unparsed" | "capped" };
   // "save that as <name>" (product-loop): save a name + an explicit task (the prior turn's task,
   // resolved by the handler from memory) without the user retyping it. Optional.
-  recipeSaveNamed?: (chatId: number, name: string, task: string) => { ok: true; name: string; saved?: boolean } | { ok: false; reason: "capped" };
+  recipeSaveNamed?: (chatId: number, name: string, task: string) => { ok: true; name: string; saved?: boolean; droppedSteps?: number } | { ok: false; reason: "capped" };
   // parses a run command + looks up. { missingArg } = a slotted recipe was run with no value, so the
   // handler asks for it instead of running a broken (empty-slot) task (product-loop).
   recipeResolve?: (chatId: number, text: string) => { name: string; task: string } | { name: string; missingArg: true } | { name: string; ambiguousArgs: true; slots: string[] } | null;
@@ -1503,7 +1503,8 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         const r = deps.recipeSaveNamed(msg.chatId, staName, (prior.content as string).trim());
         if (r.ok) {
           if (r.saved === false) { await deps.sendMessage(msg.chatId, `I've got "${r.name}" for now, but I couldn't save it to disk — it may be lost if I restart. Try again shortly.`); return; }
-          await deps.sendMessage(msg.chatId, `Saved recipe "${r.name}" from your last task. Run it anytime with /run ${r.name}.`); return;
+          const cut = r.droppedSteps ? ` (A chain runs up to 6 steps, so I dropped the last ${r.droppedSteps}.)` : "";
+          await deps.sendMessage(msg.chatId, `Saved recipe "${r.name}" from your last task.${cut} Run it anytime with /run ${r.name}.`); return;
         }
         await deps.sendMessage(msg.chatId, "You've hit the recipe limit — /forget one first.");
         return;
@@ -1558,7 +1559,8 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       const r = deps.recipeSave(msg.chatId, msg.text);
       if (r.ok) {
         if (r.saved === false) { await deps.sendMessage(msg.chatId, `I've got "${r.name}" for now, but I couldn't save it to disk — it may be lost if I restart. Try again shortly.`); return; }
-        await deps.sendMessage(msg.chatId, `Saved recipe "${r.name}". Run it anytime with /run ${r.name}.`); return;
+        const cut = r.droppedSteps ? ` (A chain runs up to 6 steps, so I dropped the last ${r.droppedSteps}.)` : "";
+        await deps.sendMessage(msg.chatId, `Saved recipe "${r.name}".${cut} Run it anytime with /run ${r.name}.`); return;
       }
       if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the recipe limit — /forget one first."); return; }
       // unparsed: fall through

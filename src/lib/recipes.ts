@@ -112,6 +112,14 @@ export function parseChainSteps(task: string): ChainStep[] {
 }
 export function isChain(task: string): boolean { return task.includes(">>"); }
 
+// How many chain steps a task defines beyond MAX_CHAIN_STEPS — i.e. how many parseChainSteps silently
+// dropped (chain-step-cap-silent-drop). 0 when within the cap. Lets the save path tell the user their
+// long chain was truncated instead of silently keeping only the first N. Exported for tests.
+export function chainOverflow(task: string): number {
+  const total = task.split(/\s*>>\s*/).map((s) => s.trim()).filter(Boolean).length;
+  return Math.max(0, total - MAX_CHAIN_STEPS);
+}
+
 // The distinct {slot} names in a task, in first-appearance order. Exported for tests.
 export function slotNames(task: string): string[] {
   const out: string[] = [], seen = new Set<string>();

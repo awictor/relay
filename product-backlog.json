@@ -3056,7 +3056,7 @@
       "title": "Chain recipe silently truncates past MAX_CHAIN_STEPS (6)",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "parseChainSteps slices at 6 steps with no signal, so a 'a >> b >> ... >> h' recipe silently drops steps 7+; a power user building a long workflow loses the tail without knowing (same class as the digest/watchlist/list caps just fixed, lower frequency).",
       "how": "Surface the dropped step count when a chain definition exceeds MAX_CHAIN_STEPS (on save/define), e.g. 'kept the first 6 steps, dropped 2' — reusing the cap-report pattern."
     },
@@ -4329,6 +4329,10 @@
     {
       "id": "countdown-holiday-label",
       "note": "Self-audit (agent cap 200/200): probed countdown + milestone math. Milestones (future-only, tz-shift, day-of) correct. Found parseCountdown labeled a bare-holiday countdown 'it' ('days until Christmas' -> label empty -> 'it') because the holiday was consumed as the date phrase. Now a named (alphabetic) date phrase doubles as the label when nothing else was given; numeric/ISO still -> 'it'. +1 test, 2005 green."
+    },
+    {
+      "id": "chain-step-cap-silent-drop",
+      "note": "Chain recipe saved with >6 steps silently kept only the first 6 (parseChainSteps slice). Added chainOverflow(task) (pure, no change to parseChainSteps's shape so its many callers are untouched); recipeSave + recipeSaveNamed return droppedSteps, and both save confirmations tell the user 'a chain runs up to 6 steps, so I dropped the last N'. Completes the cap-drop trust class (lists, digests, watchlists, now chains). +1 test, 2006 green."
     }
   ],
   "audits": [
@@ -4631,6 +4635,9 @@
     },
     {
       "note": "Self-audit inline (agent cap 200/200): countdown parse/milestones. Milestone math clean; bare-holiday countdown mislabeled 'it' (fixed). Backlog now genuinely just low papercuts + owner-gated; the medium+ veins across parse/reliability/safety/feeds are swept."
+    },
+    {
+      "note": "Cap-drop trust class COMPLETE across lists/digests/watchlists/chains. Backlog now only owner-gated (confirm-to-act high/L) + low papercuts (callback-edit, save-page-dedupe, unitprice-three-way, single-slot-named-arg). The medium+ reliability/parse/safety/feed veins are swept; recent finds trended low. Next run should either clear a remaining low or, if a fresh-surface self-audit comes up clean, report convergence honestly."
     }
   ]
 }

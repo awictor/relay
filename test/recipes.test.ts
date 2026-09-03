@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, parseSaveThatAs, parseWatchThat, parseScheduleThat, applySlots, slotNames, hasSlots, slotsAmbiguous, parseChainSteps, isChain, RecipeStore } from "../src/lib/recipes.js";
+import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, parseSaveThatAs, parseWatchThat, parseScheduleThat, applySlots, slotNames, hasSlots, slotsAmbiguous, parseChainSteps, isChain, chainOverflow, RecipeStore } from "../src/lib/recipes.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -201,5 +201,12 @@ describe("parseChainSteps / isChain (recipe-chaining)", () => {
   it("caps chain length (each step is a full agent run)", () => {
     const many = Array.from({ length: 12 }, (_, i) => `step ${i}`).join(" >> ");
     expect(parseChainSteps(many)).toHaveLength(6); // MAX_CHAIN_STEPS
+  });
+  it("chainOverflow reports steps dropped past the cap (chain-step-cap-silent-drop)", () => {
+    expect(chainOverflow(Array.from({ length: 12 }, (_, i) => `s${i}`).join(" >> "))).toBe(6); // 12 - 6
+    expect(chainOverflow("a >> b >> c")).toBe(0);      // within cap
+    expect(chainOverflow("a >> b >> c >> d >> e >> f >> g")).toBe(1); // one over
+    expect(chainOverflow("just one task")).toBe(0);    // not a chain
+    expect(chainOverflow("a >>  >> b")).toBe(0);       // empty steps filtered, 2 real -> under cap
   });
 });
