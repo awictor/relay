@@ -1949,7 +1949,7 @@
       "title": "Team-not-playing guard bypassed when the query also names a league",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The not-playing guard only triggers on ref.viaTeam, but resolveLeague matches the LEAGUES word first, so \"did the Lakers win, NBA scores?\" resolves without viaTeam -> filterByTeam dumps the whole slate again.",
       "how": "In getScores run teamMatchedAny whenever the query names a KNOWN team (independent of how the league resolved), not only on viaTeam; return teamNotPlaying when it names a team with no game."
     },
@@ -2737,6 +2737,10 @@
     {
       "item": "error-path-memory-clobber",
       "note": "Fixed the handler error path clobbering memory. The catch wrote [...history,...] from the pre-run snapshot (read before the agent ran), so a background errand that delivered its result to memory mid-run had it erased when the run then threw — the same race the SUCCESS path was fixed for last runs, still live in the catch. Now re-reads current memory (memoryGet) + appends the failure note. 1 new regression test (errand turn survives a failure write). Suite 1444 green, tsc clean."
+    },
+    {
+      "item": "scores-team-not-playing-with-league-word",
+      "note": "Fixed the team-not-playing guard being bypassed when the query also names a league. getScores keyed the guard on ref.viaTeam, which is only set when the league resolved VIA the team map; 'did the Lakers win, NBA scores?' resolves via the LEAGUES word (viaTeam unset) but still names a team, so it dumped the whole slate. Now keyed on a new namesKnownTeam(query) (any TEAM_LEAGUE regex hit, independent of league resolution) -> teamNotPlaying fires whenever a named team has no game today. 1 new test. Suite 1445 green, tsc clean."
     }
   ],
   "audits": [

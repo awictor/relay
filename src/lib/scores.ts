@@ -152,15 +152,22 @@ export async function getScores(
   if (!ref) return null;
   try {
     const all = parseScoreboard(await fetchText(scoreboardUrl(ref)));
-    // The query named a specific team (viaTeam) but NONE of today's games involve it: don't dump every
-    // OTHER game as "the answer" (scores-team-not-playing-dumps-slate) — signal it so the caller says
-    // "they're not playing today" instead. teamMatchedAny is the authoritative check (filterByTeam
-    // deliberately falls back to the whole slate on a no-match, which is what caused the dump).
-    if (ref.viaTeam && all.length > 0 && !teamMatchedAny(all, query)) {
+    // The query NAMES a specific team but NONE of today's games involve it: don't dump every OTHER game
+    // as "the answer" (scores-team-not-playing-dumps-slate) — signal it so the caller says "they're not
+    // playing today". Keyed on namesKnownTeam(query), NOT ref.viaTeam: a query like "did the Lakers win,
+    // NBA scores?" resolves the league via the LEAGUES word (viaTeam unset) but STILL names a team, so
+    // the viaTeam-only guard let it dump the slate (scores-team-not-playing-with-league-word).
+    if (namesKnownTeam(query) && all.length > 0 && !teamMatchedAny(all, query)) {
       return { leagueName: ref.name, games: [], teamNotPlaying: true };
     }
     return { leagueName: ref.name, games: filterByTeam(all, query) };
   } catch { return null; }
+}
+
+/** True if the query mentions a team in the known TEAM_LEAGUE map (regardless of how the league itself
+ * was resolved) — the trigger for the team-not-playing guard. */
+function namesKnownTeam(query: string): boolean {
+  return TEAM_LEAGUE.some(([re]) => re.test(query));
 }
 
 /** True if any game on the slate actually involves the team named in the query. */

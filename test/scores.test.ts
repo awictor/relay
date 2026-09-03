@@ -125,6 +125,14 @@ describe("getScores", () => {
     expect(r!.teamNotPlaying).toBe(true);
     expect(r!.games).toHaveLength(0);
   });
+  it("flags teamNotPlaying even when the query ALSO names the league (scores-team-not-playing-with-league-word)", async () => {
+    // "did the Lakers win, NBA scores?" resolves the league via the LEAGUES word, but still names a team.
+    const r = await getScores("did the Lakers win, NBA scores?", async () =>
+      board([game({ home: "Celtics", away: "Heat", hs: "98", as: "90" })]));
+    expect(r!.teamNotPlaying).toBe(true);
+    expect(r!.games).toHaveLength(0);
+  });
+
   it("a league-wide ask (no team) still returns the whole slate", async () => {
     const r = await getScores("NBA scores", async () =>
       board([game({ home: "Celtics", away: "Heat", hs: "98", as: "90" }), game({ home: "Suns", away: "Kings", hs: "1", as: "2" })]));
