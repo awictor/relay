@@ -27,7 +27,7 @@ import { parseTranslateRequest, translate } from "./lib/translate.js";
 import { runConvert } from "./lib/units-convert.js";
 import { parseMealRequest, getMeals, formatMealIdeas, formatFullMeal } from "./lib/meals.js";
 import { getSunTimes as sunFetch, formatSunTimes, sunPlace } from "./lib/suntimes.js";
-import { getAirQuality as airFetch, formatAirQuality, airPlace, isUvRequest } from "./lib/airquality.js";
+import { getAirQuality as airFetch, formatAirQuality, airPlace, isUvRequest, isPollenRequest } from "./lib/airquality.js";
 import { renderQr, parseQrRequest } from "./lib/qr.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
@@ -282,7 +282,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "get_air_quality",
-    description: "Air quality (US AQI + PM2.5/smoke) AND the current UV index for a place (keyless, instant). Use this — NOT web_search/scrape — for \"how's the air\", \"is it smoky\", \"air quality\", \"AQI\", \"is it safe to run outside\", \"what's the UV\", \"do I need sunscreen\". Pass the user's request verbatim; omit place to use their saved location.",
+    description: "Air quality (US AQI + PM2.5/smoke), the current UV index, AND pollen (Europe only) for a place (keyless, instant). Use this — NOT web_search/scrape — for \"how's the air\", \"is it smoky\", \"air quality\", \"AQI\", \"is it safe to run outside\", \"what's the UV\", \"do I need sunscreen\", \"pollen today\", \"allergies\". Pass the user's request verbatim; omit place to use their saved location.",
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The air-quality/UV question verbatim, e.g. \"is the air bad in LA\" or \"do I need sunscreen today\"." } },
@@ -430,7 +430,7 @@ Tools:
 - "get_quote" (symbol): latest stock/equity price. Use this — NOT web_search/scrape — for any "what's Tesla at"/"AAPL price"/"how's NVDA doing" question; it's instant. Pass the ticker (AAPL, TSLA); non-US add a market suffix (VOD.UK).
 - "get_weather" (place?, when?): current weather, today's high/low, per-hour rain timing, + up to a 7-day forecast. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location. Pass "when" with the user's words for a day OR time-of-day ("tomorrow", "this weekend", "Saturday", "this afternoon", "tonight", "at 3pm", "later today") so the RIGHT window is reported, not just today's max.
 - "get_suntimes" (request): sunrise/sunset/daylight for a place + day. Use this — NOT web_search — for "what time is sunset"/"when's sunrise tomorrow"/"is it dark by 7"/"how much daylight". Omit place to use the saved location; add "tomorrow" for the next day.
-- "get_air_quality" (request): air quality (US AQI + smoke/PM2.5) + current UV index. Use this — NOT web_search/scrape — for "how's the air"/"is it smoky"/"AQI"/"safe to run outside"/"what's the UV"/"do I need sunscreen". Omit place to use the saved location.
+- "get_air_quality" (request): air quality (US AQI + smoke/PM2.5) + current UV index + pollen (Europe only). Use this — NOT web_search/scrape — for "how's the air"/"is it smoky"/"AQI"/"safe to run outside"/"what's the UV"/"do I need sunscreen"/"pollen today"/"allergies". Omit place to use the saved location.
 - "find_nearby" (what, near?): find places near the user (coffee, pharmacy, ATM, gas...). Use this — NOT web_search — for "X near me"/"nearest Y". Omit near to use the user's location.
 - "directions" (to, from?, mode?): distance + travel time between places. Use this — NOT web_search — for "how far is X"/"directions to Y"/"how long to drive to Z". Omit from to start from the user's location.
 - "calendar_event" (title, startMs|startDate, ...): turn an event/deadline into an add-to-calendar link + .ics for the user to import ("add this to my calendar"). You never add it — pass the artifact verbatim.
@@ -1179,8 +1179,9 @@ export async function runAgent(
         try {
           const a = await backend.getAirQuality(opts);
           if (!a) { push("get_air_quality", `Couldn't get air quality${hasPlace ? "" : " (no place given + no saved location — ask the user which city)"}. Try naming a city.`); continue; }
-          // A UV/sunscreen ask leads with the UV answer; an air/smoke ask leads with AQI.
-          push("get_air_quality", `${formatAirQuality(a, isUvRequest(request))} Report this to the user.`);
+          // Lead with what was asked: a UV/sunscreen ask -> UV; a pollen/allergy ask -> pollen; else AQI.
+          const lead = isPollenRequest(request) ? "pollen" : isUvRequest(request) ? "uv" : "aqi";
+          push("get_air_quality", `${formatAirQuality(a, lead)} Report this to the user.`);
         } catch (e) {
           push("get_air_quality", `ERROR getting air quality: ${e instanceof Error ? e.message : String(e)}`);
         }

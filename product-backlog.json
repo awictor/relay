@@ -2345,9 +2345,45 @@
       "title": "\"pollen today\" matches air-quality intent but pollen is never fetched",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "airquality.ts isAirRequest regex includes 'pollen' -> routes to get_air_quality, but the Open-Meteo query only requests us_aqi/pm2_5/pm10/ozone/uv — no pollen fields. An allergy sufferer asking 'pollen today' gets AQI+UV + zero pollen. Matched then silently dropped.",
       "how": "Add pollen fields (alder/birch/grass/ragweed) to the Open-Meteo air-quality query + a formatter line; caveat that pollen is Europe-only (US -> nulls, say so) rather than promising it globally. Offline-testable with a fixture. Lower rank: Europe-only coverage."
+    },
+    {
+      "id": "alert-redefine-stale-fields",
+      "title": "re-defining a watch by name leaves stale pageUrl/series/flapCount -> wrong type + blended history",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "AlertStore.add's overwrite branch mutates a hand-picked subset (task/threshold/condition/then/feed/feedSource/members) and NEVER touches pageUrl, series, or flapCount. So: (a) re-defining an existing name AS a page-watch stores task=URL but pageUrl=undefined -> runner runs the LLM on a bare URL instead of page-diffing (confirmation says 'watching that page', does something else); (b) re-pointing a former page-watch to a value task leaves the stale pageUrl -> keeps diffing the OLD page forever; (c) 'watch price: bitcoin' redefined to 'silver' keeps the old BTC series so the chart/trend shows a phantom crash (60000->30). Confirmation contradicts behavior — the exact saved-but-broken trust failure guarded elsewhere.",
+      "how": "In the overwrite branch set existing.pageUrl = a.pageUrl (undefined clears it), and when the task/trigger/pageUrl changes, reset lastValue + series + flapCount + seen so a redefine starts fresh (matches the feed/feedSource reset already there). Offline test: redefine name as page-watch -> pageUrl set + series cleared; redefine off page-watch -> pageUrl cleared."
+    },
+    {
+      "id": "uv-instant-not-daily-peak",
+      "title": "\"do I need sunscreen\" answers from the instant UV, not the day’s peak",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "formatAirQuality prints the current uv_index with no time qualifier, so 'UV today / do I need sunscreen' at 8am reads the morning value (2 -> low, no sunscreen) even when midday peaks at 9 (very high); at night it reads 0. The headline sunscreen use case gets a confidently misleading 'you're fine' for a whole-day plan.",
+      "how": "Fetch daily=uv_index_max from Open-Meteo (forecast API — the air-quality API may not expose it; add a second field or a small forecast call) and lead the sunscreen guidance off the DAILY PEAK ('peaks at UV 9 around midday — wear sunscreen'), labeling the current reading 'right now'. Offline-testable with a fixture. Or, cheap partial: label the current value 'right now' so it's not read as the day's answer."
+    },
+    {
+      "id": "weekday-reminder-cadence",
+      "title": "no \"every weekday at 9\" cadence — degrades to daily (fires weekends) or one weekday",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Reminders support once/daily/weekly/interval/monthly/yearly but not Mon-Fri, so 'remind me every weekday at 5 to log my timesheet' mis-schedules (daily fires Sat/Sun, or a single weekly day). 'weekday'/'weekdays'/'workdays' is the single most common recurring work cadence people say — a top first-week action.",
+      "how": "parseSchedule ALREADY maps 'weekday'->[1,2,3,4,5] and 'weekend'->[0,6] in the weekly branch (weeklyClause). Verify it actually reaches a weekly schedule + fires only on those days (audit implies it degrades — check the cue/branch order). If already correct, this is a done-noop; else route 'every weekday at N' to a weekly with weekdays [1-5]. Offline test: 'every weekday at 9' -> weekly, weekdays [1,2,3,4,5]."
+    },
+    {
+      "id": "unit-price-compare",
+      "title": "no unit-price \"better buy\" compare (\"500g for $4 or 1.2kg for $9?\")",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "'which is cheaper, 500g for $4 or 1.2kg for $9' has no owner — calculate does raw arithmetic + convert_units converts measures, but nothing normalizes to price-per-unit + names the winner, so the agent hand-normalizes mixed units (the silently-wrong mental math the prompt warns against). Common in-aisle everyday errand.",
+      "how": "Add a keyless deterministic unit-price tool: parse (qty, unit, price) pairs, convert each to a common base (reuse units-convert), compute price-per-base-unit, declare the cheaper. Pure, offline-testable. New TOOLS[] entry + dispatch + prompt + HELP + sorted tool-list test."
     }
   ],
   "history": [
@@ -3266,6 +3302,10 @@
     {
       "item": "pagewatch-trailing-punct + pagewatch-time-masked",
       "note": "Fixed 2 coupled regressions in watch-any-page. (1) TRAILING PUNCT: pageWatchUrl captured https?://S+ up to whitespace, so a URL ending a sentence ('...policy.') kept the trailing period -> every fetch 404'd -> the watch was a silent black hole ('Watching...' but never pings). Now trims trailing sentence punctuation + a stray unbalanced close-paren (mirrors last-result.extractLinks); a balanced '(bar)' in a Wikipedia URL is kept. (2) TIME MASK: stableText masked ALL clock times to stop 'last updated' flap, but that erased CONTENT-bearing times, so an appointment/departure page ('Next available 3:15pm'->'5:45pm', 'Departs 9:00'->'10:30') never pinged on exactly the change it's watched for. Now a clock time is masked ONLY when adjacent to a volatile lead-in (last updated / as of / refreshed / now); a bare content time is kept + diffed. 6 new assertions (trailing-punct incl. balanced paren + content-time-detected + last-updated-still-masked), suite 1641 green, tsc clean. call-tested:false (pure lib)."
+    },
+    {
+      "item": "pollen-matched-not-fetched",
+      "note": "'pollen today' / 'allergies' matched the air-quality intent but pollen was never fetched — the Open-Meteo query only requested AQI/PM/UV, so an allergy sufferer got AQI+UV + zero pollen. Now airQualityUrl requests grass/birch/alder/ragweed_pollen; parseAirQuality collects the numeric ones (Europe-only — null elsewhere -> pollenCovered stays false); formatAirQuality gained a lead mode ('pollen'|'uv'|'aqi') + a pollen line (peak level via new pollenRisk bands + which allergen is highest), and OUTSIDE Europe says 'I don't have pollen data for X (Europe only)' instead of implying none. Dispatch: a pollen/allergy ask leads with pollen, a sunscreen ask with UV, else AQI. isAirRequest also matches allergy/hayfever. Tool desc + prompt note pollen (Europe only). 7 new tests; live-probed Open-Meteo (Berlin returns pollen numbers, Austin null) so call-tested:true for the source, agent wiring offline-tested. suite 1645 green, tsc clean."
     }
   ],
   "audits": [
@@ -3460,6 +3500,9 @@
     },
     {
       "note": "3-lens audit (get_fun shipped, backlog down to owner-gated confirm-to-act). RELIABILITY found real bugs: (1) looksLikeErrorReply OVER-BROAD (my error-reply fix over-reached) — bare 'error/cannot/blocked/no results' in a legit headline makes a news/HN watch go dark; (2) pageWatchUrl keeps trailing punctuation -> dead page watch; (3) stableText masks CONTENT-bearing times -> appointment/departure page watch never pings; (4) sub-minute timer fires up to a 30s tick late despite exact confirm (parked — needs a short setTimeout, infra). NEW-USER: reverse-geocode the location pin into a city (S), acronym/shorthand expansion (S), multi-city clock (S), pollen matched-not-fetched (S), sales-tax total (M). POWER: inline one-tap buttons (M, parked, flagged highest-leverage), flight status (S), alert value-history+trend (M), nutrition lookup (M), vacation/pause-all (S). Seeded 4: error-reply-overbroad (high/M), pagewatch-trailing-punct (high/S), pagewatch-time-masked (high/M), pollen-matched-not-fetched (med/S). Parked the rest."
+    },
+    {
+      "note": "3-lens audit (pollen shipped, backlog down to owner-gated confirm-to-act). RELIABILITY found a shared-root bug: AlertStore.add overwrite branch omits pageUrl/series/flapCount -> re-defining a watch by name silently becomes the wrong type + blends trend history across entities (phantom crash). Also: UV 'sunscreen' answer uses the instant reading not the day's peak (misleading 'you're fine' at 8am). NEW-USER: weekday reminder cadence (S, likely partial), unit-price compare (S), intra-day countdown to a clock time (S), timezone working-hours overlap (M), recipe scaling (M). POWER: personal metric tracker/quantified-self log (M, strongest new retention engine — chart/trend wired only to alerts today), read-later queue+summary digest (S), my-info vault+autofill (M, parked), inline buttons (M, parked). Seeded 4: alert-redefine-stale-fields (high/S), uv-instant-not-daily-peak (high/M), weekday-reminder-cadence (high/S), unit-price-compare (med/S). Parked the rest."
     }
   ]
 }

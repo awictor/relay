@@ -13,17 +13,28 @@ export interface AirQuality {
   pm10?: number;      // µg/m³
   ozone?: number;     // µg/m³
   uv?: number;        // current UV index (0-11+); may be 0 at night
+  // Pollen (pollen-matched-not-fetched): grains/m³ for the common allergens. Open-Meteo covers pollen in
+  // EUROPE only — outside it these come back null, so `pollenCovered` is false and the formatter says so
+  // instead of implying "no pollen". Present only when at least one pollen value is a real number.
+  pollen?: { grass?: number; birch?: number; alder?: number; ragweed?: number };
+  pollenCovered?: boolean;
 }
 
-/** Open-Meteo air-quality URL (US AQI + pollutants + current UV; local time via timezone=auto). */
+/** Open-Meteo air-quality URL (US AQI + pollutants + current UV + pollen; local time via timezone=auto).
+ * Pollen fields are Europe-only (null elsewhere) — requested always, surfaced only when present. */
 export function airQualityUrl(lat: number, lng: number): string {
   return `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lng}` +
-    `&current=us_aqi,pm2_5,pm10,ozone,uv_index&timezone=auto`;
+    `&current=us_aqi,pm2_5,pm10,ozone,uv_index,grass_pollen,birch_pollen,alder_pollen,ragweed_pollen&timezone=auto`;
+}
+
+/** True if the ask is specifically about pollen/allergies (so the reply leads with pollen). Exported. */
+export function isPollenRequest(text: string): boolean {
+  return /\b(pollen|allergy|allergies|hay ?fever|allergen)\b/i.test(text);
 }
 
 /** True if a message is an air-quality / smoke / UV / sunscreen ask. Exported for tests. */
 export function isAirRequest(text: string): boolean {
-  return /\b(air quality|air pollution|how'?s the air|is the air|aqi|smog|smoke|smoky|hazy|haze|pollen|uv( index)?|sunscreen|suncream|sun protection|safe to (?:run|go|be) (?:outside|out|for a run))\b/i.test(text);
+  return /\b(air quality|air pollution|how'?s the air|is the air|aqi|smog|smoke|smoky|hazy|haze|pollen|allergy|allergies|hay ?fever|allergen|uv( index)?|sunscreen|suncream|sun protection|safe to (?:run|go|be) (?:outside|out|for a run))\b/i.test(text);
 }
 
 /** True if the ask is specifically about UV/sunscreen (so the reply leads with UV, not AQI). Exported. */
@@ -60,35 +71,64 @@ export function uvRisk(uv: number): string {
   return "extreme";
 }
 
+// Peak pollen grains/m³ -> risk word (rough, aligned to common allergy scales). Exported for tests.
+export function pollenRisk(peak: number): string {
+  if (peak <= 0) return "none";
+  if (peak < 10) return "low";
+  if (peak < 30) return "moderate";
+  if (peak < 70) return "high";
+  return "very high";
+}
+
 /** Parse an Open-Meteo air-quality response, or null if malformed. Exported for tests. */
 export function parseAirQuality(body: string, place: string): AirQuality | null {
   try {
-    const obj = JSON.parse(body) as { current?: { us_aqi?: number; pm2_5?: number; pm10?: number; ozone?: number; uv_index?: number } };
+    const obj = JSON.parse(body) as { current?: { us_aqi?: number; pm2_5?: number; pm10?: number; ozone?: number; uv_index?: number; grass_pollen?: number | null; birch_pollen?: number | null; alder_pollen?: number | null; ragweed_pollen?: number | null } };
     const c = obj.current;
     if (!c || typeof c.us_aqi !== "number") return null;
+    // Pollen is Europe-only; outside it every field is null. Collect the numeric ones; covered iff any.
+    const pollen: NonNullable<AirQuality["pollen"]> = {};
+    if (typeof c.grass_pollen === "number") pollen.grass = c.grass_pollen;
+    if (typeof c.birch_pollen === "number") pollen.birch = c.birch_pollen;
+    if (typeof c.alder_pollen === "number") pollen.alder = c.alder_pollen;
+    if (typeof c.ragweed_pollen === "number") pollen.ragweed = c.ragweed_pollen;
+    const pollenCovered = Object.keys(pollen).length > 0;
     return {
       place, aqi: Math.round(c.us_aqi), category: aqiCategory(c.us_aqi),
       ...(typeof c.pm2_5 === "number" ? { pm25: c.pm2_5 } : {}),
       ...(typeof c.pm10 === "number" ? { pm10: c.pm10 } : {}),
       ...(typeof c.ozone === "number" ? { ozone: c.ozone } : {}),
       ...(typeof c.uv_index === "number" ? { uv: c.uv_index } : {}),
+      ...(pollenCovered ? { pollen, pollenCovered: true } : {}),
     };
   } catch { return null; }
 }
 
-/** Format an air-quality result into a short human line. `uvFirst` leads with the UV/sunscreen answer
- * (for a "do I need sunscreen" ask) instead of AQI. */
-export function formatAirQuality(a: AirQuality, uvFirst = false): string {
+/** Format an air-quality result into a short human line. `lead` picks what to lead with for the user's
+ * ask: "uv" (do I need sunscreen), "pollen" (allergies), else AQI. */
+export function formatAirQuality(a: AirQuality, lead: "aqi" | "uv" | "pollen" = "aqi"): string {
   const aqiPart = `Air quality in ${a.place}: AQI ${a.aqi} (${a.category})`;
   const pm = typeof a.pm25 === "number" ? `, PM2.5 ${Math.round(a.pm25)}µg/m³` : "";
   const uvPart = typeof a.uv === "number"
     ? `UV index ${Math.round(a.uv)} (${uvRisk(a.uv)}${a.uv >= 3 ? " — wear sunscreen" : ""})`
     : "";
-  if (uvFirst && uvPart) {
-    // Lead with UV; append AQI as context. A 0/low UV (night) is reported honestly.
+  // Pollen line: the peak allergen level + which. Only when Europe-covered; else an honest "not available".
+  let pollenPart = "";
+  if (a.pollenCovered && a.pollen) {
+    const entries = Object.entries(a.pollen).filter(([, v]) => typeof v === "number") as Array<[string, number]>;
+    const peak = entries.reduce((m, [, v]) => Math.max(m, v), 0);
+    const worst = entries.sort((x, y) => y[1] - x[1])[0];
+    pollenPart = `Pollen: ${pollenRisk(peak)}${worst && peak > 0 ? ` (${worst[0]} highest)` : ""}`;
+  }
+  if (lead === "pollen") {
+    // Lead with pollen; if the location isn't covered, say so plainly rather than implying "no pollen".
+    const p = pollenPart || `I don't have pollen data for ${a.place} (Open-Meteo covers pollen in Europe only)`;
+    return `${a.place}: ${p}. ${aqiPart}${pm}.`;
+  }
+  if (lead === "uv" && uvPart) {
     return `${a.place}: ${uvPart}. ${aqiPart}${pm}.`;
   }
-  const tail = uvPart ? ` ${uvPart}.` : "";
+  const tail = [uvPart, pollenPart].filter(Boolean).map((s) => ` ${s}.`).join("");
   return `${aqiPart}${pm}.${tail}`;
 }
 

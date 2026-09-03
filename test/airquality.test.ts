@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { airQualityUrl, isAirRequest, isUvRequest, airPlace, aqiCategory, uvRisk, parseAirQuality, formatAirQuality, getAirQuality } from "../src/lib/airquality.js";
+import { airQualityUrl, isAirRequest, isUvRequest, isPollenRequest, airPlace, aqiCategory, uvRisk, pollenRisk, parseAirQuality, formatAirQuality, getAirQuality } from "../src/lib/airquality.js";
 
 describe("aqiCategory / uvRisk", () => {
   it("maps AQI to EPA bands", () => {
@@ -47,17 +47,45 @@ describe("parseAirQuality / formatAirQuality", () => {
     expect(parseAirQuality("nope", "x")).toBeNull();
   });
   it("leads with AQI for an air ask, appends UV", () => {
-    const out = formatAirQuality(parseAirQuality(body, "Austin")!, false);
+    const out = formatAirQuality(parseAirQuality(body, "Austin")!, "aqi");
     expect(out).toMatch(/^Air quality in Austin: AQI 48 \(Good\), PM2\.5 3µg\/m³\. UV index 7 \(high — wear sunscreen\)\./);
   });
   it("leads with UV for a sunscreen ask", () => {
-    const out = formatAirQuality(parseAirQuality(body, "Austin")!, true);
+    const out = formatAirQuality(parseAirQuality(body, "Austin")!, "uv");
     expect(out).toMatch(/^Austin: UV index 7 \(high — wear sunscreen\)\. Air quality/);
   });
   it("no 'wear sunscreen' nudge when UV is low", () => {
     const low = parseAirQuality(JSON.stringify({ current: { us_aqi: 40, uv_index: 1 } }), "Reykjavik")!;
     expect(formatAirQuality(low)).toMatch(/UV index 1 \(low\)\./);
     expect(formatAirQuality(low)).not.toMatch(/wear sunscreen/);
+  });
+});
+
+describe("pollen (pollen-matched-not-fetched)", () => {
+  it("isAirRequest + isPollenRequest recognize allergy asks; airQualityUrl requests pollen fields", () => {
+    for (const t of ["what's the pollen today", "how are my allergies", "hayfever forecast"]) expect(isAirRequest(t), t).toBe(true);
+    expect(isPollenRequest("pollen count today")).toBe(true);
+    expect(isPollenRequest("how's the air")).toBe(false);
+    expect(airQualityUrl(52.5, 13.4)).toMatch(/grass_pollen.*ragweed_pollen/);
+  });
+  it("pollenRisk bands", () => {
+    expect(pollenRisk(0)).toBe("none");
+    expect(pollenRisk(5)).toBe("low");
+    expect(pollenRisk(20)).toBe("moderate");
+    expect(pollenRisk(50)).toBe("high");
+    expect(pollenRisk(100)).toBe("very high");
+  });
+  it("parses Europe pollen numbers + leads with pollen for an allergy ask", () => {
+    const eu = parseAirQuality(JSON.stringify({ current: { us_aqi: 51, grass_pollen: 0.2, birch_pollen: 0, ragweed_pollen: 12 } }), "Berlin")!;
+    expect(eu.pollenCovered).toBe(true);
+    const out = formatAirQuality(eu, "pollen");
+    expect(out).toMatch(/^Berlin: Pollen: moderate \(ragweed highest\)/); // peak 12 -> moderate, ragweed worst
+  });
+  it("outside Europe (pollen null) says it's unavailable instead of implying none", () => {
+    const us = parseAirQuality(JSON.stringify({ current: { us_aqi: 44, grass_pollen: null, ragweed_pollen: null } }), "Austin")!;
+    expect(us.pollenCovered).toBeUndefined();
+    const out = formatAirQuality(us, "pollen");
+    expect(out).toMatch(/don't have pollen data for Austin.*Europe only/i);
   });
 });
 
