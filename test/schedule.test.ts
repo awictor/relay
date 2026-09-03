@@ -250,6 +250,18 @@ describe("parseSchedule — recurring (weekly / interval)", () => {
     expect(s.kind).toBe("weekly");
     expect(s.weekdays).toEqual([1, 4]);
   });
+  it("a PLURAL weekday ('mondays at 9am') is recurring weekly, not a one-shot (plural-weekday-recurring)", () => {
+    const s = parseSchedule("remind me mondays at 9am to submit the timesheet", NOW)!;
+    expect(s.kind).toBe("weekly");           // NOT once — 'mondays' plural signals repetition
+    expect(s.weekdays).toEqual([1]);
+    const f = parseSchedule("fridays at 5pm water the plants", NOW)!;
+    expect(f.kind).toBe("weekly");
+    expect(f.weekdays).toEqual([5]);
+  });
+  it("the SINGULAR weekday one-shot still holds ('monday at 9am' -> once)", () => {
+    const s = parseSchedule("remind me monday at 9am to submit taxes", NOW)!;
+    expect(s.kind).toBe("once");             // regression guard: single-weekday-once unaffected
+  });
 });
 
 describe("parseSchedule — absolute", () => {

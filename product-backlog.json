@@ -23,7 +23,7 @@
       "title": "'remind me mondays at 9am' schedules once, not weekly",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The single-weekday->once rule (recurring = every|group|weekdays.length>1) treats a PLURAL 'mondays'/'fridays' as one day [1] with no 'every', so 'mondays at 9am submit timesheet' fires once next Monday then never again — the plural 's' is a clear recurring signal that's silently swallowed (audit 25 B#4, a regression in the just-shipped single-weekday-once fix).",
       "how": "In the weekly branch, treat a plural weekday token ('mondays', 'fridays', 'tuesdays'...) as a recurring signal (like 'every') so it stays kind:weekly. Detect the trailing 's' on the matched day word(s). Test: 'mondays at 9am' -> weekly [1]; 'monday at 9am' still -> once."
     },
@@ -1992,6 +1992,10 @@
     {
       "id": "watch-redefine-baseline-reset",
       "note": "Re-defining an alert via 'watch btc: bitcoin below 45000' on an EXISTING btc alert kept the stale lastValue — the define-overwrite path (AlertStore.add) only cleared the baseline on a feed toggle, unlike the conversational-edit path (updateTrigger) which clears it. So prevHolds computed from the old value and an already-true predicate was suppressed: the alert the user just set up was silently dead. add() now detects a real trigger change (task, threshold, or condition — deep-compared) and clears lastValue so the new trigger edge-evaluates fresh; a no-op re-define (identical trigger) PRESERVES the baseline so cumulative sub-threshold drift isn't lost. 2 tests (redefine-to-predicate clears baseline / identical redefine keeps it). call-tested: false (pure store). 1186 tests green."
+    },
+    {
+      "id": "plural-weekday-recurring",
+      "note": "Fixed a regression in the single-weekday-once rule: 'remind me mondays at 9am' scheduled ONCE then never again — the recurring test was every|group|weekdays.length>1, and a plural 'mondays' still resolves to one day [1] with no 'every', so the clear plural-'s' repetition signal was swallowed. The weekly branch now also treats a plural weekday token (mondays/fridays/tuesdays...) as recurring. The SINGULAR one-shot ('monday at 9am' -> once) is unaffected. 3 tests (mondays/fridays -> weekly / singular monday still once). call-tested: false (pure parse). 1188 tests green."
     }
   ],
   "audits": [

@@ -212,7 +212,11 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
       // to submit taxes" ping every Friday forever (weekly-single-weekday-once). Recurring only when the
       // user signalled repetition: "every", a weekday/weekend group, or more than one named day.
       const isGroup = /weekday|weekend/.test(grp);
-      const recurring = /\bevery\b/.test(weeklyClause[0]!) || isGroup || weekdays.length > 1;
+      // A PLURAL weekday ("mondays at 9am", "fridays") is a clear recurring signal even without "every" —
+      // treating it as a one-shot made "remind me mondays at 9am" fire once then never again (plural-
+      // weekday-recurring, a regression in the single-weekday-once rule). Match a day word + trailing 's'.
+      const isPlural = /\b(?:mon|tue|tues|wed|wednes|thu|thur|thurs|fri|sat|satur|sun)(?:day)?s\b/.test(grp);
+      const recurring = /\bevery\b/.test(weeklyClause[0]!) || isGroup || isPlural || weekdays.length > 1;
       if (!recurring) {
         return { kind: "once", task, dueMs, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
       }
