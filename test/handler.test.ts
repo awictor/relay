@@ -210,28 +210,42 @@ describe("createHandler", () => {
     expect(h[h.length - 1]!.content).toMatch(/that attempt failed/i);
   });
 
-  it("a photo message is answered via describeImage, not the browser agent (product-loop)", async () => {
+  it("a plain 'what is this?' photo is answered one-shot via describeImage, not the browser agent (product-loop)", async () => {
     let agentCalled = false;
     let gotFile = ""; let gotCaption = "";
     const { handle, sent } = harness({
-      describeImage: async (fileId, caption) => { gotFile = fileId; gotCaption = caption; return "That's a receipt; total is $42.50."; },
+      describeImage: async (fileId, caption) => { gotFile = fileId; gotCaption = caption; return "That's a receipt from a cafe."; },
       runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
     });
-    await handle({ chatId: 5, from: "u", text: "what's the total?", messageId: 1, photoFileId: "F1" } as InboundMessage);
-    expect(agentCalled).toBe(false);
+    await handle({ chatId: 5, from: "u", text: "what is this?", messageId: 1, photoFileId: "F1" } as InboundMessage);
+    expect(agentCalled).toBe(false);            // a describe ask stays one-shot
     expect(gotFile).toBe("F1");
-    expect(gotCaption).toBe("what's the total?");
-    expect(sent[0]!.text).toMatch(/\$42\.50/);
+    expect(gotCaption).toBe("what is this?");
+    expect(sent[0]!.text).toMatch(/cafe/);
+  });
+
+  it("an ACTION photo caption extracts the image then runs the agent so it chains into tools (photo-to-action)", async () => {
+    let extractPrompt = ""; let agentTask = "";
+    const { handle, sent } = harness({
+      // Vision is asked to TRANSCRIBE (not solve); the agent then does the math.
+      describeImage: async (_fileId, caption) => { extractPrompt = caption; return "Latte 4.50, Muffin 3.25, Tax 0.62"; },
+      runAgentFn: async (task) => { agentTask = task; return { reply: "Each of you owes $3.46 (with 20% tip).", steps: 2, tools: ["calculate"] }; },
+    });
+    await handle({ chatId: 5, from: "u", text: "split this 3 ways with 20% tip", messageId: 1, photoFileId: "F1" } as InboundMessage);
+    expect(extractPrompt).toMatch(/transcribe/i);        // vision extracts, doesn't compute
+    expect(agentTask).toMatch(/split this 3 ways/);      // the caption reached the agent
+    expect(agentTask).toMatch(/Latte 4\.50/);            // with the extracted image content
+    expect(sent[0]!.text).toMatch(/\$3\.46/);            // the agent's tool-computed answer went out
   });
 
   it("a photo answer is persisted to memory so a follow-up has context (product-loop)", async () => {
     const { handle, mem } = harness({
       describeImage: async () => "That's a receipt; total is $42.50.",
     });
-    await handle({ chatId: 5, from: "u", text: "what's the total?", messageId: 1, photoFileId: "F1" } as InboundMessage);
+    await handle({ chatId: 5, from: "u", text: "what is this?", messageId: 1, photoFileId: "F1" } as InboundMessage);
     const h = mem.get(5)!;
     expect(h).toHaveLength(2);
-    expect(h[0]).toEqual({ role: "user", content: "[photo] what's the total?" });
+    expect(h[0]).toEqual({ role: "user", content: "[photo] what is this?" });
     expect(h[1]).toEqual({ role: "assistant", content: "That's a receipt; total is $42.50." });
   });
 

@@ -2237,9 +2237,45 @@
       "title": "inbound photo is one-shot describe, never chains into a tool",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The inbound-photo path (handler -> describeImage) returns a vision string straight to formatReply, never entering the agent tool loop — so 'split this receipt 3 ways +20% tip' / 'convert these menu prices to USD' / 'what's the cheapest veg dish' answer from the model's own guesswork instead of calling calculate/convert/translate (the exact silent-math error the text path forbids).",
       "how": "Route the extracted image text/caption back through runAgent (as a normal turn with the vision content as context) so a photo can chain into calculate/translate/convert_units/find_nearby. Offline-testable by feeding a fixed vision string into the agent loop + asserting the tool call. Keep a plain 'describe' when there's no actionable ask."
+    },
+    {
+      "id": "timer-support",
+      "title": "no timer (\"set a timer for 20 minutes\", \"timer 10 min\")",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "parseSchedule handles 'in N min' + 'alarm at HH' but the word 'timer' + the 'for N minutes' duration form have NO branch — the single most common phone-assistant errand silently falls through to the agent (no timer tool) and returns a confused/refusing reply.",
+      "how": "Add a timer parse branch (\"set a timer for X\", \"timer X min\", \"for N minutes\") -> a once + reminderOnly schedule with a 'timer done' note (reuse the existing infra). Offline-testable with a fixed clock. Thread the cue set."
+    },
+    {
+      "id": "reminder-no-time-ask",
+      "title": "a reminder with no time given is silently dropped, never set",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "'remind me to call mom' (no when-clause) fails parseSchedule (empty time clause) so it's never stored + drops to the agent (no reminder tool) — the user believes a reminder is set when nothing was. A trust-killing silent failure on the core feature.",
+      "how": "Detect a reminder shape with a missing time and ask one 'when should I remind you?', stashing + re-running like the pending-location clarify flow already in the handler. Deterministic, offline-testable."
+    },
+    {
+      "id": "watch-any-page-diff",
+      "title": "no generic \"tell me when THIS page changes\" watcher",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "alerts watch numeric thresholds + feeds watch new items, but there's no 'notify on ANY change to this URL' — restocks, price drops with no fixed number, status/policy/appointment pages. A killer generic capability that turns Relay from a reader into a stakeout.",
+      "how": "Store a content-hash + a text snapshot from the existing anvil scrape; on the alert-runner cadence, re-scrape, compare (pure hash + text-diff), notify only on a real diff (show what changed). Keyless, offline-testable (hash+diff are pure)."
+    },
+    {
+      "id": "read-qr-from-photo",
+      "title": "can generate QR but can’t READ one from a sent photo",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "make_qr generates QR codes but a user who photographs a QR poster / product barcode and asks 'what is this / open this' gets the generic vision describe, which can't reliably decode the payload — the errand dead-ends. Natural symmetric complement to make_qr + the new photo-to-action pipeline.",
+      "how": "Keyless local decode (jsQR/quirc-style) on the already-downloaded image bytes -> the URL/wifi/text payload; hook the photo branch. Offline-testable against fixture images."
     }
   ],
   "history": [
@@ -3114,6 +3150,14 @@
     {
       "item": "monthly-short-month-skip + yearly-feb29-wrong-day + monthly-yearly-cap-drop",
       "note": "Fixed 3 coupled regressions in the just-shipped monthly/yearly reminders. (1) SHORT-MONTH SKIP: 'pay rent on the 31st every month' fired only in the 7 months with a 31st (domAtMs's getUTCDate check skips a month lacking the day) — silent no-show ~5 bill cycles/yr. New nextMonthlyMs CLAMPS the day to the month's last day (31->Feb28/Apr30), never skips; used in parse + complete + restamp. domAtMs kept as-is for the one-shot 'on the Nth'. (2) FEB-29: yearly 'Feb 29' fired Mar 1 in non-leap years (dateAtMs had no validity check) + invalid Feb30/Jun31 were accepted. New nextYearlyMs clamps Feb 29->Feb 28 in non-leap years (real Feb 29 in leap years); the parser now rejects an impossible month/day (per-month MAX_DAY, Feb allowed 29). (3) CAP-DROP: monthly/yearly weren't graceEligible in schedule-runner, so an over-cap period was dropped + advanced a month/year out — added them to graceEligible (defer-then-force like a 'once'), since each is a single high-stakes promise per period. 9 new tests (parse reject/allow + nextMonthlyMs/nextYearlyMs clamp + monthly cap-defer), suite 1599 green, tsc clean. call-tested:false (offline)."
+    },
+    {
+      "item": "photo-to-action",
+      "note": "A photo caption that asks Relay to DO something now chains into tools instead of the vision model guessing. The inbound-photo path was a one-shot describeImage -> formatReply, so 'split this receipt 3 ways +20% tip' / 'convert these prices to USD' / 'translate this menu' answered from the model's own (unverified) math — the exact silent-math error the text path forbids. New src/lib/photo-intent.ts (photoNeedsAgent): an action caption (split/total/tip/convert/translate/cheapest/calories/lookup/is-it-safe...) routes through the agent; a plain 'what is this?'/'describe'/empty stays one-shot. Handler: for an action caption it asks vision to TRANSCRIBE the image verbatim (not solve), then runs the caption + extracted content through runAgentFn so calculate/convert_units/convert_currency/translate do the work; sends a resulting photo too; persists the turn. 7 new tests (4 photo-intent + updated/added 3 handler: describe stays one-shot, action extracts+agents+chains). suite 1603 green, tsc clean. call-tested:false (offline handler + lib tests, mock vision+agent)."
+    },
+    {
+      "item": "photo-to-action (prod-fix same iteration)",
+      "note": "Audit immediately caught photo-to-action DEAD IN PRODUCTION: the branch gated on deps.runAgentFn, but index.ts wires describeImage and NOT runAgentFn (a test-only override), so every action-caption photo silently fell to the one-shot vision describe (the exact bug the feature fixes). Fixed before push: gate/call on runIt (= deps.runAgentFn ?? runAgent, already defined) so it fires in prod. Also, same iteration: (a) media tail-trim — photo/document answers used formatReply (hard 1200-char cut, no 'more' recovery); switched to formatReplyParts + lastResult drilldown like the text path; (b) OCR-trust — the agent task now tells it to echo the figures it read from the photo + flag they came from an image, so a vision misread is visible instead of an authoritative wrong total. Suite 1603 green, tsc clean."
     }
   ],
   "audits": [
@@ -3299,6 +3343,9 @@
     },
     {
       "note": "3-lens audit (alert-edit-persist-hedge shipped, backlog down to owner-gated confirm-to-act). RELIABILITY found 3 REGRESSIONS in the just-shipped monthly/yearly reminders: (1) monthly on day 29/30/31 skips short months via domAtMs's getUTCDate check -> ~5 missed bill cycles/yr silently; (2) monthly/yearly not in graceEligible so an over-cap period is dropped for the whole month/year; (3) yearly Feb 29 fires Mar 1 in non-leap years + invalid Feb30/Jun31 accepted -> wrong-day, mislabeled. NEW-USER: photo-to-action (chain a snapped receipt/menu into calculate/translate, M), cooking substitutions (S), 'is X down' reachability (S), word/unscramble helper (S). POWER: my-info vault + autofill (M, the write-side identity gap), confirm-to-submit form completion (M, overlaps owner-gated confirm-to-act), two-way check-ins that log replies (M), NL query over logged notes/lists (S). Seeded 4: the 3 monthly/yearly regressions (high/S) + photo-to-action (high/M). Parked the rest."
+    },
+    {
+      "note": "3-lens audit (photo-to-action shipped). RELIABILITY found photo-to-action DEAD IN PROD (gated on unwired runAgentFn) — FIXED same iteration via runIt, plus media tail-trim (formatReplyParts+drilldown) + OCR-echo prompt. Remaining flagged: rate-limit gap on the 2nd media call + voice path (parked, low harm). NEW-USER: timers (S, top — most common errand missing), reminder-with-no-time silent drop (S), Wikipedia instant fact lookup (M), read-QR-from-photo (M). POWER: watch-any-page content-diff (M, killer generic), sparkline+delta in pings (S, parked but near-free), playbooks/run-many-recipes (M), compound+cooldown alerts (M), reply-to-refine (M, parked). Seeded 4: timer-support (high/S), reminder-no-time-ask (high/S), watch-any-page-diff (high/M), read-qr-from-photo (med/M). Parked the rest."
     }
   ]
 }

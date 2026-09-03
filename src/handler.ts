@@ -19,6 +19,7 @@ import { isBackgroundErrand, stripDispatchPhrasing, BACKGROUND_MAX_STEPS } from 
 import { isAnswerRecall, relativeAge } from "./lib/answer-log.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./lib/recipes.js";
 import { getTemplate, templateCatalog } from "./lib/templates.js";
+import { photoNeedsAgent } from "./lib/photo-intent.js";
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -376,13 +377,44 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       if (!deps.describeImage) { await deps.sendMessage(msg.chatId, "I can't read images yet — send me a task in words for now."); return; }
       try {
         await deps.sendTyping(msg.chatId);
-        const answer = await deps.describeImage(msg.photoFileId, msg.text);
-        const out = formatReply(answer);
+        const caption = msg.text?.trim() ?? "";
+        // Photo-to-action (photo-to-action): a caption that asks Relay to DO something with the image
+        // ("split this receipt 3 ways +20% tip", "convert these prices to USD", "translate this menu")
+        // must NOT be answered by the vision model's own guesswork — that's the silent-math error the
+        // text path forbids. Instead EXTRACT the image's content with vision, then run the caption through
+        // the AGENT so it chains into calculate/convert/translate/etc. A plain "what is this?" (or no
+        // caption) still gets the one-shot describe.
+        // Use runIt (= deps.runAgentFn ?? runAgent) NOT deps.runAgentFn: index.ts wires describeImage but
+        // NOT runAgentFn (it's a test override), so gating on deps.runAgentFn made this branch DEAD in
+        // production and every action-caption photo silently fell to the one-shot describe (photo-to-
+        // action-dead-in-prod). runIt always resolves to the real agent.
+        if (caption && photoNeedsAgent(caption)) {
+          // Ask vision to transcribe what's in the image (text, prices, items) — not to solve anything.
+          const extracted = (await deps.describeImage(msg.photoFileId,
+            "Transcribe EVERYTHING readable in this image verbatim — all text, prices, numbers, item names, labels. List them plainly. Do NOT compute, summarize, or answer any question; just extract the content.")).trim();
+          // Tell the agent to ECHO the figures it used (so a vision misread is visible to the user) + flag
+          // that they came from a photo — calculate's exactness must not lend false authority to fallible OCR.
+          const task = `The user sent a photo and asked: "${caption}".\n\nHere is the exact content extracted from the image:\n${extracted}\n\nAnswer the user's request using this content. Use your tools (calculate, convert_units, convert_currency, translate, etc.) for any math/conversion/translation — do NOT do arithmetic yourself. Briefly list the figures you read from the photo so the user can catch a misread, and note they came from the image.`;
+          const res = await runIt(task, { llm: deps.llm, context: deps.profileContext?.(msg.chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, weatherCoords: deps.weatherCoords?.(msg.chatId), weatherUnits: deps.weatherUnits?.(msg.chatId), ...(deps.recallAnswers ? { recall: (q: string) => deps.recallAnswers!(msg.chatId, q) } : {}), ...(deps.resolveContact ? { resolveContact: (n: string) => deps.resolveContact!(msg.chatId, n) } : {}) }, deps.memoryGet(msg.chatId));
+          // Keep the untrimmed reply for "more" drilldown (media paths previously trimmed with no recovery).
+          const parts = formatReplyParts(res.reply);
+          await deps.sendMessage(msg.chatId, parts.shown);
+          if (parts.full.length > parts.shown.length) lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, parts.shown) });
+          if (res.photo && deps.sendPhoto) await deps.sendPhoto(msg.chatId, res.photo);
+          deps.recordTurn({ steps: res.steps, tools: res.tools, elapsedMs: 0, ok: !res.degraded, ...(res.degraded ? { degraded: true } : {}) });
+          deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[photo] ${caption}` }, { role: "assistant", content: parts.shown }]);
+          return;
+        }
+        const answer = await deps.describeImage(msg.photoFileId, caption);
+        // Keep the untrimmed describe for "more" too (photo/doc answers were trimmed with no recovery).
+        const parts = formatReplyParts(answer);
+        const out = parts.shown;
         await deps.sendMessage(msg.chatId, out);
+        if (parts.full.length > parts.shown.length) lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, parts.shown) });
         // Persist the turn so a follow-up ("what about the second item?", "is that safe to eat?") has
         // context — the text + error paths already do this; these media success paths silently didn't,
         // so the bot appeared to instantly forget the image it just described.
-        const q = msg.text?.trim() ? msg.text.trim() : "[sent a photo]";
+        const q = caption ? caption : "[sent a photo]";
         deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[photo] ${q}` }, { role: "assistant", content: out }]);
       } catch (e) {
         await deps.sendMessage(msg.chatId, friendlyError(e instanceof Error ? e.message : String(e)));
@@ -399,8 +431,11 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       try {
         await deps.sendTyping(msg.chatId);
         const answer = await deps.describeDocument(msg.documentFileId, msg.text, msg.documentName, msg.documentMime);
-        const out = formatReply(answer);
+        // Keep the untrimmed answer for "more" (a long doc summary was trimmed with no tail recovery).
+        const parts = formatReplyParts(answer);
+        const out = parts.shown;
         await deps.sendMessage(msg.chatId, out);
+        if (parts.full.length > parts.shown.length) lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, parts.shown) });
         // Persist the turn so a follow-up about the document has context (see the photo branch).
         const q = msg.text?.trim() ? msg.text.trim() : "[sent a document]";
         deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[document] ${q}` }, { role: "assistant", content: out }]);
