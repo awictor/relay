@@ -1,6 +1,42 @@
 {
   "items": [
     {
+      "id": "crypto-quote-tool",
+      "title": "'price of bitcoin' (the flagship demo) has no tool — falls to slow flaky web_search",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "Crypto price is Relay's MOST-promoted first errand — the literal /start + README example is 'save btc: check the price of bitcoin' — yet get_quote was equities-only + rejected 'bitcoin', so the demo the user reaches for fell to a 10-30s web_search+scrape of a flaky/paywalled page. The flagship looked broken (audit 28 A#1).",
+      "how": "New src/lib/crypto.ts hitting the keyless CoinGecko API (common-coin map -> id, else /search; simple/price for usd + 24h change). get_crypto agent tool + backend method + prompt + help. Live-verified btc/eth/pepe."
+    },
+    {
+      "id": "worded-duration-reminders",
+      "title": "'remind me in an hour' / 'set an alarm for 7am' aren't recognized",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "The reminder cue keys on 'in \\d+' + 'remind me', so worded durations ('in an hour', 'in half an hour', 'in a couple hours') and alarm phrasings ('set an alarm for 7am', 'wake me at 6') miss the scheduler and bounce with 'when should I remind you?' even though the user said exactly when — reads as the bot not understanding plain English (audit 28 A#3+A#4).",
+      "how": "In parseSchedule: map worded quantities (a/an=1, half=0.5, a couple=2, a few=3) to the relative-duration branch; treat 'alarm for <time>' / 'wake me (up) at <time>' as a clock-time once. Widen the handler scheduleCue to match. Tests for each phrasing."
+    },
+    {
+      "id": "absolute-date-reminders",
+      "title": "'remind me on March 5' / 'next Monday' can't be scheduled",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "parseSchedule handles once/daily/weekly/interval + 'tomorrow'/'at <time>' but NOT an absolute calendar date ('on March 5', 'on the 15th') or 'next <weekday>' — so appointment/birthday reminders (a top assistant errand) bounce and re-ask, unable to schedule the date the user just gave (audit 28 A#2).",
+      "how": "Add a date branch: 'on <Month> <day>' / 'on the <Nth>' / 'next <weekday>' -> a once schedule at that calendar day (default 9am or a stated time, tz-aware via dayAtMs). Widen scheduleCue. Tests for month-name, ordinal, and next-weekday."
+    },
+    {
+      "id": "watchlist-then-dropped",
+      "title": "a watchlist alert silently discards its 'then run <recipe>' action",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "parseAlertCommand's semicolon/watchlist branch returns {name,task,members} and never carries `then`, and checkAlert's watchlist path returns before any withThen handling — so 'watch basket: btc; eth then run summary' accepts the syntax but the watch-and-DO recipe never runs, no error (audit 28 B#1).",
+      "how": "Parse + store `then` on a watchlist alert (strip the then-clause before the semicolon split), and run withThen in the watchlist notify path like the single-alert path does. Test: a watchlist with a then-recipe fires it on a member change."
+    },
+    {
       "id": "recurring-time-after-task",
       "title": "'every day to take my meds at 8pm' fires at 9am default + leaves 'at 8pm' in the task",
       "impact": "high",
@@ -2104,9 +2140,16 @@
     {
       "id": "detect-carrier-bare-10-digit",
       "note": "detectCarrier mapped any bare 10-digit number to DHL (/^\\d{10}$/), so 'track my order 1234567890' (a merchant ref / 10-digit phone) drove the agent to a DHL page + reported 'no DHL match' — implying the shipment didn't exist rather than that it wasn't a carrier number, contradicting the module's stated conservative-null contract. Dropped the bare-10-digit rule (kept JJD-prefixed DHL); a lone 10-digit now returns null so track_package asks which carrier, and it's still accepted as DHL when the user NAMES dhl (parseTrackingRequest's explicit-carrier branch, /^[0-9A-Z]{8,}$/). 3 tests (bare 10 -> null / JJD still DHL / named-dhl+10 tracks, bare order falls through). call-tested: false (pure parse). 1200 tests green."
+    },
+    {
+      "id": "crypto-quote-tool",
+      "note": "Fixed the weakest path on the MOST-promoted first errand: crypto price ('save btc: check the price of bitcoin' is the literal /start + README example) had no tool — get_quote was equities-only + rejected 'bitcoin', so 'price of bitcoin' fell to a slow, flaky web_search+scrape and the flagship demo looked broken. New src/lib/crypto.ts hits the keyless CoinGecko API: a common-coin map (btc/eth/sol/doge/... -> id, skipping a round-trip) else the /search endpoint (top market-cap hit, so 'btc' -> Bitcoin not a clone), then simple/price for usd + 24h change; formatCrypto shows '▲/▼ +N% 24h' + extra precision for sub-$1 coins. Added a get_crypto agent tool + backend method + defaultBackend wiring + SYSTEM_PROMPT + help ('crypto + stock prices ... instantly'). 16 tests (crypto unit: common/search/parse/format/getQuote + 2 agent dispatch). LIVE call-tested: btc/eth (common, no search) + pepe (search->id) all resolved w/ price + 24h change. 1214 tests green."
     }
   ],
   "audits": [
+    {
+      "note": "Audit 28 (backlog dry except owner-gated confirm-to-act). A/new-user: crypto price (the flagship 'price of bitcoin' demo) has NO tool -> slow flaky web_search (TOP — built), no absolute-date/'next Monday' reminders, worded-duration ('in an hour') + alarm ('set an alarm for 7am') phrasings bounce, English-only onboarding (no reply-language mirror), trimmed answers give no 'reply more' cue, no yearly/monthly recurrence. B/reliability: watchlist alert drops its 'then' action, feed-redefine keeps stale seen-set, numeric-redefine keeps old time-series (blended trend), 'then <word>' in ordinary prose misparsed as trigger-to-action. C/power: inline-keyboard callback route (confirmed UNBUILT end-to-end — sendMessage has no reply_markup arg, parseUpdates drops callback_query; still #1 unlock), automation-coach over answer-log, profile-driven form autofill (NET-NEW 'do it for me'). Built crypto-quote-tool (A#1, live-verified); seeded worded-duration-reminders(S), absolute-date-reminders(M), watchlist-then-dropped(M). Deferred: inline-keyboard-callbacks(M, top power), automation-coach(M), form-autofill(M), reply-language-mirror(M), trimmed-answer-more-cue(S), yearly/monthly-recurrence(M), feed-redefine-seen-reset(S), numeric-redefine-series-reset(S), then-word-misparse(S), + prior deferred set."
+    },
     {
       "note": "Audit 27 (backlog dry except owner-gated confirm-to-act). A/new-user: /start examples dev-flavored (weather/package/currency hidden), no QR-code tool, can't edit/reschedule an existing reminder ('move it to 9'), 'today's headlines' not routed to top-news template, no image search, playful joke/fact asks fall to slow web_search. B/reliability: 'every day ... at 8pm' fires at 9am default + leaves 'at 8pm' in task (TOP — built), 'Paris, TX' infers Paris-FR tz (region qualifier ignored, ~7h off), detectCarrier bare-10-digit -> DHL false-positive, semicolon in an alert task silently -> watchlist + drops the trigger, parsePlaces name-dedup hides distinct same-name branches. C/power: inline-keyboard callback route (send-side half-wired, no callback_query parse — top retention unlock), recall tool (answer-log has search() but no agent tool exposes it — write-only memory), cross-session automation-coach over the log. Built recurring-time-after-task (B#2); seeded region-qualifier-tz-inference(M), detect-carrier-bare-10-digit(S), recall-answer-log-tool(S). Deferred: inline-keyboard-callbacks(M), automation-coach(M), semicolon-alert-watchlist-guard(S), parsePlaces-dedup-by-name+coords(S), edit-reschedule-reminder(S/M), qr-code-tool(S), headlines-routing(M), joke/fact-instant(S), image-search(M), + prior deferred set."
     },

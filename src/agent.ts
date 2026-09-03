@@ -15,6 +15,7 @@ import { fetchYouTubeTranscript } from "./lib/youtube.js";
 import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
+import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
 import { getWeather as fetchWeather, formatWeather, formatWeatherWhen } from "./lib/weather.js";
@@ -112,6 +113,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { symbol: { type: "string", description: "Ticker symbol, e.g. \"AAPL\" or \"TSLA\". Non-US: add a market suffix like \"VOD.UK\"." } },
       required: ["symbol"],
+    },
+  },
+  {
+    name: "get_crypto",
+    description: "Get the current price + 24h change of a cryptocurrency (no key, instant). Use this — NOT get_quote (that's stocks) or web_search — for any \"price of bitcoin\", \"what's ETH at\", \"how's dogecoin doing\", \"BTC price\" question. Pass the coin ticker or name (btc, bitcoin, eth, sol, doge).",
+    parameters: {
+      type: "object",
+      properties: { coin: { type: "string", description: "Coin ticker or name, e.g. \"BTC\", \"bitcoin\", \"ethereum\", \"doge\"." } },
+      required: ["coin"],
     },
   },
   {
@@ -267,6 +277,7 @@ Tools:
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
+- "get_crypto" (coin): current crypto price + 24h change. Use this — NOT get_quote/web_search — for "price of bitcoin"/"what's ETH at"/"BTC price"/"how's doge doing". Pass the ticker or name (btc, eth, sol, doge).
 - "get_quote" (symbol): latest stock/equity price. Use this — NOT web_search/scrape — for any "what's Tesla at"/"AAPL price"/"how's NVDA doing" question; it's instant. Pass the ticker (AAPL, TSLA); non-US add a market suffix (VOD.UK).
 - "get_weather" (place?, when?): current weather, today's high/low, + up to a 7-day forecast. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location. For a future day, pass "when" with the user's words ("tomorrow", "this weekend", "Saturday") so the RIGHT day is reported, not today.
 - "find_nearby" (what, near?): find places near the user (coffee, pharmacy, ATM, gas...). Use this — NOT web_search — for "X near me"/"nearest Y". Omit near to use the user's location.
@@ -316,6 +327,9 @@ export interface BrowserBackend {
   // Optional: latest stock/equity quote for a ticker (stock-quote-tool). Absent -> the get_quote tool
   // reports it's unavailable. Returns null on a bad symbol / fetch failure.
   getQuote?(symbol: string): Promise<import("./lib/quote.js").Quote | null>;
+  // Optional: current crypto price for a coin ticker/name (crypto-quote-tool). Absent -> the get_crypto
+  // tool reports it's unavailable. Returns null on an unknown coin / fetch failure.
+  getCrypto?(coin: string): Promise<import("./lib/crypto.js").CryptoQuote | null>;
   // Optional: current weather for a place or coords (geo-tool-cluster). Absent -> the get_weather tool
   // reports it's unavailable. Returns null on a bad place / fetch failure.
   getWeather?(opts: { place?: string; lat?: number; lng?: number; near?: { lat: number; lng: number } }): Promise<import("./lib/weather.js").WeatherResult | null>;
@@ -418,6 +432,7 @@ const defaultBackend: BrowserBackend = {
   videoTranscript: (url) => fetchYouTubeTranscript(url, defaultFetchText),
   convertCurrency: (amount, from, to) => fxConvert(amount, from, to, defaultFetchText),
   getQuote: (symbol) => quoteFetch(symbol, defaultFetchText),
+  getCrypto: (coin) => cryptoFetch(coin, defaultFetchText),
   getWeather: (opts) => fetchWeather(opts, defaultFetchText),
   findNearby: (opts) => fetchNearby(opts, defaultFetchTextPost),
   getDirections: (opts) => fetchDirections(opts, defaultFetchText),
@@ -694,6 +709,19 @@ export async function runAgent(
           push("get_quote", `${formatQuote(q)}. Report this to the user, including the "as of" time if shown (it's the last close/trade, not a to-the-second live tick).`);
         } catch (e) {
           push("get_quote", `ERROR getting quote: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "get_crypto") {
+        if (!backend.getCrypto) { push("get_crypto", "ERROR: crypto prices aren't available."); continue; }
+        const coin = String(call.args.coin ?? "").trim();
+        try {
+          const q = await backend.getCrypto(coin);
+          if (!q) { push("get_crypto", `Couldn't get a price for "${coin}" (unknown coin or fetch failed). Check the ticker/name, or try web_search for an obscure token.`); continue; }
+          push("get_crypto", `${formatCrypto(q)}. Report this to the user (the price + 24h change; note it's live/spot).`);
+        } catch (e) {
+          push("get_crypto", `ERROR getting crypto price: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

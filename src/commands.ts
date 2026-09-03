@@ -28,6 +28,7 @@ const HELP = `Relay — what I can do:
 • Summarize a video: send a YouTube link + "tldr this" → I read its transcript and sum it up.
 • Weather: "weather in Paris" or just "weather" (if you've shared your location) → current + today's high/low, instantly.
 • Find places nearby: "coffee near me", "nearest pharmacy" (share your location first) → real nearby spots with distance + hours.
+• Crypto + stock prices: "price of bitcoin", "what's ETH at", "AAPL price" → live price + 24h change, instantly.
 • Convert currency: "how much is 200 USD in EUR" → I use the live rate, instantly.
 • Track a package: "where's my package 1Z999..." or "track 9400..." → I spot the carrier (UPS/FedEx/USPS/DHL) + read its tracking page. Add "watch" to get pinged when the status changes.
 • Share your location: tap 📎 → Location and I'll use it for "near me", weather, and directions.

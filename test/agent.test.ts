@@ -277,6 +277,53 @@ describe("runAgent get_quote (stock-quote-tool)", () => {
   });
 });
 
+describe("runAgent get_crypto (crypto-quote-tool)", () => {
+  it("uses get_crypto for a coin price, not web_search", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "get_crypto", args: { coin: "bitcoin" } } },
+      { toolCall: { name: "reply", args: { text: "Bitcoin is about $77,706." } } },
+    ]);
+    let seen = "";
+    const backend = {
+      scrape: async (url: string) => ({ title: "", content: "", url }),
+      createSession: async () => ({ id: "s" }),
+      navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {},
+      readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {},
+      discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+      getCrypto: async (coin: string) => { seen = coin; return { id: "bitcoin", symbol: "BTC", usd: 77706, change24h: 0.05 }; },
+    };
+    const { reply } = await runAgent("what's the price of bitcoin", { llm, backend });
+    expect(seen).toBe("bitcoin");
+    expect(reply).toMatch(/77,706/);
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/BTC: \$77,706/);
+  });
+  it("reports gracefully on an unknown coin", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "get_crypto", args: { coin: "notacoin" } } },
+      { toolCall: { name: "reply", args: { text: "I couldn't find that coin." } } },
+    ]);
+    const backend = {
+      scrape: async (url: string) => ({ title: "", content: "", url }),
+      createSession: async () => ({ id: "s" }),
+      navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {},
+      readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {},
+      discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+      getCrypto: async () => null,
+    };
+    const { reply } = await runAgent("price of notacoin", { llm, backend });
+    expect(reply).toMatch(/couldn't find/i);
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/Couldn't get a price/i);
+  });
+});
+
 describe("runAgent recall (recall-answer-log-tool)", () => {
   const backend = () => ({
     scrape: async (url: string) => ({ title: "", content: "", url }),
