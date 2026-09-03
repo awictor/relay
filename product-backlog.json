@@ -1904,7 +1904,7 @@
       "title": "No calculator (chained/financial math answered inline, silently wrong)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "SYSTEM_PROMPT routes ALL arithmetic/tips/percentages/date-math to inline LLM answering with no verification; \"split $127.50 3 ways with 20% tip\" / \"monthly payment on a $30k loan at 6% for 5y\" get confident wrong numbers — the highest-frequency errand class through an unverified path.",
       "how": "New src/lib/calc.ts: a safe arithmetic evaluator (no eval; tokenize + shunting-yard, + - * / % ^ parens, %, basic fns) + a calc tool; route money/percent/loan math to it. Reject anything non-numeric."
     },
@@ -2672,6 +2672,10 @@
     {
       "item": "scores-team-not-playing-dumps-slate",
       "note": "Fixed: a named team with no game today no longer dumps every OTHER game as the answer. resolveLeague marks viaTeam when it resolved via a team name; getScores uses teamMatchedAny (authoritative — filterByTeam deliberately falls back to the full slate on a no-match, which caused the dump) and returns {games:[],teamNotPlaying:true} so the dispatch tells the user they are not playing today + offers next game, instead of listing unrelated teams. 4 new tests. Suite 1424 green, tsc clean."
+    },
+    {
+      "item": "calculator-tool",
+      "note": "Added a calculate tool: new src/lib/calc.ts is a SAFE deterministic evaluator (no eval/Function) — tokenizer + shunting-yard to RPN + RPN eval, supporting + - * / mod ^, parens, unary minus, %-idioms ('20% of 47', 'X + 20%', 'X - 20% off', bare %), and functions sqrt/round/abs/floor/ceil/min/max/pow/loanpayment(principal,annualRatePct,years). Wired agent.ts (TOOLS, dispatch, prompt), pinned tool list, HELP; the ANSWER-DIRECTLY carve-out now steers anything past a trivial one-step sum (bill-splits, chained tips, loan payments) to the tool instead of unverified mental math. 16 new tests (precedence, unary, money/word ops, percent idioms, bill-split, loanpayment, friendly errors, no-eval safety). Suite 1440 green, tsc clean. call-tested:false (pure offline eval)."
     }
   ],
   "audits": [

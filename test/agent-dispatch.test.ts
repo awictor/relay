@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calendar_event", "click", "compare", "compose", "convert_currency", "define", "directions", "get_news", "get_scores", "get_time", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "type", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "define", "directions", "get_news", "get_scores", "get_time", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "type", "web_search"].sort()
     );
   });
 
@@ -102,6 +102,19 @@ describe("runAgent dispatch", () => {
     ]);
     await runAgent("define escrow", { llm, backend: b });
     expect(hits).toContain("defineWord:escrow");
+  });
+
+  it("calculate computes exactly with no backend/network, reaches reply", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "calculate", args: { expression: "(127.50 * 1.2) / 3" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "$51 each." } } as ToolCall },
+    ]);
+    await runAgent("split 127.50 three ways with 20% tip", { llm, backend: b });
+    // the tool result carries the exact computed value; no scrape/fetch happened
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool")!.content;
+    expect(toolMsg).toMatch(/= 51\b/);
+    expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
   });
 
   it("get_news -> backend.getNews, reaches reply, no browser", async () => {

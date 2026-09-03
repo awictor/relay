@@ -20,6 +20,7 @@ import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
 import { parseWorldClock, runWorldClock } from "./lib/worldclock.js";
 import { getScores as scoresFetch, formatScores } from "./lib/scores.js";
 import { getNews as newsFetch, formatNews } from "./lib/news.js";
+import { calc, formatResult } from "./lib/calc.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -137,6 +138,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { coin: { type: "string", description: "Coin ticker or name, e.g. \"BTC\", \"bitcoin\", \"ethereum\", \"doge\"." } },
       required: ["coin"],
+    },
+  },
+  {
+    name: "calculate",
+    description: "Evaluate an arithmetic/financial expression EXACTLY (no key, instant). Use this — do NOT do the mental math yourself — for anything beyond a trivial one-step sum: chained math, splitting a bill, tips, percentages (\"20% of 47\", \"$127.50 split 3 ways +20% tip\"), or a loan payment (loanpayment(principal, annualRatePct, years)). Supports + - * / % ^, parens, sqrt/round/abs/min/max/pow/loanpayment. Pass the expression; I compute it deterministically.",
+    parameters: {
+      type: "object",
+      properties: { expression: { type: "string", description: "The math to compute, e.g. \"(127.50*1.2)/3\" or \"loanpayment(30000, 6, 5)\"." } },
+      required: ["expression"],
     },
   },
   {
@@ -327,6 +337,7 @@ Tools:
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "get_time" (request): current time in another city/timezone, or convert a time between zones. Use this — NOT web_search — for "what time is it in Tokyo"/"time in London"/"9am PT in London"/"convert 3pm EST to Tokyo". Pass the request verbatim. Standard-time offsets (may be an hour off during daylight saving).
+- "calculate" (expression): compute arithmetic/financial math EXACTLY. Use for chained math, bill-splits, tips, percentages, loan payments — anything past a trivial one-step sum (don't do it in your head, that's silently wrong). loanpayment(principal, annualRatePct, years) for a monthly payment.
 - "get_news" (topic?): today's top news headlines, or about a topic. Use this — NOT web_search — for "what's the news"/"top headlines"/"news about X"/"latest on Y". Omit topic for general top stories.
 - "get_scores" (request): today's sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight". Pass the request verbatim. Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
 - "define" (word): a word's definition, pronunciation, and synonyms. Use this — NOT web_search/scrape — for "what does X mean"/"define X"/"synonyms for X"/"how do you spell X". English words only; pass the single word.
@@ -348,7 +359,9 @@ Rules:
 - Take few steps. When you have enough, call "reply".
 - The user is on a phone. In "reply", write a short plain-text answer — never paste raw JSON. If you extracted/compared data, summarize it in a line or two (e.g. "A is $10, B is $20"). No markdown tables.
 - If something needs a login or a paid/irreversible action, call "reply" and say so plainly. Never invent data you didn't retrieve.
-- ANSWER DIRECTLY (call "reply" with NO tool first) when the answer is deterministic and needs no live data: arithmetic + tips + percentages ("20% tip on $47" = $9.40), unit/measure conversions ("how many oz in a cup" = 8), date/time math, and stable common knowledge ("capital of France"). Don't open a browser or search for these — it just adds 10-30s. Use tools ONLY when the answer is time-sensitive or uncertain: live prices, exchange rates that move (use "convert_currency" for FX), news, weather, anything "current"/"today"/"now". When unsure whether a fact is stable, verify with a tool rather than guess.
+- ANSWER DIRECTLY (call "reply" with NO tool first) when the answer is deterministic and needs no live data: a TRIVIAL one-step sum ("20% tip on $47" = $9.40), unit/measure conversions ("how many oz in a cup" = 8), date/time math, and stable common knowledge ("capital of France"). Don't open a browser or search for these — it just adds 10-30s.
+- Use "calculate" (NOT mental math) for anything BEYOND a trivial one-step sum: chained math, splitting a bill, multi-step tips/percentages, or a loan payment — mental math on those is silently wrong. e.g. "$127.50 split 3 ways after 20% tip" -> calculate "(127.50*1.2)/3"; "monthly payment on a $30k loan at 6% for 5 years" -> calculate "loanpayment(30000, 6, 5)".
+- Use OTHER tools when the answer is time-sensitive or uncertain: live prices, exchange rates that move (use "convert_currency" for FX), news, weather, anything "current"/"today"/"now". When unsure whether a fact is stable, verify with a tool rather than guess.
 - OPERATE ON PASTED TEXT DIRECTLY (call "reply" with NO tool): when the user's message CONTAINS the text to work on — "summarize this: <text>", "make this shorter", "proofread/fix the grammar", "tl;dr", "rewrite this as …", "translate this to Spanish" — just do it on the text they gave you. Never web_search or scrape for text that's already in the message; that only adds delay and risks answering about a different thing.
 - If the task is genuinely UNDERSPECIFIED — a real answer depends on details the user didn't give and you'd otherwise have to guess (e.g. "find me a good laptop" with no budget/use, "cheap flights to Lisbon" with no dates/origin, "book a table" with no time/size) — do NOT burn steps on a guess. Call "reply" with ONE short question naming the 1-2 things you need, then stop. Ask at most once, only when a sensible default truly doesn't exist; if the request is clear or a reasonable default works ("weather" -> their location, "top HN story"), just do it.
 - CITE YOUR SOURCE: when the answer came from a page you fetched (scrape/extract/browse/search result), end "reply" with a final line "Source: <url>" — the single primary URL you got the fact from, exactly as fetched (never invent or guess a link). One source is enough. Skip it for direct calc/conversion/known-fact answers, and skip it if you genuinely didn't fetch a page. This lets the user verify the answer.`;
@@ -839,6 +852,17 @@ export async function runAgent(
         const answer = parsed ? runWorldClock(parsed, nowForTz) : null;
         if (!answer) { push("get_time", `Couldn't resolve a timezone in "${request}" (unknown city/abbreviation). Report that you couldn't place that zone + ask which city/UTC offset, or try web_search for an unusual place.`); continue; }
         push("get_time", `${answer}\n\nReport this to the user (include the daylight-saving caveat only if it's relevant / they're near a DST change).`);
+        continue;
+      }
+
+      if (call.name === "calculate") {
+        const expr = String(call.args.expression ?? "").trim();
+        try {
+          const result = calc(expr);
+          push("calculate", `${expr} = ${formatResult(result)}. Report this exact result to the user.`);
+        } catch (e) {
+          push("calculate", `Couldn't compute "${expr}": ${e instanceof Error ? e.message : String(e)}. Ask the user to restate it, or answer a trivial one yourself.`);
+        }
         continue;
       }
 

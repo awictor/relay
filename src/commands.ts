@@ -39,6 +39,7 @@ const HELP = `Relay — what I can do:
 • Crypto + stock prices: "price of bitcoin", "what's ETH at", "AAPL price" → live price + 24h change, instantly.
 • Flip / roll / pick: "flip a coin", "roll a d20", "random number 1-100", "pick one: tacos or sushi" → a genuinely random answer.
 • Convert currency: "how much is 200 USD in EUR" → I use the live rate, instantly.
+• Do the math: "split $127.50 three ways with 20% tip", "monthly payment on a $30k loan at 6% for 5 years" → I compute it exactly, not a guess.
 • Define a word: "what does obsequious mean", "synonyms for happy" → definition, pronunciation, and synonyms, instantly.
 • World clock: "what time is it in Tokyo", "what's 9am PT in London" → the time there or a zone conversion, instantly.
 • Sports scores: "did the Lakers win?", "Man City score", "NBA scores tonight" → today's scores + status, instantly (NBA/NFL/MLB/NHL/NCAA + major soccer).
