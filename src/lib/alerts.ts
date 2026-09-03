@@ -183,7 +183,18 @@ export function conditionHolds(cond: AlertCondition, value: string, hint?: strin
   if (cond.op === "in_stock") {
     if (OUT_OF_STOCK_RE.test(value)) return false;                 // negation wins
     if (IN_STOCK_STRONG_RE.test(value)) return true;               // explicit availability statement
-    if (CTA_RE.test(value)) return CROSS_SELL_RE.test(value) ? null : true; // CTA only if no cross-sell framing
+    const cta = value.match(CTA_RE);
+    if (cta) {
+      const cross = value.match(CROSS_SELL_RE);
+      // No cross-sell framing at all -> the CTA is the watched product's, in stock.
+      if (!cross) return true;
+      // Both present (the COMMON case — almost every product page has a "you may also like" block):
+      // treat the CTA as the watched item's when it sits BEFORE the first cross-sell marker (the primary
+      // above-the-fold buy button precedes the recommendations). Only a CTA that appears SOLELY inside
+      // cross-sell framing stays ambiguous. Without this, "alert me when back in stock" returned null on
+      // EVERY check of a normal product page and the restock was never caught (instock-cross-sell-never-fires).
+      return cta.index! < cross.index! ? true : null;
+    }
     return null; // ambiguous
   }
   // Pass the watched task as a hint so a multi-number reply ("S&P 5,900, Dow 42,000") compares the number

@@ -59,6 +59,13 @@ describe("conditionHolds", () => {
   it("a CTA WITHOUT cross-sell framing still confirms in_stock (real product page)", () => {
     expect(conditionHolds({ op: "in_stock" }, "PS5 Console. Add to cart. Free shipping.")).toBe(true);
   });
+  it("the watched item's PRIMARY CTA (before the cross-sell block) confirms in_stock even with recommendations below (instock-cross-sell-never-fires)", () => {
+    // The COMMON real page: primary "Add to cart" up top, a "You may also like" block with its own CTAs below.
+    // Old code held null forever here, so the restock was never caught.
+    expect(conditionHolds({ op: "in_stock" }, "PS5 Console — Add to cart. Free shipping. You may also like: Controller — Buy now")).toBe(true);
+    // But a CTA that appears ONLY inside the cross-sell block (watched item shows no primary CTA) stays ambiguous.
+    expect(conditionHolds({ op: "in_stock" }, "PS5 Console. You may also like: Controller — Add to cart")).toBeNull();
+  });
   it("a strong 'in stock' statement confirms even alongside a recommendations block", () => {
     expect(conditionHolds({ op: "in_stock" }, "PS5 is in stock! Recommended: extra controller — add to cart")).toBe(true);
   });

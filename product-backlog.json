@@ -2606,7 +2606,7 @@
       "title": "in_stock watch never fires when the buy CTA sits in cross-sell framing",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'alert me when back in stock' stays silent even after buyable, on pages whose only availability signal is an Add-to-cart CTA surrounded by 'you may also like' framing — conditionHolds returns null indefinitely.",
       "how": "In conditionHolds in_stock: when CTA_RE matches but CROSS_SELL_RE also matches, don't hold null forever — fall back to a positive on a primary/above-the-fold CTA, or after K ambiguous checks treat a persistent CTA as in-stock."
     },
@@ -3648,6 +3648,10 @@
     {
       "item": "bg-errand-double-fire",
       "note": "Fixed a background errand double-firing after a crash (bg-errand-double-fire). If the worker crashed in the gap between sending a 'get back to me' result and clearing its persisted record, startup recovery re-ran the whole errand + texted a second (possibly different) unprompted answer. Mirrored the once-schedule delivered flag: added PendingErrand.delivered + BackgroundStore.markDelivered (persists BEFORE remove); the handler calls bgErrandDelivered right BEFORE the success send, so a crash in the send->done gap leaves delivered:true on disk. planErrandReplay now returns {replay:false, notice:null} for a delivered errand (drop the stale record silently — the user already got the real result); index guards the null notice + still removes it. Marking before the send trades a rare skipped-redelivery-on-send-failure for never double-delivering (a duplicate ping is the annoying case). 2 new tests (markDelivered persists across a reload; planErrandReplay drops a delivered errand with no notice). suite 1762 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "instock-cross-sell-never-fires",
+      "note": "Fixed an in-stock watch never firing on a normal product page (instock-cross-sell-never-fires). conditionHolds in_stock returned null (hold) whenever a buy CTA AND cross-sell framing ('you may also like') both appeared — which is almost every product page — so an edge-triggered 'alert me when back in stock' was never satisfied and the restock was missed. Now positional: a CTA BEFORE the first cross-sell marker is the watched item's primary above-the-fold buy button -> in stock; a CTA appearing SOLELY inside the recommendations block stays ambiguous (null). Out-of-stock negation + explicit in-stock phrase + no-cross-sell CTA paths unchanged. 1 new test (primary-CTA-before-recs -> true; cross-sell-only CTA -> null); existing cta-scoping/no-framing tests still green. suite 1763 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
