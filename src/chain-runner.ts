@@ -14,16 +14,30 @@ export interface ChainRunnerDeps {
   contextFor?: (chatId: number) => string; // per-user profile context (location/units/facts)
 }
 
-// True if `hay` contains `needle` NOT immediately preceded by a negation ("not"/"no"/"out of"/"n't").
-// So an "if in stock" gate doesn't pass on "out of stock". Exported for tests.
+// True if `hay` contains `needle` NOT preceded by a negation ("not"/"no"/"out of"/"n't"/"never"/
+// "without"/"no longer") within the SAME clause. So an "if in stock" gate doesn't pass on "out of
+// stock", "not currently in stock", or "no longer available". Rather than a fixed char window (which
+// missed "not currently in stock" — 'not' sits 14 chars before 'in stock'), scan back to the nearest
+// clause boundary (sentence punctuation or a coordinating conjunction) and look for a negation anywhere
+// in that clause before the needle. Exported for tests.
 export function containsUnnegated(hay: string, needle: string): boolean {
   const h = hay.toLowerCase(), n = needle.toLowerCase();
   let from = 0;
   for (;;) {
     const i = h.indexOf(n, from);
     if (i < 0) return false;
-    const before = h.slice(Math.max(0, i - 12), i);
-    if (!/(?:\bnot\b|\bno\b|\bout of\b|n['’]t)\s*$/.test(before)) return true; // an un-negated occurrence
+    // The clause preceding this occurrence: from the last boundary (., !, ?, ;, :, newline, or a
+    // " but "/" and " conjunction that starts a fresh assertion) up to the needle.
+    const pre = h.slice(0, i);
+    const boundary = Math.max(
+      pre.lastIndexOf("."), pre.lastIndexOf("!"), pre.lastIndexOf("?"),
+      pre.lastIndexOf(";"), pre.lastIndexOf(":"), pre.lastIndexOf("\n"),
+      pre.lastIndexOf(" but "), pre.lastIndexOf(" and "),
+    );
+    const clause = pre.slice(boundary + 1);
+    if (!/\b(?:not|no|never|without|out of|no longer|isn['’]t|aren['’]t|won['’]t|can['’]t|n['’]t)\b/.test(clause)) {
+      return true; // an un-negated occurrence in its clause
+    }
     from = i + n.length;
   }
 }

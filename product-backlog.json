@@ -32,7 +32,7 @@
       "title": "chain if-gate passes on the opposite condition when negation is >12 chars away",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "containsUnnegated only inspects slice(i-12, i) for a negation token, so 'not currently in stock' (‘not’ 14 chars before ‘in stock’) is read as un-negated and an 'if in stock: buy/notify' chain runs on the INVERSE of the intended condition (audit B#6).",
       "how": "Widen the negation lookback window (or scan the whole preceding clause/sentence for a leading negation) so 'not currently in stock' / 'no longer available' correctly fail the gate. Add tests for the far-negation cases."
     },
@@ -1801,6 +1801,10 @@
     {
       "id": "watchlist-member-never-seeds",
       "note": "Fixed a dead-watch bug: a watchlist member whose FIRST check errored (last stays undefined) and then recovered on a later tick where no other member changed was never seeded — the runner returned commit:noop on the all-unchanged tick, discarding its update, and the `mem.last !== undefined` change-guard then kept it out of changedLines forever, so it silently never alerted again. On a no-notify tick the runner now seeds any member still missing a baseline immediately (committing only the fresh seeds, no send to gate on); an already-seeded unchanged member is not re-written. 2 tests (missed-first-check member gets seeded on a quiet tick + unchanged member not re-committed / fully-unchanged all-seeded watchlist writes nothing). call-tested: false (pure alert logic). 1147 tests green."
+    },
+    {
+      "id": "chain-ifgate-far-negation",
+      "note": "Fixed a chain if-gate firing on the OPPOSITE condition: containsUnnegated only inspected the 12 chars before the keyword, so 'not currently in stock' ('not' 14 chars out) read as un-negated and an 'if in stock: buy/notify' chain ran on the inverse. Replaced the fixed window with a clause scan — from the nearest boundary (. ! ? ; : newline, or a ' but '/' and ' conjunction) up to the keyword — looking for any negation (not/no/never/without/out of/no longer/isn't/aren't/won't/can't/n't). So 'no longer available', 'never got it back in stock', \"isn't currently in stock\" all correctly fail the gate, while a negation in a DIFFERENT clause ('sold out online but in stock at the store') still passes. 2 tests (far-negation fails gate / different-clause negation still matches). call-tested: false (pure predicate logic). 1149 tests green."
     }
   ],
   "audits": [

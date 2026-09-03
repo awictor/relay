@@ -80,4 +80,16 @@ describe("containsUnnegated (if-gate)", () => {
     expect(containsUnnegated("not available", "available")).toBe(false);
     expect(containsUnnegated("currently unavailable but the part is available elsewhere", "available")).toBe(true);
   });
+  it("catches a negation FAR from the keyword within the same clause (chain-ifgate-far-negation)", () => {
+    // 'not' sits 14 chars before 'in stock' — the old 12-char window missed it and passed the gate.
+    expect(containsUnnegated("not currently in stock", "in stock")).toBe(false);
+    expect(containsUnnegated("this item is no longer available", "available")).toBe(false);
+    expect(containsUnnegated("we never got it back in stock", "in stock")).toBe(false);
+    expect(containsUnnegated("it isn't currently in stock right now", "in stock")).toBe(false);
+  });
+  it("a negation in a DIFFERENT clause does not suppress a real match", () => {
+    // The negation belongs to the first clause; the second clause has an un-negated 'in stock'.
+    expect(containsUnnegated("the red one is not available. the blue one is in stock", "in stock")).toBe(true);
+    expect(containsUnnegated("sold out online but in stock at the store", "in stock")).toBe(true);
+  });
 });
