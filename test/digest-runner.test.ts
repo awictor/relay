@@ -90,9 +90,12 @@ describe("runDigest", () => {
   it("all members transiently FAIL -> sends a 'couldn't build it this time' note, not silence (digest-all-fail-silent-noshow)", async () => {
     // Recipes exist (not deleted) but every run throws — a network blip. Must NOT silently no-show.
     const out = await runDigest(digest(["weather", "hn"]), deps({ runAgent: async () => { throw new Error("net"); } }));
-    expect(out).not.toBeNull();
-    expect(out).toMatch(/couldn't put your briefing together|couldn't build/i);
-    expect(out).toMatch(/temporary|try again/i);
+    // All-failed is now a distinct outcome (digest-all-failed-bypasses-gate): the scheduler streaks it,
+    // but the note the user sees on /run is unchanged.
+    expect(out && typeof out === "object" && "allFailed" in out).toBe(true);
+    const note = (out as { note: string }).note;
+    expect(note).toMatch(/couldn't put your briefing together|couldn't build/i);
+    expect(note).toMatch(/temporary|try again/i);
   });
 
   it("an error-SHAPED member reply is demoted to '(couldn't fetch)', not shown as content (digest-error-as-content)", async () => {
@@ -110,22 +113,23 @@ describe("runDigest", () => {
     const out = await runDigest(digest(["weather", "hn"]), deps({
       runAgent: async () => ({ reply: "couldn't load that right now" }), // error-shaped, not degraded
     }));
-    expect(out).not.toBeNull();
-    expect(out).toMatch(/couldn't put your briefing together|couldn't build/i);
-    expect(out).not.toMatch(/couldn't load that right now/); // the raw error isn't shown as content
+    expect(out && typeof out === "object" && "allFailed" in out).toBe(true);
+    const note = (out as { note: string }).note;
+    expect(note).toMatch(/couldn't put your briefing together|couldn't build/i);
+    expect(note).not.toMatch(/couldn't load that right now/); // the raw error isn't shown as content
   });
 
   it("all members DEGRADED (real recipes, no content) also sends the transient note, not silence", async () => {
     const out = await runDigest(digest(["weather", "hn"]), deps({ runAgent: async () => ({ reply: "", degraded: true }) }));
-    expect(out).not.toBeNull();
-    expect(out).toMatch(/couldn't/i);
+    expect(out && typeof out === "object" && "allFailed" in out).toBe(true);
+    expect((out as { note: string }).note).toMatch(/couldn't/i);
   });
 
   it("mixed gone + failed (no real) still sends the transient note (a failed member means it's not just dead)", async () => {
     // "weather" exists but fails; "gone" is deleted. At least one FAILED -> treat as transient, notify.
     const out = await runDigest(digest(["weather", "gone"]), deps({ runAgent: async () => { throw new Error("net"); } }));
-    expect(out).not.toBeNull();
-    expect(out).toMatch(/couldn't/i);
+    expect(out && typeof out === "object" && "allFailed" in out).toBe(true);
+    expect((out as { note: string }).note).toMatch(/couldn't/i);
   });
 
   it("a digest with at least one real member still sends (a transient fail doesn't blank it)", async () => {

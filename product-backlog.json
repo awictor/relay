@@ -2813,7 +2813,7 @@
       "title": "a dead digest source sends a reassuring 'temporary blip' note forever",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "digest-runner returns an all-failed note as a normal string; the runner sends it + completes ok:true, so the softFail/fail-streak machinery never engages. A genuinely dead digest (bad recipe, permanently blocked URL) keeps sending 'I couldn't put your briefing together this time, I'll try next run' every morning with no escalation, and if THAT send fails it's silently lost.",
       "how": "Have digest-runner signal all-failed as a soft-fail (like watches) so the runner streaks it + sends a failed-watch-style receipt after N ('your <name> briefing has failed K days — check its recipes'); gate the note send on delivery."
     }
@@ -3938,6 +3938,10 @@
     {
       "item": "scheduled-chain-partial-unflagged",
       "note": "A scheduled chained recipe that stops early is no longer pushed as a complete briefing (scheduled-chain-partial-unflagged). The scheduler's runChain dep returned Promise<string>, so a chain halted at an if-gate or a step that produced nothing was sent as normal complete-looking content every cadence, no '⚠️ partial' — while the inbound /run path already flagged stoppedEarly. Widened the runChain dep to return string | {final, stoppedEarly?, stepsDone?, stepsTotal?} (bare string still accepted = legacy complete); the runner sets res.degraded on stoppedEarly so the existing partial-banner + ok:!degraded metric fire. Reworded the banner cause-agnostic ('Partial — this didn't fully finish', not 'ran low on steps', since a chain stops for an if-gate too). index wires the structured result from runChain's ChainResult (final + stoppedEarly + step counts). 2 new tests (stopped-early -> banner + ok:false; completed structured -> no banner); existing legacy-string chain test unchanged. suite 1895 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "id": "digest-all-failed-bypasses-gate",
+      "note": "Digest whose sources ALL fail now returns a distinct {allFailed,note} outcome instead of a plain string; scheduler streaks it like a watch soft-fail (silent per fire, escalation receipt at N, gated on delivery) so a dead digest no longer pings the reassuring 'I'll try next run' note every morning with no escalation. /run + callback still show the note (user asked now). +2 tests, 1897 green."
     }
   ],
   "audits": [

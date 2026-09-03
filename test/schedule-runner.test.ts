@@ -418,6 +418,39 @@ describe("makeScheduleRunner.tick", () => {
     expect(notices).toHaveLength(2); // still just the two — no repeat
   });
 
+  it("a digest whose sources ALL fail stays silent per fire, then escalates a receipt at the streak (digest-all-failed-bypasses-gate)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    let runs = 0;
+    const { store, runner } = harness(clock, {
+      send: async (_c, text) => { sent.push(text); },
+      digestRun: async () => { runs++; return { allFailed: true as const, note: "📋 morning\nI couldn't put your briefing together this time — temporary blip." }; },
+      failStreakNotice: (s, streak) => `⚠️ "${s.task.replace(/^digest:/, "")}" failed ${streak} checks in a row.`,
+    });
+    store.add(1, { kind: "daily", task: "digest:morning", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    // Fire 3 times (FAIL_STREAK_NOTIFY default 3): the reassuring note is NEVER pinged; the 3rd trips the
+    // escalation receipt instead — the fix for a dead digest reassuring "I'll try next run" forever.
+    for (let i = 0; i < 3; i++) { await runner.tick(); clock.t += 25 * 3_600_000; }
+    expect(runs).toBe(3);
+    expect(sent.some((t) => /couldn't put your briefing/.test(t))).toBe(false); // per-fire note suppressed
+    expect(sent.filter((t) => /failed 3 checks/.test(t))).toHaveLength(1);      // one escalation at the threshold
+  });
+
+  it("a digest that recovers to real content clears its all-failed streak (never trips the receipt)", async () => {
+    const clock = { t: NOW };
+    const notices: number[] = [];
+    let call = 0;
+    const { store, runner, sent } = harness(clock, {
+      // fail, fail, then a real briefing (clears the streak), fail -> never 3 consecutive.
+      digestRun: async () => { call++; return call === 3 ? "📋 morning\n• weather: sunny" : { allFailed: true as const, note: "blip" }; },
+      failStreakNotice: (_s, streak) => { notices.push(streak); return "x"; },
+    });
+    store.add(1, { kind: "daily", task: "digest:morning", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    for (let i = 0; i < 4; i++) { await runner.tick(); clock.t += 25 * 3_600_000; }
+    expect(notices).toEqual([]);                                         // fail,fail,CONTENT,fail -> never hit 3
+    expect(sent.some((s) => /weather: sunny/.test(s.text))).toBe(true);  // the recovered briefing was actually sent
+  });
+
   it("a ONCE recipe whose content is gone stays silent (no notice — it just drops)", async () => {
     const clock = { t: NOW };
     const notices: unknown[] = [];

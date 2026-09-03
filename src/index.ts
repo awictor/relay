@@ -32,7 +32,7 @@ import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots, slotsAmbiguous, slotNames, isChain } from "./lib/recipes.js";
 import { matchRecipe } from "./lib/task-suggest.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
-import { runDigest } from "./digest-runner.js";
+import { runDigest, type DigestOutcome } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summarizeSeries, isQuietDeferrable } from "./lib/alerts.js";
 import { parseChartRequest, renderChart } from "./lib/chart.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
@@ -148,7 +148,7 @@ const agentEnvFor = (chatId: number) => ({
   weatherUnits: profiles.get(chatId)?.units,
 });
 // Run a digest -> composed briefing text (member recipes -> one message). Shared by /run + schedule.
-const digestRunText = (chatId: number, name: string): Promise<string | null> => {
+const digestRunText = (chatId: number, name: string): Promise<DigestOutcome> => {
   const d = digests.get(chatId, name);
   if (!d) return Promise.resolve(null);
   return runDigest(d, { llm, resolveRecipe: (c, n) => { const r = recipes.get(c, n); return r ? { task: r.task } : null; }, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor,

@@ -10,6 +10,7 @@ import { hasSlots, isChain } from "./lib/recipes.js";
 import type { AgentEnv } from "./chain-runner.js";
 import { buttonsForTask, pickButtons, type InlineKeyboard } from "./lib/callbacks.js";
 import { parseResultList, type ResultItem } from "./lib/result-list.js";
+import type { DigestOutcome } from "./digest-runner.js";
 
 export interface ScheduleRunnerDeps {
   store: ScheduleStore;
@@ -52,7 +53,7 @@ export interface ScheduleRunnerDeps {
   maxPerChatPerHour?: number;
   // Digests (m9 digest-3): a scheduled digest stores the task "digest:<name>"; when it fires,
   // run the digest to a composed message instead of the agent. Optional.
-  digestRun?: (chatId: number, name: string) => Promise<string | null>;
+  digestRun?: (chatId: number, name: string) => Promise<DigestOutcome>;
   // Alerts (m10 alert-3): a scheduled alert stores "alert:<name>"; on fire, check it and get back
   // the notify message ONLY if it changed (null = silent) + a commit() to advance the baseline, which
   // MUST be called only AFTER a successful send so a failed send re-fires next check. Optional.
@@ -313,6 +314,27 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
         return;
       }
+      // Every member failed to load THIS run (transient) — the digest is alive but its sources didn't
+      // answer (digest-all-failed-bypasses-gate). Treat it like a watch soft-fail instead of pinging the
+      // reassuring "temporary blip" note every cadence: stay silent per fire, count the streak, and only
+      // after FAIL_STREAK_NOTIFY send the failed-watch receipt (so a truly-broken source escalates instead
+      // of reassuring forever), then reset. A run that produces real content clears the streak below.
+      if (typeof composed === "object" && composed !== null && "allFailed" in composed) {
+        if (isCancelled()) return; // timed out late: the tick's catch already handled this schedule
+        const streak = (softFailStreak.get(s.id) ?? 0) + 1;
+        softFailStreak.set(s.id, streak);
+        log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, digest: digestMatch[1], ok: false, sent: false, soft_fail_streak: streak })}`);
+        if (streak >= FAIL_STREAK_NOTIFY && deps.failStreakNotice && !overCap(s.chatId, deps.now())) {
+          const notice = deps.failStreakNotice(s, streak);
+          // Gate the receipt on ACTUAL delivery (send-never-throws-dead-commit-guard): only reset the
+          // streak if the heads-up landed, else keep it so the next fire re-sends rather than swallowing it.
+          if (notice && (await deps.send(s.chatId, notice)) !== false) { noteSend(s.chatId, deps.now()); softFailStreak.set(s.id, 0); }
+        }
+        deps.store.complete(s.id, deps.now());
+        deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: false });
+        return;
+      }
+      softFailStreak.delete(s.id); // real briefing content this run — clear any all-failed streak
       res = { reply: composed };
       sendText = deps.formatReply(res.reply); // digest text already labeled; no reminder prefix
       fullText = composed; // untrimmed source, so "more"/"link" can page the tail formatReply dropped

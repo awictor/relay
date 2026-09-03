@@ -34,12 +34,23 @@ export interface DigestRunnerDeps {
   contextFor?: (chatId: number) => string;
 }
 
+// The outcome of a digest run. Three cases the SCHEDULER must tell apart (digest-all-failed-bypasses-gate):
+//  - string          -> real briefing content, send it.
+//  - null            -> structurally dead (every member deleted / none defined): stay silent + stop firing.
+//  - { allFailed }   -> every member failed to load THIS run (transient network/site blip). Distinct from a
+//    dead digest: the automation is fine, the sources just didn't answer. The scheduler streaks this like a
+//    watch soft-fail (silent per fire, escalation receipt after N) instead of pinging the reassuring `note`
+//    every single cadence with no way to notice a source that's now permanently broken. The inbound /run +
+//    callback paths still SHOW `note` (the user asked right now, so an honest "couldn't build it" is right).
+export interface DigestAllFailed { allFailed: true; note: string; }
+export type DigestOutcome = string | DigestAllFailed | null;
+
 /**
  * Run a digest: execute each member recipe, compose a single message with a section per
  * member. Returns the composed text. Never throws on a member failure — that member gets a
  * fallback line. An unknown recipe (deleted after define) is noted, not fatal.
  */
-export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise<string | null> {
+export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise<DigestOutcome> {
   const cap = deps.maxMembers ?? 10;
   const members = digest.members.slice(0, cap);
   // A digest whose recipes were ALL deleted (or that never had any) has no real content — return null so
@@ -99,7 +110,11 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
     //  - every member is GONE (deleted / slotted-skip) -> the digest is structurally dead; return null
     //    so a scheduled fire stays silent + /run says "empty or gone" (empty-digest-fires-noise).
     if (built.some((b) => b.status === "failed")) {
-      return `📋 ${digest.name}\nI couldn't put your briefing together this time — every source failed to load (likely a temporary network blip). I'll try again on the next run.`;
+      // Signal all-failed as a distinct outcome (not a plain string): the scheduler streaks it like a
+      // watch soft-fail so a digest whose sources are ALL down doesn't ping this reassuring "temporary
+      // blip" note every morning forever with no escalation (digest-all-failed-bypasses-gate). /run +
+      // callback show `note` verbatim — the user asked right now, so the honest "couldn't build it" is right.
+      return { allFailed: true, note: `📋 ${digest.name}\nI couldn't put your briefing together this time — every source failed to load (likely a temporary network blip). I'll try again on the next run.` };
     }
     return null;
   }

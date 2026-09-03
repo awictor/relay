@@ -23,6 +23,15 @@ import { photoNeedsAgent, photoIsQrScan } from "./lib/photo-intent.js";
 import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, tryButtons as buildTryButtons, actButtons, installButtons, TRY_EXAMPLES, type InlineKeyboard } from "./lib/callbacks.js";
 import { parseResultList, firstUrl, type ResultItem } from "./lib/result-list.js";
 import { rowsToCsv } from "./lib/to-csv.js";
+import type { DigestOutcome } from "./digest-runner.js";
+
+// Coerce a digest outcome to what an INBOUND /run or callback shows: real content as-is, the all-failed
+// `note` verbatim (the user asked right now, so the honest "couldn't build it" is correct — unlike the
+// scheduler, which streaks all-failed silently), or null for a gone/empty digest (caller supplies copy).
+function digestDisplay(outcome: DigestOutcome): string | null {
+  if (outcome && typeof outcome === "object" && "allFailed" in outcome) return outcome.note;
+  return outcome;
+}
 
 // Tap-to-watch gating (tap-to-watch-on-answers). Only offer the "make this recurring" buttons on a
 // task that's a plausible standing errand — NOT a command-shaped message (already an automation / a
@@ -260,7 +269,7 @@ export interface HandlerDeps {
   // Is <name> a digest for this chat? (so /run + schedule dispatch digest vs recipe).
   isDigest?: (chatId: number, name: string) => boolean;
   // Run a digest NOW -> the composed briefing text (sent by the handler). null if unknown.
-  digestRun?: (chatId: number, name: string) => Promise<string | null>;
+  digestRun?: (chatId: number, name: string) => Promise<DigestOutcome>;
   digestSchedule?: (chatId: number, name: string, whenClause: string, now: number) =>
     { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" };
   // Change-alerts (m10 alert-3): "watch <name>: <task>" defines + auto-schedules a check.
@@ -533,7 +542,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       if (action.kind === "digest") {
         if (!deps.digestRun) return null;
         await deps.sendTyping(chatId).catch(() => {});
-        const text = await deps.digestRun(chatId, action.name);
+        const text = digestDisplay(await deps.digestRun(chatId, action.name));
         await deps.sendMessage(chatId, text ?? `I couldn't run the "${action.name}" briefing — it may have been removed.`, text ? buildDigestKeyboard(action.name) : undefined);
         return text ? "Done" : null;
       }
@@ -1515,7 +1524,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         // pool + starves other chats). A recipe /run falls through to the rate-checked agent path below.
         const rl = deps.checkRateLimit(msg.chatId);
         if (!rl.allowed) { await deps.sendMessage(msg.chatId, `You're sending a lot — give me ${rl.retryAfterSec}s to catch up.`); return; }
-        const composed = await deps.digestRun(msg.chatId, nameOnly);
+        const composed = digestDisplay(await deps.digestRun(msg.chatId, nameOnly));
         await deps.sendMessage(msg.chatId, composed ?? "That digest is empty or gone — see /digests.");
         return;
       }
