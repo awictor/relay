@@ -228,7 +228,12 @@ function normalizeName(s: string): string {
  *   "... (when it changes) by <n>"                       -> numeric change threshold
  */
 export function parseAlertCommand(text: string): ParsedAlert | null {
-  const m = text.trim().match(/^\s*(?:alert(?:\s+me)?|watch)\s+([^:]+?)\s*:\s*(.+)$/i);
+  // The name/task separator is a colon — but NOT the ":" inside a URL scheme ("https://"). Without the
+  // (?!//) guard, "watch this page https://ex.com for changes" split at "https:" into a garbage alert
+  // named "this page https" watching "//ex.com ..." (alert-colon-in-url); the guard makes that phrasing
+  // find no separator and fall through (null) so the agent/page-watch handles it. A real "watch news:
+  // https://x.com" still splits at the "news:" colon (followed by a space, not "//").
+  const m = text.trim().match(/^\s*(?:alert(?:\s+me)?|watch)\s+([^:]+?)\s*:(?!\/\/)\s*(.+)$/i);
   if (!m) return null;
   const name = normalizeName(m[1]!);
   let task = m[2]!.trim();

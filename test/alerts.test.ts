@@ -396,6 +396,14 @@ describe("feed-watch (new-item-feed-watch)", () => {
     // A non-URL task is NOT a page watch (stays a normal value/prose watch).
     expect(parseAlertCommand("watch hn: the top HN story")).toEqual({ name: "hn", task: "the top HN story" });
   });
+  it("does NOT split on a URL-scheme colon (alert-colon-in-url)", () => {
+    // "watch this page https://ex.com for changes" has no name:task colon — the ":" is inside "https://".
+    // Before the (?!//) guard this made a garbage alert named "this page https" watching "//ex.com ...".
+    expect(parseAlertCommand("watch this page https://ex.com for changes")).toBeNull();
+    expect(parseAlertCommand("alert me https://site.com/x changed")).toBeNull();
+    // A genuine "name: <url>" (colon followed by space, not "//") still splits + becomes a page-watch.
+    expect(parseAlertCommand("watch news: https://x.com")).toEqual({ name: "news", task: "https://x.com", pageUrl: "https://x.com" });
+  });
   it("a price/stock trigger wins over the feed cue (no false feed)", () => {
     expect(parseAlertCommand("watch btc: new bitcoin price below 50000")).toEqual({ name: "btc", task: "new bitcoin price", condition: { op: "below", operand: 50000 } });
     expect(parseAlertCommand("watch ps5: the PS5 back in stock")).toEqual({ name: "ps5", task: "the PS5", condition: { op: "in_stock" } });

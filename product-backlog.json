@@ -2987,6 +2987,24 @@
       "status": "todo",
       "why": "the comparator handles N options but the phrasing/tests focus on 2; a 3-way compare's 'better buy (X% cheaper)' line compares only to the runner-up, which may read oddly with 3+.",
       "how": "Add 3-way tests; consider phrasing the savings vs the most-expensive or naming rank, so a 3-option compare reads clearly."
+    },
+    {
+      "id": "alert-colon-in-url",
+      "title": "Watch command split on a URL-scheme colon, making a garbage alert",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "parseAlertCommand split name:task on the FIRST colon, so 'watch this page https://ex.com for changes' split at 'https:' -> a garbage alert named 'this page https' watching '//ex.com for changes' instead of a page-diff watch (or falling through).",
+      "how": "Added a (?!//) guard to the separator colon so a URL-scheme colon isn't treated as the name:task boundary; a real 'name: <url>' (colon + space) still splits."
+    },
+    {
+      "id": "single-slot-named-arg-literal",
+      "title": "Single-slot recipe run with a name=value arg keeps the literal 'name='",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "applySlots fills a SINGLE slot with the whole arg string verbatim, so '/run greet name=Sam' on 'hi {name}' yields 'hi name=Sam' instead of 'hi Sam' — a user who mirrors the multi-slot name=value form gets the literal pair.",
+      "how": "In the single-slot branch, if the arg is a lone 'slotname=value' matching the slot, use just the value; else keep the whole-string fill (a bare 'oat milk' still works)."
     }
   ],
   "history": [
@@ -4181,6 +4199,10 @@
     {
       "id": "unitprice-spaceless-price",
       "note": "Self-audit (agent spawn cap exhausted, no 3-agent AUDIT): probed calc/units-convert/unitprice/compose. calc + units-convert + compose all correct. Found unitprice dead-ended on the connector-less '12 rolls $6 vs 8 rolls $4.50' shelf phrasing (parseOption Form A needed for/at/@) -> fell to the agent's forbidden mental math. Added Form A2 ('<qty><unit> $<price>', $-required so bare '12 rolls 6' stays ambiguous). +3 tests, 1955 green."
+    },
+    {
+      "id": "alert-colon-in-url",
+      "note": "Self-audit (agent cap exhausted): probed recipes (chain/slot logic ok, one low papercut noted) + alert parsing. Found parseAlertCommand split name:task on the first colon, so 'watch this page https://ex.com for changes' made a garbage alert ('this page https' / '//ex.com ...'). Added (?!//) to the separator so a URL-scheme colon isn't a boundary; genuine 'name: <url>' still splits. +1 test, 1956 green."
     }
   ],
   "audits": [
@@ -4453,6 +4475,9 @@
     },
     {
       "note": "Self-audit inline (agent cap 200/200). Swept common first-errand math surfaces: calc(ok), units-convert(ok incl offsets/negatives), unitprice(BUG: connector-less shelf phrasing -> null), compose(ok). Fixed the unitprice gap; seeded save-page-confirm-dedupe-feedback + unitprice-three-way follow-on."
+    },
+    {
+      "note": "Self-audit inline (agent cap 200/200). Swept recipes (parseChainSteps/slotNames/applySlots/slotsAmbiguous ok; single-slot name=value papercut seeded) + parseAlertCommand (BUG: URL-scheme colon split -> garbage watch). Fixed the alert bug; seeded single-slot-named-arg-literal + carried save-page-confirm-dedupe-feedback."
     }
   ]
 }
