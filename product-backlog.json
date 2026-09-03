@@ -2579,7 +2579,7 @@
       "title": "flight status lookup ('is AA100 on time / what gate')",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A very common assistant errand — 'is AA100 delayed / what gate / when does it land' — dead-ends: track_package only recognizes UPS/FedEx/USPS/DHL parcel numbers, and a flight number falls to a flaky web_search.",
       "how": "anvil (real Chrome) can scrape Google's flight-status card the same way track_package scrapes carrier pages; add a flight-number detector + a get_flight backend that reads the status/gate/times. Keyless, high-frequency, high-stakes."
     }
@@ -3600,6 +3600,10 @@
     {
       "item": "digest-silent-on-member-delete",
       "note": "A scheduled digest/recipe no longer goes silently dead when its content is deleted (digest-silent-on-member-delete). Both null-compose branches in schedule-runner (digestRun -> null = all members gone; recipeResolveTask -> null = recipe deleted) used to just complete() + advance, so a relied-upon 'morning briefing' no-showed every day forever with zero explanation. Added a goneNotice dep + noteGone() helper: for a RECURRING schedule (not a once, which just drops) it sends a one-time 'your <name> briefing/recipe stopped — its content was removed, I've turned it off' notice, tracked per schedule id (goneNotified set) so a daily doesn't repeat it, and anti-spam-capped. index's goneNotice also removeByTask's the dead schedule so it stops firing. 2 new tests (recurring recipe+digest each notify once then stay silent across a re-fire; a once stays silent). suite 1741 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "flight-status",
+      "note": "Flight status lookup (flight-status): 'is AA100 on time', 'where's UA83', 'when does DL215 land' now answered instead of dead-ending (track_package only knew parcels). New src/lib/flight.ts: detectFlight (2-char airline code incl letter+digit like B6, +1-4 digits, gated on a flight cue OR a bare designator so a stray 'AA100' in prose doesn't trigger); parseAdsbdbRoute (KEYLESS adsbdb -> airline + origin/dest city+IATA); parseAdsbLive (KEYLESS adsb.lol -> airborne now + alt/speed); adsbdbUrl/adsbLiveUrl (ICAO callsign via a common IATA->ICAO map, IATA fallback); formatFlight (honest: route + airborne + tracker link, NEVER an invented gate/delay — no keyless source for scheduled gate/on-time, so it says so + links flightaware); getFlight (both sources, returns null only when route AND live both fail). Wired get_flight tool + dispatch + BrowserBackend.getFlight + defaultBackend + prompt menu + HELP + the pinned tool-name list (now 40 tools). No anvil needed (2 keyless JSON APIs). 15 new tests (detect gate/ignore, both parsers incl 'ground' alt, url ICAO/IATA, honest format no-gate, getFlight route+live/route-only/null, 2 dispatch). suite 1756 green, tsc clean. Live-probed both APIs (adsbdb 200 AA100->JFK/LHR/American; adsb.lol 200) so call-tested:true for the data sources; agent path offline-tested."
     }
   ],
   "audits": [

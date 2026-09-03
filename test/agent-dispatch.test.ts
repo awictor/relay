@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_fun", "get_news", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_flight", "get_fun", "get_news", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
     );
   });
 
@@ -200,6 +200,29 @@ describe("runAgent dispatch", () => {
     const out = await runAgent("did the lakers win", { llm, backend: b });
     expect(hits).toContain("getScores:did the Lakers win");
     expect(out.reply).toMatch(/Lakers won/);
+  });
+
+  it("get_flight -> backend.getFlight, reaches reply, no browser (flight-status)", async () => {
+    const { b, hits } = recordingBackend();
+    b.getFlight = async (ref) => { hits.push(`getFlight:${ref.iata}`); return { ref, route: { iata: "AA100", airline: "American Airlines", origin: { iata: "JFK", city: "New York" }, destination: { iata: "LHR", city: "London" } }, live: { airborne: true, altFt: 37000 } }; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_flight", args: { flight: "AA100" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "AA100 is JFK->LHR, airborne." } } as ToolCall },
+    ]);
+    const out = await runAgent("is AA100 on time", { llm, backend: b });
+    expect(hits).toContain("getFlight:AA100");
+    expect(out.reply).toMatch(/AA100/);
+  });
+
+  it("get_flight with a non-flight string doesn't call the backend", async () => {
+    const { b, hits } = recordingBackend();
+    b.getFlight = async (ref) => { hits.push(`getFlight:${ref.iata}`); return null; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_flight", args: { flight: "the meeting is at 3" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "asked for a flight number" } } as ToolCall },
+    ]);
+    await runAgent("x", { llm, backend: b });
+    expect(hits.filter((h) => h.startsWith("getFlight"))).toHaveLength(0);
   });
 
   it("get_time answers from nowMs without any backend call, reaches reply", async () => {

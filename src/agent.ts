@@ -32,6 +32,7 @@ import { getAirQuality as airFetch, formatAirQuality, airPlace, isUvRequest, isP
 import { renderQr, parseQrRequest } from "./lib/qr.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
+import { detectFlight, getFlight as fetchFlight, formatFlight } from "./lib/flight.js";
 import { relativeAge } from "./lib/answer-log.js";
 import { getWeather as fetchWeather, formatWeather, formatWeatherWhen, formatWeatherHourly } from "./lib/weather.js";
 import { formatDraft, type Draft } from "./lib/compose.js";
@@ -270,6 +271,17 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "get_flight",
+    description: "Look up a flight by its number (keyless, instant). Use this — NOT web_search/scrape — for \"is AA100 on time\", \"where's flight UA83\", \"when does DL215 land\", \"what's the status of BA286\". Returns the airline + route (from → to) and whether it's airborne right now, plus a live-tracker link. It CANNOT get scheduled gate/terminal or an on-time-vs-delayed verdict (no keyless source) — report the route + airborne status honestly and give the tracker link for the rest; don't invent a gate or a delay.",
+    parameters: {
+      type: "object",
+      properties: {
+        flight: { type: "string", description: "The flight number, e.g. \"AA100\", \"UA 83\", \"BA286\"." },
+      },
+      required: ["flight"],
+    },
+  },
+  {
     name: "get_weather",
     description: "Current weather, today's high/low, a per-hour rain-timing view, AND up to a 7-day forecast for a place (keyless, instant). Use this — NOT web_search/scrape — for any \"weather\", \"forecast\", \"will it rain [this afternoon/tonight/at 3pm/tomorrow]\", \"how hot is it\" question. Pass the city name; if the user gave no place but their location is known, omit place (it uses their saved coords). Pass `when` with the user's OWN words for a specific day OR time-of-day (\"tomorrow\", \"this weekend\", \"Saturday\", \"this afternoon\", \"tonight\", \"at 3pm\", \"later today\") so I report the RIGHT window, not just today's max.",
     parameters: {
@@ -436,6 +448,7 @@ Tools:
 - "define" (word): a word's definition, pronunciation, and synonyms. Use this — NOT web_search/scrape — for "what does X mean"/"define X"/"synonyms for X"/"how do you spell X". English words only; pass the single word.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
+- "get_flight" (flight): flight route + live position by number. Use this — NOT web_search — for "is AA100 on time"/"where's UA83"/"when does DL215 land". Returns airline + from→to + airborne-now + a tracker link; it CAN'T get scheduled gate/on-time — report honestly, don't invent a gate/delay.
 - "random" (request): flip a coin / roll dice / random number / pick from options. Use this — NEVER invent a "random" value yourself — for "flip a coin", "roll a d20", "random number 1-100", "pick one: X or Y".
 - "get_crypto" (coin): current crypto price + 24h change. Use this — NOT get_quote/web_search — for "price of bitcoin"/"what's ETH at"/"BTC price"/"how's doge doing". Pass the ticker or name (btc, eth, sol, doge).
 - "get_quote" (symbol): latest stock/equity price. Use this — NOT web_search/scrape — for any "what's Tesla at"/"AAPL price"/"how's NVDA doing" question; it's instant. Pass the ticker (AAPL, TSLA); non-US add a market suffix (VOD.UK).
@@ -533,6 +546,9 @@ export interface BrowserBackend {
   // Optional: distance + travel time between two places (directions-eta). Absent -> the directions tool
   // reports it's unavailable. Returns null on a bad place / no route / fetch failure.
   getDirections?(opts: { to: string; from?: string; fromLat?: number; fromLng?: number; bias?: { lat: number; lng: number }; mode?: "driving" | "walking" | "cycling"; units?: "metric" | "imperial" }): Promise<import("./lib/directions.js").Route | null>;
+  // Optional: flight route + live position by flight number (flight-status). Absent -> the get_flight
+  // tool reports it's unavailable. Returns null on an unknown flight / both fetches failing.
+  getFlight?(ref: import("./lib/flight.js").FlightRef): Promise<{ ref: import("./lib/flight.js").FlightRef; route: import("./lib/flight.js").FlightRoute | null; live: import("./lib/flight.js").LivePosition } | null>;
 }
 
 const FETCH_JSON_MAX_BYTES = 200_000;
@@ -651,6 +667,7 @@ const defaultBackend: BrowserBackend = {
   makeQr: (payload) => renderQr(payload, defaultFetchBytes),
   findNearby: (opts) => fetchNearby(opts, defaultFetchTextPost),
   getDirections: (opts) => fetchDirections(opts, defaultFetchText),
+  getFlight: (ref) => fetchFlight(ref, defaultFetchText),
   createSession: () => anvil.createSession().then((s) => ({ id: s.id })),
   navigate: (id, url) => anvil.navigate(id, url),
   click: (id, sel) => anvil.click(id, sel),
@@ -1148,6 +1165,21 @@ export async function runAgent(
           push("track_package", `${page}\n\nIf the text above is a real tracking page, summarize the LATEST status + expected delivery in one line (say so if the number shows no match); if it's the "nearly empty / needs a login / blocked" marker, tell the user you couldn't read the ${carrierName(carrier)} page and suggest re-checking the number or the carrier site directly.`);
         } catch (e) {
           push("track_package", `ERROR reading the ${carrierName(carrier)} tracking page: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "get_flight") {
+        if (!backend.getFlight) { push("get_flight", "ERROR: flight lookup isn't available."); continue; }
+        const raw = String(call.args.flight ?? "").trim();
+        const ref = detectFlight(raw);
+        if (!ref) { push("get_flight", `"${raw}" doesn't look like a flight number (e.g. AA100, UA83). Ask the user for the flight number.`); continue; }
+        try {
+          const r = await backend.getFlight(ref);
+          if (!r) { push("get_flight", `Couldn't find flight ${ref.iata} in my keyless sources. Suggest they check the airline's site or a live tracker (flightaware.com/live/flight/${ref.iata}).`); continue; }
+          push("get_flight", `${formatFlight(r.ref, r.route, r.live)}\n\nReport this to the user. Be honest about what's known (route + whether it's airborne now) vs not (scheduled gate/terminal + on-time/delayed need the tracker link — do NOT state a gate or a delay you weren't given).`);
+        } catch (e) {
+          push("get_flight", `ERROR looking up flight ${ref.iata}: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }
