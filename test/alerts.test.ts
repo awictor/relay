@@ -280,6 +280,18 @@ describe("feed-watch (new-item-feed-watch)", () => {
     expect(looksLikeErrorReply("BTC is $65,000")).toBe(false);
     expect(looksLikeErrorReply("It's $450 now")).toBe(false);
     expect(looksLikeErrorReply("Nasdaq 5900")).toBe(false);
+    // Legit content with failure WORDS mid-sentence must NOT be flagged (error-reply-overbroad): a
+    // headline/news watch on these was going dark forever.
+    expect(looksLikeErrorReply("Why you cannot trust AI benchmarks")).toBe(false);
+    expect(looksLikeErrorReply("Tesla recall blocked by federal court")).toBe(false);
+    expect(looksLikeErrorReply("Fatal error in kernel module fixed, says report")).toBe(false); // "error" alone
+    expect(looksLikeErrorReply("Startup failed to raise Series B, shuts down")).toBe(false); // "failed to raise" not a fetch verb
+    expect(looksLikeErrorReply("No results for the Lakers — they're off tonight")).toBe(false); // "no results for" not "no results found/available"
+    // More real fetch failures still caught.
+    expect(looksLikeErrorReply("I couldn't reach the site")).toBe(true);
+    expect(looksLikeErrorReply("Unable to fetch the page")).toBe(true);
+    expect(looksLikeErrorReply("The server is down")).toBe(true);
+    expect(looksLikeErrorReply("please try again later")).toBe(true);
   });
   it("feedItemKey is stable across phrasing/case/punctuation drift", () => {
     expect(feedItemKey("• Senior React Dev — Acme!")).toBe(feedItemKey("senior react dev acme"));

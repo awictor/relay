@@ -138,7 +138,25 @@ const OUT_OF_STOCK_RE = /\b(out of stock|sold out|unavailable|out-of-stock|curre
 // time-series (chart/trend) would show a bogus spike. Detect the shape so recordPoint can skip it.
 // NOTE: does NOT include a bare 4xx/5xx number — "$450" / "bitcoin 5900" are real values, so a status
 // code only counts inside an explicit error phrase ("error 404", "status 500", "returned a 503").
-const ERROR_REPLY_RE = /\b(errored|failed|couldn'?t|could not|can'?t|cannot|unable to|unavailable|not available|no (?:data|price|result|results|info|information)|timed? ?out|try again|blocked|forbidden|access denied)\b|\b(?:error|status|code|returned|http)\s*(?:code\s*)?[:#]?\s*[45]\d\d\b|\berror\b/i;
+// ANCHORED to real failure PHRASING, not lone words (error-reply-overbroad): a legitimate headline/answer
+// routinely contains "cannot", "blocked", "error", "no results", "failed" mid-sentence ("Why you cannot
+// trust AI benchmarks", "Tesla recall blocked by court", "No results found for that team tonight"). The
+// old regex flagged all of those as soft failures, so a news/HN/value watch went DARK on that change +
+// held the stale baseline. Now a match requires (a) an explicit HTTP error + code, OR (b) a first-person
+// fetch failure — "couldn't/can't/unable to/failed to <fetch-verb>" (load/fetch/reach/get/retrieve/find/
+// connect/access/read/open/pull/look up/complete), OR (c) a standalone fetch-failure idiom.
+const FETCH_VERB = "(?:load|loading|fetch|reach|get|retrieve|retriev\\w+|find|connect(?:\\s+to)?|access|read|open|pull|look\\s*up|complete|process|parse|display|show)";
+const ERROR_REPLY_RE = new RegExp(
+  // (a) explicit HTTP error + status code, either order: "error 404", "returned a 503", "404 error",
+  // "status: 500". Allows a short filler ("a"/"the"/"an") between the error word and the code.
+  "\\b(?:error|status|code|returned|http|response)\\b(?:\\s+(?:code|a|an|the|with|of|status))?[:#\\s]*[45]\\d\\d\\b" +
+  "|\\b[45]\\d\\d\\s+(?:error|status|response|code)\\b" +
+  // (b) first-person fetch failure: "couldn't load", "can't reach", "unable to fetch", "failed to get"
+  "|\\b(?:couldn'?t|could\\s+not|can'?t|cannot|unable\\s+to|failed\\s+to|was\\s+unable\\s+to|wasn'?t\\s+able\\s+to)\\s+(?:\\w+\\s+){0,2}" + FETCH_VERB + "\\b" +
+  // (c) standalone soft-failure idioms
+  "|\\b(?:please\\s+)?try\\s+again(?:\\s+(?:later|in\\s+a\\b))?\\b|\\baccess\\s+denied\\b|\\brequest\\s+(?:failed|timed?\\s*out)\\b|\\b(?:timed?\\s*out|timeout)\\s+(?:while|trying|fetching|loading)\\b|\\b(?:page|site|server|it)\\s+(?:is\\s+)?(?:down|unavailable|unreachable|not\\s+responding)\\b|\\bno\\s+(?:data|price|results?)\\s+(?:available|found|returned)\\b|\\bcouldn'?t\\s+be\\s+(?:reached|loaded|found|retrieved)\\b",
+  "i",
+);
 /** True if a reply reads like a fetch/soft failure rather than a real value — so a stray status code
  * (404/500) or "N/A" number isn't recorded into the watch's time series. Exported for tests. */
 export function looksLikeErrorReply(reply: string): boolean {

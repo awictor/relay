@@ -2318,7 +2318,7 @@
       "title": "looksLikeErrorReply swallows real alert/feed changes containing common words",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "ERROR_REPLY_RE ends with bare \berror\b + lone words (cannot/blocked/failed/unavailable/no results) that occur constantly in legitimate content. It gates EVERY non-page value path + each watchlist member, so a HN/news headline watch on 'Why you cannot trust AI benchmarks' / 'Tesla recall blocked by court' / 'No results found' is treated as a fetch failure, held at the old baseline, and goes DARK on that change forever. My error-reply-false-fires fix over-reached.",
       "how": "Anchor the regex to real failure PHRASING (couldn't load / unable to load / error 4xx-5xx / returned a 500 / request failed / timed out), not lone words mid-sentence. Keep catching the soft-failure prose it was built for. Offline test: legit headlines with 'cannot/blocked/error' are NOT flagged; 'the page returned a 404' still is."
     },
@@ -3258,6 +3258,10 @@
     {
       "item": "get-fun-tool",
       "note": "Added a keyless get_fun tool: 'tell me a joke' / 'fun fact' / 'quiz me' — among the most common FIRST messages to a new bot — now answer instantly instead of a slow browse or a stale from-memory reply. New src/lib/fun.ts: parseFunKind (joke default / fact / trivia), funUrl (official-joke-api / catfact.ninja / opentdb — all keyless no-signup), formatFun (joke=setup+punchline, fact, trivia=question+answer w/ HTML-entity decode). Wired like get_news: TOOLS[] entry + BrowserBackend.getFun + defaultBackend (funFetch+defaultFetchText) + dispatch + prompt line + sorted tool-list test + START ('tell me a joke') + HELP. 8 new tests; live-probed all 3 sources (joke 200, catfact 200, opentdb 200) so call-tested:true for the sources, agent wiring offline-tested. suite 1639 green, tsc clean."
+    },
+    {
+      "item": "error-reply-overbroad",
+      "note": "Fixed looksLikeErrorReply over-reach that silently killed real watches. ERROR_REPLY_RE ended with bare \berror\b + lone words (cannot/blocked/failed/unable/no results), which occur constantly in legitimate content — so a news/HN/value watch on 'Why you cannot trust AI benchmarks' / 'Tesla recall blocked by court' / 'No results for the Lakers' was treated as a fetch failure, held at the old baseline, and went DARK on that change forever (regression from my earlier error-reply-false-fires fix). Rewrote the regex ANCHORED to real failure phrasing: (a) explicit HTTP error+code either order ('error 404', 'returned a 503', '404 error'), (b) first-person fetch failure 'couldn't/can't/unable to/failed to <fetch-verb>' (load/fetch/reach/get/retrieve/find/connect/access/read/open/pull/lookup/...), (c) standalone idioms ('try again later', 'access denied', 'the server is down', 'no data available', 'request timed out'). Legit headlines with cannot/blocked/error mid-sentence no longer flagged; genuine soft failures still are. 9 new assertions (false-positive guards + real-failure cases), suite 1639 green, tsc clean. call-tested:false (pure regex + existing runner/digest tests)."
     }
   ],
   "audits": [
