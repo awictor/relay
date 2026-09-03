@@ -94,14 +94,42 @@ export function parseRunWithArgs(text: string): { name: string; args: string } |
   return { name, args: m[2]!.trim() };
 }
 
-/** Substitute {slots} in a recipe task with the user's args. If the task has named slots, ALL of
- * them get the (single) arg string — recipes are simple, usually one slot ("track price of {item}").
- * Multiple distinct slot names each get the full arg string. A task with no {slot} is returned
- * unchanged (so a plain recipe run with stray args just ignores them). Exported for tests. */
+// The distinct {slot} names in a task, in first-appearance order. Exported for tests.
+export function slotNames(task: string): string[] {
+  const out: string[] = [], seen = new Set<string>();
+  for (const m of task.matchAll(/\{([a-z0-9_]+)\}/gi)) {
+    const n = m[1]!.toLowerCase();
+    if (!seen.has(n)) { seen.add(n); out.push(n); }
+  }
+  return out;
+}
+
+/** Substitute {slots} in a recipe task with the user's args (multi-slot-recipes). Filling rules:
+ *   - No slots: task returned unchanged (stray args ignored).
+ *   - ONE distinct slot: the whole arg string fills it ("track price of {item}" + "oat milk").
+ *   - MULTIPLE distinct slots: args are matched by NAME when given as "name=value" pairs
+ *     ("track {item} at {store}" + "item=milk store=HEB"); otherwise by POSITION, splitting the arg
+ *     string on commas then whitespace ("track {item} at {store}" + "milk, HEB"). A slot with no
+ *     matching arg is left blank. This is what makes a parameterized recipe with 2+ slots actually
+ *     usable instead of stuffing one value into every slot. Exported for tests. */
 export function applySlots(task: string, args: string): string {
+  const names = slotNames(task);
+  if (names.length === 0) return task;
   const a = args.trim();
-  if (!/\{[a-z0-9_]+\}/i.test(task)) return task; // no slots — nothing to fill
-  return task.replace(/\{[a-z0-9_]+\}/gi, a);
+  if (names.length === 1) return task.replace(/\{[a-z0-9_]+\}/gi, a);
+
+  // Multiple slots: try name=value pairs first.
+  const byName = new Map<string, string>();
+  const pairRe = /([a-z0-9_]+)\s*=\s*("([^"]*)"|\S+)/gi;
+  let m: RegExpExecArray | null, sawPair = false;
+  while ((m = pairRe.exec(a)) !== null) { sawPair = true; byName.set(m[1]!.toLowerCase(), (m[3] ?? m[2])!); }
+  if (sawPair) {
+    return task.replace(/\{([a-z0-9_]+)\}/gi, (_full, n: string) => byName.get(n.toLowerCase()) ?? "");
+  }
+  // Else positional: split on commas (preferred) or whitespace, map to slots in order.
+  const parts = (a.includes(",") ? a.split(",") : a.split(/\s+/)).map((p) => p.trim()).filter(Boolean);
+  const pos = new Map(names.map((n, i) => [n, parts[i] ?? ""]));
+  return task.replace(/\{([a-z0-9_]+)\}/gi, (_full, n: string) => pos.get(n.toLowerCase()) ?? "");
 }
 
 /** True if the task has at least one {slot}. Used to detect a slotted recipe run with no argument

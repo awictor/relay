@@ -1130,7 +1130,7 @@
       "title": "recipes give the single arg to EVERY slot",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "applySlots stuffs one arg into all slots (its own comment flags it), so \"track {item} at {store}\" cannot take two values — recipes stay toys.",
       "how": "Parse distinct positional/named args; map each to its slot."
     },
@@ -1532,6 +1532,10 @@
     {
       "id": "ics-calendar-export",
       "note": "Added a calendar_event tool — an event/deadline now ends in the user calendar instead of dead-ending at text. Emits a Google Calendar template link + an .ics VEVENT as a data: URL (all-day date or timed UTC). New src/lib/calendar.ts (buildIcs RFC-5545-escaped, gcalLink, formatCalendar) + agent tool/dispatch/prompt; pure formatting, never touches the send/pay guard (user taps to add). 1032 tests green."
+    },
+    {
+      "id": "multi-slot-recipes",
+      "note": "applySlots no longer stuffs one arg into every slot: a recipe with DISTINCT slots (\"track {item} at {store}\") now fills by name=value pairs (item=milk store=HEB, quotes supported) or by position (comma then whitespace); single-slot + repeated-same-name behavior unchanged (back-compat). New slotNames helper. Makes parameterized recipes actually reusable. Help updated. 1037 tests green."
     }
   ],
   "audits": [

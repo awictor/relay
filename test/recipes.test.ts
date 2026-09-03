@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, parseSaveThatAs, parseWatchThat, parseScheduleThat, applySlots, hasSlots, RecipeStore } from "../src/lib/recipes.js";
+import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, parseSaveThatAs, parseWatchThat, parseScheduleThat, applySlots, slotNames, hasSlots, RecipeStore } from "../src/lib/recipes.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -62,6 +62,27 @@ describe("applySlots", () => {
   });
   it("no slot -> unchanged (stray args ignored)", () => {
     expect(applySlots("check bitcoin price", "sneakers")).toBe("check bitcoin price");
+  });
+  it("a repeated SAME slot name still fills both (one distinct slot)", () => {
+    expect(applySlots("compare {item} vs {item}", "gpu")).toBe("compare gpu vs gpu");
+  });
+  it("DISTINCT slots fill by name=value pairs (multi-slot-recipes)", () => {
+    expect(applySlots("track {item} at {store}", "item=milk store=HEB")).toBe("track milk at HEB");
+    expect(applySlots('email {who} about {topic}', 'topic="the rent" who=bob')).toBe("email bob about the rent");
+  });
+  it("DISTINCT slots fill by POSITION when no pairs given (comma then whitespace)", () => {
+    expect(applySlots("track {item} at {store}", "milk, HEB")).toBe("track milk at HEB");
+    expect(applySlots("track {item} at {store}", "milk HEB")).toBe("track milk at HEB");
+  });
+  it("a distinct slot with no matching arg is left blank", () => {
+    expect(applySlots("track {item} at {store}", "item=milk")).toBe("track milk at ");
+  });
+});
+
+describe("slotNames", () => {
+  it("returns distinct slot names in first-appearance order", () => {
+    expect(slotNames("track {item} at {store} for {item}")).toEqual(["item", "store"]);
+    expect(slotNames("no slots here")).toEqual([]);
   });
 });
 
