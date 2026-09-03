@@ -52,11 +52,32 @@ export function resolveFeedSource(target: string): FeedSource | null {
     return { kind: "hn", url, label: q ? `HN: ${q}` : "Hacker News" };
   }
 
+  // Reddit user page ("reddit.com/user/spez", "/u/spez"): a user's posts feed is keyless like a subreddit
+  // (feed-source-audit-more) — otherwise it fell to the bare-URL branch + RSS-parsed the HTML profile.
+  const rUser = t.match(/(?:^|reddit\.com\/|\/)(?:user|u)\/([a-z0-9_-]+)\b/i);
+  if (rUser) {
+    return { kind: "rss", url: `https://www.reddit.com/user/${rUser[1]}/.rss?limit=15`, label: `u/${rUser[1]}` };
+  }
+
+  // GitHub repo ("github.com/owner/repo", ".../releases"): follow its RELEASES atom feed (keyless) — the
+  // highest-value GitHub follow (a new release), and github.com/owner/repo has no site RSS so the bare-URL
+  // branch would dead-parse the repo HTML (feed-source-audit-more). Only owner/repo, not a user/org page.
+  const gh = t.match(/github\.com\/([a-z0-9][\w.-]*)\/([a-z0-9][\w.-]*?)(?:\/(?:releases|tags|commits)[\w/]*)?(?:[?#].*)?$/i);
+  if (gh && gh[2] && !/^(?:settings|marketplace|sponsors|orgs|about|features)$/i.test(gh[2])) {
+    const owner = gh[1], repo = gh[2].replace(/\.git$/, "");
+    return { kind: "rss", url: `https://github.com/${owner}/${repo}/releases.atom`, label: `${owner}/${repo} releases` };
+  }
+
   // YouTube channel: a channel URL with /channel/UC... (the keyless Atom feed keys off the channel id).
   const yt = t.match(/youtube\.com\/channel\/(UC[\w-]+)/i);
   if (yt) {
     return { kind: "youtube", url: `https://www.youtube.com/feeds/videos.xml?channel_id=${yt[1]}`, label: "YouTube channel" };
   }
+  // A YouTube URL that ISN'T a /channel/UC... id (a @handle, /c/, /user/, or a youtu.be video) has NO
+  // keyless feed without a handle->channel-id lookup (feed-source-audit-more). Returning it to the bare-URL
+  // branch would RSS-parse the HTML watch/channel page + silently never fire. Return null so the caller
+  // falls back to the agent-driven feed watch instead of a dead subscription.
+  if (/(?:youtube\.com|youtu\.be)\//i.test(t)) return null;
 
   // A bare/explicit URL -> treat as an RSS/Atom feed (many blogs expose /feed or /rss; we fetch as-is
   // and parse whatever XML comes back). Require an http(s) URL so a random phrase isn't treated as one.

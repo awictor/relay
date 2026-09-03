@@ -3074,9 +3074,18 @@
       "title": "Sweep resolveFeedSource for other paste-a-URL feeds that dead-parse",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "HN's homepage URL dead-parsed; other common paste targets (a subreddit URL variant, a bare twitter/x handle, a YouTube @handle URL which needs a channel-id lookup) may also fall to the bare-URL RSS branch + silently never fire.",
       "how": "Probe resolveFeedSource with the URLs users actually paste; for ones with no keyless feed (YT @handle needs a lookup), return null so the caller falls back to the agent feed-watch instead of a dead RSS parse."
+    },
+    {
+      "id": "followable-sources-help",
+      "title": "Tell users what they can follow (reddit/HN/YouTube-channel/GitHub/RSS)",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "follow now supports r/x, HN, YouTube /channel, GitHub releases, Reddit user, and any RSS URL — but HELP/START don't enumerate them, so a user won't discover 'follow github.com/owner/repo' or that a YouTube @handle needs the channel URL.",
+      "how": "Add a follow-examples line to HELP + the START menu listing the supported source shapes + the YouTube channel-URL caveat."
     }
   ],
   "history": [
@@ -4299,6 +4308,10 @@
     {
       "id": "feed-hn-url-dead",
       "note": "Self-audit (agent cap 200/200): verified scheduler recurrence math (nextWeekly/Monthly/Yearly roll-forward, month-end clamp, leap, multi-day ordering, DST-offset) all CORRECT. Probed feed-source resolution: 'follow news.ycombinator.com' fell to the bare-URL RSS branch + dead-parsed HN's HTML homepage -> a silently-dead follow. Mapped the HN host to the Algolia front-page feed (tightened so blog.ycombinator.com/feed.xml + /item permalinks stay real RSS). +1 test, 2001 green."
+    },
+    {
+      "id": "feed-source-audit-more",
+      "note": "Probed resolveFeedSource on the URLs users actually paste. Found more dead-parse follows (returned rss but the URL has no feed -> silently never fires): youtube @handle//c//user/ + youtu.be video, reddit user page, github repo. Fixed: GitHub owner/repo -> releases.atom (keyless, new capability, blocklists settings/marketplace/etc), Reddit user -> user/.rss (keyless), and YouTube non-channel-id URLs -> null (need a handle->id lookup, so fall back to the agent feed-watch instead of a dead RSS parse). +3 tests, 2004 green."
     }
   ],
   "audits": [
@@ -4592,6 +4605,9 @@
     },
     {
       "note": "Self-audit inline (agent cap 200/200): recurrence math clean; feed resolution had a silently-dead HN-URL follow (fixed). Seeded feed-source-audit-more (sweep other paste-a-URL feeds) + carried chain-step-cap."
+    },
+    {
+      "note": "Self-audit inline (agent cap 200/200): swept resolveFeedSource with paste-a-URL feeds. 3 dead-parse follows found -> GitHub-releases + Reddit-user now keyless feeds, YouTube-non-id now null (agent fallback). Seeded followable-sources-help (discoverability) + carried chain-step-cap."
     }
   ]
 }

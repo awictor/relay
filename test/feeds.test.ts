@@ -37,6 +37,27 @@ describe("resolveFeedSource", () => {
     expect(resolveFeedSource("https://news.ycombinator.com/item?id=123")!.kind).toBe("rss");
     expect(resolveFeedSource("https://blog.ycombinator.com/feed.xml")!.kind).toBe("rss");
   });
+  it("resolves a GitHub repo to its keyless releases atom feed (feed-source-audit-more)", () => {
+    const s = resolveFeedSource("github.com/torvalds/linux")!;
+    expect(s.kind).toBe("rss");
+    expect(s.url).toBe("https://github.com/torvalds/linux/releases.atom");
+    expect(resolveFeedSource("https://github.com/rust-lang/rust/releases")!.url).toBe("https://github.com/rust-lang/rust/releases.atom");
+    // a non-repo GitHub path (settings/marketplace) is NOT treated as a repo feed
+    expect(resolveFeedSource("github.com/settings")).toBeNull();
+  });
+  it("resolves a Reddit user page to its keyless posts feed (feed-source-audit-more)", () => {
+    expect(resolveFeedSource("reddit.com/user/spez")!.url).toBe("https://www.reddit.com/user/spez/.rss?limit=15");
+    expect(resolveFeedSource("https://reddit.com/u/foo")!.url).toContain("/user/foo/.rss");
+  });
+  it("returns null for a YouTube URL with no channel-id (no keyless feed -> agent fallback, not a dead RSS parse)", () => {
+    // @handle / /c/ / /user/ / youtu.be need a handle->channel-id lookup we can't do keyless; returning
+    // them as bare-URL RSS would silently never fire (feed-source-audit-more).
+    for (const t of ["https://youtube.com/@mkbhd", "youtube.com/@LinusTechTips", "https://www.youtube.com/c/veritasium", "https://youtu.be/abc123"]) {
+      expect(resolveFeedSource(t), t).toBeNull();
+    }
+    // a real /channel/UC... id still resolves to the Atom feed.
+    expect(resolveFeedSource("https://youtube.com/channel/UCabc123")!.kind).toBe("youtube");
+  });
   it("returns null for an unresolvable target", () => {
     expect(resolveFeedSource("my favorite thing")).toBeNull();
     expect(resolveFeedSource("")).toBeNull();
