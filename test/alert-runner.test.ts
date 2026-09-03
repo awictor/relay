@@ -39,6 +39,21 @@ describe("checkAlert", () => {
     expect(r.notify).toBe(false);            // the failure text is NOT reported as a change
     expect(r.value).toBe("$65,000");         // lastValue preserved
     expect(lastSet).toEqual([]);             // setLast NOT called with the degraded value
+    expect(r.softFail).toBe(true);           // silent-watch-death: flagged so a persistent fail earns a receipt
+  });
+
+  it("an error-SHAPED reply flags softFail (silent-watch-death)", async () => {
+    const { d } = deps("the page returned a 404 error");
+    const r = await checkAlert(alert({ lastValue: "$65,000", threshold: 1000 }), d);
+    expect(r.notify).toBe(false);
+    expect(r.softFail).toBe(true);
+  });
+
+  it("a healthy silent hold (unchanged) does NOT flag softFail (an intermittent blip won't trip a receipt)", async () => {
+    const { d } = deps("sunny");
+    const r = await checkAlert(alert({ lastValue: "sunny" }), d);
+    expect(r.notify).toBe(false);
+    expect(r.softFail).toBeFalsy();          // a real read, just unchanged — not a soft-fail
   });
 
   it("unchanged value -> silent (no notify), keeps the baseline (does NOT re-seed lastValue)", async () => {

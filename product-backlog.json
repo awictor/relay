@@ -2582,6 +2582,42 @@
       "status": "done",
       "why": "A very common assistant errand — 'is AA100 delayed / what gate / when does it land' — dead-ends: track_package only recognizes UPS/FedEx/USPS/DHL parcel numbers, and a flight number falls to a flaky web_search.",
       "how": "anvil (real Chrome) can scrape Google's flight-status card the same way track_package scrapes carrier pages; add a flight-number detector + a get_flight backend that reads the status/gate/times. Keyless, high-frequency, high-stakes."
+    },
+    {
+      "id": "silent-watch-death-soft-fail",
+      "title": "a watch reading error/degraded replies silently dies (no receipt)",
+      "impact": "high",
+      "effort": "M",
+      "status": "done",
+      "why": "A watch whose source keeps returning error-shaped/degraded/empty reads never notifies AND never throws, so the failed-watch receipt (thrown-only) never fires — user thinks it's armed for weeks while dead.",
+      "how": "Flag genuine soft-fails from checkAlert; count a per-watch consecutive soft-fail streak in the runner; send the failed-watch receipt after N."
+    },
+    {
+      "id": "bg-errand-double-fire",
+      "title": "background errand delivered twice after a crash (no delivered-dedup)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "If Relay crashes after sending a background-errand result but before bgErrandDone clears the record, startup recovery re-runs the whole errand and texts a second (possibly different) unprompted answer.",
+      "how": "Mirror the once-schedule delivered flag: mark the errand delivered before the finally-clear, and skip replay of a delivered errand on startup recovery (planErrandReplay)."
+    },
+    {
+      "id": "instock-cross-sell-never-fires",
+      "title": "in_stock watch never fires when the buy CTA sits in cross-sell framing",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "'alert me when back in stock' stays silent even after buyable, on pages whose only availability signal is an Add-to-cart CTA surrounded by 'you may also like' framing — conditionHolds returns null indefinitely.",
+      "how": "In conditionHolds in_stock: when CTA_RE matches but CROSS_SELL_RE also matches, don't hold null forever — fall back to a positive on a primary/above-the-fold CTA, or after K ambiguous checks treat a persistent CTA as in-stock."
+    },
+    {
+      "id": "saved-named-places",
+      "title": "saved named places (home/work/gym) — one location only today",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "'directions to work', 'weather at the gym', 'coffee near home' re-ask the city each time; profile stores exactly ONE location.",
+      "how": "A per-chat place-alias store (name -> coords/label); resolve an alias in directions/find_nearby/weather before geocoding. Sharpens every location errand + is the prerequisite for geofencing."
     }
   ],
   "history": [
@@ -3604,6 +3640,10 @@
     {
       "item": "flight-status",
       "note": "Flight status lookup (flight-status): 'is AA100 on time', 'where's UA83', 'when does DL215 land' now answered instead of dead-ending (track_package only knew parcels). New src/lib/flight.ts: detectFlight (2-char airline code incl letter+digit like B6, +1-4 digits, gated on a flight cue OR a bare designator so a stray 'AA100' in prose doesn't trigger); parseAdsbdbRoute (KEYLESS adsbdb -> airline + origin/dest city+IATA); parseAdsbLive (KEYLESS adsb.lol -> airborne now + alt/speed); adsbdbUrl/adsbLiveUrl (ICAO callsign via a common IATA->ICAO map, IATA fallback); formatFlight (honest: route + airborne + tracker link, NEVER an invented gate/delay — no keyless source for scheduled gate/on-time, so it says so + links flightaware); getFlight (both sources, returns null only when route AND live both fail). Wired get_flight tool + dispatch + BrowserBackend.getFlight + defaultBackend + prompt menu + HELP + the pinned tool-name list (now 40 tools). No anvil needed (2 keyless JSON APIs). 15 new tests (detect gate/ignore, both parsers incl 'ground' alt, url ICAO/IATA, honest format no-gate, getFlight route+live/route-only/null, 2 dispatch). suite 1756 green, tsc clean. Live-probed both APIs (adsbdb 200 AA100->JFK/LHR/American; adsb.lol 200) so call-tested:true for the data sources; agent path offline-tested."
+    },
+    {
+      "item": "silent-watch-death-soft-fail",
+      "note": "Fixed a watch silently dying when its source keeps failing (silent-watch-death). A degraded/error-shaped/empty-fetch read returns notify:false and never throws, so the runner counted it as success (resetFailures) and the failed-watch receipt (thrown-only) never fired — a dead watch looked armed for weeks. Added a softFail flag to AlertRunResult, set at the genuine can't-read holds (degraded reply, caught agent throw, looksLikeErrorReply, empty page fetch, unassessable weather) — distinct from a healthy silent hold (unchanged/condition-not-true/seed). Threaded through index alertCheck -> runner, which now counts a per-watch consecutive soft-fail streak (separate in-memory map) and sends the existing failStreakNotice receipt after FAIL_STREAK_NOTIFY, resetting on any clean read so an intermittent blip never trips it. 5 new tests (checkAlert flags degraded+error-reply softFail, clean hold doesn't; runner fires receipt at streak 3, resets on a clean read mid-streak). suite 1760 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
@@ -3816,6 +3856,9 @@
     },
     {
       "note": "No audit this run — built from the prior audit's seeded queue (digest-silent-on-member-delete). Refilled by promoting a parked Agent-A finding: flight-status (medium/M, anvil-scrapeable Google flight card). Remaining: flight-status, callback-edit-in-place(low), confirm-to-act(owner-gated)."
+    },
+    {
+      "note": "Backlog dry (low/M + owner-gated) -> 3-agent audit. A(new-user): streaming/showtimes, price-without-links, near-me ratings, local events. B(reliability): silent-watch-death soft-fail [SEEDED+BUILT], bg-errand double-fire [SEEDED], in_stock cross-sell never fires [SEEDED], slow-digest timeout no-show. C(power): catch-me-up rollup, saved named places [SEEDED], reply-to-ping NL, geofence, read-it-later. Seeded: silent-watch-death(built), bg-errand-double-fire, instock-cross-sell-never-fires, saved-named-places."
     }
   ]
 }

@@ -30,6 +30,13 @@ export interface AlertRunResult {
   // crossing re-fires next check instead of being silently eaten (alert-notify-send-fail). A no-op
   // when this check shouldn't advance the baseline (indeterminate reply / unchanged threshold).
   commit: () => void;
+  // The check couldn't actually READ the source this tick (silent-watch-death): the agent reply was
+  // degraded / error-shaped, or a page/weather fetch came back empty. Distinct from a normal silent hold
+  // (unchanged value, condition-not-yet-true, seeded first run) — those leave softFail falsy. The runner
+  // counts CONSECUTIVE soft-fails per watch and, after a threshold, sends the failed-watch receipt so a
+  // watch whose source keeps failing doesn't silently die looking armed. A real read (notify OR a clean
+  // silent hold) resets the streak.
+  softFail?: boolean;
 }
 
 export interface AlertRunnerDeps {
@@ -108,7 +115,7 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     let w: import("./lib/weather.js").WeatherResult | null = null;
     try { w = await deps.fetchWeather(alert.chatId, alert.weather.place); } catch { w = null; }
     const ev = w ? evalWeatherCondition(alert.weather, w) : null;
-    if (!ev) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop }; // can't assess -> hold
+    if (!ev) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop, softFail: true }; // can't assess (fetch failed / horizon day missing) -> hold + count as a soft-fail
     const nowHolds = ev.holds;
     const prevHolds = alert.lastValue === "1";
     if (nowHolds && !prevHolds) {
@@ -127,7 +134,7 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   if (alert.pageUrl && deps.fetchPage) {
     let raw = "";
     try { raw = (await deps.fetchPage(alert.pageUrl)).trim(); } catch { raw = ""; }
-    if (!raw || !pageText(raw)) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
+    if (!raw || !pageText(raw)) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop, softFail: true }; // page fetch empty/failed -> soft-fail (a persistently dead page shouldn't look armed)
     const snapshot = pageText(raw);
     if (alert.lastValue === undefined) {
       // First check: seed the snapshot silently (don't dump the whole page as "changed").
@@ -256,10 +263,12 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     const res = await deps.runAgent(alert.task, { llm: deps.llm, context: deps.contextFor?.(alert.chatId) || undefined, ...deps.agentEnv?.(alert.chatId) }, []);
     // A degraded (soft-failure) reply is NOT a real value — comparing it to lastValue would read as a
     // change and spam the user with the failure text. Skip notify, keep lastValue (DEV-0176).
-    if (res.degraded) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
+    if (res.degraded) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop, softFail: true };
     value = deps.formatReply(res.reply).trim();
   } catch {
-    return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
+    // The agent threw INSIDE checkAlert (caught here, so it never reaches the runner's thrown-failure
+    // counter) — count it as a soft-fail so a persistently-failing watch still earns a receipt.
+    return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop, softFail: true };
   }
 
   // An error-SHAPED reply ("the page returned a 404", "couldn't load the price right now") is a soft
@@ -268,7 +277,7 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // FALSE alarm showing an error string, and (b) poison the baseline so the next real check re-fires. Guard
   // it exactly like `degraded` — hold, keep the last GOOD baseline, stay silent — across every value path
   // (condition / threshold / change / feed / series). The series already skips it separately (line below).
-  if (looksLikeErrorReply(value)) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
+  if (looksLikeErrorReply(value)) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop, softFail: true };
 
   const firstRun = alert.lastValue === undefined;
 

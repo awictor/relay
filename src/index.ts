@@ -152,7 +152,7 @@ const digestRunText = (chatId: number, name: string): Promise<string | null> => 
 // Check an alert -> { message (null = silent), commit }. The caller MUST call commit() AFTER a
 // successful send so a failed send leaves the baseline un-advanced + the crossing re-fires next
 // check (alert-notify-send-fail). Silent path already committed inside checkAlert (commit is a noop).
-const alertCheck = async (chatId: number, name: string): Promise<{ message: string | null; commit: () => void }> => {
+const alertCheck = async (chatId: number, name: string): Promise<{ message: string | null; commit: () => void; softFail?: boolean }> => {
   const a = alerts.get(chatId, name);
   if (!a) return { message: null, commit: () => {} };
   const r = await checkAlert(a, {
@@ -190,7 +190,7 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
       return out.degraded ? null : formatReply(out.reply);
     },
   });
-  return { message: r.notify ? r.message : null, commit: r.commit };
+  return { message: r.notify ? r.message : null, commit: r.commit, softFail: r.softFail };
 };
 const ALERT_CADENCE = process.env.RELAY_ALERT_CADENCE ?? "every day at 09:00"; // default alert check cadence
 // How long after a sticky reminder last pinged a bare "ok"/"done" still counts as dismissing IT

@@ -52,7 +52,12 @@ export interface ScheduleRunnerDeps {
   // Alerts (m10 alert-3): a scheduled alert stores "alert:<name>"; on fire, check it and get back
   // the notify message ONLY if it changed (null = silent) + a commit() to advance the baseline, which
   // MUST be called only AFTER a successful send so a failed send re-fires next check. Optional.
-  alertCheck?: (chatId: number, name: string) => Promise<{ message: string | null; commit: () => void }>;
+  // softFail (silent-watch-death): true when the check couldn't READ its source this tick (degraded /
+  // error-shaped reply / empty page/weather fetch) — distinct from a clean silent hold. The runner
+  // counts consecutive soft-fails per watch and sends the failed-watch receipt after a threshold, so a
+  // watch whose source keeps failing doesn't silently die looking armed. A read (notify or clean hold)
+  // resets the count.
+  alertCheck?: (chatId: number, name: string) => Promise<{ message: string | null; commit: () => void; softFail?: boolean }>;
   // Recipes: a scheduled recipe stores "recipe:<name>"; on fire, resolve the recipe's CURRENT task by
   // name (null if it was deleted) and run it as the agent task — so editing the recipe changes what
   // fires + forgetting it stops it (a stable marker, unlike storing the raw task). Optional.
@@ -156,6 +161,11 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   // whose members were deleted explains itself ONCE, not every morning. In-memory; a restart may re-notify
   // once, which is harmless (a restart is when a still-dead briefing would resurface anyway).
   const goneNotified = new Set<string>();
+  // Consecutive soft-fail counts per watch schedule id (silent-watch-death): a watch whose source keeps
+  // returning degraded/error-shaped/empty reads never notifies + never throws, so the thrown-failure
+  // streak stays 0 and it silently looks armed for weeks. Count soft-fails here + fire the failed-watch
+  // receipt after the same FAIL_STREAK_NOTIFY threshold, then reset (re-notify only after another N).
+  const softFailStreak = new Map<string, number>();
 
   // Send the one-time "your <name> briefing/recipe has no content left" notice for a RECURRING schedule
   // whose digest/recipe resolved empty, then remember we did. A once (fires + drops on its own) gets no
@@ -214,11 +224,28 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       if (sendText === null) {
         if (isCancelled()) return; // timed out late: the tick's catch already handled this schedule
         checked.commit(); // silent path: baseline already advanced inside checkAlert; noop here
+        // Silent-watch-death: a soft-fail (couldn't read the source) is NOT a healthy silent hold. Count
+        // consecutive soft-fails; after FAIL_STREAK_NOTIFY send the failed-watch receipt so the watch
+        // doesn't silently die looking armed, then reset (re-notify only after another N). A clean read
+        // (a normal unchanged hold) resets the count.
+        if (checked.softFail) {
+          const streak = (softFailStreak.get(s.id) ?? 0) + 1;
+          softFailStreak.set(s.id, streak);
+          log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, alert: alertMatch[1], ok: true, sent: false, soft_fail_streak: streak })}`);
+          if (streak >= FAIL_STREAK_NOTIFY && deps.failStreakNotice && !overCap(s.chatId, deps.now())) {
+            const notice = deps.failStreakNotice(s, streak);
+            if (notice) { try { await deps.send(s.chatId, notice); noteSend(s.chatId, deps.now()); } catch (e) { deps.onError?.(e); } }
+            softFailStreak.set(s.id, 0); // re-notify only after another N soft-fails
+          }
+        } else {
+          softFailStreak.delete(s.id); // a clean read (healthy silent hold) clears the streak
+        }
         deps.store.complete(s.id, deps.now());
         log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, alert: alertMatch[1], ok: true, sent: false })}`);
         deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
         return;
       }
+      softFailStreak.delete(s.id); // a notify is a real read — clear any soft-fail streak
     } else if (digestMatch && deps.digestRun) {
       const composed = await deps.digestRun(s.chatId, digestMatch[1]!.trim());
       // null = the digest is gone or every member recipe was deleted (empty-digest-fires-noise). Stay

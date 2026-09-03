@@ -914,6 +914,44 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
     expect(iv.dueMs).toBeGreaterThan(NOW);          // advanced to its next occurrence, not fired now
   });
 
+  it("a watch that keeps SOFT-failing (can't read its source) earns a failed-watch receipt, not silent death (silent-watch-death)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    const notices: number[] = [];
+    let checks = 0;
+    const { store, runner } = harness(clock, {
+      send: async (_c, text) => { sent.push(text); },
+      alertCheck: async () => { checks++; return { message: null, commit: () => {}, softFail: true }; }, // source unreadable every tick
+      failStreakNotice: (_s, streak) => { notices.push(streak); return `⚠️ your watch failed ${streak} checks`; },
+    });
+    store.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    // Fire 3 times (FAIL_STREAK_NOTIFY default 3) — the 3rd trips the receipt. Advance the clock a day
+    // each round so the daily (which reschedules ~24h forward on complete) is due again.
+    for (let i = 0; i < 3; i++) {
+      await runner.tick(); clock.t += 25 * 3_600_000;
+    }
+    expect(checks).toBe(3);
+    expect(notices).toContain(3);                         // receipt fired at the streak threshold
+    expect(sent.some((t) => /failed 3 checks/.test(t))).toBe(true);
+  });
+
+  it("a soft-fail streak RESETS on a clean read, so an intermittent blip never trips the receipt", async () => {
+    const clock = { t: NOW };
+    const notices: number[] = [];
+    let call = 0;
+    const { store, runner } = harness(clock, {
+      send: async () => {},
+      // fail, fail, then a clean silent hold (softFail falsy) resets — never reaches 3 in a row.
+      alertCheck: async () => { call++; return { message: null, commit: () => {}, softFail: call !== 3 }; },
+      failStreakNotice: (_s, streak) => { notices.push(streak); return "x"; },
+    });
+    store.add(1, { kind: "daily", task: "alert:btc", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    for (let i = 0; i < 4; i++) {
+      await runner.tick(); clock.t += 25 * 3_600_000;
+    }
+    expect(notices).toEqual([]); // fail,fail,CLEAN,fail -> streak never hit 3 consecutively
+  });
+
   it("a chatty alert burning the hourly budget no longer starves the user's daily briefing (chatty-watch-starves-daily)", async () => {
     const clock = { t: NOW };
     const sent: string[] = [];
