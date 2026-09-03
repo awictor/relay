@@ -43,7 +43,7 @@ export interface HandlerDeps {
   // Per-user profile (product-loop). setLocation parses + stores a "set my location" message (null
   // if it isn't one); profileContext returns the agent context line for a chat (""/absent = none).
   // All optional so older wiring/tests are unaffected.
-  setLocation?: (chatId: number, text: string) => { location: string; units?: string; tzOffsetMin?: number; restamped?: number } | null;
+  setLocation?: (chatId: number, text: string) => { location: string; units?: string; tzOffsetMin?: number; restamped?: number; saved?: boolean } | null;
   profileContext?: (chatId: number) => string;
   // The chat's tz offset (minutes east of UTC) for the agent's current-datetime line + reasoning
   // (inject-current-datetime). Optional; absent -> UTC (0).
@@ -58,7 +58,7 @@ export interface HandlerDeps {
   // location-dependent errand ("weather", "near me") with no saved location offers to save the city
   // once, then re-runs the original errand — instead of the agent asking the city every time. Optional.
   hasLocation?: (chatId: number) => boolean;
-  captureLocation?: (chatId: number, text: string) => { location: string; tzOffsetMin?: number } | null;
+  captureLocation?: (chatId: number, text: string) => { location: string; tzOffsetMin?: number; saved?: boolean } | null;
   // Shared location pin (telegram-location-pin): save the chat's precise coords so "near me"/directions
   // resolve against them. Optional; absent -> a location pin just gets a generic ack.
   saveCoords?: (chatId: number, lat: number, lng: number) => void;
@@ -442,8 +442,11 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       const saved = deps.captureLocation(msg.chatId, msg.text);
       pendingLocation.delete(msg.chatId);
       if (saved) {
-        await deps.sendMessage(msg.chatId, `Thanks — saved ${saved.location}. (Change it anytime with /setlocation.)`);
-        // Re-run the original errand now that we have the location.
+        // saved===false: the profile write failed — say so (still re-run the errand this session, but
+        // don't imply it's persisted, since the tz/location reverts to UTC on restart).
+        const note = saved.saved === false ? " (heads up: I couldn't save it to disk, so I may ask again after a restart)" : " (Change it anytime with /setlocation.)";
+        await deps.sendMessage(msg.chatId, `Thanks — saved ${saved.location}.${note}`);
+        // Re-run the original errand now that we have the location (in memory this session regardless).
         msg = { ...msg, text: errand };
       }
       // else: not a city — fall through and route THIS message normally (no re-run).
@@ -526,6 +529,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         const fixed = set.restamped && set.restamped > 0
           ? ` Fixed the timing of ${set.restamped} existing recurring reminder${set.restamped === 1 ? "" : "s"}.`
           : "";
+        // saved===false: the profile write failed — DON'T confirm it's stored, or every weather/near-me
+        // + daily-reminder time silently reverts to UTC on restart (profile-save-silent-failure).
+        if (set.saved === false) {
+          await deps.sendMessage(msg.chatId, `I've got ${set.location} for now, but couldn't save it to disk — it may be lost if I restart. Please set it again in a moment.`);
+          return;
+        }
         await deps.sendMessage(msg.chatId, `Got it — I'll use ${set.location}${u} for "weather", "near me", and the like.${tz}${fixed}`);
         return;
       }

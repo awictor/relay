@@ -321,6 +321,15 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/Paris/);
   });
 
+  it("warns instead of confirming when the profile write failed (profile-save-silent-failure)", async () => {
+    const { handle, sent } = harness({
+      setLocation: (_id, t) => (/paris/i.test(t) ? { location: "Paris", tzOffsetMin: 60, saved: false } : null),
+    });
+    await handle(msg("/setlocation Paris UTC+1", 5));
+    expect(sent[0]!.text).toMatch(/couldn't save it to disk/i);
+    expect(sent[0]!.text).not.toMatch(/I'll use Paris for/); // must NOT falsely confirm it's stored
+  });
+
   it("/profile shows the stored profile, no agent (profile-view-reset)", async () => {
     let agentCalled = false;
     const { handle, sent } = harness({

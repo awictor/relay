@@ -1979,6 +1979,42 @@
       "status": "done",
       "why": "Translation is a top assistant ask + a glaring gap next to define-a-word; only implicit inline now (no consistency, no discoverability, weak on long text / pages).",
       "how": "A translate tool: for pasted text, LLM-translate inline with the target language; for a URL, scrape then translate. Add tool + prompt + help. Optionally romaji/pronunciation like define."
+    },
+    {
+      "id": "profile-save-silent-failure",
+      "title": "Profile (location/tz) save failure silently swallowed",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "ProfileStore was the one store whose handler never checked lastSaveOk(); a failed location/tz write confirmed \"saved\" then reverted to UTC on restart -> every weather/near-me + daily-reminder time silently wrong (the wrong-hour reminder bug through the back door).",
+      "how": "Thread profiles.lastSaveOk() through setLocation + captureLocation; handler hedges the confirmation when saved===false, like every other store."
+    },
+    {
+      "id": "unit-convert-tool",
+      "title": "Real unit/measurement conversion (temp/weight/length/volume/cooking)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "\"180C to F\", \"5ft11 in cm\", \"2 cups flour in grams\" fall to model memory (prompt literally says \"oz in a cup = 8\") — a correctness risk the prompt itself calls silently-wrong for multi-step. Only currency has a real convert tool.",
+      "how": "New src/lib/units-convert.ts: deterministic conversion tables (temp/mass/length/volume + common cooking) + a convert tool mirroring convert_currency; parse \"N <unit> to <unit>\". Reject unknown units."
+    },
+    {
+      "id": "meal-ideas-tool",
+      "title": "Cooking recipes / meal ideas by ingredient",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "\"dinner ideas with eggs, spinach, feta\" / \"what can I make with chicken\" is a top everyday ask; falls to a slow blog-link web_search AND the word \"recipe\" collides with the automation-recipe system.",
+      "how": "Keyless TheMealDB (filter.php?i=ingredient, random.php, lookup.php) -> a meal-ideas tool; parse ingredients; format name + a few + a link. Distinct verb from automation recipes."
+    },
+    {
+      "id": "sunrise-sunset-tool",
+      "title": "Sunrise/sunset/daylight times",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "profile.ts already treats \"sunset today\"/\"is it dark by 7\" as location errands but no tool returns them -> degrades to weather/web_search.",
+      "how": "Open-Meteo daily sunrise/sunset (already the weather provider) -> a suntimes tool or a get_weather field; format for the resolved place + day."
     }
   ],
   "history": [
@@ -2753,6 +2789,10 @@
     {
       "item": "translate-tool",
       "note": "Added a translate tool: new src/lib/translate.ts (parseTranslateRequest + buildTranslatePrompt + translate) wrapping the in-loop LLM — 'translate X to Spanish' / 'how do you say X in Japanese' / 'read me this page in English: <url>'. Pasted text translates via an LLM sub-call; a URL is scraped (backend.scrape) then translated. Prompt asks for only the translation + a pronunciation line for short phrases into non-Latin scripts. Chose the LLM over a keyless MT endpoint (MyMemory transliterated 'good morning' -> グッドモーリング; live-probed). Wired agent.ts (TOOLS, dispatch, prompt), pinned tool list, HELP. 11 new tests. Suite 1459 green, tsc clean. call-tested:false (LLM sub-call is offline-mocked; live LLM path unchanged)."
+    },
+    {
+      "item": "profile-save-silent-failure",
+      "note": "Fixed the profile store being the only one that didn't hedge a failed write. setLocation + captureLocation now return profiles.lastSaveOk(); the handler warns 'couldn't save it to disk, may be lost on restart' + doesn't falsely confirm when saved===false. Was: a failed location/tz write confirmed success then reverted to UTC -> silent wrong-hour reminders + wrong-place weather. 1 new test. Suite 1460 green, tsc clean."
     }
   ],
   "audits": [
@@ -2914,6 +2954,9 @@
     },
     {
       "note": "No 3-agent audit this run (translate-tool was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
+    },
+    {
+      "note": "AUDIT (backlog dry, only owner-gated). A/new-user: cooking meal-ideas (recipe-word collision), real unit conversion (temp/weight/volume), transit directions, flight status, sunrise/sunset. B/reliability: profile save silently swallowed (S,fixed), follow bare-URL confirms a never-firing feed (M), scores UNKNOWN team still dumps slate (S), feed long-headline bulletless silently never fires (M). C/power: clarify-once-ambiguous, weekly value recap, semantic-condition alerts, refine-last-result, auto-locale replies. Seeded: profile-save-silent-failure(built), unit-convert-tool, meal-ideas-tool, clarify-once-ambiguous, sunrise-sunset-tool."
     }
   ]
 }
