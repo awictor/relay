@@ -150,6 +150,13 @@ const agentEnvFor = (chatId: number) => ({
   tzOffsetMin: profiles.offsetMinAt(chatId, Date.now()) ?? tzOffsetMin(),
   weatherCoords: profiles.homeCoords(chatId),
   weatherUnits: profiles.get(chatId)?.units,
+  // Read-it-later (read-it-later-capture): let the agent file a page it just found into this chat's saved
+  // list, so "find X and save it" completes in one turn. Chat-bound here; the model supplies title/summary
+  // (it just read the page), so no extra fetch — falls back to a host-label title inside SavedStore.
+  savePage: (url: string, title?: string, summary?: string) => {
+    const r = saved.add(chatId, { url, title, summary: summary ?? title ?? url }, Date.now());
+    return { title: r.page.title, saved: r.saved };
+  },
 });
 // Run a digest -> composed briefing text (member recipes -> one message). Shared by /run + schedule.
 const digestRunText = (chatId: number, name: string): Promise<DigestOutcome> => {

@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
     );
   });
 
@@ -246,6 +246,34 @@ describe("runAgent dispatch", () => {
     const out = await runAgent("where can I watch Dune Part Two", { llm, backend: b });
     expect(hits.filter((h) => !h.startsWith("scrape") ? false : true)).toHaveLength(0); // no browser used
     expect(out.reply).toMatch(/watch/i);
+  });
+
+  it("save_page -> deps.savePage with the url/title/summary, no browser (agent-can-save-pages)", async () => {
+    const { b, hits } = recordingBackend();
+    const saves: Array<{ url: string; title?: string; summary?: string }> = [];
+    const llm = new ScriptLLM([
+      { toolCall: { name: "save_page", args: { url: "https://ex.com/pasta", title: "Best Carbonara", summary: "A simple 5-ingredient recipe." } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "Saved it to your reading list." } } as ToolCall },
+    ]);
+    const out = await runAgent("find a good carbonara recipe and save it", {
+      llm, backend: b,
+      savePage: (url, title, summary) => { saves.push({ url, title, summary }); return { title: title ?? "x", saved: true }; },
+    });
+    expect(saves).toEqual([{ url: "https://ex.com/pasta", title: "Best Carbonara", summary: "A simple 5-ingredient recipe." }]);
+    expect(hits.some((h) => h.startsWith("scrape"))).toBe(false); // pure store write, no browser
+    expect(out.reply).toMatch(/saved/i);
+  });
+
+  it("save_page rejects a non-URL (never saves junk)", async () => {
+    const { b } = recordingBackend();
+    let called = false;
+    const llm = new ScriptLLM([
+      { toolCall: { name: "save_page", args: { url: "not a url" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "I couldn't save that — no valid link." } } as ToolCall },
+    ]);
+    const out = await runAgent("save that", { llm, backend: b, savePage: () => { called = true; return { title: "x", saved: true }; } });
+    expect(called).toBe(false); // the invalid URL never reached the store
+    expect(out.reply).toMatch(/couldn't save/i);
   });
 
   it("get_nutrition -> backend.getNutrition, reaches reply, no browser (nutrition-lookup)", async () => {

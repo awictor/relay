@@ -289,6 +289,19 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "save_page",
+    description: "Save a web page to the user's read-it-later list so they can recall it later (\"what did I save about X\" / \"my reading list\"). Use this when the user asks to SAVE/BOOKMARK/keep a page — including one you JUST found for them (\"find a good pasta recipe and save it\", \"bookmark that\"). Pass the exact URL; optionally a short title + a 1-2 sentence summary of what it is (if you omit them I'll derive them). Only save a real page the user wants kept — never a search-results or junk URL.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "The exact http(s) URL of the page to save." },
+        title: { type: "string", description: "Optional short title for the page." },
+        summary: { type: "string", description: "Optional 1-2 sentence gist of the page, for later recall." },
+      },
+      required: ["url"],
+    },
+  },
+  {
     name: "track_package",
     description: "Track a shipment by its tracking number (UPS/FedEx/USPS/DHL) — use this for any \"where's my package\", \"track 1Z...\", \"track my order 9400...\" request. I detect the carrier from the number's shape + read the carrier's official tracking page. Pass the tracking number as given; optionally name the carrier if you know it.",
     parameters: {
@@ -480,6 +493,7 @@ Tools:
 - "get_nutrition" (food): calories + macros from USDA. Use this — NOT web_search, NEVER guess — for "calories in X"/"protein in X"/"carbs in X"/"is X healthy". Per-100g for the closest match; say "not sure" on a miss instead of inventing numbers.
 - "where_to_watch" (title): where a movie/show streams/rents/buys. Use this — NOT web_search, NEVER claim a service from memory — for "where can I watch X"/"is X on Netflix". Returns a JustWatch per-region link (the source of truth). For a rating/plot use get_fact.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
+- "save_page" (url, title?, summary?): save a page to the user's read-it-later list. Use when they ask to save/bookmark/keep a page — including one I JUST found ("find a good X and save it", "bookmark that"). Pass the exact URL (+ optional title/summary). Never save a search-results or junk URL.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
 - "get_flight" (flight): flight route + live position by number. Use this — NOT web_search — for "is AA100 on time"/"where's UA83"/"when does DL215 land". Returns airline + from→to + airborne-now + a tracker link; it CAN'T get scheduled gate/on-time — report honestly, don't invent a gate/delay.
 - "random" (request): flip a coin / roll dice / random number / pick from options. Use this — NEVER invent a "random" value yourself — for "flip a coin", "roll a d20", "random number 1-100", "pick one: X or Y".
@@ -773,6 +787,11 @@ export interface AgentDeps {
   // email/phone so compose can draft to the right recipient instead of dead-ending. Bound to the chatId
   // by the caller. Optional; absent -> compose uses whatever `to` the model passed (prior behavior).
   resolveContact?: (name: string) => { name: string; email?: string; phone?: string } | null;
+  // Read-it-later (read-it-later-capture): let the agent file a page it just found into the user's saved
+  // list, so "find X and save it" works in ONE turn instead of the user re-issuing a save command. Bound
+  // to the chatId by the caller; returns the stored title + whether it persisted. Optional; absent -> the
+  // save_page tool reports it's unavailable.
+  savePage?: (url: string, title?: string, summary?: string) => { title: string; saved: boolean } | null;
   // Background errands (async-background-errands): a raised per-run step budget for a long,
   // dispatch-and-ping task ("find the 5 cheapest flights and get back to me") that a normal ~8-step
   // synchronous run would truncate. Optional; absent/<=0 -> the RELAY_MAX_STEPS default. Clamped to a
@@ -1247,6 +1266,18 @@ export async function runAgent(
           return `• They asked "${h.task}"${age ? ` (${age})` : ""} — I said:\n${h.reply}`;
         }).join("\n\n");
         push("recall", `Past answers I gave this user:\n${body}\n\nUse these to answer; mention how long ago if it might be stale (a price/score/story), and offer to refresh it.`);
+        continue;
+      }
+
+      if (call.name === "save_page") {
+        if (!deps.savePage) { push("save_page", "ERROR: I can't save pages here."); continue; }
+        const url = String(call.args.url ?? "").trim();
+        if (!/^https?:\/\/\S+$/i.test(url)) { push("save_page", "ERROR: save_page needs a real http(s) URL. Don't save a non-URL."); continue; }
+        const title = call.args.title ? String(call.args.title).trim() : undefined;
+        const summary = call.args.summary ? String(call.args.summary).trim() : undefined;
+        const r = deps.savePage(url, title, summary);
+        if (!r) { push("save_page", "ERROR: couldn't save that page."); continue; }
+        push("save_page", `Saved "${r.title}" to the user's reading list.${r.saved ? "" : " (Warning: it may not have persisted to disk — tell the user to try again if it doesn't stick.)"} Confirm to the user they can recall it with "what did I save about …" or "my reading list".`);
         continue;
       }
 
