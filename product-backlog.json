@@ -1832,7 +1832,7 @@
       "title": "On-demand news headlines (promised, unbacked)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "START advertises \"every morning: weather + top news\" but there is no news source; \"what's the news\" runs a slow scrape. feeds.ts (RSS/Reddit/HN) infra already exists to reuse.",
       "how": "New get_news tool over a keyless headline feed (Reuters/AP/BBC RSS or HN front page); parse top N titles; tool + dispatch + prompt + help. Reuse parseXmlItems."
     },
@@ -2546,6 +2546,10 @@
     {
       "item": "contact-wrong-person-draft",
       "note": "Hardened ContactStore.get so a fuzzy match can't draft to the wrong person. Was: any single shared word + longest-name-wins, so 'text mom' with only 'mom's doctor' saved resolved to the doctor + formatDraft showed a confident To: line (one tap from texting the wrong person). Now a contact matches ONLY when EVERY word of its name is present in the query, and only a UNIQUE match returns (most-specific by word-count when several are all-present; a genuine tie -> null so the caller asks which). 'text mom' no longer selects 'mom doctor'; 'email the big boss' still uniquely picks 'big boss'. 3 new tests. Suite 1389 green, tsc clean."
+    },
+    {
+      "item": "get-news-tool",
+      "note": "Added get_news tool: new src/lib/news.ts (newsUrl/parseHeadlines/formatNews/getNews) over the keyless Google News RSS feed (general top stories, or a topic search), reusing feeds.ts parseXmlItems + stripping the ' - Publisher' tail + deduping. Wired agent.ts (TOOLS, backend.getNews + defaultBackend, dispatch, prompt), pinned tool list, HELP. 'what's the news'/'top headlines'/'news about AI' now instant instead of a slow paywalled-front-page scrape (START already promised 'weather + top news'). 16 new tests, suite 1401 green, tsc clean. call-tested:true (live Google News general + topic feeds fetched + parsed via ctx_execute)."
     }
   ],
   "audits": [

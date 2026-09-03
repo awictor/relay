@@ -19,6 +19,7 @@ import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
 import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
 import { parseWorldClock, runWorldClock } from "./lib/worldclock.js";
 import { getScores as scoresFetch, formatScores } from "./lib/scores.js";
+import { getNews as newsFetch, formatNews } from "./lib/news.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -136,6 +137,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { coin: { type: "string", description: "Coin ticker or name, e.g. \"BTC\", \"bitcoin\", \"ethereum\", \"doge\"." } },
       required: ["coin"],
+    },
+  },
+  {
+    name: "get_news",
+    description: "Get today's top news headlines, or headlines about a topic (no key, instant). Use this — NOT web_search/scrape — for \"what's the news\", \"top headlines\", \"news about the election\", \"latest on <topic>\". Pass an optional topic (omit for general top stories).",
+    parameters: {
+      type: "object",
+      properties: { topic: { type: "string", description: "Optional topic to filter headlines, e.g. \"AI\" or \"the election\". Omit for general top headlines." } },
+      required: [],
     },
   },
   {
@@ -317,6 +327,7 @@ Tools:
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "get_time" (request): current time in another city/timezone, or convert a time between zones. Use this — NOT web_search — for "what time is it in Tokyo"/"time in London"/"9am PT in London"/"convert 3pm EST to Tokyo". Pass the request verbatim. Standard-time offsets (may be an hour off during daylight saving).
+- "get_news" (topic?): today's top news headlines, or about a topic. Use this — NOT web_search — for "what's the news"/"top headlines"/"news about X"/"latest on Y". Omit topic for general top stories.
 - "get_scores" (request): today's sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight". Pass the request verbatim. Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
 - "define" (word): a word's definition, pronunciation, and synonyms. Use this — NOT web_search/scrape — for "what does X mean"/"define X"/"synonyms for X"/"how do you spell X". English words only; pass the single word.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
@@ -382,6 +393,9 @@ export interface BrowserBackend {
   // Optional: today's sports scores for a league/team (sports-scores-tool). Absent -> the get_scores
   // tool reports it's unavailable. Returns null on an unknown league / fetch failure.
   getScores?(query: string): Promise<{ leagueName: string; games: import("./lib/scores.js").GameScore[] } | null>;
+  // Optional: today's top news headlines, or about a topic (get-news-tool). Absent -> the get_news tool
+  // reports it's unavailable. Returns null on a fetch failure / empty parse.
+  getNews?(topic?: string): Promise<{ topic?: string; headlines: string[] } | null>;
   // Optional: current weather for a place or coords (geo-tool-cluster). Absent -> the get_weather tool
   // reports it's unavailable. Returns null on a bad place / fetch failure.
   getWeather?(opts: { place?: string; lat?: number; lng?: number; near?: { lat: number; lng: number } }): Promise<import("./lib/weather.js").WeatherResult | null>;
@@ -487,6 +501,7 @@ const defaultBackend: BrowserBackend = {
   getCrypto: (coin) => cryptoFetch(coin, defaultFetchText),
   defineWord: (word) => dictFetch(word, defaultFetchText),
   getScores: (query) => scoresFetch(query, defaultFetchText),
+  getNews: (topic) => newsFetch(topic, defaultFetchText),
   getWeather: (opts) => fetchWeather(opts, defaultFetchText),
   findNearby: (opts) => fetchNearby(opts, defaultFetchTextPost),
   getDirections: (opts) => fetchDirections(opts, defaultFetchText),
@@ -812,6 +827,19 @@ export async function runAgent(
         const answer = parsed ? runWorldClock(parsed, nowForTz) : null;
         if (!answer) { push("get_time", `Couldn't resolve a timezone in "${request}" (unknown city/abbreviation). Report that you couldn't place that zone + ask which city/UTC offset, or try web_search for an unusual place.`); continue; }
         push("get_time", `${answer}\n\nReport this to the user (include the daylight-saving caveat only if it's relevant / they're near a DST change).`);
+        continue;
+      }
+
+      if (call.name === "get_news") {
+        if (!backend.getNews) { push("get_news", "ERROR: news headlines aren't available."); continue; }
+        const topic = String(call.args.topic ?? "").trim() || undefined;
+        try {
+          const r = await backend.getNews(topic);
+          if (!r) { push("get_news", `Couldn't pull headlines${topic ? ` about "${topic}"` : ""} right now. Try web_search.`); continue; }
+          push("get_news", `${formatNews(r.headlines, r.topic)}\n\nReport these to the user (today's headlines; offer to open one if they want more).`);
+        } catch (e) {
+          push("get_news", `ERROR getting news: ${e instanceof Error ? e.message : String(e)}`);
+        }
         continue;
       }
 

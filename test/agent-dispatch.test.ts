@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calendar_event", "click", "compare", "compose", "convert_currency", "define", "directions", "get_scores", "get_time", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "type", "web_search"].sort()
+      ["browse", "calendar_event", "click", "compare", "compose", "convert_currency", "define", "directions", "get_news", "get_scores", "get_time", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "type", "web_search"].sort()
     );
   });
 
@@ -102,6 +102,18 @@ describe("runAgent dispatch", () => {
     ]);
     await runAgent("define escrow", { llm, backend: b });
     expect(hits).toContain("defineWord:escrow");
+  });
+
+  it("get_news -> backend.getNews, reaches reply, no browser", async () => {
+    const { b, hits } = recordingBackend();
+    b.getNews = async (topic) => { hits.push(`getNews:${topic ?? ""}`); return { headlines: ["Big thing happened", "Another story"] }; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_news", args: {} } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "Top: Big thing happened." } } as ToolCall },
+    ]);
+    const out = await runAgent("what's the news", { llm, backend: b });
+    expect(hits).toContain("getNews:");
+    expect(out.reply).toMatch(/Big thing/);
   });
 
   it("get_scores -> backend.getScores, reaches reply, no browser", async () => {
