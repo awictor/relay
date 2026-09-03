@@ -145,6 +145,11 @@ export interface HandlerDeps {
   rememberFact?: (chatId: number, text: string) => { fact: string; evicted: string[]; saved?: boolean } | null;
   forgetFact?: (chatId: number, text: string) => { removed: number; all: boolean; forgotten: string[]; saved?: boolean } | null;
   notesList?: (chatId: number) => string[];
+  // Countdown (countdown-tracker): parse "countdown to X on <date>" / "days until X <date>" and schedule
+  // milestone pings (a week out / day before / morning of), returning the immediate day-count. null when
+  // it isn't a countdown command; { ok:false, reason:"past" } for an already-passed date. Optional.
+  countdownAdd?: (chatId: number, text: string, now: number) =>
+    { ok: true; message: string; milestones: number; saved?: boolean } | { ok: false; reason: "past"; message: string } | null;
   // Saved named places (saved-named-places): savePlace parses + stores "my work is <addr>" / "save gym:
   // <addr>" (null if not one); forgetPlace deletes by alias; placeList lists them; isListPlacesRequest
   // is a whole-message "what places do you have". Aliases are injected into the agent via profileContext,
@@ -1089,6 +1094,21 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           const scope = s.which === "all" ? "all your automations" : `"${s.which}"`;
           await deps.sendMessage(msg.chatId, `Resumed ${scope} — back on its normal schedule.`);
         }
+        return;
+      }
+    }
+
+    // Countdown (countdown-tracker): "countdown to my flight Dec 20" / "start a countdown to vacation
+    // on 2026-07-01" -> persist milestone pings + confirm the day count. Gated on the explicit "countdown"
+    // word ONLY: a bare "how many days until Christmas" is a one-shot QUESTION (date_math answers it via
+    // the agent), not a standing countdown — capturing that here would wrongly schedule pings for it.
+    // Checked before the schedule cue so "countdown ... on <date>" isn't read as a one-shot reminder.
+    if (!isExplicitCommand && deps.countdownAdd && /\bcountdown\b/i.test(msg.text)) {
+      const r = deps.countdownAdd(msg.chatId, msg.text, deps.now());
+      if (r) {
+        if (!r.ok) { await deps.sendMessage(msg.chatId, r.message); return; }
+        const warn = r.saved === false ? `\n\n⚠️ Couldn't save it to disk — the pings may be lost if I restart.` : "";
+        await deps.sendMessage(msg.chatId, `${r.message}${warn}`);
         return;
       }
     }

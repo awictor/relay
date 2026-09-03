@@ -59,6 +59,38 @@ describe("createHandler — memory-write hedge (memory-write-silent-fail)", () =
   });
 });
 
+describe("createHandler — countdown (countdown-tracker)", () => {
+  it("'countdown to X' routes to countdownAdd + confirms, no agent", async () => {
+    let seen = "";
+    const { handle, sent, recorded } = harness({
+      countdownAdd: (_c, text) => { seen = text; return { ok: true, message: "⏳ 30 days until \"vacation\"", milestones: 3 }; },
+    });
+    await handle(msg("countdown to vacation on 2026-07-01", 5));
+    expect(seen).toBe("countdown to vacation on 2026-07-01");
+    expect(sent[0]!.text).toMatch(/30 days until/);
+    expect(recorded).toHaveLength(0); // never hit the agent
+  });
+
+  it("a past-date countdown reports it passed", async () => {
+    const { handle, sent } = harness({
+      countdownAdd: () => ({ ok: false, reason: "past", message: "that date has passed" }),
+    });
+    await handle(msg("countdown to my birthday on 2020-01-01", 5));
+    expect(sent[0]!.text).toMatch(/passed/);
+  });
+
+  it("a bare 'how many days until Christmas' is NOT a countdown (falls to the agent for a one-shot answer)", async () => {
+    let cdCalled = false;
+    const { handle, recorded } = harness({
+      countdownAdd: () => { cdCalled = true; return { ok: true, message: "x", milestones: 1 }; },
+      runAgentFn: async () => { return { reply: "12 days", steps: 1, tools: [] }; },
+    });
+    await handle(msg("how many days until Christmas", 5));
+    expect(cdCalled).toBe(false);   // no "countdown" word -> not captured
+    expect(recorded).toHaveLength(1); // reached the agent (date_math)
+  });
+});
+
 describe("createHandler — inbound send-failure (inbound-send-fail-swallowed)", () => {
   it("a FAILED reply send does NOT write the turn to memory (so the next turn isn't poisoned)", async () => {
     const mem = new Map<number, LLMMessage[]>();

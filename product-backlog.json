@@ -2750,9 +2750,18 @@
       "title": "'days until' is one-shot — no saved countdown with milestone pings",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "datecalc computes a difference on demand; nothing persists a countdown or pings at milestones. Countdowns (trips/birthdays/deadlines) are emotionally sticky + every proactive ping is a re-engagement touch.",
       "how": "A tiny countdown store + a scheduler-backed item ('countdown to my flight Dec 20') that fires milestone pings (1 week, tomorrow); reuse schedule.ts + datecalc + safe-store."
+    },
+    {
+      "id": "quick-log-tracker",
+      "title": "no personal quick-log tracker ('log weight 182', 'spent $14 lunch') + trends",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "Notes stores facts, alerts watch external values — nothing lets a user log their OWN tagged data points + ask 'show my weight this month' / 'how much did I spend on food'. The single strongest daily-habit retention primitive Relay lacks; Instinct's moat is 'the assistant that remembers your life'.",
+      "how": "A tagged append-only store (tag -> [{t,v}]) + parse 'log <tag> <value>' + a 'show/how much <tag>' aggregator (sum/avg/latest/trend). Reuse chart.ts (line chart), summarizeSeries, to-csv, safe-store. Keyless."
     }
   ],
   "history": [
@@ -3847,6 +3856,10 @@
     {
       "item": "onboarding-weather-deadend",
       "note": "Fixed the flagship onboarding tap-to-try dead-end (onboarding-weather-deadend). The '☀️ Weather' first-win button ran a bare 'weather', which asks a cold user (no shared location) 'What city are you in?' — the one dead-end in an otherwise instant onboarding. Changed TRY_EXAMPLES weather entry to 'weather in New York' so the first tap always lands an answer; no example now depends on a saved location. 1 new guard test (no example is a bare weather/near-me location-relative errand). suite 1854 green, tsc clean. Offline; anvil-independent (all try examples are keyless)."
+    },
+    {
+      "item": "countdown-tracker",
+      "note": "Countdowns (countdown-tracker): 'countdown to my flight Dec 20' / 'countdown to vacation on 2026-07-01' now PERSIST as milestone reminders (a month/week out, day before, morning of) + confirm the day count, instead of date_math's one-shot answer — a sticky re-engagement hook. New src/lib/countdown.ts: parseCountdown (label + date via datecalc.parseDate incl holidays/ISO/M-D/'Dec 20', peels the trailing date phrase off the label, preferFuture rolls a bare month/day forward), countdownMilestones (future-only fire instants at 9am local, tz-shifted; near-term targets get only the applicable milestones), formatCountdown + milestonePing. Handler routes on the explicit 'countdown' word ONLY (a bare 'how many days until Christmas' stays a date_math QUESTION, not a scheduled countdown), BEFORE the schedule cue; index.countdownAdd synthesizes reminder-only clock-time onces via the existing ScheduleStore (no new runner) + returns the confirmation, past-date -> honest note. HELP line. 12 new tests (parse/milestone-future-filter/tz/format + handler route/past/not-a-countdown-question). suite 1866 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
@@ -4077,6 +4090,9 @@
     },
     {
       "note": "Backlog dry (low/M+owner-gated) -> 3-agent audit. A(new-user): onboarding-weather-deadend [SEEDED], local-events-near-me, movie-showtimes, named-business-hours. B(reliability): threshold-suffix-drop [SEEDED+BUILT], inbound-send-fail-swallowed [SEEDED], degraded-recipe-pushed-as-briefing, digest-all-failed-bypasses-gate, multi-tenant memory LRU. C(power): quick-log personal tracker, countdown-tracker [SEEDED], contact-tied follow-up nudges, call-prep bridge. Seeded: threshold-suffix-drop(built), inbound-send-fail-swallowed, onboarding-weather-deadend, countdown-tracker."
+    },
+    {
+      "note": "No audit this run — built from the prior queue (countdown-tracker). Refilled by promoting a parked Agent-C finding: quick-log-tracker (medium/M, tagged self-log + trends, reuses chart/series/csv). Remaining: quick-log-tracker, callback-edit-in-place(low), confirm-to-act(owner-gated)."
     }
   ]
 }

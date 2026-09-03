@@ -37,6 +37,7 @@ import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summa
 import { parseChartRequest, renderChart } from "./lib/chart.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
+import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
 import { ListStore, parseListCommand, parseListExport, splitItems } from "./lib/lists.js";
 import { ContactStore, parseSaveContact, parseForgetContact } from "./lib/contacts.js";
@@ -518,6 +519,27 @@ const handle = createHandler({
     const isClockTime = rec.kind === "daily" || rec.kind === "weekly" || rec.kind === "monthly" || rec.kind === "yearly" || /\bat\s+\d/i.test(text) || /\b(morning|evening|night|noon|midnight)\b/i.test(text);
     const noTz = isClockTime && profiles.offsetMin(chatId) === undefined && tzOffsetMin() === 0;
     return { ok: true, kind: rec.kind, task: rec.task, whenMs: rec.dueMs, whenText, noTz, saved: schedules.lastSaveOk(), ...(rec.sticky ? { sticky: true } : {}) };
+  },
+  // Countdown (countdown-tracker): parse "countdown to X on <date>" + schedule milestone reminder-onces
+  // (a week out / day before / morning of) so Relay pings as the day nears, then confirm with the day
+  // count. Reuses the ScheduleStore (each milestone is a reminderOnly clock-time once) — no new runner.
+  countdownAdd: (chatId, text, now) => {
+    const off = profiles.offsetMin(chatId) ?? tzOffsetMin();
+    // The chat's LOCAL today (now shifted into its tz), so "Dec 20" counts from the user's calendar day.
+    const local = new Date(now + off * 60_000);
+    const today = { y: local.getUTCFullYear(), m: local.getUTCMonth() + 1, d: local.getUTCDate() };
+    const c = parseCountdown(text, today);
+    if (!c) return null;
+    if (c.daysAway < 0) return { ok: false, reason: "past", message: formatCountdown(c) };
+    // Schedule the future milestones as reminder-onces (skip if the countdown is same-day — the
+    // confirmation already says "today"). clockTime so a later tz change re-stamps them.
+    const milestones = countdownMilestones(c.target, now, off);
+    let scheduled = 0;
+    for (const ms of milestones) {
+      const rec = schedules.add(chatId, { kind: "once", task: milestonePing(c.label, ms.daysBefore), dueMs: ms.whenMs, reminderOnly: true, clockTime: true, offsetMin: off }, now);
+      if (rec) scheduled++;
+    }
+    return { ok: true, message: formatCountdown(c), milestones: scheduled, saved: schedules.lastSaveOk() };
   },
   // First-reminder tz (first-reminder-tz-ask): would this message schedule a CLOCK-TIME task with no
   // saved tz? If so the handler asks the city first (city→tz) rather than scheduling wrong-at-UTC.

@@ -50,6 +50,7 @@ const HELP = `Relay — what I can do:
 • Where to watch: "where can I watch Dune Part Two", "is Oppenheimer streaming" → a JustWatch link showing where it streams/rents/buys in your region. (Availability shifts constantly, so I point you to the live source instead of guessing a service.)
 • World clock: "what time is it in Tokyo", "what's 9am PT in London" → the time there or a zone conversion, instantly.
 • Dates: "how many days until Christmas", "what day is July 4 2026", "how old if born 1990-05-06", "days between two dates" → exact calendar math, instantly.
+• Countdowns: "countdown to my flight Dec 20", "countdown to vacation on 2026-07-01" → I save it and ping you as it nears (a week out, the day before, the morning of), not just a one-time answer.
 • Sports scores: "did the Lakers win?", "Man City score", "NBA scores tonight" → today's scores + status, instantly (NBA/NFL/MLB/NHL/NCAA + major soccer).
 • News: "what's the news?", "top headlines", "news about AI" → today's top headlines, instantly.
 • Fun: "tell me a joke", "fun fact", "quiz me" → a joke, a fun fact, or a trivia question, instantly.
