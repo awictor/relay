@@ -2120,7 +2120,7 @@
       "title": "no hourly / rain-timing weather (\"will it rain this afternoon / at 3pm?\")",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "weather.ts fetches only Open-Meteo current+daily, so a time-of-day question ('umbrella this afternoon?', 'rain tonight?') gets a whole-day max-precip guess, not WHEN. One of the highest-frequency first errands.",
       "how": "Add &hourly=precipitation_probability,temperature_2m to the existing keyless Open-Meteo call + a pure 'next-N-hours' formatter; detect a time-of-day phrase to pick the window. Reuses saved location. Offline-testable with a fixture."
     },
@@ -2962,6 +2962,10 @@
     {
       "item": "sticky-ack-scopes-to-one + sticky-send-fail-burns-budget",
       "note": "Fixed 2 regressions the audit found in the just-shipped sticky reminders. (1) SCOPE: a 'done' reply wiped EVERY sticky reminder, so acking the meds nag silently deleted an unrelated 'drink water every 30m' too. Now the runner stamps lastFiredMs on each confirmed sticky ping (markStickyFired) and acknowledgeSticky removes only the MOST-RECENTLY-FIRED one (falls back to all only if several exist and none has fired yet). (2) BUDGET: a transient send/anvil outage counted each failed fire toward the anti-nag cap via complete(), so a brief Telegram outage could exhaust stickyMax and self-delete a 'nag me until done' the user never saw ping. complete() now takes a `fired` flag; the runner's failure path passes fired:false so a failed send advances the interval to retry WITHOUT burning budget — only a confirmed send counts (mirrors the once transient-retry contract). 4 new tests (2 store scope/budget + 2 runner fired-stamp/fail-no-burn), suite 1547 green, tsc clean. call-tested:false (offline store + runner tests)."
+    },
+    {
+      "item": "hourly-rain-weather",
+      "note": "Weather now answers time-of-day rain questions with WHEN, not a whole-day max. Added &hourly=precipitation_probability,temperature_2m to the existing keyless Open-Meteo call; parseForecast now builds an hours[] array (local date+hour+precip+temp from timezone=auto). New resolveHourWindow maps named dayparts (morning/afternoon/evening/tonight/noon), a specific 'at 3pm'/'at 15:00', and 'later today'/'rest of the day' (anchored to the location's current local hour) to an hour window; formatWeatherHourly slices those hours and summarizes rain likelihood + the peak-rain hour + temp range ('Austin afternoon: likely rain (up to 80%, around 3pm), 72-75F'). Dispatch resolves most-specific-first: hourly window -> future day -> current; nowHour from nowMs+tzOffsetMin. Tool `when` + prompt updated to route 'this afternoon'/'tonight'/'at 3pm'. 8 new tests; live-probed the Open-Meteo hourly URL (200, local timestamps, 168h) so call-tested:true for the data source (agent wiring offline-tested)."
     }
   ],
   "audits": [

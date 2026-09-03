@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { weatherDesc, parseGeocode, parseGeocodeAll, pickCandidate, parseForecast, formatWeather, getWeather, geocodeUrl, forecastUrl, resolveWhen, dayLabel, formatDay, formatWeatherWhen } from "../src/lib/weather.js";
+import { weatherDesc, parseGeocode, parseGeocodeAll, pickCandidate, parseForecast, formatWeather, getWeather, geocodeUrl, forecastUrl, resolveWhen, dayLabel, formatDay, formatWeatherWhen, resolveHourWindow, formatWeatherHourly } from "../src/lib/weather.js";
 
 describe("weatherDesc (geo-tool-cluster)", () => {
   it("maps WMO codes to short descriptions", () => {
@@ -38,6 +38,63 @@ describe("parseForecast", () => {
   });
   it("null when current is missing", () => {
     expect(parseForecast(JSON.stringify({ daily: {} }), "x")).toBeNull();
+  });
+  it("parses the hourly block into local date+hour points (hourly-rain-weather)", () => {
+    const b = JSON.stringify({
+      current: { temperature_2m: 20, weather_code: 2 },
+      daily: { temperature_2m_max: [25], temperature_2m_min: [15], precipitation_probability_max: [40] },
+      hourly: { time: ["2026-09-03T00:00", "2026-09-03T15:00"], precipitation_probability: [5, 80], temperature_2m: [16, 24] },
+    });
+    const w = parseForecast(b, "Austin")!;
+    expect(w.hours).toHaveLength(2);
+    expect(w.hours![1]).toMatchObject({ date: "2026-09-03", hour: 15, precipPct: 80, tempC: 24, tempF: 75 });
+  });
+});
+
+describe("resolveHourWindow (hourly-rain-weather)", () => {
+  it("maps named dayparts to local-hour windows", () => {
+    expect(resolveHourWindow("will it rain this afternoon", 9)).toMatchObject({ startHour: 12, endHour: 17, tomorrow: false });
+    expect(resolveHourWindow("rain tonight?", 9)).toMatchObject({ startHour: 18, endHour: 24 });
+    expect(resolveHourWindow("weather tomorrow morning", 9)).toMatchObject({ startHour: 5, endHour: 12, tomorrow: true });
+  });
+  it("maps a specific 'at 3pm' to a tight one-hour window", () => {
+    expect(resolveHourWindow("will it rain at 3pm", 9)).toMatchObject({ startHour: 15, endHour: 16, label: "3pm" });
+  });
+  it("'later today' anchors to the current local hour", () => {
+    expect(resolveHourWindow("any rain later today", 14)).toMatchObject({ startHour: 14, endHour: 24, tomorrow: false });
+  });
+  it("null when there's no time-of-day cue", () => {
+    expect(resolveHourWindow("what's the weather", 9)).toBeNull();
+  });
+});
+
+describe("formatWeatherHourly (hourly-rain-weather)", () => {
+  const w = parseForecast(JSON.stringify({
+    current: { temperature_2m: 20, weather_code: 2 },
+    daily: { temperature_2m_max: [25], temperature_2m_min: [15], precipitation_probability_max: [80] },
+    hourly: {
+      time: ["2026-09-03T12:00", "2026-09-03T13:00", "2026-09-03T14:00", "2026-09-03T15:00", "2026-09-03T16:00"],
+      precipitation_probability: [10, 20, 60, 80, 30],
+      temperature_2m: [22, 23, 24, 24, 23],
+    },
+  }), "Austin")!;
+  it("summarizes rain likelihood + the peak hour for an afternoon question", () => {
+    const out = formatWeatherHourly(w, "will it rain this afternoon", 9, "imperial")!;
+    expect(out).toMatch(/Austin afternoon:/);
+    expect(out).toMatch(/likely rain \(up to 80%, around 3pm\)/);
+  });
+  it("says little-to-no rain when the window is dry", () => {
+    const dry = parseForecast(JSON.stringify({
+      current: { temperature_2m: 20, weather_code: 0 },
+      daily: { temperature_2m_max: [25], temperature_2m_min: [15], precipitation_probability_max: [5] },
+      hourly: { time: ["2026-09-03T18:00", "2026-09-03T19:00"], precipitation_probability: [0, 5], temperature_2m: [19, 18] },
+    }), "Paris")!;
+    expect(formatWeatherHourly(dry, "rain tonight?", 9, "metric")).toMatch(/little to no rain/);
+  });
+  it("null when no hourly data or no time cue (caller falls back to daily)", () => {
+    const noHours = parseForecast(JSON.stringify({ current: { temperature_2m: 20, weather_code: 0 }, daily: { temperature_2m_max: [25], temperature_2m_min: [15], precipitation_probability_max: [0] } }), "x")!;
+    expect(formatWeatherHourly(noHours, "this afternoon", 9)).toBeNull();
+    expect(formatWeatherHourly(w, "what's the weather", 9)).toBeNull(); // no time-of-day cue
   });
 });
 

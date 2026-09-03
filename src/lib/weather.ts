@@ -6,6 +6,11 @@
 
 export interface ForecastDay { date: string; hiC: number; loC: number; hiF: number; loF: number; precipPct: number; code: number; desc: string; }
 
+// One hourly point (hourly-rain-weather): the location's LOCAL timestamp broken into date + hour, plus
+// rain chance + temp. Lets the tool answer "will it rain this afternoon / tonight / at 3pm" with WHEN,
+// not a whole-day max.
+export interface HourPoint { date: string; hour: number; precipPct: number; tempC: number; tempF: number; }
+
 export interface WeatherResult {
   place: string;      // resolved place name ("Austin, Texas, United States")
   current: { tempC: number; tempF: number; code: number; desc: string; windKph: number };
@@ -14,6 +19,9 @@ export interface WeatherResult {
   // returned a daily block; lets the tool answer "tomorrow" / "this weekend" / "this week" instead of
   // confidently giving today's numbers to a future-day question.
   days?: ForecastDay[];
+  // Hourly (hourly-rain-weather): per-hour rain chance + temp in the location's local time, so a
+  // time-of-day question ("rain this afternoon?") gets a windowed answer, not the daily max.
+  hours?: HourPoint[];
 }
 
 // Open-Meteo WMO weather codes -> short human descriptions (the common buckets).
@@ -39,6 +47,7 @@ export function geocodeUrl(place: string): string {
 export function forecastUrl(lat: number, lng: number): string {
   return `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
     `&current=temperature_2m,weather_code,wind_speed_10m` +
+    `&hourly=precipitation_probability,temperature_2m` +
     `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=7`;
 }
 
@@ -86,6 +95,7 @@ export function parseForecast(body: string, place: string): WeatherResult | null
     const obj = JSON.parse(body) as {
       current?: { temperature_2m?: number; weather_code?: number; wind_speed_10m?: number };
       daily?: { time?: string[]; weather_code?: number[]; temperature_2m_max?: number[]; temperature_2m_min?: number[]; precipitation_probability_max?: number[] };
+      hourly?: { time?: string[]; precipitation_probability?: number[]; temperature_2m?: number[] };
     };
     const c = obj.current, d = obj.daily;
     if (!c || typeof c.temperature_2m !== "number") return null;
@@ -103,6 +113,17 @@ export function parseForecast(body: string, place: string): WeatherResult | null
         precipPct: d!.precipitation_probability_max?.[i] ?? 0, code: dcode, desc: weatherDesc(dcode),
       });
     }
+    // Hourly points in the location's local time (timezone=auto -> the API's hourly.time is local, form
+    // "YYYY-MM-DDTHH:MM"). Split into date + hour so a time-of-day window can slice by the local clock.
+    const h = obj.hourly;
+    const hours: HourPoint[] = [];
+    const ht = h?.time ?? [];
+    for (let i = 0; i < ht.length; i++) {
+      const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):/.exec(ht[i] ?? "");
+      if (!m) continue;
+      const tC = h!.temperature_2m?.[i];
+      hours.push({ date: m[1]!, hour: parseInt(m[2]!, 10), precipPct: h!.precipitation_probability?.[i] ?? 0, tempC: tC ?? 0, tempF: cToF(tC ?? 0) });
+    }
     return {
       place,
       current: { tempC: c.temperature_2m, tempF: cToF(c.temperature_2m), code, desc: weatherDesc(code), windKph: Math.round(c.wind_speed_10m ?? 0) },
@@ -112,6 +133,7 @@ export function parseForecast(body: string, place: string): WeatherResult | null
         precipPct: d?.precipitation_probability_max?.[0] ?? 0,
       },
       ...(days.length ? { days } : {}),
+      ...(hours.length ? { hours } : {}),
     };
   } catch { return null; }
 }
@@ -202,6 +224,71 @@ export function formatWeatherWhen(w: WeatherResult, question: string, units: "me
   const lines = inWindow.map((i) => formatDay(w.days![i]!, dayLabel(i, todayDow), units));
   const dropped = inWindow.length < idx.length ? `\n(Some days you asked about are beyond my ${w.days.length}-day forecast.)` : "";
   return `${w.place}:\n${lines.join("\n")}${dropped}`;
+}
+
+// Named time-of-day windows [startHour, endHour] inclusive-exclusive-ish on the local clock, used by
+// resolveHourWindow (hourly-rain-weather). "tonight"/"evening" run to end-of-day.
+const DAYPARTS: Record<string, [number, number]> = {
+  morning: [5, 12], afternoon: [12, 17], evening: [17, 22], tonight: [18, 24], night: [20, 24], noon: [11, 14],
+};
+
+/** Resolve a time-of-day phrase in a weather question to a local-hour window {startHour,endHour,label}
+ * plus whether it's for TODAY (vs "tomorrow morning"). Handles named dayparts, a specific "at 3pm"/"at
+ * 15:00", and "later"/"rest of the day"/"next few hours" (anchored to nowHour). Returns null when there's
+ * no time-of-day cue (caller falls back to the daily line). Pure + tested. */
+export function resolveHourWindow(text: string, nowHour: number): { startHour: number; endHour: number; label: string; tomorrow: boolean } | null {
+  const t = text.toLowerCase();
+  const tomorrow = /\btomorrow\b/.test(t);
+  // "at 3pm" / "at 15:00" / "3pm" / "at 3 o'clock" -> a tight 1-hour window around that hour.
+  const at = t.match(/\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/) || t.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\b/);
+  if (at) {
+    let hh = parseInt(at[1]!, 10);
+    const ap = at[3];
+    if (ap === "pm" && hh < 12) hh += 12; else if (ap === "am" && hh === 12) hh = 0;
+    if (hh >= 0 && hh <= 23) return { startHour: hh, endHour: hh + 1, label: fmtHour(hh), tomorrow };
+  }
+  for (const [name, [s, e]] of Object.entries(DAYPARTS)) {
+    if (new RegExp(`\\b${name}\\b`).test(t)) return { startHour: s, endHour: e, label: name, tomorrow };
+  }
+  if (/\b(later|rest of (?:the|today|the day)|next few hours|coming hours|this afternoon|soon)\b/.test(t)) {
+    return { startHour: nowHour, endHour: 24, label: "later today", tomorrow: false };
+  }
+  return null;
+}
+
+function fmtHour(h: number): string {
+  const ap = h < 12 ? "am" : "pm"; const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}${ap}`;
+}
+
+/** Answer a time-of-day rain/temp question (hourly-rain-weather) from the hourly block. Slices the hours
+ * matching the resolved window (today or tomorrow, on the location's local clock) and summarizes the rain
+ * chance + temp range. Returns null when there's no hourly data or no time-of-day cue (caller falls back
+ * to the daily forecast). `nowHour` is the location's current local hour (0..23) for "later today". */
+export function formatWeatherHourly(w: WeatherResult, question: string, nowHour: number, units: "metric" | "imperial" = "imperial"): string | null {
+  if (!w.hours?.length) return null;
+  const win = resolveHourWindow(question, nowHour);
+  if (!win) return null;
+  // Which local date: hours[0].date is today for the location; "tomorrow" bumps to the next date present.
+  const today = w.hours[0]!.date;
+  const dates = Array.from(new Set(w.hours.map((h) => h.date)));
+  const targetDate = win.tomorrow ? (dates[1] ?? today) : today;
+  const slice = w.hours.filter((h) => h.date === targetDate && h.hour >= win.startHour && h.hour < win.endHour);
+  if (!slice.length) return null;
+  const maxPrecip = Math.max(...slice.map((h) => h.precipPct));
+  const metric = units === "metric";
+  const temps = slice.map((h) => (metric ? h.tempC : h.tempF));
+  const lo = Math.round(Math.min(...temps)), hi = Math.round(Math.max(...temps));
+  const unit = metric ? "°C" : "°F";
+  const tempPart = lo === hi ? `${hi}${unit}` : `${lo}–${hi}${unit}`;
+  // Find the peak-rain hour so "will it rain this afternoon" can say WHEN it's likeliest.
+  const peak = slice.reduce((a, b) => (b.precipPct > a.precipPct ? b : a));
+  const when = win.tomorrow ? `tomorrow ${win.label}` : win.label;
+  let rainLine: string;
+  if (maxPrecip < 15) rainLine = `little to no rain (${maxPrecip}% at most)`;
+  else if (maxPrecip < 50) rainLine = `a slight chance of rain (up to ${maxPrecip}%, around ${fmtHour(peak.hour)})`;
+  else rainLine = `likely rain (up to ${maxPrecip}%, around ${fmtHour(peak.hour)})`;
+  return `${w.place} ${when}: ${rainLine}, ${tempPart}.`;
 }
 
 /**

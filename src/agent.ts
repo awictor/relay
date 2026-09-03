@@ -29,7 +29,7 @@ import { getSunTimes as sunFetch, formatSunTimes, sunPlace } from "./lib/suntime
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
-import { getWeather as fetchWeather, formatWeather, formatWeatherWhen } from "./lib/weather.js";
+import { getWeather as fetchWeather, formatWeather, formatWeatherWhen, formatWeatherHourly } from "./lib/weather.js";
 import { formatDraft, type Draft } from "./lib/compose.js";
 import { findNearby as fetchNearby, formatPlaces } from "./lib/places.js";
 import { getDirections as fetchDirections, formatRoute, routeMode } from "./lib/directions.js";
@@ -249,12 +249,12 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "get_weather",
-    description: "Current weather, today's high/low, AND up to a 7-day forecast for a place (keyless, instant). Use this — NOT web_search/scrape — for any \"weather\", \"forecast\", \"is it going to rain [tomorrow/this weekend]\", \"how hot is it\" question. Pass the city name; if the user gave no place but their location is known, omit place (it uses their saved coords). For a future day, pass `when` with the user's own words (\"tomorrow\", \"this weekend\", \"Saturday\", \"this week\") so I report the RIGHT day, not today.",
+    description: "Current weather, today's high/low, a per-hour rain-timing view, AND up to a 7-day forecast for a place (keyless, instant). Use this — NOT web_search/scrape — for any \"weather\", \"forecast\", \"will it rain [this afternoon/tonight/at 3pm/tomorrow]\", \"how hot is it\" question. Pass the city name; if the user gave no place but their location is known, omit place (it uses their saved coords). Pass `when` with the user's OWN words for a specific day OR time-of-day (\"tomorrow\", \"this weekend\", \"Saturday\", \"this afternoon\", \"tonight\", \"at 3pm\", \"later today\") so I report the RIGHT window, not just today's max.",
     parameters: {
       type: "object",
       properties: {
         place: { type: "string", description: "City/place name, e.g. \"Austin\" or \"Paris, France\". Omit to use the user's saved location." },
-        when: { type: "string", description: "Optional future-day phrase from the user's question: \"tomorrow\", \"this weekend\", \"Saturday\", \"this week\". Omit for current/today's weather." },
+        when: { type: "string", description: "Optional day OR time-of-day phrase from the user's question: \"tomorrow\", \"this weekend\", \"Saturday\", \"this afternoon\", \"tonight\", \"at 3pm\", \"later today\". Omit for current/today's weather." },
       },
       required: [],
     },
@@ -400,7 +400,7 @@ Tools:
 - "random" (request): flip a coin / roll dice / random number / pick from options. Use this — NEVER invent a "random" value yourself — for "flip a coin", "roll a d20", "random number 1-100", "pick one: X or Y".
 - "get_crypto" (coin): current crypto price + 24h change. Use this — NOT get_quote/web_search — for "price of bitcoin"/"what's ETH at"/"BTC price"/"how's doge doing". Pass the ticker or name (btc, eth, sol, doge).
 - "get_quote" (symbol): latest stock/equity price. Use this — NOT web_search/scrape — for any "what's Tesla at"/"AAPL price"/"how's NVDA doing" question; it's instant. Pass the ticker (AAPL, TSLA); non-US add a market suffix (VOD.UK).
-- "get_weather" (place?, when?): current weather, today's high/low, + up to a 7-day forecast. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location. For a future day, pass "when" with the user's words ("tomorrow", "this weekend", "Saturday") so the RIGHT day is reported, not today.
+- "get_weather" (place?, when?): current weather, today's high/low, per-hour rain timing, + up to a 7-day forecast. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location. Pass "when" with the user's words for a day OR time-of-day ("tomorrow", "this weekend", "Saturday", "this afternoon", "tonight", "at 3pm", "later today") so the RIGHT window is reported, not just today's max.
 - "get_suntimes" (request): sunrise/sunset/daylight for a place + day. Use this — NOT web_search — for "what time is sunset"/"when's sunrise tomorrow"/"is it dark by 7"/"how much daylight". Omit place to use the saved location; add "tomorrow" for the next day.
 - "find_nearby" (what, near?): find places near the user (coffee, pharmacy, ATM, gas...). Use this — NOT web_search — for "X near me"/"nearest Y". Omit near to use the user's location.
 - "directions" (to, from?, mode?): distance + travel time between places. Use this — NOT web_search — for "how far is X"/"directions to Y"/"how long to drive to Z". Omit from to start from the user's location.
@@ -1058,9 +1058,17 @@ export async function runAgent(
           // No explicit user pref -> infer °C/°F from the RESOLVED place's country (metric-imperial-infer)
           // instead of defaulting the whole world to °F. w.place carries the country tail from geocoding.
           const units = resolveUnits(deps.weatherUnits, w.place);
-          // A future-day question ("tomorrow", "this weekend", "Saturday") -> report THOSE days, not
-          // today's numbers (weather-multi-day). Falls back to the current-weather line otherwise.
-          const forecast = when ? formatWeatherWhen(w, when, units) : null;
+          // Resolution order for the user's phrasing (weather is one answer, most-specific wins):
+          //  1) a TIME-OF-DAY question ("rain this afternoon / tonight / at 3pm") -> the hourly window,
+          //     so the answer says WHEN, not a whole-day max (hourly-rain-weather);
+          //  2) a FUTURE-DAY question ("tomorrow", "this weekend", "Saturday") -> those days (weather-
+          //     multi-day); 3) else the current-weather line.
+          // The location's local hour (for "later today") comes from nowMs + the chat's tz offset.
+          const q = when || String(call.args.place ?? ""); // "when" carries the phrasing; fall back to place text
+          const local = new Date((deps.nowMs ?? Date.now()) + (deps.tzOffsetMin ?? 0) * 60_000);
+          const nowHour = local.getUTCHours();
+          const hourly = formatWeatherHourly(w, q, nowHour, units);
+          const forecast = hourly ?? (when ? formatWeatherWhen(w, when, units) : null);
           push("get_weather", `${forecast ?? formatWeather(w, units)} Report this to the user.`);
         } catch (e) {
           push("get_weather", `ERROR getting weather: ${e instanceof Error ? e.message : String(e)}`);
