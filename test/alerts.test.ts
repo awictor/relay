@@ -278,6 +278,16 @@ describe("feed-watch (new-item-feed-watch)", () => {
   it("feedItemKey is stable across phrasing/case/punctuation drift", () => {
     expect(feedItemKey("• Senior React Dev — Acme!")).toBe(feedItemKey("senior react dev acme"));
   });
+  it("two distinct long titles sharing a 120-char prefix get DISTINCT keys (feed-key-collision)", () => {
+    const prefix = "Senior Software Engineer, Distributed Systems Platform Team, Remote US, competitive salary and equity, apply now to "; // >120 chars
+    const a = prefix + "Acme Corporation";
+    const b = prefix + "Globex Corporation"; // same first 120 chars, different company
+    expect(feedItemKey(a)).not.toBe(feedItemKey(b)); // the second no longer collides + gets swallowed as "seen"
+    // A short title is unchanged (no hash appended) so existing stability still holds.
+    expect(feedItemKey("short title")).toBe("short title");
+    // Same long text still keys identically (dedup of a genuine repeat still works).
+    expect(feedItemKey(a)).toBe(feedItemKey("  " + a + "  "));
+  });
   it("store records + caps the seen-set, dropping oldest", () => {
     const s = new AlertStore({ file: tmpFile() });
     s.add(1, { name: "jobs", task: "roles", feed: true }, NOW);

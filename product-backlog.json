@@ -2165,9 +2165,45 @@
       "title": "feedItemKey truncates to 120 chars — distinct long titles collide, a new item never pings",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "feedItemKey = normalizeForCompare(item).slice(0,120). Two different feed entries sharing a 120-char prefix (verbose news/marketplace titles) get the same dedup key; the second is treated as already-seen and never surfaces — a job/listing/headline the user waits for silently never pings, reads as 'nothing new'.",
       "how": "Key on a stable id when present (the follow-feed path already does; the agent-driven checkAlert path keys title-only), else hash the FULL normalized title instead of a 120-char prefix slice. Offline test: two titles sharing a long prefix get distinct keys."
+    },
+    {
+      "id": "error-reply-false-fires-alerts",
+      "title": "error-shaped agent replies false-fire alert triggers + poison the baseline",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "alert-runner imports looksLikeErrorReply but only uses it to skip recording a time-series point — NOT in the trigger decision. A soft-failure reply like 'the page returned a 404' yields extractValue()=404 (not null, so the numberless guard misses it), satisfies a 'below 50000' predicate/threshold, and pings a false alarm showing an error string as the value; on a threshold it poisons the baseline so the next check re-fires. Hits watchlist members + follow-feed value paths too.",
+      "how": "Treat looksLikeErrorReply(value) as indeterminate (hold, keep last-good baseline, don't fire) in the same spots the degraded flag is already checked — conditionHolds predicate eval + the threshold changed()/numberless block + the watchlist changed() path. Offline test: an error-shaped reply doesn't fire + doesn't advance the baseline."
+    },
+    {
+      "id": "digest-error-as-content",
+      "title": "digest presents a soft-error reply as real briefing content",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "digest-runner only demotes a member to '(couldn't fetch)' when the agent throws or sets degraded. A non-degraded reply whose TEXT is a fetch failure ('btc: the page returned a 404') becomes a 'real' section verbatim, and the all-fail-vs-partial logic miscounts it as real content so the honest 'every source failed' notice never fires. User reads an error line as fact.",
+      "how": "Gate the digest member line with looksLikeErrorReply (already in alerts.ts) the same way degraded is — demote to '(couldn't fetch)' + count it as a failure for the all-fail/partial tally. Offline test: an error-text member is demoted + a digest of all-error members emits the all-failed notice."
+    },
+    {
+      "id": "alert-edit-persist-hedge",
+      "title": "alertEdit confirms \"Updated\" without checking the disk write",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "Every other write path surfaces lastSaveOk() + hedges (persist-bool-all-stores effort), but index.ts alertEdit returns {ok,name,summary} with no saved field + handler confirms unconditionally. A failed write silently reverts the trigger to the old threshold on restart — user watches the wrong number with no warning. AlertStore.updateTrigger already persists + lastSaveOk exists.",
+      "how": "Return saved from alertEdit (alerts.lastSaveOk()) + hedge in the handler ('I couldn't save that to disk') exactly like alertDefine/scheduleAdd. Offline test: a failed-write edit hedges."
+    },
+    {
+      "id": "monthly-yearly-reminders",
+      "title": "no monthly/yearly recurring reminders (\"pay rent on the 1st\", \"mom’s birthday every year\")",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "The schedule parser supports only once/daily/weekly/interval, so the two most universal recurring errands — monthly bills + annual birthdays — silently fall back to a one-time or misparsed reminder. Reminders are the core retention hook.",
+      "how": "Add 'monthly'/'yearly' ScheduleKinds + parse ('every month on the 1st', 'every year on <date>', 'monthly', 'annually') + a complete()/nextMonthlyMs/nextYearlyMs roll-forward reusing the absolute-date month roll + short-month clamp already in schedule.ts. Offline-testable with a fixed clock. New kind must thread the cue set + tz-restamp + dashboard."
     }
   ],
   "history": [
@@ -3018,6 +3054,10 @@
     {
       "item": "qr-code-tool",
       "note": "Added a keyless make_qr agent tool. New src/lib/qr.ts: parseQrRequest (pulls the payload after 'qr code for/of/:' or a bare 'qr <payload>', strips quotes/please, rejects a lone connective or >900-char payload), qrUrl (keyless api.qrserver.com, no signup), renderQr (fetch + PNG-signature validation, null on non-PNG/throw). Wired like screenshot: TOOLS[] entry + BrowserBackend.makeQr method + defaultBackend (renderQr+defaultFetchBytes) + dispatch sets the outgoing `photo` bytes + prompt line + HELP + sorted tool-list test. So 'make a QR code for <link>' / 'QR for my wifi' texts back a scannable image instead of a floundering browse. 10 new tests (8 lib + 2 dispatch); live-probed api.qrserver.com (200, image/png, valid PNG sig) so call-tested:true for the renderer, agent wiring offline-tested."
+    },
+    {
+      "item": "feed-key-collision",
+      "note": "Fixed feedItemKey truncating to 120 chars, which collided distinct long titles. Two different feed entries (verbose news/marketplace/job titles) sharing a 120-char prefix got the same dedup key, so the second was treated as already-seen + a genuinely-new item silently never pinged (read as 'nothing new'). feedItemKey now appends a short FNV-1a hash of the FULL normalized text when it exceeds 120 chars, so distinct long titles get distinct keys; a short title is unchanged (no hash) so existing phrasing-drift stability holds; a genuine repeat still keys identically. Both feed paths (alert-runner id-or-title key + the checkAlert list path) use feedItemKey so both are covered. 1 new test, suite 1583 green, tsc clean. call-tested:false (pure key fn)."
     }
   ],
   "audits": [
@@ -3197,6 +3237,9 @@
     },
     {
       "note": "3-lens audit (air-quality shipped, backlog down to owner-gated confirm-to-act). RELIABILITY (top): the DELETE path (cancel/forget/remove/clear) confirms success without checking the persist write — mirror of the save-side hedge; a failed write resurrects a cancelled reminder or a deleted privacy fact on restart. Also: a wall-clock `once` set before location is never re-stamped (fires wrong-hour); feedItemKey 120-char truncation collides distinct long titles (new item never pings). NEW-USER: nutrition/calorie lookup (M), QR code (S), secure password gen (S), flight status (partly owner-gated). POWER: inbound photo understanding (M), inbound voice transcription (M), inline-button one-tap actions (M), vacation/pause-all (S), trend sparkline in alert pings (S). Seeded 4: delete-persist-hedge (high/M), clocktime-once-restamp (high/S), qr-code (med/S), feed-key-collision (med/S). Parked the rest."
+    },
+    {
+      "note": "3-lens audit (feed-key-collision shipped, backlog down to owner-gated confirm-to-act). RELIABILITY (top): looksLikeErrorReply guards the chart series but NOT the alert trigger (error reply 'returned a 404' -> extractValue 404 -> false-fires + poisons baseline) NOR the digest (error text shown as real briefing content); alertEdit is the one write path missing the persist hedge; watchlist members never feed the time-series so trend/chart of a basket is永 empty (parked, M). NEW-USER: monthly/yearly reminders (S), keyless holiday lookup any country via Nager.Date (M), single-named-place hours (M), transit directions (L, hard keyless). POWER: 'what changed' diff in alert pings (S), saved-search new-listings watcher (M), personal portfolio aggregate (M), scheduled screenshot/PDF delivery (S). Seeded 4: error-reply-false-fires-alerts (high/S), digest-error-as-content (high/S), alert-edit-persist-hedge (med/S), monthly-yearly-reminders (high/S). Parked the rest."
     }
   ]
 }

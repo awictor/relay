@@ -100,10 +100,22 @@ export function extractListItems(reply: string): string[] {
   return [];
 }
 
+// Small deterministic string hash (FNV-1a, 32-bit -> base36). Used to disambiguate long feed keys.
+function shortHash(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36);
+}
+
 /** A stable-ish key for a feed item so re-phrasing/reordering doesn't read as new. Lowercased, punctuation
- * and volatile lead-ins stripped, whitespace collapsed (reuses normalizeForCompare). Exported for tests. */
+ * and volatile lead-ins stripped, whitespace collapsed (reuses normalizeForCompare). When the normalized
+ * text exceeds the 120-char prefix, a hash of the FULL text is appended (feed-key-collision): two distinct
+ * long titles sharing a 120-char prefix (verbose news/marketplace boilerplate) would otherwise collide, so
+ * the second is treated as already-seen and a genuinely-new item silently never pings. Exported for tests. */
 export function feedItemKey(item: string): string {
-  return normalizeForCompare(item).slice(0, 120);
+  const norm = normalizeForCompare(item);
+  if (norm.length <= 120) return norm;
+  return norm.slice(0, 120) + "#" + shortHash(norm);
 }
 
 // Out-of-stock language (checked first — takes precedence over any affirmative on the same page).
