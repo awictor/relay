@@ -17,6 +17,7 @@ import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { getWeather as fetchWeather, formatWeather } from "./lib/weather.js";
 import { formatDraft, type Draft } from "./lib/compose.js";
 import { findNearby as fetchNearby, formatPlaces } from "./lib/places.js";
+import { getDirections as fetchDirections, formatRoute, routeMode } from "./lib/directions.js";
 
 // Does the user's task ask for a keepable file (csv-export-compare)? A compare/extract then attaches
 // a CSV document instead of only pasting a truncated JSON blob in chat.
@@ -146,6 +147,19 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "directions",
+    description: "Distance + travel time between two places. Use this — NOT web_search/scrape — for \"how far is X\", \"directions to Y\", \"how long to drive to Z\". Omit `from` to start from the user's location. Modes: driving (default), walking, cycling.",
+    parameters: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: "Destination place/address, e.g. \"the airport\", \"Denver\"" },
+        from: { type: "string", description: "Start place. Omit to use the user's saved location." },
+        mode: { type: "string", description: "driving | walking | cycling (default driving)" },
+      },
+      required: ["to"],
+    },
+  },
+  {
     name: "compose",
     description: "Draft an email or text message for the user to review and SEND THEMSELVES (you never send it). Use when the user asks you to \"write/draft the email to X\", \"reply to this\", \"text Y that ...\". You write the body (and subject for email); this returns a copy block + a one-tap mailto:/sms: link. This is how Relay helps with correspondence without logging in or sending.",
     parameters: {
@@ -200,6 +214,7 @@ Tools:
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "get_weather" (place?): current weather + today's high/low. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location.
 - "find_nearby" (what, near?): find places near the user (coffee, pharmacy, ATM, gas...). Use this — NOT web_search — for "X near me"/"nearest Y". Omit near to use the user's location.
+- "directions" (to, from?, mode?): distance + travel time between places. Use this — NOT web_search — for "how far is X"/"directions to Y"/"how long to drive to Z". Omit from to start from the user's location.
 - "compose" (kind, to?, subject?, body): draft an email/text for the user to SEND THEMSELVES (you write the body; it returns a copy block + a mailto:/sms: link). Use for "write/draft/reply to..." asks. You never send — pass the returned draft to the user verbatim in reply.
 - "reply" (text): finish.
 
@@ -247,6 +262,9 @@ export interface BrowserBackend {
   // Optional: find nearby places (near-me-poi). Absent -> the find_nearby tool reports it's
   // unavailable. Returns [] on a bad area / fetch failure.
   findNearby?(opts: { what: string; lat?: number; lng?: number; near?: string; units?: "metric" | "imperial" }): Promise<import("./lib/places.js").Place[]>;
+  // Optional: distance + travel time between two places (directions-eta). Absent -> the directions tool
+  // reports it's unavailable. Returns null on a bad place / no route / fetch failure.
+  getDirections?(opts: { to: string; from?: string; fromLat?: number; fromLng?: number; mode?: "driving" | "walking" | "cycling"; units?: "metric" | "imperial" }): Promise<import("./lib/directions.js").Route | null>;
 }
 
 const FETCH_JSON_MAX_BYTES = 200_000;
@@ -312,7 +330,7 @@ async function defaultFetchJson(url: string): Promise<{ status: number; contentT
 async function defaultFetchText(url: string): Promise<string> {
   const res = await fetch(url, {
     method: "GET",
-    headers: { accept: "text/html,application/xml,*/*", "accept-language": "en" },
+    headers: { accept: "text/html,application/xml,application/json,*/*", "accept-language": "en", "user-agent": "relay-bot" },
     redirect: "follow",
     signal: AbortSignal.timeout(10000),
   });
@@ -342,6 +360,7 @@ const defaultBackend: BrowserBackend = {
   convertCurrency: (amount, from, to) => fxConvert(amount, from, to, defaultFetchText),
   getWeather: (opts) => fetchWeather(opts, defaultFetchText),
   findNearby: (opts) => fetchNearby(opts, defaultFetchTextPost),
+  getDirections: (opts) => fetchDirections(opts, defaultFetchText),
   createSession: () => anvil.createSession().then((s) => ({ id: s.id })),
   navigate: (id, url) => anvil.navigate(id, url),
   click: (id, sel) => anvil.click(id, sel),
@@ -632,6 +651,27 @@ export async function runAgent(
           push("find_nearby", `${formatPlaces(places, what, units)} Report this to the user.`);
         } catch (e) {
           push("find_nearby", `ERROR finding places: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "directions") {
+        if (!backend.getDirections) { push("directions", "ERROR: directions aren't available."); continue; }
+        const to = String(call.args.to ?? "").trim();
+        const from = String(call.args.from ?? "").trim();
+        if (!to) { push("directions", "ERROR: no destination given."); continue; }
+        if (!from && !deps.weatherCoords) { push("directions", "No start given and no saved location — ask where they're starting from."); continue; }
+        const units = deps.weatherUnits ?? "imperial";
+        const mode = (["driving", "walking", "cycling"].includes(String(call.args.mode)) ? String(call.args.mode) : routeMode(userText)) as "driving" | "walking" | "cycling";
+        try {
+          const opts = from
+            ? { to, from, mode, units }
+            : { to, fromLat: deps.weatherCoords!.lat, fromLng: deps.weatherCoords!.lng, mode, units };
+          const r = await backend.getDirections(opts);
+          if (!r) { push("directions", `Couldn't route to "${to}" (unknown place or no route). Try a more specific address.`); continue; }
+          push("directions", `${formatRoute(r, units)} Report this to the user.`);
+        } catch (e) {
+          push("directions", `ERROR getting directions: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

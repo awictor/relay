@@ -335,3 +335,46 @@ describe("runAgent find_nearby (near-me-poi)", () => {
     expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/no saved location/i);
   });
 });
+
+describe("runAgent directions (directions-eta)", () => {
+  function nb(over = {}) {
+    return {
+      scrape: async (url: string) => ({ title: "", content: "", url }),
+      createSession: async () => ({ id: "s" }), navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {}, readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {}, discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+      ...over,
+    };
+  }
+  it("routes from the user's coords to a named destination, no browser", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "directions", args: { to: "the airport" } } },
+      { toolCall: { name: "reply", args: { text: "~15 min drive." } } },
+    ]);
+    let seen: unknown = null;
+    const backend = nb({ getDirections: async (opts: unknown) => { seen = opts; return { fromLabel: "your location", toLabel: "the airport", distanceKm: 11, durationMin: 15, mode: "driving" }; } });
+    await runAgent("how far is the airport", { llm, backend, weatherCoords: { lat: 30, lng: -97 }, weatherUnits: "imperial" });
+    expect(seen).toMatchObject({ to: "the airport", fromLat: 30, fromLng: -97, mode: "driving" });
+    expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/your location → the airport: 6\.8 mi, ~15 min drive/);
+  });
+  it("infers walking mode from the phrasing", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "directions", args: { to: "the park" } } },
+      { toolCall: { name: "reply", args: { text: "ok" } } },
+    ]);
+    let mode = "";
+    const backend = nb({ getDirections: async (opts: { mode?: string }) => { mode = opts.mode ?? ""; return { fromLabel: "your location", toLabel: "the park", distanceKm: 1, durationMin: 12, mode: "walking" as const }; } });
+    await runAgent("how long to walk to the park", { llm, backend, weatherCoords: { lat: 30, lng: -97 } });
+    expect(mode).toBe("walking");
+  });
+  it("asks for a start when there's no location + no from", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "directions", args: { to: "Denver" } } },
+      { toolCall: { name: "reply", args: { text: "Where from?" } } },
+    ]);
+    const backend = nb({ getDirections: async () => null });
+    await runAgent("how far to Denver", { llm, backend });
+    expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/no saved location/i);
+  });
+});
