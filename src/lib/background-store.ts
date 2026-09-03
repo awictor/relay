@@ -11,6 +11,9 @@ export interface PendingErrand {
   text: string;    // the ORIGINAL user message, so a replay re-runs exactly what they asked
   startedAt: number;
   attempts?: number; // how many times we've started this errand (poison-task guard on crash-loop)
+  delivered?: boolean; // the result was already sent (bg-errand-double-fire): set right after the send,
+                       // BEFORE the store record is removed, so a crash in that gap doesn't make startup
+                       // recovery re-run + re-deliver a second (possibly different) unprompted answer.
 }
 
 // A safety cap: a pending errand older than this on startup is assumed abandoned/stuck (the process
@@ -55,6 +58,14 @@ export class BackgroundStore {
     return attempts;
   }
 
+  /** Mark an errand's result as DELIVERED (bg-errand-double-fire), persisted BEFORE remove() so a crash
+   * in the send→remove gap leaves a record that startup recovery skips instead of re-running. No-op if
+   * the errand is already gone / not found. */
+  markDelivered(id: string): void {
+    const e = this.items.find((x) => x.id === id);
+    if (e && !e.delivered) { e.delivered = true; this.persist(); }
+  }
+
   /** Remove an errand once it has settled (delivered or failed). No-op if already gone. */
   remove(id: string): void {
     const before = this.items.length;
@@ -78,8 +89,14 @@ export class BackgroundStore {
 export function planErrandReplay(
   errands: PendingErrand[],
   now: number,
-): Array<{ errand: PendingErrand; replay: boolean; notice: string }> {
+): Array<{ errand: PendingErrand; replay: boolean; notice: string | null }> {
   return errands.map((errand) => {
+    // Already delivered (bg-errand-double-fire): the result WAS sent; the crash hit between the send and
+    // the record's removal. Don't replay (that texts a duplicate/different answer) and send NO notice
+    // (the user already got the real result) — just drop the stale record. notice:null = say nothing.
+    if (errand.delivered) {
+      return { errand, replay: false, notice: null };
+    }
     // Poison guard: an errand that's already been started MAX times crashed the worker each time — stop
     // replaying it (else it re-crashes on every boot forever) and own up once.
     if ((errand.attempts ?? 1) >= MAX_ERRAND_ATTEMPTS) {

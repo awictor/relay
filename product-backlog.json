@@ -2597,7 +2597,7 @@
       "title": "background errand delivered twice after a crash (no delivered-dedup)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "If Relay crashes after sending a background-errand result but before bgErrandDone clears the record, startup recovery re-runs the whole errand and texts a second (possibly different) unprompted answer.",
       "how": "Mirror the once-schedule delivered flag: mark the errand delivered before the finally-clear, and skip replay of a delivered errand on startup recovery (planErrandReplay)."
     },
@@ -3644,6 +3644,10 @@
     {
       "item": "silent-watch-death-soft-fail",
       "note": "Fixed a watch silently dying when its source keeps failing (silent-watch-death). A degraded/error-shaped/empty-fetch read returns notify:false and never throws, so the runner counted it as success (resetFailures) and the failed-watch receipt (thrown-only) never fired — a dead watch looked armed for weeks. Added a softFail flag to AlertRunResult, set at the genuine can't-read holds (degraded reply, caught agent throw, looksLikeErrorReply, empty page fetch, unassessable weather) — distinct from a healthy silent hold (unchanged/condition-not-true/seed). Threaded through index alertCheck -> runner, which now counts a per-watch consecutive soft-fail streak (separate in-memory map) and sends the existing failStreakNotice receipt after FAIL_STREAK_NOTIFY, resetting on any clean read so an intermittent blip never trips it. 5 new tests (checkAlert flags degraded+error-reply softFail, clean hold doesn't; runner fires receipt at streak 3, resets on a clean read mid-streak). suite 1760 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "bg-errand-double-fire",
+      "note": "Fixed a background errand double-firing after a crash (bg-errand-double-fire). If the worker crashed in the gap between sending a 'get back to me' result and clearing its persisted record, startup recovery re-ran the whole errand + texted a second (possibly different) unprompted answer. Mirrored the once-schedule delivered flag: added PendingErrand.delivered + BackgroundStore.markDelivered (persists BEFORE remove); the handler calls bgErrandDelivered right BEFORE the success send, so a crash in the send->done gap leaves delivered:true on disk. planErrandReplay now returns {replay:false, notice:null} for a delivered errand (drop the stale record silently — the user already got the real result); index guards the null notice + still removes it. Marking before the send trades a rare skipped-redelivery-on-send-failure for never double-delivering (a duplicate ping is the annoying case). 2 new tests (markDelivered persists across a reload; planErrandReplay drops a delivered errand with no notice). suite 1762 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [

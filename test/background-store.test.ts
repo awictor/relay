@@ -37,6 +37,16 @@ describe("BackgroundStore (background-errand-persist)", () => {
     const s = new BackgroundStore({ file: tmp() });
     expect(s.add(1, "a", NOW)).not.toBe(s.add(1, "b", NOW));
   });
+  it("markDelivered sets delivered + persists, before removal (bg-errand-double-fire)", () => {
+    const f = tmp();
+    const s = new BackgroundStore({ file: f });
+    const id = s.add(1, "task", NOW);
+    s.markDelivered(id);
+    expect(s.list()[0]!.delivered).toBe(true);
+    // survives a "crash" between markDelivered and remove — the flag is on disk.
+    expect(new BackgroundStore({ file: f }).list()[0]!.delivered).toBe(true);
+    s.markDelivered("nope"); // no-op on unknown id
+  });
 });
 
 describe("planErrandReplay", () => {
@@ -51,6 +61,12 @@ describe("planErrandReplay", () => {
     expect(plan[1]!.replay).toBe(false);
     expect(plan[1]!.notice).toMatch(/got interrupted before finishing/i);
     expect(plan[1]!.notice).toMatch(/old task/);
+  });
+  it("a DELIVERED errand is not replayed and gets NO notice (bg-errand-double-fire)", () => {
+    const errands = [{ id: "d", chatId: 5, text: "sent already", startedAt: NOW - 60_000, delivered: true }];
+    const plan = planErrandReplay(errands, NOW);
+    expect(plan[0]!.replay).toBe(false);   // don't re-run -> no duplicate answer
+    expect(plan[0]!.notice).toBeNull();    // say nothing -> the user already got the real result
   });
   it("stops replaying a poison errand after MAX_ERRAND_ATTEMPTS (crash-loop guard)", () => {
     const poison = [{ id: "p", chatId: 5, text: "crashy task", startedAt: NOW, attempts: MAX_ERRAND_ATTEMPTS }];

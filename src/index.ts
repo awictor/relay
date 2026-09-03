@@ -763,6 +763,7 @@ const handle = createHandler({
   // On by default; set RELAY_BACKGROUND_ERRANDS=0 to force every task synchronous.
   enableBackgroundErrands: process.env.RELAY_BACKGROUND_ERRANDS !== "0",
   bgErrandAdd: (chatId, text) => backgroundStore.add(chatId, text, Date.now()),
+  bgErrandDelivered: (id) => backgroundStore.markDelivered(id), // bg-errand-double-fire: persist delivered before the send
   bgErrandDone: (id) => backgroundStore.remove(id),
 });
 
@@ -800,7 +801,9 @@ async function main() {
   if (interrupted.length) {
     console.log(`[background] recovering ${interrupted.length} interrupted errand(s)`);
     for (const { errand, replay, notice } of planErrandReplay(interrupted, Date.now())) {
-      void sendMessage(errand.chatId, notice).catch(() => {});
+      // notice:null (bg-errand-double-fire): an already-delivered errand — the result went out before the
+      // crash, so say nothing + just drop the stale record (below), no duplicate ping.
+      if (notice) void sendMessage(errand.chatId, notice).catch(() => {});
       if (replay) {
         // Bump attempts + keep the same id (reinstate is a no-op-if-present safety); then re-dispatch.
         backgroundStore.reinstate(errand, Date.now());

@@ -281,6 +281,10 @@ export interface HandlerDeps {
   // mid-run doesn't silently drop the promise; clear it when the run settles. Both optional; absent ->
   // errands run detached but aren't crash-recoverable (previous behavior).
   bgErrandAdd?: (chatId: number, text: string) => string; // returns an id
+  // Mark an errand's result delivered BEFORE the send (bg-errand-double-fire), so a crash in the
+  // send→done gap doesn't make startup recovery re-run + re-deliver it. Optional; absent -> the record is
+  // only cleared by bgErrandDone (a crash in the gap would double-fire — the previous behavior).
+  bgErrandDelivered?: (id: string) => void;
   bgErrandDone?: (id: string) => void;
   log?: (line: string) => void;
 }
@@ -392,6 +396,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           const nowHistory = deps.memoryGet(chatId);
           deps.memorySet(chatId, [...nowHistory, { role: "user", content: originalText }, { role: "assistant", content: parts.shown }]);
         }
+        // Mark delivered BEFORE the send (bg-errand-double-fire): if the process crashes in the tiny gap
+        // between sending and bgErrandDone below, the persisted record now carries delivered:true, so
+        // startup recovery drops it silently instead of re-running + texting a second answer. (Marking
+        // before rather than after means at worst we skip re-delivering a send that failed — far better
+        // than double-delivering; a failed send is the rare case, a duplicate ping is the annoying one.)
+        deps.bgErrandDelivered?.(errandId);
         await deps.sendMessage(chatId, out);
         deps.recordTurn({ steps: r.steps, tools: r.tools, elapsedMs: deps.now() - startedAt, ok: !r.degraded, degraded: r.degraded });
       } catch (e) {
