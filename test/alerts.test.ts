@@ -242,6 +242,31 @@ describe("changed", () => {
     expect(changed("The top story is Apple buys OpenAI.", "The top story is Google buys Anthropic.")).toBe(true);
     expect(changed("In stock", "Sold out")).toBe(true);
   });
+  // no-threshold-watch-firehose: a bare "watch bitcoin price" (no threshold) must NOT ping on sub-percent
+  // jitter — alerts skip the anti-spam cap + quiet hours, so a nonzero-delta rule trained users to mute it.
+  it("no threshold: ignores a sub-deadband jitter but fires a real move", () => {
+    expect(changed("$65,000", "$65,100")).toBe(false); // +100 = 0.15% < 0.5% band -> jitter, no ping
+    expect(changed("$65,000", "$65,010")).toBe(false); // +10 = tiny tick
+    expect(changed("$65,000", "$66,000")).toBe(true);  // +1000 = 1.5% >= band -> real move
+  });
+  it("no threshold: a small-integer count still fires (band scales, stays below 1)", () => {
+    expect(changed("5 items left", "6 items left")).toBe(true);  // 0.5% of 5 = 0.025; +1 clears it
+    expect(changed("3 in stock", "0 in stock")).toBe(true);      // sold out
+  });
+  it("no threshold: a move off a zero baseline always fires (band is 0 at 0)", () => {
+    expect(changed("0 available", "2 available")).toBe(true);
+  });
+  it("RELAY_ALERT_DEADBAND_PCT tunes the band", () => {
+    const prev = process.env.RELAY_ALERT_DEADBAND_PCT;
+    process.env.RELAY_ALERT_DEADBAND_PCT = "5"; // widen to 5%
+    try {
+      expect(changed("$100", "$103")).toBe(false); // +3% < 5%
+      expect(changed("$100", "$110")).toBe(true);  // +10% >= 5%
+    } finally {
+      if (prev === undefined) delete process.env.RELAY_ALERT_DEADBAND_PCT;
+      else process.env.RELAY_ALERT_DEADBAND_PCT = prev;
+    }
+  });
 });
 
 describe("normalizeForCompare", () => {

@@ -517,17 +517,32 @@ export function normalizeForCompare(s: string): string {
 /**
  * Did the value change enough to notify? Compares the SALIENT VALUE, not raw prose — so a reply
  * whose wording drifted but whose tracked number is identical does NOT false-fire, and a real move
- * always does. If BOTH replies carry a value: changed iff |new - prev| >= (threshold || any nonzero
- * delta). If neither is numeric: compare NORMALIZED text (lead-ins/timestamps/punctuation stripped)
- * so pure phrasing drift on a "watch top HN story" alert doesn't ping every check — only a real
- * content change ("in stock" vs "sold out") fires. First run (no prev) is handled by the caller.
+ * always does. If BOTH replies carry a value: with an explicit threshold, changed iff |new - prev| >=
+ * threshold. WITHOUT a threshold, changed iff the move clears a small RELATIVE deadband (default 0.5%
+ * of the previous value, env RELAY_ALERT_DEADBAND_PCT) — a bare "watch bitcoin price" must NOT ping on
+ * every sub-cent tick (no-threshold-watch-firehose): alerts skip the anti-spam cap + quiet hours, so a
+ * volatile price with a nonzero-delta rule trained users to mute the bot. The relative band still fires
+ * a small-integer count (0.5% of 5 ≈ 0.025, so 5→6 clears it) and any move off zero. If neither side is
+ * numeric: compare NORMALIZED text (lead-ins/timestamps/punctuation stripped) so pure phrasing drift on
+ * a "watch top HN story" alert doesn't ping every check — only a real content change ("in stock" vs
+ * "sold out") fires. First run (no prev) is handled by the caller.
  */
+// Default no-threshold deadband as a FRACTION of the previous value. 0.5% filters price/quote jitter
+// while staying far below any move a watcher would care about; env-tunable (given in PERCENT).
+const DEFAULT_DEADBAND_PCT = 0.5;
+function noThresholdBand(prev: number): number {
+  const pct = Number(process.env.RELAY_ALERT_DEADBAND_PCT);
+  const usePct = Number.isFinite(pct) && pct >= 0 ? pct : DEFAULT_DEADBAND_PCT;
+  return Math.abs(prev) * (usePct / 100);
+}
 export function changed(prev: string, next: string, threshold?: number, hint?: string): boolean {
   const a = prev.trim(), b = next.trim();
   const pv = extractValue(a, hint), nv = extractValue(b, hint);
   if (pv !== null && nv !== null) {
     const delta = Math.abs(nv - pv);
-    return threshold && threshold > 0 ? delta >= threshold : delta > 0;
+    // Explicit threshold wins; otherwise require the move to clear the relative deadband (a move off a
+    // zero baseline has band 0, so it still fires — 0 → anything is always meaningful).
+    return threshold && threshold > 0 ? delta >= threshold : delta > noThresholdBand(pv);
   }
   // No comparable number on one/both sides — compare the MEANINGFUL content, not phrasing/whitespace.
   return normalizeForCompare(a) !== normalizeForCompare(b);

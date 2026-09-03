@@ -2816,6 +2816,33 @@
       "status": "done",
       "why": "digest-runner returns an all-failed note as a normal string; the runner sends it + completes ok:true, so the softFail/fail-streak machinery never engages. A genuinely dead digest (bad recipe, permanently blocked URL) keeps sending 'I couldn't put your briefing together this time, I'll try next run' every morning with no escalation, and if THAT send fails it's silently lost.",
       "how": "Have digest-runner signal all-failed as a soft-fail (like watches) so the runner streaks it + sends a failed-watch-style receipt after N ('your <name> briefing has failed K days — check its recipes'); gate the note send on delivery."
+    },
+    {
+      "id": "no-threshold-watch-firehose",
+      "title": "No-threshold numeric watch pings on any nonzero move",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "changed() returned delta>0 with no threshold; a bare 'watch bitcoin price' fires on every sub-cent tick, and alerts skip anti-spam + quiet hours -> firehose trains the user to mute the bot.",
+      "how": "Relative deadband (default 0.5%, env RELAY_ALERT_DEADBAND_PCT) for no-threshold numeric compares; move off zero always fires; explicit threshold still wins; text-diff path unchanged."
+    },
+    {
+      "id": "bare-greeting-skips-menu",
+      "title": "Plain greeting skips the START menu, burns a cold agent turn",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "START/onboarding buttons only fire on /start; 'hi'/'hello'/'what can you do' route straight to the agent, so most users never see the tap-to-try examples on their real first message.",
+      "how": "Detect a bare greeting/help-ask in the handler (before the agent dispatch) and reply with the START menu + try-buttons instead of a cold agent run."
+    },
+    {
+      "id": "corrupt-notice-lost-if-send-fails",
+      "title": "Corrupt-store notice consumed even if its send fails",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "handler drains corruptNotice() on read but sends best-effort with .catch(()=>{}); a single failed send permanently loses the only signal that saved reminders/alerts/recipes vanished.",
+      "how": "Gate the drain on delivery: only clear the pending corrupt-notice once the send resolves truthy (mirror the send-never-throws-dead-commit-guard pattern), else re-surface next inbound."
     }
   ],
   "history": [
@@ -3942,6 +3969,10 @@
     {
       "id": "digest-all-failed-bypasses-gate",
       "note": "Digest whose sources ALL fail now returns a distinct {allFailed,note} outcome instead of a plain string; scheduler streaks it like a watch soft-fail (silent per fire, escalation receipt at N, gated on delivery) so a dead digest no longer pings the reassuring 'I'll try next run' note every morning with no escalation. /run + callback still show the note (user asked now). +2 tests, 1897 green."
+    },
+    {
+      "id": "no-threshold-watch-firehose",
+      "note": "changed() no longer fires on any nonzero delta for a no-threshold numeric watch; requires clearing a relative deadband (default 0.5%, env RELAY_ALERT_DEADBAND_PCT). Kills sub-cent price-jitter pings (alerts skip quiet hours + anti-spam cap); small-int counts + moves off zero still fire; explicit threshold + text-diff unchanged. +4 tests, 1901 green. .env.example parity added."
     }
   ],
   "audits": [
@@ -4187,6 +4218,9 @@
     },
     {
       "note": "No audit this run — built from the prior queue (scheduled-chain-partial-unflagged). Refilled by promoting a parked Agent-B finding: digest-all-failed-bypasses-gate (medium/M). Remaining: digest-all-failed-bypasses-gate, callback-edit-in-place(low), confirm-to-act(owner-gated)."
+    },
+    {
+      "note": "Backlog dry (only owner-gated + low). 3-agent audit: A(new-user)=bare-greeting-skips-menu, tz-guess-from-city, weather-needs-location one-tap; B(reliability)=no-threshold-watch-firehose, extractValue mis-picks number, corrupt-notice-lost-if-send-fails, post-send-timeout double-ping, 6k truncation answered as fact; C(power)=per-user credentialed browsing, SMTP send, form autofill vault, schedule-a-chain, read-it-later. Seeded top 3 non-owner: no-threshold-watch-firehose(built), bare-greeting-skips-menu, corrupt-notice-lost-if-send-fails."
     }
   ]
 }
