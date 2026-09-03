@@ -2525,7 +2525,7 @@
       "title": "sports is today-only — 'when do the Lakers play next' returns nothing",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A very common casual sports ask ('next Arsenal game', 'when do the Lakers play next') gets today's score or 'not playing today', never the upcoming fixture — a high-frequency errand goes unanswered.",
       "how": "scores.ts already hits the keyless ESPN scoreboard which has scheduled/'pre' games; surface the next scheduled game (date/time/opponent) when there's no game today or the user asks 'next'. Keyless, extends an existing path."
     }
@@ -3522,6 +3522,10 @@
     {
       "item": "quiet-hours-persistent-alerts",
       "note": "Quiet hours no longer let a persistent watch buzz at 3am (quiet-hours-persistent-alerts). The blanket alert-exemption from the quiet-hours defer was too broad: it exists so an EDGE-triggered crossing (value/predicate/weather 'below 50k' that can revert overnight) is still evaluated on cadence — but it also let a PERSISTENT alert (a new feed item, a page-diff, still there at quiet-end) wake the user at 3am for no reason. Added an alertQuietDeferrable(chatId,name) classifier dep; index returns true for feed/feedSource/pageUrl watches (persistent) and false for value/predicate/weather/watchlist (edge). The runner now defers a persistent alert to quiet-end like any schedule (nothing lost, no 3am buzz) while keeping edge-triggered alerts exempt (checked on cadence so a reverting crossing isn't missed). Unknown/absent -> edge default (keep exempt, prior behavior). 2 new tests (persistent defers to quiet-end then sends; edge stays exempt even with a classifier wired); existing edge-exempt + non-alert-defers guards unchanged. suite 1720 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "sports-next-game",
+      "note": "Sports is no longer today-only (sports-next-game): 'when do the Lakers play next', 'next Arsenal game', 'upcoming NFL' now return the next scheduled fixture. Live-probed the keyless ESPN cdn scoreboard — it accepts a dates=YYYYMMDD-YYYYMMDD range that returns scheduled 'pre' games with ISO kickoff dates. scores.ts: added date to GameScore + parse it (event.date/competition.date), wantsNextGame() intent detector, nextGameUrl() (forward now-1d..now+45d range), pickNextGame() (soonest not-final game >= now-3h), getNextGame() (resolve league -> fetch range -> team-filter with the same not-playing guard so another team's game isn't returned -> soonest), formatNextGame(). agent.ts get_scores dispatch: a 'next'/'upcoming'/'when do they play' request routes to getNextGame(nowMs); AND a team with no game today now auto-looks-up its next game instead of dead-ending. get_scores tool desc + prompt menu updated; new getNextGame backend method + defaultBackend wiring (no new TOOLS entry, so pinned-tool tests unaffected). 8 new tests (intent detect, url range, pick soonest/none, getNextGame team-filter + none + unresolvable, format). suite 1728 green, tsc clean. Live-probed data source (ESPN range 200, scheduled games present) so call-tested:true for the source; runner/agent path offline-tested."
     }
   ],
   "audits": [

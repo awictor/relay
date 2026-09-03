@@ -1,13 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { resolveLeague, scoreboardUrl, parseScoreboard, filterByTeam, formatGame, formatScores, getScores } from "../src/lib/scores.js";
+import { resolveLeague, scoreboardUrl, parseScoreboard, filterByTeam, formatGame, formatScores, getScores,
+  wantsNextGame, nextGameUrl, pickNextGame, getNextGame, formatNextGame } from "../src/lib/scores.js";
 
 // Minimal ESPN cdn.espn.com scoreboard shape: content.sbData.events[].competitions[0].competitors[].
 function board(events: unknown[]) {
   return JSON.stringify({ content: { sbData: { events } } });
 }
-const game = (opts: { home: string; away: string; hs?: string; as?: string; state?: string; detail?: string }) => ({
+const game = (opts: { home: string; away: string; hs?: string; as?: string; state?: string; detail?: string; date?: string }) => ({
   status: { type: { state: opts.state ?? "post", shortDetail: opts.detail ?? "Final" } },
+  ...(opts.date ? { date: opts.date } : {}),
   competitions: [{
+    ...(opts.date ? { date: opts.date } : {}),
     competitors: [
       { homeAway: "home", score: opts.hs, team: { shortDisplayName: opts.home, displayName: opts.home, abbreviation: opts.home.slice(0, 3).toUpperCase() } },
       { homeAway: "away", score: opts.as, team: { shortDisplayName: opts.away, displayName: opts.away, abbreviation: opts.away.slice(0, 3).toUpperCase() } },
@@ -138,5 +141,72 @@ describe("getScores", () => {
       board([game({ home: "Celtics", away: "Heat", hs: "98", as: "90" }), game({ home: "Suns", away: "Kings", hs: "1", as: "2" })]));
     expect(r!.teamNotPlaying).toBeUndefined();
     expect(r!.games).toHaveLength(2);
+  });
+});
+
+describe("next game (sports-next-game)", () => {
+  const NOW = Date.parse("2026-09-10T12:00Z");
+
+  it("wantsNextGame detects upcoming-fixture phrasings, not a plain score ask", () => {
+    for (const q of ["when do the Lakers play next", "next Arsenal game", "when's the next NFL game",
+      "upcoming premier league games", "when do the Celtics play", "Lakers schedule"]) {
+      expect(wantsNextGame(q)).toBe(true);
+    }
+    for (const q of ["did the Lakers win", "Man City score", "NBA scores tonight"]) {
+      expect(wantsNextGame(q)).toBe(false);
+    }
+  });
+
+  it("nextGameUrl adds a forward date range to the league scoreboard", () => {
+    const url = nextGameUrl({ sport: "basketball", league: "nba", name: "NBA" }, NOW, 30);
+    expect(url).toContain("/nba/scoreboard");
+    expect(url).toMatch(/dates=20260909-20261010/); // now-1d .. now+30d (UTC)
+  });
+
+  it("pickNextGame returns the soonest not-yet-final game at/after now", () => {
+    const games = parseScoreboard(board([
+      game({ home: "Celtics", away: "Lakers", state: "post", detail: "Final", date: "2026-09-08T00:00Z" }), // past
+      game({ home: "Suns", away: "Lakers", state: "pre", detail: "9/15 10pm", date: "2026-09-15T02:00Z" }), // later
+      game({ home: "Kings", away: "Lakers", state: "pre", detail: "9/12 10pm", date: "2026-09-12T02:00Z" }), // sooner
+    ]));
+    const next = pickNextGame(games, NOW)!;
+    expect(next.home).toBe("Kings"); // the 9/12 game, not the 9/15 one, and not the finished 9/8
+  });
+
+  it("pickNextGame returns null when everything is in the past / final", () => {
+    const games = parseScoreboard(board([
+      game({ home: "Celtics", away: "Lakers", state: "post", detail: "Final", date: "2026-09-08T00:00Z" }),
+    ]));
+    expect(pickNextGame(games, NOW)).toBeNull();
+  });
+
+  it("getNextGame fetches a forward range + returns the team's next fixture", async () => {
+    let seen = "";
+    const r = await getNextGame("when do the Lakers play next", NOW, async (u) => {
+      seen = u;
+      return board([
+        game({ home: "Kings", away: "Lakers", state: "pre", detail: "9/12 10pm ET", date: "2026-09-12T02:00Z" }),
+        game({ home: "Heat", away: "Knicks", state: "pre", detail: "9/11 8pm ET", date: "2026-09-11T00:00Z" }), // sooner but not Lakers
+      ]);
+    });
+    expect(seen).toMatch(/dates=\d{8}-\d{8}/);
+    expect(r!.leagueName).toBe("NBA");
+    expect(r!.game!.away).toBe("Lakers"); // filtered to the team, not the sooner non-Lakers game
+  });
+
+  it("getNextGame -> game:null when the named team has nothing scheduled in the horizon", async () => {
+    const r = await getNextGame("when do the Lakers play next", NOW, async () =>
+      board([game({ home: "Heat", away: "Knicks", state: "pre", detail: "9/11", date: "2026-09-11T00:00Z" })]));
+    expect(r!.game).toBeNull(); // Lakers matched nothing -> no other team's game returned
+  });
+
+  it("getNextGame returns null for an unresolvable league", async () => {
+    expect(await getNextGame("next cricket match", NOW, async () => board([]))).toBeNull();
+  });
+
+  it("formatNextGame renders the fixture or a none line", () => {
+    expect(formatNextGame("NBA", { home: "Kings", away: "Lakers", state: "pre", detail: "9/12 10pm ET" }))
+      .toBe("Next up (NBA): Lakers @ Kings — 9/12 10pm ET");
+    expect(formatNextGame("NBA", null)).toMatch(/No upcoming NBA game/);
   });
 });

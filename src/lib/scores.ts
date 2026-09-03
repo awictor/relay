@@ -10,6 +10,7 @@ export interface GameScore {
   homeScore?: number; awayScore?: number;
   state: "pre" | "in" | "post";      // scheduled / live / final
   detail: string;                    // "Final", "Q3 4:21", "10/3 - 7:00 PM EDT"
+  date?: string;                     // ISO kickoff, e.g. "2026-09-13T17:00Z" — used to pick the NEXT game
 }
 
 // Common league words -> ESPN {sport, league} path. Keyed lowercased. A user says "NBA scores" or names
@@ -85,7 +86,8 @@ export function parseScoreboard(body: string): GameScore[] {
     const obj = JSON.parse(body) as {
       content?: { sbData?: { events?: Array<{
         status?: { type?: { state?: string; shortDetail?: string } };
-        competitions?: Array<{ competitors?: Array<{ homeAway?: string; score?: string; team?: { displayName?: string; shortDisplayName?: string; abbreviation?: string } }> }>;
+        date?: string;
+        competitions?: Array<{ date?: string; competitors?: Array<{ homeAway?: string; score?: string; team?: { displayName?: string; shortDisplayName?: string; abbreviation?: string } }> }>;
       }> } };
     };
     const events = obj.content?.sbData?.events ?? [];
@@ -107,6 +109,7 @@ export function parseScoreboard(body: string): GameScore[] {
         ...(Number.isFinite(as) ? { awayScore: as } : {}),
         state,
         detail: e.status?.type?.shortDetail ?? (state === "post" ? "Final" : ""),
+        ...(e.date || comp?.date ? { date: e.date || comp?.date } : {}),
       });
     }
     return out;
@@ -168,6 +171,78 @@ export async function getScores(
  * was resolved) — the trigger for the team-not-playing guard. */
 function namesKnownTeam(query: string): boolean {
   return TEAM_LEAGUE.some(([re]) => re.test(query));
+}
+
+// --- Next game (sports-next-game): "when do the Lakers play next", "next Arsenal game", "when's the
+// next NFL game" — today's scoreboard only shows today, so this looks FORWARD over a date range and
+// returns the soonest scheduled ("pre") game. Reuses the same keyless ESPN scoreboard, which accepts a
+// dates=YYYYMMDD-YYYYMMDD range param returning scheduled fixtures. ---
+
+/** True if the query is asking for an UPCOMING game rather than a current/past score. Matches "next",
+ * "when do/does ... play", "when is/are ... playing", "when's the next", "upcoming", "schedule". */
+export function wantsNextGame(query: string): boolean {
+  const q = String(query ?? "").toLowerCase();
+  return /\bnext\b/.test(q)
+    || /\bupcoming\b/.test(q)
+    || /\bschedule\b/.test(q)
+    || /\bwhen\b.*\b(play|playing|game|match|fixture|on)\b/.test(q)
+    || /\b(play|playing|game|match|fixture)\b.*\bnext\b/.test(q);
+}
+
+// Format an epoch-ms day as ESPN's YYYYMMDD (UTC — the scoreboard buckets by UTC day; a ±1 day window
+// on each end covers tz skew so a game late tonight local isn't missed).
+function yyyymmdd(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}`;
+}
+
+/** The keyless scoreboard URL for a forward date RANGE [now-1d, now+horizonDays], so scheduled fixtures
+ * are returned (today's default URL only covers today). Exported for tests. */
+export function nextGameUrl(ref: LeagueRef, nowMs: number, horizonDays = 45): string {
+  const base = scoreboardUrl(ref);
+  const from = yyyymmdd(nowMs - 24 * 3_600_000);
+  const to = yyyymmdd(nowMs + horizonDays * 24 * 3_600_000);
+  return `${base}&dates=${from}-${to}`;
+}
+
+/** From a slate, pick the SOONEST game that hasn't finished (scheduled or live) at/after nowMs. A game
+ * with no parseable date is skipped. Returns null when there's no upcoming game. Exported for tests. */
+export function pickNextGame(games: GameScore[], nowMs: number): GameScore | null {
+  const upcoming = games
+    .filter((g) => g.state !== "post" && g.date && !Number.isNaN(Date.parse(g.date)))
+    .filter((g) => Date.parse(g.date!) >= nowMs - 3 * 3_600_000) // a game in progress (started up to 3h ago) still counts as "next"
+    .sort((a, b) => Date.parse(a.date!) - Date.parse(b.date!));
+  return upcoming[0] ?? null;
+}
+
+/**
+ * Fetch the NEXT scheduled game for a league/team query. Resolves the league, fetches a forward date
+ * range, filters to the named team, and returns the soonest upcoming game. Returns null when the league
+ * can't be resolved / fetch fails; { game: null } with teamName set when the team has no upcoming game
+ * in the horizon (so the caller can say "nothing scheduled soon"). `nowMs` is injected for testability.
+ */
+export async function getNextGame(
+  query: string,
+  nowMs: number,
+  fetchText: (url: string) => Promise<string>,
+): Promise<{ leagueName: string; game: GameScore | null } | null> {
+  const ref = resolveLeague(query);
+  if (!ref) return null;
+  try {
+    const all = parseScoreboard(await fetchText(nextGameUrl(ref, nowMs)));
+    const scoped = namesKnownTeam(query) || ref.viaTeam ? filterByTeam(all, query) : all;
+    // filterByTeam returns ALL when the team matched nothing — guard so we don't return another team's
+    // game as "your team's next game". Only trust the team filter when it actually narrowed the slate.
+    const narrowed = namesKnownTeam(query) && !teamMatchedAny(all, query) ? [] : scoped;
+    return { leagueName: ref.name, game: pickNextGame(narrowed, nowMs) };
+  } catch { return null; }
+}
+
+/** Format the next-game answer line. */
+export function formatNextGame(leagueName: string, game: GameScore | null): string {
+  if (!game) return `No upcoming ${leagueName} game found in the next several weeks.`;
+  return `Next up (${leagueName}): ${game.away} @ ${game.home} — ${game.detail || game.date || "TBD"}`;
 }
 
 /** True if any game on the slate actually involves the team named in the query. */

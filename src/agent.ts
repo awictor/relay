@@ -19,7 +19,7 @@ import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
 import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
 import { parseWorldClock, runWorldClock } from "./lib/worldclock.js";
 import { runDateCalc, type Ymd } from "./lib/datecalc.js";
-import { getScores as scoresFetch, formatScores } from "./lib/scores.js";
+import { getScores as scoresFetch, formatScores, getNextGame as nextGameFetch, formatNextGame, wantsNextGame } from "./lib/scores.js";
 import { getNews as newsFetch, formatNews } from "./lib/news.js";
 import { getFun as funFetch } from "./lib/fun.js";
 import { calc, formatResult } from "./lib/calc.js";
@@ -214,7 +214,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "get_scores",
-    description: "Get today's sports scores/schedule for a league or team (no key, instant). Use this — NOT web_search/scrape — for \"did the Lakers win\", \"Man City score\", \"NBA scores\", \"who's playing tonight\", \"is the game on\". Pass the user's request verbatim (a team or league name). Covers NBA/NFL/MLB/NHL/NCAA + major soccer leagues.",
+    description: "Get sports scores/schedule for a league or team (no key, instant). Use this — NOT web_search/scrape — for \"did the Lakers win\", \"Man City score\", \"NBA scores\", \"who's playing tonight\", \"is the game on\", AND for upcoming games: \"when do the Lakers play next\", \"next Arsenal game\", \"upcoming NFL games\". Pass the user's request verbatim (a team or league name); include their \"next\"/\"upcoming\"/\"when do they play\" wording so it returns the next fixture. Covers NBA/NFL/MLB/NHL/NCAA + major soccer leagues.",
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The user's sports question verbatim, e.g. \"did the Lakers win\" or \"Premier League scores\"." } },
@@ -432,7 +432,7 @@ Tools:
 - "calculate" (expression): compute arithmetic/financial math EXACTLY. Use for chained math, bill-splits, tips, percentages, loan payments — anything past a trivial one-step sum (don't do it in your head, that's silently wrong). loanpayment(principal, annualRatePct, years) for a monthly payment.
 - "get_news" (topic?): today's top news headlines, or about a topic. Use this — NOT web_search — for "what's the news"/"top headlines"/"news about X"/"latest on Y". Omit topic for general top stories.
 - "get_fun" (request): a joke, fun fact, or trivia question. Use this — NOT web_search or your own memory — for "tell me a joke"/"fun fact"/"trivia"/"quiz me". Pass the request verbatim; I pick joke/fact/trivia.
-- "get_scores" (request): today's sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight". Pass the request verbatim. Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
+- "get_scores" (request): sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight" AND upcoming games "when do the Lakers play next"/"next Arsenal game"/"upcoming NFL". Pass the request verbatim (keep their "next"/"when do they play" wording). Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
 - "define" (word): a word's definition, pronunciation, and synonyms. Use this — NOT web_search/scrape — for "what does X mean"/"define X"/"synonyms for X"/"how do you spell X". English words only; pass the single word.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
@@ -505,6 +505,10 @@ export interface BrowserBackend {
   // Optional: today's sports scores for a league/team (sports-scores-tool). Absent -> the get_scores
   // tool reports it's unavailable. Returns null on an unknown league / fetch failure.
   getScores?(query: string): Promise<{ leagueName: string; games: import("./lib/scores.js").GameScore[]; teamNotPlaying?: boolean } | null>;
+  // Optional: the NEXT scheduled game for a league/team (sports-next-game). `nowMs` anchors the forward
+  // date range. Absent -> the get_scores tool answers today-only. Returns null on unknown league / fetch
+  // failure; { game: null } when nothing is scheduled in the horizon.
+  getNextGame?(query: string, nowMs: number): Promise<{ leagueName: string; game: import("./lib/scores.js").GameScore | null } | null>;
   // Optional: today's top news headlines, or about a topic (get-news-tool). Absent -> the get_news tool
   // reports it's unavailable. Returns null on a fetch failure / empty parse.
   getNews?(topic?: string): Promise<{ topic?: string; headlines: string[] } | null>;
@@ -637,6 +641,7 @@ const defaultBackend: BrowserBackend = {
   getCrypto: (coin) => cryptoFetch(coin, defaultFetchText),
   defineWord: (word) => dictFetch(word, defaultFetchText),
   getScores: (query) => scoresFetch(query, defaultFetchText),
+  getNextGame: (query, nowMs) => nextGameFetch(query, nowMs, defaultFetchText),
   getNews: (topic) => newsFetch(topic, defaultFetchText),
   getFun: (request) => funFetch(request, defaultFetchText),
   getMeals: (request) => { const req = parseMealRequest(request); return req ? getMeals(req, defaultFetchText) : Promise.resolve(null); },
@@ -1082,10 +1087,28 @@ export async function runAgent(
       if (call.name === "get_scores") {
         if (!backend.getScores) { push("get_scores", "ERROR: sports scores aren't available."); continue; }
         const request = String(call.args.request ?? "").trim();
+        const nowForScores = deps.nowMs ?? Date.now();
         try {
+          // "when do the Lakers play next" / "next Arsenal game" / "upcoming NFL" -> the NEXT scheduled
+          // game, not today's slate (sports-next-game). Today's scoreboard only covers today, so a
+          // forward date range is needed. Falls back to today's scores if the next-game tool is absent.
+          if (wantsNextGame(request) && backend.getNextGame) {
+            const n = await backend.getNextGame(request, nowForScores);
+            if (!n) { push("get_scores", `I don't cover that league/team with my scores tool (I do NBA/NFL/MLB/NHL/NCAA + major soccer). Try web_search for "${request}", or name the league.`); continue; }
+            push("get_scores", `${formatNextGame(n.leagueName, n.game)}\n\nReport this to the user (the upcoming game + its date/time).`);
+            continue;
+          }
           const r = await backend.getScores(request);
           if (!r) { push("get_scores", `I don't cover that league/team with my scores tool (I do NBA/NFL/MLB/NHL/NCAA + major soccer). Try web_search for "${request}", or name the league.`); continue; }
-          if (r.teamNotPlaying) { push("get_scores", `That team has no ${r.leagueName} game today. Tell the user they're not playing today (do NOT list other teams' games), and offer to check their next game or another team.`); continue; }
+          if (r.teamNotPlaying) {
+            // No game today — proactively look up their NEXT game so the user gets a useful answer
+            // instead of a dead-end (sports-next-game), rather than only offering to check.
+            if (backend.getNextGame) {
+              const n = await backend.getNextGame(request, nowForScores);
+              if (n && n.game) { push("get_scores", `No ${r.leagueName} game today for that team. ${formatNextGame(n.leagueName, n.game)}\n\nTell the user they're not playing today, then give their next game.`); continue; }
+            }
+            push("get_scores", `That team has no ${r.leagueName} game today. Tell the user they're not playing today (do NOT list other teams' games), and offer to check their next game or another team.`); continue;
+          }
           push("get_scores", `${formatScores(r.leagueName, r.games)}\n\nReport this to the user (scores + status; note it's live/today).`);
         } catch (e) {
           push("get_scores", `ERROR getting scores: ${e instanceof Error ? e.message : String(e)}`);
