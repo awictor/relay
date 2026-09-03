@@ -17,7 +17,7 @@ import { createHandler } from "./handler.js";
 import { createShutdown, installSignalHandlers, installCrashHandlers } from "./shutdown.js";
 import { formatStatus, makeAnvilPinger } from "./lib/status.js";
 import { makeMetricsHeartbeat } from "./lib/metrics-heartbeat.js";
-import { runAgent, defaultFetchText } from "./agent.js";
+import { runAgent, defaultFetchText, defaultFetchBytes } from "./agent.js";
 import { fetchFeedItems, resolveFeedSource, parseFollowCommand } from "./lib/feeds.js";
 import { formatReply } from "./lib/format-reply.js";
 import { friendlyError } from "./lib/failure.js";
@@ -31,6 +31,7 @@ import { matchRecipe } from "./lib/task-suggest.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summarizeSeries } from "./lib/alerts.js";
+import { parseChartRequest, renderChart } from "./lib/chart.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { ListStore, parseListCommand, splitItems } from "./lib/lists.js";
@@ -331,6 +332,19 @@ const handle = createHandler({
     if (!a) return null; // not a watch by that name — let it fall through to the agent
     const summary = summarizeSeries(alerts.seriesOf(chatId, req.name), Date.now(), req.sinceMs);
     return summary ? `📈 ${a.name}: ${summary}` : `I haven't logged enough checks of "${a.name}" yet to show a trend — give it a few more.`;
+  },
+  // Chart a watch (chart-it-tool): "chart btc" / "graph my btc watch this week" -> a PNG line chart of
+  // the watch's recorded series via keyless quickchart.io. Returns {png} to send as a photo, {text} for
+  // a not-enough-data / unknown-watch note, or null (not a chart ask -> falls through). The handler
+  // sends the photo via its existing sendPhoto path.
+  chartWatch: async (chatId, text) => {
+    const req = parseChartRequest(text, Date.now());
+    if (!req) return null;
+    const a = alerts.get(chatId, req.name);
+    if (!a) return { text: `I don't have a watch called "${req.name}" to chart. Set one with "watch ${req.name}: ..." first, or ask me to chart an existing watch (see /alerts).` };
+    const png = await renderChart(a.name, alerts.seriesOf(chatId, req.name), defaultFetchBytes, req.sinceMs);
+    if (!png) return { text: `I haven't logged enough checks of "${a.name}" yet to chart it — give it a few more.` };
+    return { png, caption: `📈 ${a.name}${req.sinceMs ? " (recent)" : ""}` };
   },
   // First-run location capture (first-location-capture): does this chat have a home location yet, and
   // save a bare "which city?" reply (+re-stamp recurring reminders if a tz came with it).

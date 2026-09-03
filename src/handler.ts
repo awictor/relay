@@ -87,6 +87,10 @@ export interface HandlerDeps {
   // recorded points, no agent run. Returns a one-line trend summary, or null when there's no such
   // watch / not enough data. Optional; absent -> a trend ask falls through to the agent.
   watchTrend?: (chatId: number, text: string) => string | null;
+  // Chart a watch (chart-it-tool): "chart btc" -> a PNG of the watch's series (sent via sendPhoto), or a
+  // text note (not enough data / unknown watch), or null (not a chart ask -> falls through). Async (it
+  // fetches the render). Optional; absent -> a chart ask falls through to the agent.
+  chartWatch?: (chatId: number, text: string) => Promise<{ png: Uint8Array; caption?: string } | { text: string } | null>;
   // Long-term memory (remember-facts-store): rememberFact parses + stores a "remember X" message
   // (returns the stored fact, or null if it isn't one); forgetFact deletes matching facts (returns a
   // count, or a "cleared all" total); notesList returns the remembered facts for a "what do you know
@@ -537,6 +541,19 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       const ask = "What city are you in? Tap the button to share your location, or type a city (add \"UTC-5\" and I'll get your reminder times right too). I'll save it so I don't have to ask again.";
       if (deps.requestLocation) await deps.requestLocation(msg.chatId, ask); else await deps.sendMessage(msg.chatId, ask);
       return;
+    }
+
+    // Chart a watch (chart-it-tool): "chart btc" / "graph my btc watch" -> a PNG of the watch's series.
+    // Before watchTrend since it requires an explicit chart/graph/plot word (a bare "btc trend" is still
+    // the text trend). Null -> not a chart ask, fall through. Needs sendPhoto for the image; a text note
+    // (not enough data / unknown watch) goes out either way.
+    if (deps.chartWatch) {
+      const r = await deps.chartWatch(msg.chatId, msg.text);
+      if (r) {
+        if ("png" in r && deps.sendPhoto) { await deps.sendPhoto(msg.chatId, r.png, r.caption); return; }
+        if ("png" in r) { await deps.sendMessage(msg.chatId, `${r.caption ?? "Here's your chart"} — but I can't send images on this channel.`); return; }
+        await deps.sendMessage(msg.chatId, r.text); return;
+      }
     }
 
     // Watch time series (watch-time-series): "how has btc moved this week" / "btc trend" — answer from

@@ -1886,7 +1886,7 @@
       "title": "chart_it — texted graph of tracked/numeric data",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Watch/alert trend series + any numeric answer come back as a wall of numbers; a chart image is the natural payoff for stored history + a free-infra edge no vendor-browser competitor matches.",
       "how": "Keyless quickchart.io URL -> image via the existing screenshot/doc attachment path; a chart tool + dispatch that plots a watch series or an ad-hoc number set."
     }
@@ -2619,6 +2619,10 @@
     {
       "item": "sync-turn-clobbers-errand-memory",
       "note": "The inbound sync turn wrote memory as [...history,...] using the pre-run snapshot read minutes earlier; a detached background errand (runs off the chain, the ack invites more texts) completing mid-turn had its result erased -> a follow-up had no memory of the errand. Now re-reads current memory at write time (memoryGet -> append -> memorySet, race-free with no await between), mirroring the errand-completion path's own re-read fix. 1 new regression test (interim errand write survives the sync turn). Suite 1410 green, tsc clean."
+    },
+    {
+      "item": "chart-it-tool",
+      "note": "Added chart-a-watch: 'chart btc'/'graph my btc watch this week' renders the watch's recorded numeric series (watch-time-series) as a PNG line chart via keyless quickchart.io, sent through the existing sendPhoto path. New src/lib/chart.ts (parseChartRequest requiring an explicit chart/graph/plot word so a bare 'btc trend' still routes to the text watchTrend; chartUrl builds a Chart.js config URL; renderChart fetches + validates the PNG signature). New defaultFetchBytes (SSRF-guarded, size-capped) in agent.ts. Handler chartWatch branch before watchTrend; index wiring + HELP. Not-enough-data / unknown-watch -> text note. 16 new tests, suite 1422 green, tsc clean. call-tested:true (quickchart.io returns a valid 200 image/png verified via ctx_execute)."
     }
   ],
   "audits": [
@@ -2765,6 +2769,9 @@
     },
     {
       "note": "AUDIT (backlog dry, only owner-gated). A/new-user: no calculator (financial/chained math wrong), transit directions, flight status, local showtimes, translation tool. B/reliability: weather future-day->today (S, fixed), scores ambiguous-team wrong-sport (S), daily-digest dropped over cap (S), sync-turn clobbers errand memory (M). C/power: chart_it, live-watch MJPEG link, fetch-and-send-file, visual-diff watch, aggregate-and-rank. Seeded: weather-future-day(built), scores-ambiguous-team-wrong-sport, digest-dropped-over-cap, sync-turn-clobbers-errand-memory, chart-it-tool."
+    },
+    {
+      "note": "No 3-agent audit this run (chart-it-tool was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
     }
   ]
 }

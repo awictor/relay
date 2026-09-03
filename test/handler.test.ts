@@ -1279,6 +1279,37 @@ describe("watch trend recall (watch-time-series)", () => {
   });
 });
 
+describe("chart a watch (chart-it-tool)", () => {
+  it("'chart btc' sends the PNG via sendPhoto, no agent run", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    let agentCalls = 0;
+    const { handle, photos } = harness({
+      chartWatch: async (_c, t) => (/btc/i.test(t) ? { png, caption: "📈 btc" } : null),
+      runAgentFn: async () => { agentCalls++; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("chart btc", 5));
+    expect(agentCalls).toBe(0);
+    expect(photos).toHaveLength(1);
+    expect(photos[0]!.caption).toBe("📈 btc");
+  });
+  it("a not-enough-data / unknown-watch note goes out as text", async () => {
+    const { handle, sent } = harness({
+      chartWatch: async () => ({ text: "I haven't logged enough checks of \"btc\" yet to chart it." }),
+    });
+    await handle(msg("chart btc", 5));
+    expect(sent[0]!.text).toMatch(/enough checks/);
+  });
+  it("a non-chart message falls through (chartWatch returns null)", async () => {
+    let ran = "";
+    const { handle } = harness({
+      chartWatch: async () => null,
+      runAgentFn: async (t) => { ran = t; return { reply: "ok", steps: 1, tools: [] }; },
+    });
+    await handle(msg("what's the weather", 5));
+    expect(ran).toBe("what's the weather");
+  });
+});
+
 describe("background errand persistence hooks (background-errand-persist)", () => {
   it("records the errand on dispatch and clears it when the run settles", async () => {
     const added: Array<{ chatId: number; text: string }> = [];

@@ -478,6 +478,18 @@ export async function defaultFetchText(url: string): Promise<string> {
   return new TextDecoder().decode(buf.slice(0, TRANSCRIPT_MAX_BYTES));
 }
 
+// Guarded GET returning raw bytes (for an image render — the chart-it quickchart.io PNG). Same SSRF
+// discipline as defaultFetchText; size-capped so a hostile URL can't stream unbounded data.
+export async function defaultFetchBytes(url: string): Promise<Uint8Array> {
+  const res = await safeFetch(url, {
+    method: "GET",
+    headers: { accept: "image/png,image/*,*/*", "user-agent": "relay-bot" },
+    signal: AbortSignal.timeout(15000),
+  });
+  const buf = await res.arrayBuffer();
+  return new Uint8Array(buf.slice(0, FETCH_JSON_MAX_BYTES));
+}
+
 // GET when no body, POST (form-encoded) when a body is given — Overpass wants the QL query POSTed.
 // safeFetch re-validates each redirect hop (geo-ssrf-redirect). Size-capped, no credentials.
 async function defaultFetchTextPost(url: string, body?: string): Promise<string> {
