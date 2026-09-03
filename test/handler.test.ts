@@ -1088,6 +1088,30 @@ describe("background errand reliability (audit fixes)", () => {
     expect(h[h.length - 1]).toEqual({ role: "assistant", content: "The XPS wins." });
   });
 
+  it("does NOT clobber interim conversation exchanged while the errand ran (background-errand-memory-clobber)", async () => {
+    // A quick task can't run through the mocked chain easily, so simulate the interim turn by writing
+    // memory directly WHILE the detached errand is in flight — exactly what a real inbound turn does.
+    const mem = new Map<number, LLMMessage[]>();
+    let resolveRun: ((r: { reply: string; steps: number; tools: string[] }) => void) | null = null;
+    const { handle } = harness({
+      enableBackgroundErrands: true,
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, hh) => { mem.set(id, hh); },
+      runAgentFn: () => new Promise((res) => { resolveRun = res; }),
+    });
+    await handle(msg("compare the 5 best laptops and get back to me", 5)); // dispatch snapshots empty memory
+    // User keeps chatting while it runs — an interim turn lands in memory.
+    mem.set(5, [{ role: "user", content: "what's the weather?" }, { role: "assistant", content: "72 and sunny." }]);
+    resolveRun!({ reply: "The XPS wins.", steps: 3, tools: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    const h = mem.get(5)!;
+    // The interim turn must survive; the errand turn is appended after it (not overwritten by the
+    // stale dispatch-time snapshot, which would erase the weather exchange).
+    expect(h.some((m) => m.content === "what's the weather?")).toBe(true);
+    expect(h.some((m) => m.content === "72 and sunny.")).toBe(true);
+    expect(h[h.length - 1]).toEqual({ role: "assistant", content: "The XPS wins." });
+  });
+
   it("a background result writes the PING slot, not clobbering an inbound answer's paging", async () => {
     const store = new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
     store.set(5, { full: "an earlier long answer tail", sent: 4 }); // inbound answer mid-paging

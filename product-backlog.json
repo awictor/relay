@@ -1679,7 +1679,7 @@
       "title": "Reminders before location capture fire at UTC silently",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "first-location-capture only triggers for weather/near-me, not the scheduler; \"remind me at 9am\" from a new user fires at 9am UTC with no warning it guessed the zone.",
       "how": "On the first clock/reminder task with no tz set, prompt once for city/UTC offset (mirror first-location-capture) or annotate the confirmation that it assumed UTC."
     },
@@ -1697,7 +1697,7 @@
       "title": "Background errand completion clobbers interim conversation",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "dispatchBackground snapshots memory at dispatch, runs detached minutes, then memorySet([...staleSnapshot]) on completion — dropping every turn exchanged while waiting (which the bot explicitly invites).",
       "how": "On completion, re-read current memory + append the errand result instead of overwriting from the stale snapshot; or merge by message identity."
     }
@@ -2338,6 +2338,14 @@
     {
       "item": "metric-imperial-infer",
       "note": "Units now inferred from the resolved place country instead of defaulting the world to imperial. New src/lib/units.ts (inferUnitsFromPlace + resolveUnits): user pref wins; else infer (US/Liberia/Myanmar -> imperial, any other recognizable country tail -> metric); else keep imperial fallback (no regression for US-no-location). Wired at the 3 agent dispatch sites: get_weather uses resolved w.place (has country tail), find_nearby uses the named area, directions uses destination/origin. A London user's first \"weather in Paris\" now returns C, not F. HELP updated. 9 new tests, suite 1310 green, tsc clean."
+    },
+    {
+      "item": "first-reminder-tz-prompt",
+      "note": "NO-OP: already built + tested (stale seed). Handler scheduleNeedsTz+captureLocation asks the city once before scheduling a clock-time reminder with no tz, stashes the errand, saves tz on the city reply, and re-runs the stashed reminder through the scheduler (not the agent). Covered by test/handler.test.ts first-reminder-tz-ask block incl. the re-run-after-capture case. Marked done without code change."
+    },
+    {
+      "item": "background-errand-memory-clobber",
+      "note": "Fixed: dispatchBackground snapshotted memory at dispatch (bgHistory) and on completion did memorySet([...bgHistory, errandTurn]) — overwriting every turn the user exchanged during the minutes-long detached run. Now re-reads current memory at completion (memoryGet) and appends the errand turn to THAT, so interim conversation survives. Verified no double-persist (dispatch site doesn't persist the errand turn). New regression test. Suite 1311 green, tsc clean."
     }
   ],
   "audits": [

@@ -291,7 +291,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         lastResult.set(chatId, { full: prevLast?.full ?? "", sent: prevLast?.sent ?? 0, ping: { full: parts.full, sent: deliveredLen(parts.full, parts.shown) } });
         if (!r.degraded) {
           deps.logAnswer?.(chatId, errand, parts.shown);
-          deps.memorySet(chatId, [...bgHistory, { role: "user", content: originalText }, { role: "assistant", content: parts.shown }]);
+          // Append the errand turn to the CURRENT memory, not the dispatch-time snapshot
+          // (background-errand-memory-clobber): the errand ran detached for minutes while the user kept
+          // texting; those interim turns are already in memory. Re-reading here preserves them instead
+          // of overwriting with the stale bgHistory (which would erase the whole interim conversation).
+          const nowHistory = deps.memoryGet(chatId);
+          deps.memorySet(chatId, [...nowHistory, { role: "user", content: originalText }, { role: "assistant", content: parts.shown }]);
         }
         await deps.sendMessage(chatId, out);
         deps.recordTurn({ steps: r.steps, tools: r.tools, elapsedMs: deps.now() - startedAt, ok: !r.degraded, degraded: r.degraded });
