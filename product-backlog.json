@@ -2390,7 +2390,7 @@
       "title": "reminder grabs an HH:MM from the TASK text, fires at the wrong hour",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The 24-hour branch (at24) runs before am/pm and its 'at' is optional, so 'remind me at 9am to submit the 10:30 report' grabs the FIRST bare HH:MM anywhere (10:30 inside the task) ahead of the explicit 'at 9am' -> fires 10:30, stores a mangled task. User is told a next-fire time but it lands at the wrong hour. Reminders are the highest-trust feature; wrong-time is worse than a loud fail.",
       "how": "Require the at24 colon-time to be anchored ('at'/'tomorrow' immediately before it), OR only take at24 when the am/pm branch found no time. Prefer: if an explicit am/pm time exists anywhere, it wins over a bare colon-time in the body. Offline test: 'at 9am to submit the 10:30 report' fires 09:00, task='submit the 10:30 report'."
     },
@@ -3362,6 +3362,10 @@
     {
       "item": "checkon-todo-browses",
       "note": "'remind me to check on mom at 8pm' now echoes, not browses. FETCH_CUE_RE (which flags a reminder as needing the agent at fire time) still listed 'check on'/'check the', so caretaking to-dos ('check on mom', 'check on the baby', 'check the oven/mail') were routed to a confused 20-40s browser run/refusal instead of a plain reminder echo. Removed both cues — the real lookup targets (weather/the price/the score/the news/the status/standings/look up/search/summar...) are listed explicitly, so 'check the weather'/'check the price of bitcoin'/'check the news' STILL match via the data noun + stay on the agent path. 8 new assertions (check-on/check-the household to-dos are reminderOnly; check-the-weather/price/news still agent). suite 1658 green, tsc clean. call-tested:false (offline parse)."
+    },
+    {
+      "item": "reminder-time-from-task-body",
+      "note": "Fixed a reminder grabbing an HH:MM from the TASK body + firing at the wrong hour. The 24-hour (at24) branch ran before am/pm and its 'at' was OPTIONAL, so 'remind me at 9am to submit the 10:30 report' matched the bare '10:30' in the note -> fired 10:30 instead of the explicit 9am. Anchored the colon-time regex to require 'at' or 'tomorrow' immediately before it; a bare time inside the task body is now ignored, and 'at 9am' (no colon) falls through to the am/pm branch -> fires 09:00. 'at 14:30'/'tomorrow at 09:00'/'tomorrow 9:30' still parse. 2 new tests (explicit am/pm wins over body 10:30; a body HH:MM under 'in 20 min' isn't hijacked), suite 1660 green, tsc clean. call-tested:false (offline parse)."
     }
   ],
   "audits": [

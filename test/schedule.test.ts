@@ -142,6 +142,19 @@ describe("parseSchedule — 24-hour clock (DEV-0189)", () => {
     expect(new Date(s.dueMs).getUTCHours()).toBe(14);
     expect(new Date(s.dueMs).getUTCMinutes()).toBe(30);
   });
+  it("an explicit 'at 9am' wins over a bare HH:MM in the task body (reminder-time-from-task-body)", () => {
+    // The colon-time inside the task ("the 10:30 report") must NOT be grabbed as the fire time.
+    const s = parseSchedule("remind me at 9am to submit the 10:30 report", NOW)!;
+    expect(new Date(s.dueMs).getUTCHours()).toBe(9);
+    expect(new Date(s.dueMs).getUTCMinutes()).toBe(0);
+    expect(s.task).toMatch(/submit the 10:30 report/); // the 10:30 stays in the note, not taken as the time
+  });
+  it("a bare HH:MM in the task body (no 'at'/'tomorrow' anchor) is NOT taken as the fire time", () => {
+    // "in 20 min" is the real trigger; the "10:30" in the note must not hijack it.
+    const s = parseSchedule("remind me in 20 min about the 10:30 standup", NOW)!;
+    expect(s.dueMs - NOW).toBe(20 * MIN); // fired by the relative branch, not at24
+    expect(s.task).toMatch(/10:30 standup/);
+  });
 });
 
 describe("parseScheduleFor (m7 recipe-3: timing-only + supplied task)", () => {

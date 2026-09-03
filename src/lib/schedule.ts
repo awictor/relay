@@ -489,9 +489,12 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
 
   // --- 24-hour clock: "at 14:30", "tomorrow at 09:00" (DEV-0189) ---
   // The am/pm branch below can't match a 24h time, but a COLON form "HH:MM" is unambiguous (it can't
-  // be a stray bare integer), so accept it here. Hour 0-23, minute 00-59; requires the colon + 2-digit
-  // minute so a lone "at 5" (no colon, no am/pm) still doesn't match.
-  const at24 = lower.match(/\b(tomorrow\s+)?(?:at\s+)?([01]?[0-9]|2[0-3]):([0-5][0-9])\b(?!\s*(?:am|pm))/);
+  // be a stray bare integer), so accept it here. Hour 0-23, minute 00-59.
+  // MUST be anchored by "at" or "tomorrow" (reminder-time-from-task-body): the colon-time used to be
+  // grabbed from ANYWHERE, so "remind me at 9am to submit the 10:30 report" fired at 10:30 (the time in
+  // the TASK) instead of the explicit "at 9am". Requiring the anchor means a bare time inside the task
+  // body is ignored, and an explicit "at 9am" (no colon) falls through to the am/pm branch below.
+  const at24 = lower.match(/\b(?:(tomorrow)\s+(?:at\s+)?|at\s+)([01]?[0-9]|2[0-3]):([0-5][0-9])\b(?!\s*(?:am|pm))/);
   if (at24) {
     const hh = parseInt(at24[2]!, 10);
     const mm = parseInt(at24[3]!, 10);
