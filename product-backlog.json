@@ -2066,7 +2066,7 @@
       "title": "scheduled recipe/reminder replies trim to 1200 chars, tail unrecoverable",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "schedule-runner passes the already-trimmed formatReply(res.reply) as both sent and full text, so a long scheduled/recipe answer arrives cut off and 'more' says 'that's the whole answer' — dropped content is gone. The digest path was fixed (fullText) but the plain scheduled-agent + recipe path wasn't.",
       "how": "Use formatReplyParts to keep the untrimmed text and pass it as `full` to recordSend (mirror the digest fix) so chunkFrom can serve the tail on 'more'. Offline test: mock send + a >1200-char reply, assert 'more' returns the remainder."
     },
@@ -2906,6 +2906,10 @@
     {
       "item": "calc-modulo-and-variadic",
       "note": "Fixed two dead calc paths. (1) A bare '%' BETWEEN two operands ('17 % 5', '17 % (2+3)') is now modulo — the percent-idiom rewrite only fires when '%' TRAILS a number ('20% of', '50 - 20%'), so it no longer eats the operator form into a malformed expr. (2) toRpn now counts function arity (seed 1 at '(', +1 per comma at that depth) and evalRpn folds it: min/max are variadic ('max(1,2,3)'->3), and fixed-arity fns (sqrt/loanpayment/...) throw a friendly 'takes N arguments' instead of silent residue. Also: normalizeExpr now strips only true thousands-commas (digit,comma,exactly-3-digits) so arg-separator commas survive for arity counting. 5 new calc tests, suite 1513 green, tsc clean. call-tested:false (pure offline evaluator)."
+    },
+    {
+      "item": "sched-reminder-tail-trim",
+      "note": "Scheduled/recipe agent replies no longer lose their tail. The plain scheduled-agent + recipe path set body=formatReply(res.reply) (trimmed to 1200) and passed the trimmed text as BOTH full and sent to recordSend, so a long daily/recipe answer arrived cut off and 'more' wrongly said 'that's the whole answer' — the dropped tail was gone. (The digest path had already been fixed via fullText; this path hadn't.) Added an optional formatReplyParts dep (untrimmed + phone-sized views) wired in index.ts; the path now caches the UNTRIMMED body as fullText when it differs from what was sent, so 'more' pages the remainder — mirroring the digest fix. Back-compat: without formatReplyParts it falls back to trimmed-only. 2 new runner tests (long reply pages tail; short reply back-compat), suite 1515 green, tsc clean. call-tested:false (offline runner test w/ mock agent + injected clock)."
     }
   ],
   "audits": [

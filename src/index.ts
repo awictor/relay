@@ -19,7 +19,7 @@ import { formatStatus, makeAnvilPinger } from "./lib/status.js";
 import { makeMetricsHeartbeat } from "./lib/metrics-heartbeat.js";
 import { runAgent, defaultFetchText, defaultFetchBytes } from "./agent.js";
 import { fetchFeedItems, resolveFeedSource, parseFollowCommand } from "./lib/feeds.js";
-import { formatReply } from "./lib/format-reply.js";
+import { formatReply, formatReplyParts } from "./lib/format-reply.js";
 import { friendlyError } from "./lib/failure.js";
 import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
 import { ScheduleStore, parseSchedule, parseSnoozeCommand, tzOffsetMin, quietUntilMs, PAUSE_INDEFINITE } from "./lib/schedule.js";
@@ -189,7 +189,7 @@ const SCHED_TICK_MS = intEnv(process.env.RELAY_SCHED_TICK_MS, { fallback: 30_000
 // runner records proactive sends, so "more"/"send the link" works after an unprompted ping too.
 const lastResultStore = new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
 const scheduleRunner = makeScheduleRunner({
-  store: schedules, llm, runAgent, send: sendMessage, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor,
+  store: schedules, llm, runAgent, send: sendMessage, formatReply, formatReplyParts, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor,
   now: () => Date.now(), periodMs: SCHED_TICK_MS,
   log: (m) => console.log(m),
   recordTurn, // proactive fires count in the same Metrics as inbound turns (m8)

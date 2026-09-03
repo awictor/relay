@@ -22,6 +22,13 @@ export interface ScheduleRunnerDeps {
   agentEnv?: (chatId: number) => AgentEnv;
   send: (chatId: number, text: string) => Promise<unknown>;
   formatReply: (text: string) => string;
+  // The untrimmed + phone-sized views of a reply (sched-reminder-tail-trim). The plain scheduled/recipe
+  // agent path used only formatReply (trimmed to 1200), passing the trimmed text as BOTH sent and full to
+  // recordSend — so a long scheduled/recipe answer arrived cut off and "more" said "that's the whole
+  // answer" (the tail was gone). The digest path was already fixed via fullText; this gives the agent path
+  // the same untrimmed source so "more" can page the dropped tail. Optional; absent = trimmed-only (old
+  // behavior — no tail recovery for these fires).
+  formatReplyParts?: (text: string) => { shown: string; full: string };
   now: () => number;
   periodMs: number;                                       // 0 (or <=0) disables the interval
   setInterval?: (fn: () => void, ms: number) => unknown;  // injectable for tests
@@ -234,7 +241,11 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       } else {
         res = await deps.runAgent(taskToRun, { llm: deps.llm, context: deps.contextFor?.(s.chatId) || undefined, ...deps.agentEnv?.(s.chatId) }, []);
       }
-      const body = deps.formatReply(res.reply);
+      // Trimmed body for the phone-sized send + the UNTRIMMED body so "more" can page the tail
+      // (sched-reminder-tail-trim). Without formatReplyParts, fall back to trimmed-only (old behavior).
+      const parts = deps.formatReplyParts?.(res.reply);
+      const body = parts?.shown ?? deps.formatReply(res.reply);
+      const fullBody = parts?.full ?? body;
       // A degraded reply (agent ran out of steps / no answer, DEV-0176) is a soft failure, not a real
       // proactive result. Marking the unprompted message as partial keeps a flaky daily from pushing a
       // failure string as if it were the briefing, and the ok:!degraded below keeps it out of the
@@ -243,6 +254,9 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       // Show the human task, not the "recipe:<name>" marker, in the reminder header.
       const shown = recipeMatch ? taskToRun : s.task;
       sendText = `${label}: ${shown}\n\n${prefix}${body}`;
+      // Only cache an untrimmed full when it actually differs from what we send (a long answer was
+      // trimmed) — else fullText stays undefined and recordSend uses sendText as-is (short answer).
+      if (fullBody !== body) fullText = `${label}: ${shown}\n\n${prefix}${fullBody}`;
     }
     // If this fire already timed out, the tick's catch has advanced/failed the schedule — a late finish
     // must NOT also send + complete (duplicate ping + double-advance). Drop the result silently.

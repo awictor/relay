@@ -268,6 +268,39 @@ describe("makeScheduleRunner.tick", () => {
     expect(cached.full.length).toBeGreaterThan(cached.sent); // -> "more" has a tail to page
   });
 
+  it("caches the UNTRIMMED agent reply for a scheduled task, so 'more' can page the dropped tail (sched-reminder-tail-trim)", async () => {
+    const clock = { t: NOW };
+    const store = new Map<number, { full: string; sent: number }>();
+    // A long agent answer whose phone-sized view is trimmed. formatReplyParts returns both views.
+    const longReply = Array.from({ length: 40 }, (_, i) => `sentence ${i} https://ex.com/${i}`).join(" ");
+    const { store: sched, runner } = harness(clock, {
+      runAgent: async () => ({ reply: longReply }),
+      formatReply: (t) => t.slice(0, 200),                          // trimmed view
+      formatReplyParts: (t) => ({ shown: t.slice(0, 200), full: t }), // untrimmed full retained
+      recordSend: (chatId, full, sentLen) => store.set(chatId, { full, sent: sentLen ?? full.length }),
+    });
+    sched.add(1, { kind: "once", task: "summarize the article", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    const cached = store.get(1)!;
+    expect(cached.full).toContain("sentence 39"); // the FULL reply (incl. the tail) was cached
+    expect(cached.full.length).toBeGreaterThan(cached.sent); // -> "more" has a real tail to page
+  });
+
+  it("without formatReplyParts, a short scheduled reply still caches sensibly (back-compat)", async () => {
+    const clock = { t: NOW };
+    const store = new Map<number, { full: string; sent: number }>();
+    const { store: sched, runner } = harness(clock, {
+      runAgent: async () => ({ reply: "short answer" }),
+      // no formatReplyParts injected -> falls back to formatReply, fullText stays undefined
+      recordSend: (chatId, full, sentLen) => store.set(chatId, { full, sent: sentLen ?? full.length }),
+    });
+    sched.add(1, { kind: "once", task: "ping", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    const cached = store.get(1)!;
+    expect(cached.full).toContain("short answer");
+    expect(cached.sent).toBe(cached.full.length); // whole thing sent, no phantom tail
+  });
+
   it("defers a proactive send that lands in quiet hours to the window's end, no send (quiet-hours)", async () => {
     const clock = { t: NOW };
     const sent: unknown[] = [];
