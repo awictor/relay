@@ -977,7 +977,7 @@
       "title": "web_search single-provider (Bing scrape) no fallback",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The headline \"ask anything\" path scrapes only bing.com/search; a bot-check or markup change makes a new user first errand return nothing, no DuckDuckGo/Brave fallback.",
       "how": "Add a keyless fallback engine (DuckDuckGo HTML endpoint) behind the same webSearch interface; try Bing then fall back on empty/error."
     },
@@ -1351,6 +1351,10 @@
     {
       "id": "bg-recovery-hardening",
       "note": "Hardened the crash-recovery shipped last iteration (audit found 3 defects): replay now runs under the errand EXISTING id via a shared dispatchBackground + handle.resumeErrand — no drain-gap data loss, no second ACK; the store keeps the record (list+reinstate bumps attempts in place, no drain) so a poison task that crashes each boot is dropped after MAX_ERRAND_ATTEMPTS(3) instead of crash-looping + re-spamming. 935 tests green."
+    },
+    {
+      "id": "websearch-fallback-provider",
+      "note": "web_search no longer a single point of failure: Bing stays primary, but on an empty result (bot-check / markup change) it now falls back to DuckDuckGo no-JS HTML endpoint (html.duckduckgo.com/html/). Refactored into searchBing/searchDuck + shared collectResults; unwrapDuckUrl recovers the //duckduckgo.com/l/?uddg= redirect target. Each provider its own session, deduped+SSRF-filtered. 938 tests green."
     }
   ],
   "audits": [

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { runAgent } from "../src/agent.js";
-import { unwrapBingUrl } from "../src/anvil.js";
+import { unwrapBingUrl, unwrapDuckUrl } from "../src/anvil.js";
 import type { LLMClient, LLMMessage, LLMResult, ToolSpec, ToolCall } from "../src/llm.js";
 import type { BrowserBackend } from "../src/agent.js";
 
@@ -40,6 +40,21 @@ describe("unwrapBingUrl", () => {
   });
   it("returns input on garbage", () => {
     expect(unwrapBingUrl("not a url")).toBe("not a url");
+  });
+});
+
+describe("unwrapDuckUrl (websearch-fallback-provider)", () => {
+  it("decodes a //duckduckgo.com/l/?uddg= redirect to the real target", () => {
+    const real = "https://en.wikipedia.org/wiki/Paris";
+    const wrapped = `//duckduckgo.com/l/?uddg=${encodeURIComponent(real)}&rut=abc`;
+    expect(unwrapDuckUrl(wrapped)).toBe(real);
+  });
+  it("passes a non-ddg / non-/l/ url through (normalizing a protocol-relative href)", () => {
+    expect(unwrapDuckUrl("https://example.com/page")).toBe("https://example.com/page");
+    expect(unwrapDuckUrl("//example.com/x")).toBe("https://example.com/x");
+  });
+  it("returns input on garbage", () => {
+    expect(unwrapDuckUrl("not a url")).toBe("not a url");
   });
 });
 

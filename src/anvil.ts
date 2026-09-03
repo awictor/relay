@@ -302,18 +302,47 @@ export function unwrapBingUrl(href: string): string {
  * unwrapBingUrl() recovers the real https target so callers get a clean URL to scrape/extract next.
  * Creates a session, navigates, evaluates, releases.
  */
-export async function webSearch(query: string, limit = 6): Promise<SearchResult[]> {
-  const q = String(query).trim().slice(0, 300);
-  if (!q) return [];
-  const url = `https://www.bing.com/search?q=${encodeURIComponent(q)}`;
-  const check = isUrlSafe(url);
-  if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
-  const cap = Math.max(1, Math.min(20, limit));
+// Unwrap a DuckDuckGo html-endpoint result link (`//duckduckgo.com/l/?uddg=<urlencoded>`) to the real
+// target. Returns the input unchanged if it isn't a wrapped link. Exported for tests.
+export function unwrapDuckUrl(href: string): string {
+  try {
+    const h = href.startsWith("//") ? "https:" + href : href;
+    const u = new URL(h);
+    if (!/(^|\.)duckduckgo\.com$/i.test(u.hostname) || !u.pathname.startsWith("/l/")) return h;
+    const target = u.searchParams.get("uddg");
+    return target && /^https?:/.test(target) ? target : h;
+  } catch {
+    return href;
+  }
+}
+
+// Collect + clean rows from a search-provider evaluate result into SearchResults, unwrapping redirect
+// links via `unwrap`, de-duping, SSRF-filtering, capping. Shared by the Bing + DuckDuckGo paths.
+function collectResults(rows: unknown, unwrap: (h: string) => string, cap: number): SearchResult[] {
+  const seen = new Set<string>();
+  const out: SearchResult[] = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const real = unwrap(String((row as { url?: unknown }).url ?? ""));
+    if (!real || seen.has(real) || !isUrlSafe(real).safe) continue;
+    seen.add(real);
+    out.push({
+      title: String((row as { title?: unknown }).title ?? "").slice(0, 200),
+      url: real,
+      snippet: String((row as { snippet?: unknown }).snippet ?? "").slice(0, 300),
+    });
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
+// Bing organic-results scrape (primary). <li class="b_algo"> rows with an <h2><a> + .b_caption p.
+async function searchBing(query: string, cap: number): Promise<SearchResult[]> {
+  const url = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+  if (!isUrlSafe(url).safe) return [];
   const session = await createSession();
   try {
     await navigate(session.id, url, "domcontentloaded");
     await new Promise((r) => setTimeout(r, 700));
-    // Bing: organic results are <li class="b_algo"> with an <h2><a> title+href and a .b_caption p snippet.
     const script = `(() => {
       const out = [];
       for (const el of Array.from(document.querySelectorAll('li.b_algo')).slice(0, ${cap * 2})) {
@@ -327,24 +356,55 @@ export async function webSearch(query: string, limit = 6): Promise<SearchResult[
       return out;
     })()`;
     const r = await action(session.id, "/v1/actions/evaluate", { script });
-    const rows = Array.isArray(r) ? r : [];
-    const seen = new Set<string>();
-    const out: SearchResult[] = [];
-    for (const row of rows) {
-      const real = unwrapBingUrl(String((row as { url?: unknown }).url ?? ""));
-      if (!real || seen.has(real) || !isUrlSafe(real).safe) continue;
-      seen.add(real);
-      out.push({
-        title: String((row as { title?: unknown }).title ?? "").slice(0, 200),
-        url: real,
-        snippet: String((row as { snippet?: unknown }).snippet ?? "").slice(0, 300),
-      });
-      if (out.length >= cap) break;
-    }
-    return out;
+    return collectResults(r, unwrapBingUrl, cap);
   } finally {
     await releaseSession(session.id);
   }
+}
+
+// DuckDuckGo no-JS HTML endpoint (fallback). Rows are .result with a .result__a title link (a
+// //duckduckgo.com/l/?uddg= redirect) + a .result__snippet. Used only when Bing returns nothing (a
+// bot-check / markup change) so the headline "ask anything" errand isn't a single point of failure.
+async function searchDuck(query: string, cap: number): Promise<SearchResult[]> {
+  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  if (!isUrlSafe(url).safe) return [];
+  const session = await createSession();
+  try {
+    await navigate(session.id, url, "domcontentloaded");
+    await new Promise((r) => setTimeout(r, 500));
+    const script = `(() => {
+      const out = [];
+      for (const el of Array.from(document.querySelectorAll('.result, .web-result')).slice(0, ${cap * 2})) {
+        const a = el.querySelector('a.result__a') || el.querySelector('h2 a');
+        if (!a) continue;
+        const href = a.getAttribute('href') || '';
+        const sn = el.querySelector('.result__snippet') || el.querySelector('p');
+        out.push({ title: (a.textContent||'').trim(), url: href, snippet: (sn?sn.textContent:'').trim() });
+      }
+      return out;
+    })()`;
+    const r = await action(session.id, "/v1/actions/evaluate", { script });
+    return collectResults(r, unwrapDuckUrl, cap);
+  } finally {
+    await releaseSession(session.id);
+  }
+}
+
+/**
+ * General web search (no URL needed). Primary provider is Bing (no key, free, headless-friendly); when
+ * it returns NOTHING (a bot-check or markup change would otherwise make the headline "ask anything"
+ * errand fail cold) we fall back to DuckDuckGo's no-JS HTML endpoint — so one provider breaking doesn't
+ * sink the first errand. Each provider drives its own anvil session; results are unwrapped + deduped +
+ * SSRF-filtered by collectResults.
+ */
+export async function webSearch(query: string, limit = 6): Promise<SearchResult[]> {
+  const q = String(query).trim().slice(0, 300);
+  if (!q) return [];
+  const cap = Math.max(1, Math.min(20, limit));
+  const primary = await searchBing(q, cap).catch(() => [] as SearchResult[]);
+  if (primary.length) return primary;
+  // Bing came back empty — try the fallback before giving up.
+  return await searchDuck(q, cap).catch(() => [] as SearchResult[]);
 }
 
 /**
