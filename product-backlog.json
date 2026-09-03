@@ -32,7 +32,7 @@
       "title": "a watchlist alert silently discards its 'then run <recipe>' action",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "parseAlertCommand's semicolon/watchlist branch returns {name,task,members} and never carries `then`, and checkAlert's watchlist path returns before any withThen handling — so 'watch basket: btc; eth then run summary' accepts the syntax but the watch-and-DO recipe never runs, no error (audit 28 B#1).",
       "how": "Parse + store `then` on a watchlist alert (strip the then-clause before the semicolon split), and run withThen in the watchlist notify path like the single-alert path does. Test: a watchlist with a then-recipe fires it on a member change."
     },
@@ -2152,6 +2152,10 @@
     {
       "id": "absolute-date-reminders",
       "note": "Added calendar-date reminders — 'remind me on March 5', 'on the 15th', 'on Dec 25', 'next Monday' — appointment/birthday errands that previously bounced (parseSchedule only did relative/daily/weekly/interval + tomorrow/at-time). New branch before the weekly one: 'next <weekday>' -> that weekday's next occurrence (strips 'next' so it doesn't linger in the task — also fixes 'next friday at 3pm' which left 'next' in the task); 'on <Month> <day>' -> dateAtMs (this year, rolls to next year if past); 'on the <Nth>' -> domAtMs (this month if upcoming else next, month-by-month rollover for a 31st). A stated 'at <time>' sets the hour (else 9am default) via extractLooseAtTime; tz-aware. A month name with no day ('the march report') is NOT hijacked. Widened the handler scheduleCue. 5 tests (next-weekday / March 5 rolls to next year / Dec 25 this year + the 15th this month / at-time on a date / no-hijack). call-tested: false (pure parse). 1221 tests green."
+    },
+    {
+      "id": "watchlist-then-dropped",
+      "note": "A watchlist alert's 'then run <recipe>' was accepted by the parser but silently never ran — parseAlertCommand's semicolon/watchlist branch returned {name,task,members} without carrying `then`, and checkAlert's watchlist notify built its message without withThen. Fixed both: the watchlist branch now returns `then` (the then-clause was already stripped before the semicolon split, so members stay clean), and withThen was hoisted above the watchlist branch so a member-change ping runs the recipe + appends '▶ <recipe>: <output>' like the single-alert path. 2 tests (parse carries then through watchlist / checkAlert runs the then-recipe on a member change + appends output). call-tested: false (pure parse + alert logic). 1223 tests green."
     }
   ],
   "audits": [

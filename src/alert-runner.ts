@@ -66,6 +66,16 @@ export interface AlertRunnerDeps {
 export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<AlertRunResult> {
   const noop = () => {};
 
+  // Trigger-to-action (trigger-to-action-alerts): append the `then` recipe's output to a fired ping.
+  // Hoisted above the watchlist branch so a WATCHLIST with a `then` runs it too (watchlist-then-dropped).
+  const withThen = async (message: string): Promise<string> => {
+    if (!alert.then || !deps.runThen) return message;
+    try {
+      const out = (await deps.runThen(alert.chatId, alert.then))?.trim();
+      return out ? `${message}\n\n▶ ${alert.then}:\n${out}` : message;
+    } catch { return message; }
+  };
+
   // Watchlist (watchlists): run each member sub-task, compare to its own last value, and send ONE
   // grouped ping of only the members that CHANGED. First run seeds every member silently (no dump).
   // Member-last advances are deferred to the caller's post-send commit (a failed send re-reports).
@@ -112,7 +122,8 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     }
     const shown = changedLines.slice(0, 10);
     const more = changedLines.length > shown.length ? `\n…and ${changedLines.length - shown.length} more` : "";
-    const message = `🔔 ${alert.name} — ${changedLines.length} update${changedLines.length === 1 ? "" : "s"}:\n${shown.join("\n")}${more}`;
+    const base = `🔔 ${alert.name} — ${changedLines.length} update${changedLines.length === 1 ? "" : "s"}:\n${shown.join("\n")}${more}`;
+    const message = await withThen(base); // run the `then` recipe on a watchlist change too (watchlist-then-dropped)
     return { notify: true, message, value: "", commit };
   }
 
@@ -142,14 +153,6 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // Trigger-to-action (trigger-to-action-alerts): when this alert fires AND has a `then` recipe, run it
   // and append its result to the notification. Failures/absence just leave the base message unchanged
   // (the alert still notifies). Called at each notify site below.
-  const withThen = async (message: string): Promise<string> => {
-    if (!alert.then || !deps.runThen) return message;
-    try {
-      const out = (await deps.runThen(alert.chatId, alert.then))?.trim();
-      return out ? `${message}\n\n▶ ${alert.then}:\n${out}` : message;
-    } catch { return message; }
-  };
-
   // Feed-watch (new-item-feed-watch): the task returns a LIST; notify only about entries we haven't
   // seen before. First run (seen undefined) seeds the whole list SILENTLY so setup doesn't dump every
   // current item as "new". After that, only genuinely-new item keys fire, and the seen-set advance is

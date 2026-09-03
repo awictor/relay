@@ -167,7 +167,9 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
       seen.set(base, n);
       return { label: n > 1 ? `${base} (${n})` : base, task: p };
     });
-    return { name, task, members };
+    // Carry a `then` recipe through the watchlist branch (watchlist-then-dropped) — the thenClause was
+    // stripped above, so 'watch mk: btc; eth then run summary' should still run the recipe on a change.
+    return then ? { name, task, members, then } : { name, task, members };
   }
 
   // Feed-watch: a trailing "for new items/listings/jobs/posts" or a leading "new " in the task

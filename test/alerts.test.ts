@@ -288,6 +288,11 @@ describe("trigger-to-action (trigger-to-action-alerts)", () => {
   it("no 'then' clause -> no then field", () => {
     expect(parseAlertCommand("watch btc: price of bitcoin")).toEqual({ name: "btc", task: "price of bitcoin", threshold: undefined });
   });
+  it("carries a 'then' recipe through a WATCHLIST (watchlist-then-dropped)", () => {
+    const r = parseAlertCommand("watch mk: btc price; eth price then run summary")!;
+    expect(r.members?.map((m) => m.task)).toEqual(["btc price", "eth price"]); // then-clause stripped off the last member
+    expect(r.then).toBe("summary");
+  });
   it("store persists + updates the then field", () => {
     const s = new AlertStore({ file: tmpFile() });
     s.add(1, { name: "jobs", task: "roles", feed: true, then: "sum" }, NOW);

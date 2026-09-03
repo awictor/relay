@@ -333,6 +333,17 @@ describe("checkAlert — watchlists", () => {
   const wl = (members: Array<{ label: string; task: string; last?: string }>): Alert =>
     ({ chatId: 1, name: "mk", task: "wl", members, created: NOW });
 
+  it("runs the 'then' recipe + appends its output when a watchlist member changes (watchlist-then-dropped)", async () => {
+    const { d } = wlDeps({ "btc": "$65k", "eth": "$3k" });
+    let ranThen = "";
+    const alert: Alert = { chatId: 1, name: "mk", task: "wl", then: "summary", created: NOW,
+      members: [{ label: "btc", task: "btc", last: "$60k" }, { label: "eth", task: "eth", last: "$3k" }] };
+    const r = await checkAlert(alert, { ...d, runThen: async (_c: number, name: string) => { ranThen = name; return "market note: choppy"; } });
+    expect(r.notify).toBe(true);
+    expect(ranThen).toBe("summary");                 // the then-recipe ran on the change
+    expect(r.message).toMatch(/▶ summary:\nmarket note: choppy/); // its output appended to the ping
+  });
+
   it("first run seeds every member silently (no notify), commit records all", async () => {
     const { d, committed } = wlDeps({ "btc": "$60k", "eth": "$3k" });
     const r = await checkAlert(wl([{ label: "btc", task: "btc" }, { label: "eth", task: "eth" }]), d);
