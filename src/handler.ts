@@ -126,7 +126,10 @@ export interface HandlerDeps {
   recipeResolve?: (chatId: number, text: string) => { name: string; task: string } | { name: string; missingArg: true } | null;
   // Run a chained recipe (task with ">>" steps) sequentially, returning the final output (recipe-chaining).
   // Optional; absent -> a chained task just runs as one agent task (the ">>" is inert).
-  runChainRecipe?: (chatId: number, task: string) => Promise<string>;
+  // A chained recipe returns the final output plus whether it stopped early (an if-gate failed or a
+  // step degraded) so the handler can flag a partial answer instead of passing an intermediate output
+  // off as the complete result (chain-progress-partial). A bare-string return is still accepted (legacy).
+  runChainRecipe?: (chatId: number, task: string) => Promise<string | { final: string; stoppedEarly?: boolean; stepsDone?: number; stepsTotal?: number }>;
   recipeList?: (chatId: number) => Array<{ name: string; task: string; schedule?: string }>;
   // recipe-auto-recall (product-loop): a free-text message strongly matching a saved recipe -> the
   // matching recipe name (else null), so the handler offers "/run <name>" instead of a cold agent run.
@@ -873,13 +876,35 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         if (!rl.allowed) { await deps.sendMessage(msg.chatId, `You're sending a lot — give me ${rl.retryAfterSec}s to catch up.`); return; }
         await deps.sendTyping(msg.chatId);
         const startedAt = deps.now();
+        // A chain holds the per-chat lock across several sequential agent runs, so a long one reads as
+        // a hang; arm the same one-shot "still working" ping the agent path uses (chain-progress-partial).
+        const setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+        const clearTimer = deps.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
+        let chainProgress: unknown = null;
+        if (deps.progressDelayMs && deps.progressDelayMs > 0) {
+          chainProgress = setTimer(() => {
+            void deps.sendMessage(msg.chatId, "Still working on it — running your steps, hang tight…").catch(() => {});
+          }, deps.progressDelayMs);
+        }
         try {
-          const out = await deps.runChainRecipe(msg.chatId, hit.task);
-          const parts = formatReplyParts(out);
+          const res = await deps.runChainRecipe(msg.chatId, hit.task);
+          // Accept a structured result (final + stoppedEarly) or a legacy bare string. When the chain
+          // stopped early, the "final" is only an INTERMEDIATE step's output — say so instead of passing
+          // it off as the complete answer (chain-progress-partial).
+          const out = typeof res === "string" ? res : res.final;
+          const stoppedEarly = typeof res === "string" ? false : !!res.stoppedEarly;
+          const stepsNote = (typeof res === "object" && res.stepsDone && res.stepsTotal)
+            ? ` (${res.stepsDone} of ${res.stepsTotal} steps)` : "";
+          const body = stoppedEarly
+            ? `⚠️ Couldn't finish all the steps${stepsNote} — here's how far it got:\n\n${out}`
+            : out;
+          const parts = formatReplyParts(body);
           lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, parts.shown) });
+          if (chainProgress !== null) { clearTimer(chainProgress); chainProgress = null; }
           await deps.sendMessage(msg.chatId, parts.shown);
-          deps.recordTurn({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
+          deps.recordTurn({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: !stoppedEarly });
         } catch (e) {
+          if (chainProgress !== null) { clearTimer(chainProgress); chainProgress = null; }
           deps.recordTurn({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: false });
           await deps.sendMessage(msg.chatId, friendlyError(e instanceof Error ? e.message : String(e)));
         }

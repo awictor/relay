@@ -1211,7 +1211,7 @@
       "title": "chain: no progress ping + intermediate output sent as final",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A multi-step chain awaits inline holding the per-chat lock with no \"still working\" ping (reads as a hang, wedges the queue); and a step that degrades/fails silently returns the PRIOR step output as if it were the complete answer.",
       "how": "Arm the progress-ping timer on the chain branch; when runChain stoppedEarly, prefix the result with a \"couldn t finish all steps\" note instead of passing it as final."
     },
@@ -1684,6 +1684,10 @@
     {
       "id": "first-reminder-tz-ask",
       "note": "A brand-new user's first \"remind me at 7am\" no longer misfires at UTC then hands them offset math. Added a scheduleNeedsTz dep (index.ts reuses the isClockTime/no-tz predicate WITHOUT scheduling); handler intercepts a clock-time reminder from a tz-less chat BEFORE scheduleAdd, stashes msg.text in pendingLocation, asks the city once; the existing city-capture path infers tz (inferTzFromLocation) + re-runs the stashed schedule, now firing at the right local hour. Falls through untouched when a tz is already known or capture isn't wired. 3 handler tests (asks+stashes / city reply re-runs / tz-set schedules directly). 1078 tests green."
+    },
+    {
+      "id": "chain-progress-partial",
+      "note": "Fixed 2 chain defects. (1) A stopped-early chain (if-gate failed or a step degraded) returned an INTERMEDIATE step's output as if it were the complete answer — runChainRecipe now returns {final, stoppedEarly, stepsDone, stepsTotal} and the handler prefixes a '⚠️ Couldn't finish all the steps (N of M)' note instead of passing the partial off as done; legacy bare-string return still accepted. (2) A long chain held the per-chat lock with no 'still working' ping (read as a hang) — armed the same one-shot progress timer the agent path uses on the chain branch. 3 handler tests (partial flagged / full sends clean / progress armed). 1081 tests green."
     }
   ],
   "audits": [

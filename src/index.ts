@@ -337,7 +337,8 @@ const handle = createHandler({
   // Run a chained recipe (">>"-separated steps) sequentially, feeding each step's output to the next.
   runChainRecipe: async (chatId, task) => {
     const r = await runChain(chatId, task, { llm, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()) });
-    return r.final;
+    // Surface stoppedEarly + step counts so the handler flags a partial answer (chain-progress-partial).
+    return { final: r.final, stoppedEarly: r.stoppedEarly, stepsDone: r.steps.filter((s) => !s.skipped).length, stepsTotal: r.steps.length };
   },
   recipeList: (chatId) => recipes.list(chatId).map((r) => ({ name: r.name, task: r.task, schedule: r.schedule })),
   // recipe-auto-recall: offer a saved recipe when a free-text message strongly matches its task. Skip

@@ -1175,6 +1175,40 @@ describe("chained recipe run (recipe-chaining)", () => {
     await handle(msg("/run btc", 5));
     expect(ran).toBe("price of bitcoin");  // single task via the agent, chain runner untouched
   });
+
+  it("flags a partial answer when the chain stops early instead of passing it off as complete (chain-progress-partial)", async () => {
+    const { handle, sent } = harness({
+      recipeResolve: (_c, t) => /^\/run flow/.test(t) ? { name: "flow", task: "check price >> if under: buy" } : null,
+      runChainRecipe: async () => ({ final: "price is $500, above target", stoppedEarly: true, stepsDone: 1, stepsTotal: 2 }),
+    });
+    await handle(msg("/run flow", 5));
+    expect(sent[0]!.text).toMatch(/couldn't finish all the steps/i);
+    expect(sent[0]!.text).toMatch(/1 of 2 steps/);
+    expect(sent[0]!.text).toMatch(/price is \$500/);
+  });
+
+  it("a fully-completed chain sends the final with no partial warning", async () => {
+    const { handle, sent } = harness({
+      recipeResolve: (_c, t) => /^\/run flow/.test(t) ? { name: "flow", task: "a >> b" } : null,
+      runChainRecipe: async () => ({ final: "all done", stoppedEarly: false, stepsDone: 2, stepsTotal: 2 }),
+    });
+    await handle(msg("/run flow", 5));
+    expect(sent[0]!.text).toBe("all done");
+    expect(sent.some((m) => /couldn't finish/i.test(m.text))).toBe(false);
+  });
+
+  it("arms the progress ping on a long chain (reads as working, not a hang)", async () => {
+    let armed = false;
+    const { handle } = harness({
+      progressDelayMs: 100,
+      setTimer: (fn: () => void) => { armed = true; fn(); return 1 as unknown; },
+      clearTimer: () => {},
+      recipeResolve: (_c, t) => /^\/run flow/.test(t) ? { name: "flow", task: "a >> b" } : null,
+      runChainRecipe: async () => ({ final: "done", stoppedEarly: false, stepsDone: 2, stepsTotal: 2 }),
+    });
+    await handle(msg("/run flow", 5));
+    expect(armed).toBe(true);
+  });
 });
 
 describe("/templates (starter-template-library)", () => {
