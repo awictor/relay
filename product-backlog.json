@@ -1889,6 +1889,51 @@
       "status": "done",
       "why": "Watch/alert trend series + any numeric answer come back as a wall of numbers; a chart image is the natural payoff for stored history + a free-infra edge no vendor-browser competitor matches.",
       "how": "Keyless quickchart.io URL -> image via the existing screenshot/doc attachment path; a chart tool + dispatch that plots a watch series or an ad-hoc number set."
+    },
+    {
+      "id": "scores-team-not-playing-dumps-slate",
+      "title": "Named team not playing -> dumps every other game as the answer",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "filterByTeam falls back to the whole slate on a no-match, so \"did the Lakers win\" on a Lakers-idle night returned Celtics/Heat/etc as scores to report, confidently answering about teams never asked.",
+      "how": "resolveLeague marks viaTeam; getScores checks teamMatchedAny and returns {games:[],teamNotPlaying:true} when a named team has no game today; dispatch says they are not playing instead of listing others."
+    },
+    {
+      "id": "calculator-tool",
+      "title": "No calculator (chained/financial math answered inline, silently wrong)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "SYSTEM_PROMPT routes ALL arithmetic/tips/percentages/date-math to inline LLM answering with no verification; \"split $127.50 3 ways with 20% tip\" / \"monthly payment on a $30k loan at 6% for 5y\" get confident wrong numbers — the highest-frequency errand class through an unverified path.",
+      "how": "New src/lib/calc.ts: a safe arithmetic evaluator (no eval; tokenize + shunting-yard, + - * / % ^ parens, %, basic fns) + a calc tool; route money/percent/loan math to it. Reject anything non-numeric."
+    },
+    {
+      "id": "digest-drilldown-trims-tail",
+      "title": "Scheduled digest \"more\"/\"link\" pages the TRIMMED copy",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "A long scheduled digest is trimmed before send but recordSend caches only the trimmed text, so \"more\" says \"nothing more to show\" (a lie) + \"link\" cannot return a URL from a cut line. Inbound /run digest stores the untrimmed parts.full and works — an asymmetry.",
+      "how": "Thread the untrimmed composed digest text into recordSend on the scheduled path (schedule-runner), so the ping cache holds full + sent like the inbound path."
+    },
+    {
+      "id": "feed-agent-prose-false-new",
+      "title": "Agent-driven feed watch false-fires on prose rewording",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "extractListItems keeps any non-bullet non-colon line as a feed item; an agent reply that is a plain sentence gets keyed by feedItemKey, so a reworded same-fact next check reads as \"1 new\" — crying wolf on the agent-driven alert.feed path (the keyless feedSource path is safe, uses stable ids).",
+      "how": "Require an actual list shape (bullet/ordinal, >=2 items) before treating a reply as a feed; else fall back to change-detection for prose."
+    },
+    {
+      "id": "when-then-recipe-on-alert",
+      "title": "When-then: run a recipe/errand on an alert fire (not just notify)",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "Alerts fire + recipes run + one scheduler drives both, but they are wired only to NOTIFY; \"when BTC below 55k run my rebalance-check\" would convert every passive watch into IFTTT-style action — the biggest do-more unlock vs Instinct.",
+      "how": "Extend alert def with an optional then-recipe; on fire, invoke the named recipe (reuse recipeResolve/runChain) + include/deliver its result. Guard against slotted recipes (needs a value)."
     }
   ],
   "history": [
@@ -2623,6 +2668,10 @@
     {
       "item": "chart-it-tool",
       "note": "Added chart-a-watch: 'chart btc'/'graph my btc watch this week' renders the watch's recorded numeric series (watch-time-series) as a PNG line chart via keyless quickchart.io, sent through the existing sendPhoto path. New src/lib/chart.ts (parseChartRequest requiring an explicit chart/graph/plot word so a bare 'btc trend' still routes to the text watchTrend; chartUrl builds a Chart.js config URL; renderChart fetches + validates the PNG signature). New defaultFetchBytes (SSRF-guarded, size-capped) in agent.ts. Handler chartWatch branch before watchTrend; index wiring + HELP. Not-enough-data / unknown-watch -> text note. 16 new tests, suite 1422 green, tsc clean. call-tested:true (quickchart.io returns a valid 200 image/png verified via ctx_execute)."
+    },
+    {
+      "item": "scores-team-not-playing-dumps-slate",
+      "note": "Fixed: a named team with no game today no longer dumps every OTHER game as the answer. resolveLeague marks viaTeam when it resolved via a team name; getScores uses teamMatchedAny (authoritative — filterByTeam deliberately falls back to the full slate on a no-match, which caused the dump) and returns {games:[],teamNotPlaying:true} so the dispatch tells the user they are not playing today + offers next game, instead of listing unrelated teams. 4 new tests. Suite 1424 green, tsc clean."
     }
   ],
   "audits": [
@@ -2772,6 +2821,9 @@
     },
     {
       "note": "No 3-agent audit this run (chart-it-tool was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
+    },
+    {
+      "note": "AUDIT (backlog dry, only owner-gated). A/new-user: no calculator (chained/financial math wrong), no translation tool, no showtimes/events, no flight status, transit-mode directions. B/reliability: scores team-not-playing dumps slate (S,fixed), scheduled-digest drilldown pages trimmed copy (S), agent-feed prose false-new (M), news same-headline dedup collapse (S). C/power: when-then recipe-on-alert, automation-health notices, record-replay browser macros, conditional-branch recipes. Seeded: scores-team-not-playing(built), calculator-tool, digest-drilldown-trims-tail, feed-agent-prose-false-new, when-then-recipe-on-alert."
     }
   ]
 }

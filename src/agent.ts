@@ -392,7 +392,7 @@ export interface BrowserBackend {
   defineWord?(word: string): Promise<import("./lib/dictionary.js").WordEntry | null>;
   // Optional: today's sports scores for a league/team (sports-scores-tool). Absent -> the get_scores
   // tool reports it's unavailable. Returns null on an unknown league / fetch failure.
-  getScores?(query: string): Promise<{ leagueName: string; games: import("./lib/scores.js").GameScore[] } | null>;
+  getScores?(query: string): Promise<{ leagueName: string; games: import("./lib/scores.js").GameScore[]; teamNotPlaying?: boolean } | null>;
   // Optional: today's top news headlines, or about a topic (get-news-tool). Absent -> the get_news tool
   // reports it's unavailable. Returns null on a fetch failure / empty parse.
   getNews?(topic?: string): Promise<{ topic?: string; headlines: string[] } | null>;
@@ -861,6 +861,7 @@ export async function runAgent(
         try {
           const r = await backend.getScores(request);
           if (!r) { push("get_scores", `I don't cover that league/team with my scores tool (I do NBA/NFL/MLB/NHL/NCAA + major soccer). Try web_search for "${request}", or name the league.`); continue; }
+          if (r.teamNotPlaying) { push("get_scores", `That team has no ${r.leagueName} game today. Tell the user they're not playing today (do NOT list other teams' games), and offer to check their next game or another team.`); continue; }
           push("get_scores", `${formatScores(r.leagueName, r.games)}\n\nReport this to the user (scores + status; note it's live/today).`);
         } catch (e) {
           push("get_scores", `ERROR getting scores: ${e instanceof Error ? e.message : String(e)}`);

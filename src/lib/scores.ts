@@ -55,10 +55,11 @@ const TEAM_LEAGUE: Array<[RegExp, string]> = [
   [/\b(bruins|maple leafs|oilers|canucks|penguins)\b/i, "nhl"],
 ];
 
-export interface LeagueRef { sport: string; league: string; name: string; }
+export interface LeagueRef { sport: string; league: string; name: string; viaTeam?: boolean; }
 
 /** Resolve a free-text sports query to an ESPN league ref, or null. Tries an explicit league word first,
- * then a known team. Exported for tests. */
+ * then a known team (marks viaTeam so the caller can say "that team isn't playing today" instead of
+ * dumping the whole slate — scores-team-not-playing-dumps-slate). Exported for tests. */
 export function resolveLeague(query: string): LeagueRef | null {
   const q = String(query ?? "").toLowerCase().trim();
   if (!q) return null;
@@ -67,7 +68,7 @@ export function resolveLeague(query: string): LeagueRef | null {
     if (q.includes(key)) return LEAGUES[key]!;
   }
   for (const [re, leagueWord] of TEAM_LEAGUE) {
-    if (re.test(q)) return LEAGUES[leagueWord]!;
+    if (re.test(q)) return { ...LEAGUES[leagueWord]!, viaTeam: true };
   }
   return null;
 }
@@ -146,11 +147,26 @@ export function formatScores(leagueName: string, games: GameScore[]): string {
 export async function getScores(
   query: string,
   fetchText: (url: string) => Promise<string>,
-): Promise<{ leagueName: string; games: GameScore[] } | null> {
+): Promise<{ leagueName: string; games: GameScore[]; teamNotPlaying?: boolean } | null> {
   const ref = resolveLeague(query);
   if (!ref) return null;
   try {
-    const games = parseScoreboard(await fetchText(scoreboardUrl(ref)));
-    return { leagueName: ref.name, games: filterByTeam(games, query) };
+    const all = parseScoreboard(await fetchText(scoreboardUrl(ref)));
+    // The query named a specific team (viaTeam) but NONE of today's games involve it: don't dump every
+    // OTHER game as "the answer" (scores-team-not-playing-dumps-slate) — signal it so the caller says
+    // "they're not playing today" instead. teamMatchedAny is the authoritative check (filterByTeam
+    // deliberately falls back to the whole slate on a no-match, which is what caused the dump).
+    if (ref.viaTeam && all.length > 0 && !teamMatchedAny(all, query)) {
+      return { leagueName: ref.name, games: [], teamNotPlaying: true };
+    }
+    return { leagueName: ref.name, games: filterByTeam(all, query) };
   } catch { return null; }
+}
+
+/** True if any game on the slate actually involves the team named in the query. */
+function teamMatchedAny(games: GameScore[], query: string): boolean {
+  const q = query.toLowerCase();
+  return games.some((g) => q.includes(g.home.toLowerCase()) || q.includes(g.away.toLowerCase())
+    || g.home.toLowerCase().split(/\s+/).some((w) => w.length > 3 && q.includes(w))
+    || g.away.toLowerCase().split(/\s+/).some((w) => w.length > 3 && q.includes(w)));
 }

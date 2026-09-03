@@ -118,4 +118,17 @@ describe("getScores", () => {
   it("returns null on a fetch throw", async () => {
     expect(await getScores("nba scores", async () => { throw new Error("net"); })).toBeNull();
   });
+  it("flags teamNotPlaying (empty games) when the named team has no game today, NOT the whole slate (scores-team-not-playing-dumps-slate)", async () => {
+    // Lakers asked, but tonight's slate is Celtics/Heat only -> must NOT dump those as the answer.
+    const r = await getScores("did the Lakers win", async () =>
+      board([game({ home: "Celtics", away: "Heat", hs: "98", as: "90" })]));
+    expect(r!.teamNotPlaying).toBe(true);
+    expect(r!.games).toHaveLength(0);
+  });
+  it("a league-wide ask (no team) still returns the whole slate", async () => {
+    const r = await getScores("NBA scores", async () =>
+      board([game({ home: "Celtics", away: "Heat", hs: "98", as: "90" }), game({ home: "Suns", away: "Kings", hs: "1", as: "2" })]));
+    expect(r!.teamNotPlaying).toBeUndefined();
+    expect(r!.games).toHaveLength(2);
+  });
 });
