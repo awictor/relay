@@ -648,7 +648,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       }
     }
 
-    const scheduleCue = /\b(remind me|every day|every morning|every evening|every night|daily|weekdays?|weekends?|tomorrow)\b|\bevery\s+(mon|tue|wed|thu|fri|sat|sun)|\bevery\s+(\d+|other)\s*(min|hour|hr|day|week|wk)|\bin \d+\s*(min|hour|day|week|wk)|\bin\s+(an?|half\s+an?|a\s+couple|a\s+few|several|one|two|three)\s+(min|hour|hr|day|week|wk)|\b(set\s+(?:an?\s+)?alarm|wake\s+me)\b|\bat\s+\d{1,2}\s*(am|pm)\b|\bat\s+([01]?\d|2[0-3]):[0-5]\d\b/i;
+    const scheduleCue = /\b(remind me|every day|every morning|every evening|every night|daily|weekdays?|weekends?|tomorrow)\b|\bevery\s+(mon|tue|wed|thu|fri|sat|sun)|\bevery\s+(\d+|other)\s*(min|hour|hr|day|week|wk)|\bin \d+\s*(min|hour|day|week|wk)|\bin\s+(an?|half\s+an?|a\s+couple|a\s+few|several|one|two|three)\s+(min|hour|hr|day|week|wk)|\b(set\s+(?:an?\s+)?alarm|wake\s+me)\b|\bnext\s+(mon|tue|wed|thu|fri|sat|sun)|\b(?:on\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|\bon\s+the\s+\d{1,2}(st|nd|rd|th)\b|\bat\s+\d{1,2}\s*(am|pm)\b|\bat\s+([01]?\d|2[0-3]):[0-5]\d\b/i;
     if (!isExplicitCommand && deps.scheduleAdd && scheduleCue.test(msg.text)) {
       // First-reminder tz (first-reminder-tz-ask): a clock-time schedule with no saved tz would fire
       // against UTC (a new user's "remind me at 7am" lands at 3am). Ask the city ONCE first (city→tz

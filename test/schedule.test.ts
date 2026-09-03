@@ -296,6 +296,37 @@ describe("parseSchedule — recurring (weekly / interval)", () => {
   });
 });
 
+describe("parseSchedule — absolute calendar date (absolute-date-reminders)", () => {
+  const JUN1 = new Date("2024-06-01T12:00:00Z").getTime(); // a Saturday
+  it("'next Monday' -> once on the next Monday (9am default), 'next' stripped from task", () => {
+    const s = parseSchedule("remind me next Monday to call the vet", JUN1, 0)!;
+    expect(s.kind).toBe("once");
+    expect(new Date(s.dueMs).getUTCDay()).toBe(1);       // Monday
+    expect(new Date(s.dueMs).getUTCHours()).toBe(9);
+    expect(s.task).toBe("to call the vet");              // no leftover "next"
+  });
+  it("'on March 5' -> that calendar day; rolls to next year when it already passed", () => {
+    const s = parseSchedule("remind me on March 5 to renew the lease", JUN1, 0)!; // March past in June
+    expect(new Date(s.dueMs).getUTCFullYear()).toBe(2025);
+    expect(new Date(s.dueMs).getUTCMonth()).toBe(2);     // March
+    expect(new Date(s.dueMs).getUTCDate()).toBe(5);
+    expect(s.task).toMatch(/renew the lease/);
+  });
+  it("'on Dec 25' this year (still upcoming) + 'on the 15th' this month", () => {
+    expect(new Date(parseSchedule("remind me on Dec 25 to call mom", JUN1, 0)!.dueMs).getUTCFullYear()).toBe(2024);
+    const dom = parseSchedule("remind me on the 15th to pay rent", JUN1, 0)!;
+    expect(new Date(dom.dueMs).getUTCDate()).toBe(15);
+    expect(new Date(dom.dueMs).getUTCMonth()).toBe(5);   // June (15th still upcoming)
+  });
+  it("a stated 'at <time>' sets the hour on a dated reminder", () => {
+    const s = parseSchedule("remind me on March 5 at 2pm to renew", JUN1, 0)!;
+    expect(new Date(s.dueMs).getUTCHours()).toBe(14);
+  });
+  it("a month name with no day is NOT a date reminder (no hijack)", () => {
+    expect(parseSchedule("email bob the march report", JUN1, 0)).toBeNull();
+  });
+});
+
 describe("parseSchedule — absolute", () => {
   it("tomorrow at 9am -> once, >= ~1 day out", () => {
     const s = parseSchedule("tomorrow at 9am check the deploy", NOW)!;

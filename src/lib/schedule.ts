@@ -212,8 +212,50 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     }
   }
 
-  // --- weekly: "every monday", "every mon and thu", "every weekday", "weekends", optional "at HH:MM" ---
   const WEEKDAY: Record<string, number> = { sun: 0, sunday: 0, mon: 1, monday: 1, tue: 2, tues: 2, tuesday: 2, wed: 3, weds: 3, wednesday: 3, thu: 4, thur: 4, thurs: 4, thursday: 4, fri: 5, friday: 5, sat: 6, saturday: 6 };
+
+  // --- absolute date (absolute-date-reminders): "next Monday", "on March 5", "on the 15th", "on Dec 25"
+  // — a one-shot at that calendar day. A detached "at <time>" sets the hour (else default 9am). Handled
+  // BEFORE the weekly branch so "next friday" (no recurrence) fires ONCE, and so "on the 15th" (an
+  // ordinal, no weekday) is caught. Appointment/birthday reminders were bouncing without this. ---
+  {
+    const loose = extractLooseAtTime(lower); // a stated "at 3pm" anywhere; else 9am default
+    const hh = loose ? loose.hh : 9, mm = loose ? loose.mm : 0;
+    const stripTime = (s: string) => (loose ? cleanTask(s, loose.clause) : s);
+    // "next <weekday>" -> that weekday's next occurrence (strip the "next" so it doesn't linger in task).
+    const nextDow = lower.match(/\bnext\s+(sun|mon|tue|tues|wed|weds|thu|thur|thurs|fri|sat)[a-z]*\b/);
+    if (nextDow) {
+      const dow = WEEKDAY[nextDow[1]!] ?? WEEKDAY[nextDow[1]!.slice(0, 3)];
+      if (dow !== undefined) {
+        const dueMs = nextWeeklyMs(now, hh, mm, [dow], offsetMin);
+        const task = stripTime(cleanTask(raw, nextDow[0]!));
+        if (task) return { kind: "once", task, dueMs, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+      }
+    }
+    // "on <Month> <day>" / "<Month> <day>" (day 1-31, optional ordinal/comma-year).
+    const MONTHS: Record<string, number> = { jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7, sep: 8, sept: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11 };
+    const md = lower.match(/\b(?:on\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+([0-9]{1,2})(?:st|nd|rd|th)?\b/);
+    if (md) {
+      const mon = MONTHS[md[1]!]; const day = parseInt(md[2]!, 10);
+      if (mon !== undefined && day >= 1 && day <= 31) {
+        const dueMs = dateAtMs(now, mon, day, hh, mm, offsetMin);
+        const task = stripTime(cleanTask(raw, md[0]!));
+        if (task) return { kind: "once", task, dueMs, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+      }
+    }
+    // "on the <Nth>" — a day-of-month in the current or next month.
+    const dom = lower.match(/\bon\s+the\s+([0-9]{1,2})(?:st|nd|rd|th)\b/);
+    if (dom) {
+      const day = parseInt(dom[1]!, 10);
+      if (day >= 1 && day <= 31) {
+        const dueMs = domAtMs(now, day, hh, mm, offsetMin);
+        const task = stripTime(cleanTask(raw, dom[0]!));
+        if (task) return { kind: "once", task, dueMs, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+      }
+    }
+  }
+
+  // --- weekly: "every monday", "every mon and thu", "every weekday", "weekends", optional "at HH:MM" ---
   const weeklyClause = lower.match(/\b(?:every\s+)?((?:mon|tue|wed|thu|fri|sat|sun)[a-z]*(?:(?:\s*,\s*|\s+and\s+|\s+)(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*)*|weekdays?|weekends?)\b(?:\s+at\s+([0-9]{1,2})(?::([0-9]{2}))?\s*(am|pm)?)?/);
   // Require a recurring cue ("every" / "weekday"/"weekend" / an explicit time) so a bare "monday" in
   // a task ("email bob monday's report") isn't turned into a weekly schedule.
@@ -379,6 +421,30 @@ export function dayAtMs(now: number, hh: number, mm: number, dayOffset: number, 
   const d = new Date(now + offsetMin * 60_000);
   const atUser = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + dayOffset, hh, mm, 0, 0);
   return atUser - offsetMin * 60_000;
+}
+
+// A specific calendar month+day at hh:mm in the user's zone, as epoch ms (absolute-date-reminders).
+// Uses THIS year, but rolls to next year if that date already passed (so "on Jan 5" in December means
+// next January, not one that's gone). Day is clamped by JS Date rollover (Feb 30 -> early March).
+export function dateAtMs(now: number, month: number, day: number, hh: number, mm: number, offsetMin = tzOffsetMin()): number {
+  const d = new Date(now + offsetMin * 60_000);
+  let year = d.getUTCFullYear();
+  let atUser = Date.UTC(year, month, day, hh, mm, 0, 0);
+  if (atUser - offsetMin * 60_000 <= now) { year += 1; atUser = Date.UTC(year, month, day, hh, mm, 0, 0); }
+  return atUser - offsetMin * 60_000;
+}
+
+// A day-of-month at hh:mm in the user's zone: this month if still upcoming, else next month
+// (absolute-date-reminders "on the 15th"). Rolls forward month-by-month so a 31st in a short month lands
+// the next month that has it (JS Date rollover handles the overflow).
+export function domAtMs(now: number, day: number, hh: number, mm: number, offsetMin = tzOffsetMin()): number {
+  const d = new Date(now + offsetMin * 60_000);
+  for (let add = 0; add <= 12; add++) {
+    const atUser = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + add, day, hh, mm, 0, 0);
+    const t = atUser - offsetMin * 60_000;
+    if (t > now && new Date(atUser).getUTCDate() === day) return t; // valid day in that month + future
+  }
+  return dayAtMs(now, hh, mm, 1, offsetMin); // fallback (shouldn't hit)
 }
 
 export function nextWeeklyMs(now: number, hh: number, mm: number, weekdays: number[], offsetMin = tzOffsetMin()): number {
