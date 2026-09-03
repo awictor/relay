@@ -873,6 +873,41 @@ describe("long-term memory (remember-facts-store)", () => {
   });
 });
 
+describe("contacts book routing (contacts-book-compose)", () => {
+  it("'save mom's number is ...' stores it, no agent run; then resolveContact is threaded to the agent", async () => {
+    let saved = "";
+    let threadedResolve = false;
+    const { handle, sent } = harness({
+      saveContact: (_c, text) => { if (!/number is/.test(text)) return null; saved = text; return { name: "mom", phone: "5551234567", saved: true }; },
+      resolveContact: () => { threadedResolve = true; return null; },
+      runAgentFn: async (_t, deps) => { if ((deps as { resolveContact?: unknown }).resolveContact) (deps as { resolveContact: (n: string) => unknown }).resolveContact("mom"); return { reply: "ok", steps: 1, tools: [] }; },
+    });
+    await handle(msg("save mom's number is 555-123-4567", 8));
+    expect(saved).toBe("save mom's number is 555-123-4567");
+    expect(sent[0]!.text).toMatch(/Saved mom/);
+    expect(sent[0]!.text).toMatch(/text mom/);
+    // a later real task threads resolveContact into the agent deps
+    await handle(msg("summarize this article for me", 8));
+    expect(threadedResolve).toBe(true);
+  });
+
+  it("'/contacts' lists saved contacts, no agent run", async () => {
+    const { handle, sent, recorded } = harness({
+      contactList: () => [{ name: "mom", phone: "5551234567" }, { name: "boss", email: "b@co.com" }],
+    });
+    await handle(msg("/contacts", 8));
+    expect(sent[0]!.text).toMatch(/mom.*5551234567/s);
+    expect(sent[0]!.text).toMatch(/boss.*b@co\.com/s);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it("a non-contact message falls through to the agent (saveContact returns null)", async () => {
+    const { handle, recorded } = harness({ saveContact: () => null, contactList: () => [] });
+    await handle(msg("what's the weather in Paris", 8));
+    expect(recorded).toHaveLength(1);
+  });
+});
+
 describe("named lists routing (personal-notes-lists-store)", () => {
   function listHarness() {
     const store = new ListStore({ file: join(mkdtempSync(join(tmpdir(), "relay-h-lists-")), "l.json") });

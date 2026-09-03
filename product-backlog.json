@@ -1796,7 +1796,7 @@
       "title": "Contacts book so \"text mom\" drafts to a saved recipient",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "compose only works if the user re-types a raw email/number every time; \"text mom\" dead-ends asking for the address. Its highest-intent use silently fails.",
       "how": "A small name->handle store (like notes/lists); compose resolves a saved contact by name; \"save mom’s number as ...\" to add. Feeds the deferred confirm-to-send."
     }
@@ -2477,6 +2477,10 @@
     {
       "item": "sports-scores-tool",
       "note": "Added get_scores tool: new src/lib/scores.ts (resolveLeague from a league word or a known team, keyless cdn.espn.com scoreboard fetch, parseScoreboard, filterByTeam, formatGame/formatScores) covering NBA/WNBA/NFL/MLB/NHL/NCAA + major soccer leagues. Wired agent.ts (TOOLS, backend.getScores + defaultBackend, dispatch, prompt), pinned tool list, HELP. 'did the Lakers win?'/'Man City score'/'NBA scores' now instant + sourced instead of a flaky JS-scoreboard scrape (the SYSTEM_PROMPT already promised 'who won the game'). Used cdn.espn.com not site.api.espn.com (latter 403s datacenter IPs + plain UA; cdn returns 200 with relay-bot UA). 18 new tests, suite 1360 green, tsc clean. call-tested:true (live cdn.espn NBA board fetched + parsed via ctx_execute)."
+    },
+    {
+      "item": "contacts-book-compose",
+      "note": "Added a contacts book so compose drafts to a saved recipient. New src/lib/contacts.ts (ContactStore + parseSaveContact/parseForgetContact/normalizeContactName): 'save mom's number is 555-1234' / 'my boss's email is b@co.com' stores a name->handle; exact + fuzzy (word-overlap, longest-name-wins) lookup. agent.ts compose dispatch resolves a `to` that's a NAME (not a valid handle) via a new resolveContact AgentDep, threaded through both runIt calls; handler save/forget/'/contacts' branches before the scheduler; index wiring + RELAY_CONTACTS_FILE + START Commands + HELP + .env.example + KNOWN_COMMANDS. 'text mom I'm late' now drafts to her number instead of dead-ending. 29 new tests, suite 1377 green, tsc clean. call-tested:false (offline unit + dispatch + handler routing)."
     }
   ],
   "audits": [

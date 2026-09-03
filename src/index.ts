@@ -34,6 +34,7 @@ import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summa
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { ListStore, parseListCommand, splitItems } from "./lib/lists.js";
+import { ContactStore, parseSaveContact, parseForgetContact } from "./lib/contacts.js";
 import { isTextualDoc, decodeTextDoc, buildDocPrompt } from "./lib/docs.js";
 import { AnswerLog, recallKeywords } from "./lib/answer-log.js";
 import { BackgroundStore, planErrandReplay } from "./lib/background-store.js";
@@ -106,6 +107,7 @@ const alerts = new AlertStore({ file: paths.alerts });
 const profiles = new ProfileStore({ file: paths.profile });
 const notes = new NotesStore({ file: paths.notes });
 const lists = new ListStore({ file: paths.lists });
+const contacts = new ContactStore({ file: paths.contacts });
 const answerLog = new AnswerLog({ file: paths.answers });
 const backgroundStore = new BackgroundStore({ file: paths.background });
 // Per-chat agent environment for PROACTIVE runs (proactive-runs-datetime-units-blind): the clock + tz +
@@ -251,6 +253,24 @@ const handle = createHandler({
     return { removed: forgotten.length, all: false, forgotten };
   },
   notesList: (chatId) => notes.list(chatId).map((n) => n.text),
+  // Contacts book (contacts-book-compose): save/resolve/forget/list a name -> email/phone.
+  saveContact: (chatId, text) => {
+    const p = parseSaveContact(text);
+    if (!p) return null;
+    const c = contacts.save(chatId, p, Date.now());
+    if (!c) return null;
+    return { name: c.name, ...(c.email ? { email: c.email } : {}), ...(c.phone ? { phone: c.phone } : {}), saved: contacts.lastSaveOk() };
+  },
+  resolveContact: (chatId, name) => {
+    const c = contacts.get(chatId, name);
+    return c ? { name: c.name, ...(c.email ? { email: c.email } : {}), ...(c.phone ? { phone: c.phone } : {}) } : null;
+  },
+  forgetContact: (chatId, text) => {
+    const name = parseForgetContact(text);
+    if (!name) return null;
+    return contacts.forget(chatId, name) ? { name } : null;
+  },
+  contactList: (chatId) => contacts.list(chatId).map((c) => ({ name: c.name, ...(c.email ? { email: c.email } : {}), ...(c.phone ? { phone: c.phone } : {}) })),
   // Named lists (personal-notes-lists-store): parse a list op + render the reply. Null falls through
   // to the scheduler/agent when it isn't a list command. Reads back the full list on every mutation so
   // the user sees the current state (a grocery list is only useful if you can see what's on it).

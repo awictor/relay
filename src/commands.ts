@@ -23,7 +23,7 @@ Bigger stuff (send a link or name a site):
 
 Not sure what to try? Text "help" for the full list.
 
-Commands: /help  /start  /reset  /status  /sites  /setlocation  /profile  /dashboard  /schedules  /cancel  /recipes  /templates  /run  /forget  /digests  /alerts`;
+Commands: /help  /start  /reset  /status  /sites  /setlocation  /profile  /dashboard  /schedules  /cancel  /recipes  /templates  /run  /forget  /digests  /alerts  /contacts`;
 
 const HELP = `Relay — what I can do:
 • Read a page: send a link, or name a site + what you want. ("top HN story", "weather in Paris")
@@ -47,6 +47,8 @@ const HELP = `Relay — what I can do:
 • Big errands: "find the 5 cheapest flights to Lisbon and get back to me" → I work on it in the background and text you when it's done.
 
 Draft correspondence: "write an email to my landlord that rent is late" or "text mom I'll be late" → I draft it and give you a copy block + a one-tap send link. You review and send — I never send for you.
+
+Save contacts so I know who "mom" is: "save mom's number is 555-123-4567", "my boss's email is boss@co.com" → then "text mom I'll be late" / "email my boss the update" drafts straight to them. /contacts lists them; "forget mom's contact" removes one.
 
 Add to your calendar: "add dentist Thursday 2pm to my calendar" → I give you a Google Calendar link + an .ics file to import. You tap to add.
 

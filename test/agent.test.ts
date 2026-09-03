@@ -563,6 +563,30 @@ describe("runAgent compose (draft-to-send-composer)", () => {
     await runAgent("draft it", { llm });
     expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/no draft body/i);
   });
+  it("resolves a saved contact NAME to its handle (contacts-book-compose)", async () => {
+    // The model passes to:"mom" (a name, not an address); resolveContact turns it into the phone.
+    const llm = new MockLLM([
+      { toolCall: { name: "compose", args: { kind: "message", to: "mom", body: "Running late!" } } },
+      { toolCall: { name: "reply", args: { text: "Draft ready." } } },
+    ]);
+    await runAgent("text mom I'm running late", {
+      llm,
+      resolveContact: (n) => (/mom/i.test(n) ? { name: "mom", phone: "5551234567" } : null),
+    });
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool")!.content;
+    expect(toolMsg).toMatch(/sms:5551234567/); // addressed to the saved number, not left blank
+    expect(toolMsg).toMatch(/To: 5551234567/);
+  });
+  it("leaves an already-valid handle untouched (doesn't treat it as a contact name)", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "compose", args: { kind: "email", to: "real@x.com", body: "hi" } } },
+      { toolCall: { name: "reply", args: { text: "ok" } } },
+    ]);
+    let called = false;
+    await runAgent("email real@x.com", { llm, resolveContact: () => { called = true; return null; } });
+    expect(called).toBe(false); // a valid address short-circuits the contact lookup
+    expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/mailto:real@x\.com/);
+  });
 });
 
 describe("runAgent find_nearby (near-me-poi)", () => {

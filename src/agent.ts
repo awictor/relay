@@ -528,6 +528,10 @@ export interface AgentDeps {
   // shrugging. Bound to the chatId by the caller. Optional; absent -> the recall tool reports it's
   // unavailable. Returns most-relevant past {task, reply, at(epoch ms)} entries.
   recall?: (query: string) => Array<{ task: string; reply: string; at: number }>;
+  // Contacts book (contacts-book-compose): resolve a saved contact NAME ("mom", "my boss") to its
+  // email/phone so compose can draft to the right recipient instead of dead-ending. Bound to the chatId
+  // by the caller. Optional; absent -> compose uses whatever `to` the model passed (prior behavior).
+  resolveContact?: (name: string) => { name: string; email?: string; phone?: string } | null;
   // Background errands (async-background-errands): a raised per-run step budget for a long,
   // dispatch-and-ping task ("find the 5 cheapest flights and get back to me") that a normal ~8-step
   // synchronous run would truncate. Optional; absent/<=0 -> the RELAY_MAX_STEPS default. Clamped to a
@@ -966,7 +970,20 @@ export async function runAgent(
         const body = String(call.args.body ?? "").trim();
         if (!body) { push("compose", "ERROR: no draft body given."); continue; }
         const kind = String(call.args.kind ?? "email").toLowerCase() === "message" ? "message" : "email";
-        const draft: Draft = { kind, body, ...(call.args.to ? { to: String(call.args.to) } : {}), ...(call.args.subject ? { subject: String(call.args.subject) } : {}) };
+        // Contacts book (contacts-book-compose): if `to` isn't already a valid handle (it's a NAME like
+        // "mom"/"my boss"), resolve it from the saved contacts so the draft addresses the right person
+        // instead of dead-ending on an unaddressed link. Prefer email for an email draft, phone for a
+        // message; fall back to the other handle if only one is saved.
+        let to = call.args.to ? String(call.args.to) : "";
+        const looksLikeHandle = /@/.test(to) || /^\+?[0-9][0-9\s().-]{5,}/.test(to);
+        if (to && !looksLikeHandle && deps.resolveContact) {
+          const c = deps.resolveContact(to);
+          if (c) {
+            const resolved = kind === "email" ? (c.email || c.phone) : (c.phone || c.email);
+            if (resolved) to = resolved;
+          }
+        }
+        const draft: Draft = { kind, body, ...(to ? { to } : {}), ...(call.args.subject ? { subject: String(call.args.subject) } : {}) };
         // The formatted draft + deep link IS the user-facing deliverable — hand it straight back so the
         // model relays it verbatim in reply (never re-summarize a draft the user is about to send).
         push("compose", `${formatDraft(draft)}\n\n(Give this to the user verbatim — the copy block + the "Tap to send" link. You are NOT sending it; they review and send.)`);

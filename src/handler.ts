@@ -76,6 +76,13 @@ export interface HandlerDeps {
   // with no agent run. Optional; absent -> no answer history.
   recallAnswers?: (chatId: number, text: string) => Array<{ task: string; reply: string; at: number }>;
   logAnswer?: (chatId: number, task: string, reply: string) => void;
+  // Contacts book (contacts-book-compose): saveContact stores a "mom's number is ..." message (returns
+  // the saved contact, or null if it isn't one); resolveContact looks a NAME up to its email/phone so
+  // compose can address a draft; forgetContact deletes one; contactList lists them. All optional.
+  saveContact?: (chatId: number, text: string) => { name: string; email?: string; phone?: string; saved: boolean } | null;
+  resolveContact?: (chatId: number, name: string) => { name: string; email?: string; phone?: string } | null;
+  forgetContact?: (chatId: number, text: string) => { name: string } | null;
+  contactList?: (chatId: number) => Array<{ name: string; email?: string; phone?: string }>;
   // Watch time series (watch-time-series): answer "how has <watch> moved this week" from the alert's
   // recorded points, no agent run. Returns a one-line trend summary, or null when there's no such
   // watch / not enough data. Optional; absent -> a trend ask falls through to the agent.
@@ -287,7 +294,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     const clearBgProgress = () => { if (bgProgress !== null) { bgClearTimer(bgProgress); bgProgress = null; } };
     void (async () => {
       try {
-        const r = await runIt(errand, { llm: deps.llm, context: deps.profileContext?.(chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(chatId) ?? 0, weatherCoords: deps.weatherCoords?.(chatId), weatherUnits: deps.weatherUnits?.(chatId), ...(deps.recallAnswers ? { recall: (q: string) => deps.recallAnswers!(chatId, q) } : {}), maxSteps: BACKGROUND_MAX_STEPS }, bgHistory);
+        const r = await runIt(errand, { llm: deps.llm, context: deps.profileContext?.(chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(chatId) ?? 0, weatherCoords: deps.weatherCoords?.(chatId), weatherUnits: deps.weatherUnits?.(chatId), ...(deps.recallAnswers ? { recall: (q: string) => deps.recallAnswers!(chatId, q) } : {}), ...(deps.resolveContact ? { resolveContact: (n: string) => deps.resolveContact!(chatId, n) } : {}), maxSteps: BACKGROUND_MAX_STEPS }, bgHistory);
         clearBgProgress();
         const parts = formatReplyParts(r.reply);
         const out = r.degraded ? `⚠️ Here's what I got (I couldn't fully finish):\n\n${parts.shown}` : `✅ Done with "${errand}":\n\n${parts.shown}`;
@@ -436,7 +443,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // silently never schedules. If it's a bare mistyped command (one /token, no args) suggest the
     // nearest real one; otherwise strip the stray slash so the rest routes normally ("/remind me ..."
     // -> "remind me ..." reaches the schedule matcher; "/weather Paris" -> the agent as plain text).
-    const KNOWN_COMMANDS = new Set(["/start", "/help", "/menu", "/commands", "/reset", "/clear", "/status", "/sites", "/profile", "/setlocation", "/dashboard", "/dash", "/schedules", "/cancel", "/recipes", "/templates", "/run", "/forget", "/forget-recipe", "/forget-alert", "/digests", "/forget-digest", "/alerts"]);
+    const KNOWN_COMMANDS = new Set(["/start", "/help", "/menu", "/commands", "/reset", "/clear", "/status", "/sites", "/profile", "/setlocation", "/dashboard", "/dash", "/schedules", "/cancel", "/recipes", "/templates", "/run", "/forget", "/forget-recipe", "/forget-alert", "/digests", "/forget-digest", "/alerts", "/contacts"]);
     if (first && first.startsWith("/") && !KNOWN_COMMANDS.has(first)) {
       const afterCmd = msg.text.trim().slice(first.length).trim(); // args after the /token
       if (!afterCmd) {
@@ -598,6 +605,31 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     if (deps.listCommand) {
       const r = deps.listCommand(msg.chatId, msg.text);
       if (r) { await deps.sendMessage(msg.chatId, r); return; }
+    }
+
+    // Contacts book (contacts-book-compose). "/contacts" lists them; "forget mom's contact" deletes;
+    // "save mom's number is 555-1234" / "boss's email is b@co.com" stores a name->handle so a later
+    // "text mom ..." drafts to the saved recipient. Detected before the scheduler + agent. Save is
+    // checked LAST (its cue is broad) and only fires when parseSaveContact finds a real phone/email.
+    if (first === "/contacts" && deps.contactList) {
+      const list = deps.contactList(msg.chatId);
+      if (!list.length) { await deps.sendMessage(msg.chatId, "No saved contacts. Save one: \"save mom's number is 555-123-4567\" or \"my boss's email is boss@co.com\", then \"text mom ...\"."); return; }
+      const lines = list.map((c) => `• ${c.name}${c.email ? ` — ${c.email}` : ""}${c.phone ? ` — ${c.phone}` : ""}`);
+      await deps.sendMessage(msg.chatId, `Your contacts:\n${lines.join("\n")}\n\nForget one with "forget <name>'s contact".`);
+      return;
+    }
+    if (deps.forgetContact) {
+      const r = deps.forgetContact(msg.chatId, msg.text);
+      if (r) { await deps.sendMessage(msg.chatId, `Forgot ${r.name}'s contact.`); return; }
+    }
+    if (deps.saveContact) {
+      const r = deps.saveContact(msg.chatId, msg.text);
+      if (r) {
+        const handle = [r.email, r.phone].filter(Boolean).join(", ");
+        if (r.saved === false) { await deps.sendMessage(msg.chatId, `I've got ${r.name} (${handle}) for now, but couldn't save it to disk — it may be lost if I restart. Try again shortly.`); return; }
+        await deps.sendMessage(msg.chatId, `Saved ${r.name} (${handle}). Now you can say "text ${r.name} ..." or "email ${r.name} ..." and I'll draft it to them.`);
+        return;
+      }
     }
 
     // /dashboard: one rollup of every automation (schedules/alerts/digests/recipes). Pure read, no agent.
@@ -1141,7 +1173,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         ? `The user is replying to this message I just sent them: "${cachedPing.full.slice(0, 600)}". Answer their follow-up in that context.`
         : "";
       const context = [profileCtx, pingCtx].filter(Boolean).join(" ") || undefined;
-      const { reply, steps, tools, photo, doc, docName, degraded } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, weatherCoords: deps.weatherCoords?.(msg.chatId), weatherUnits: deps.weatherUnits?.(msg.chatId), ...(deps.recallAnswers ? { recall: (q: string) => deps.recallAnswers!(msg.chatId, q) } : {}) }, history);
+      const { reply, steps, tools, photo, doc, docName, degraded } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, weatherCoords: deps.weatherCoords?.(msg.chatId), weatherUnits: deps.weatherUnits?.(msg.chatId), ...(deps.recallAnswers ? { recall: (q: string) => deps.recallAnswers!(msg.chatId, q) } : {}), ...(deps.resolveContact ? { resolveContact: (n: string) => deps.resolveContact!(msg.chatId, n) } : {}) }, history);
       clearProgress();
       // A degraded reply is a soft-failure fallback (agent ran out of steps / produced no answer,
       // DEV-0176), not a real answer. Prepend a one-line hint so a live-bot user knows the result is

@@ -168,6 +168,8 @@ describe("handleCommand", () => {
         digestForget: () => false,
         isDigest: () => false,
         digestRun: async () => null,
+        contactList: () => [], // /contacts branch
+
         runAgentFn: async () => { agentCalls++; return { reply: "AGENT", steps: 1, tools: [] }; },
         log: () => {},
       });
