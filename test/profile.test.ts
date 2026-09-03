@@ -175,6 +175,19 @@ describe("inferTzFromLocation (city-to-tz-inference)", () => {
     expect(inferTzFromLocation("Portland, OR")).toBe(-480); // city wins (OR would also be -480)
     expect(inferTzFromLocation("somewhere in CA")).toBe(-480);
   });
+  it("the REGION tail disambiguates a same-named city (region-qualifier-tz-inference)", () => {
+    // Paris/Dublin/Athens exist in both the US + abroad — the ', ST' must win over the bare city.
+    expect(inferTzFromLocation("Paris, TX")).toBe(-360);   // US Central, NOT Paris-France (+60)
+    expect(inferTzFromLocation("Dublin, OH")).toBe(-300);  // US Eastern, NOT Dublin-Ireland (0)
+    expect(inferTzFromLocation("Athens, GA")).toBe(-300);  // US Eastern, NOT Athens-Greece (+120)
+    expect(inferTzFromLocation("Portland, ME")).toBe(-300); // Maine Eastern, NOT the default Oregon guess
+    // The real foreign cities still resolve correctly.
+    expect(inferTzFromLocation("Paris, France")).toBe(60);
+    expect(inferTzFromLocation("Dublin, Ireland")).toBe(0);
+  });
+  it("a bare 'LA' still means Los Angeles, not Louisiana (no abbrev collision)", () => {
+    expect(inferTzFromLocation("LA")).toBe(-480);
+  });
   it("null for an unknown place (never a wrong guess)", () => {
     expect(inferTzFromLocation("Smallville")).toBeNull();
     expect(inferTzFromLocation("")).toBeNull();

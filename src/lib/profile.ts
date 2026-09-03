@@ -116,7 +116,12 @@ const CITY_TZ: Record<string, number> = {
   "los angeles": -480, la: -480, "san francisco": -480, sf: -480, "san diego": -480, seattle: -480, portland: -480, "san jose": -480, sacramento: -480, "las vegas": -480, vegas: -480, oakland: -480,
   anchorage: -540, honolulu: -600,
   // US state abbreviations (approx — most-populous zone)
-  ny: -300, nj: -300, fl: -300, ga: -300, ma: -300, pa: -300, va: -300, nc: -300, oh: -300, mi: -300, tx: -360, il: -360, tn: -360, mo: -360, mn: -360, co: -420, az: -420, ut: -420, nm: -420, ca: -480, wa: -480, or: -480, nv: -480,
+  // US state abbreviations (approx — most-populous zone). Ambiguous ones that are also common English
+  // words or collide with a city code (in, or, hi, la=Los Angeles, de, ok, ma-kept, id, ne) are OMITTED
+  // — they'd mis-resolve a bare word; a "City, <that state>" is rare enough to fall back to the city.
+  ny: -300, nj: -300, fl: -300, ga: -300, ma: -300, pa: -300, va: -300, nc: -300, sc: -300, oh: -300, mi: -300, me: -300, nh: -300, vt: -300, ct: -300, ri: -300, md: -300, wv: -300, ky: -300,
+  tx: -360, il: -360, tn: -360, mo: -360, mn: -360, wi: -360, ia: -360, ks: -360, ar: -360, al: -360, ms: -360, nd: -360, sd: -360,
+  co: -420, az: -420, ut: -420, nm: -420, mt: -420, wy: -420, ca: -480, wa: -480, nv: -480, ak: -540,
   // World cities
   london: 0, dublin: 0, lisbon: 0, reykjavik: 0,
   paris: 60, berlin: 60, madrid: 60, rome: 60, amsterdam: 60, brussels: 60, vienna: 60, prague: 60, warsaw: 60, zurich: 60, milan: 60, munich: 60, barcelona: 60, stockholm: 60, oslo: 60, copenhagen: 60,
@@ -138,9 +143,16 @@ export function inferTzFromLocation(location: string): number | null {
   if (!norm) return null;
   // 1. whole string ("new york")
   if (norm in CITY_TZ) return CITY_TZ[norm]!;
-  // 2. comma-separated parts, most specific (leftmost city) first, then the region tail ("austin, tx")
+  // 2. comma-separated "City, Region" — the REGION tail DISAMBIGUATES the city, so resolve it FIRST
+  // (region-qualifier-tz-inference): "Paris, TX" must be US-Central (tx=-360), NOT Paris-France (60), and
+  // the old leftmost-first loop returned the France match. Only when the tail isn't a known region do we
+  // fall back to the leftmost city token. A single-part location (no comma) skips straight to the city.
   const parts = norm.split(",").map((p) => p.trim()).filter(Boolean);
-  for (const p of parts) if (p in CITY_TZ) return CITY_TZ[p]!;
+  if (parts.length >= 2) {
+    const tail = parts[parts.length - 1]!;
+    if (tail in CITY_TZ) return CITY_TZ[tail]!;         // region wins ("..., tx" / "..., france")
+  }
+  for (const p of parts) if (p in CITY_TZ) return CITY_TZ[p]!; // else the leftmost known token
   // 3. any whole word / adjacent word pair
   const words = norm.replace(/,/g, " ").split(/\s+/).filter(Boolean);
   for (let i = 0; i < words.length; i++) {

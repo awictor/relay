@@ -14,7 +14,7 @@
       "title": "'Paris, TX' infers Paris-France timezone, firing reminders ~7h off",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "inferTzFromLocation loops the comma parts leftmost-first and returns on the first hit, so the CITY token ('paris'->UTC+1) beats the disambiguating REGION token ('tx'->UTC-6): a 'Paris, TX' / 'Dublin, OH' / 'Athens, GA' user gets every daily reminder at the foreign city's hour, silently + forever — reintroducing the wrong-hour class the codebase fought hard to fix. Non-ambiguous cities (Austin, TX) are unaffected, which is why it slips through (audit 27 B#1).",
       "how": "Prefer the MOST-specific match: when a US state abbreviation / '<City>, <ST>' is present, resolve tz from the state (or the city+region pair) before falling back to the bare city-name table. Add tests for Paris TX / Dublin OH / Athens GA vs Paris FR / Dublin IE."
     },
@@ -2092,6 +2092,10 @@
     {
       "id": "recurring-time-after-task",
       "note": "Fixed a critical wrong-hour reminder: the daily/weekly time clause was only parsed when it sat right after the cadence word, so 'remind me every day to take my meds at 8pm' silently scheduled 9:00am (the default) AND left 'at 8pm' in the task — an evening reminder arriving 11h early every day. Added extractLooseAtTime(lower): finds the LAST 'at HH[:MM][am/pm]' anywhere in the message (am/pm or a colon-minute required, matching the main branches' discipline so 'look at 5 tabs' doesn't match). The daily + weekly branches use it as a fallback when no time sat adjacent, and strip the clause from the task; the morning/evening/night word-defaults still apply when there's no time anywhere. 2 tests (time-after-task on daily + weekly captured & stripped / word-default preserved). call-tested: false (pure parse). 1195 tests green."
+    },
+    {
+      "id": "region-qualifier-tz-inference",
+      "note": "Fixed a same-named-city timezone bug: inferTzFromLocation looped comma-parts leftmost-first, so 'Paris, TX' matched the CITY token (paris->UTC+1) before the disambiguating REGION token (tx->UTC-6) and fired every daily reminder ~7h off (also Dublin OH, Athens GA, Portland ME). Now a 'City, Region' form resolves the TAIL first (region wins), falling back to the leftmost city token only when the tail isn't a known region — so 'Paris, TX'->-360, 'Dublin, OH'->-300, 'Portland, ME'->-300, while 'Paris, France'->60 + 'Dublin, Ireland'->0 still resolve. Also filled in the missing US state abbrevs (ME/NH/VT/CT/RI/MD/WV/KY/WI/IA/KS/AR/AL/MS/ND/SD/MT/WY/AK) while OMITTING ones that collide with a city code or common English word (in/or/hi/la=Los Angeles/de/ok/id/ne) so a bare 'LA' still means Los Angeles. 3 tests (region disambiguation / foreign cities intact / LA no-collision). call-tested: false (pure inference). 1197 tests green."
     }
   ],
   "audits": [
