@@ -21,6 +21,7 @@ import { parseWorldClock, runWorldClock } from "./lib/worldclock.js";
 import { getScores as scoresFetch, formatScores } from "./lib/scores.js";
 import { getNews as newsFetch, formatNews } from "./lib/news.js";
 import { calc, formatResult } from "./lib/calc.js";
+import { parseTranslateRequest, translate } from "./lib/translate.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -138,6 +139,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { coin: { type: "string", description: "Coin ticker or name, e.g. \"BTC\", \"bitcoin\", \"ethereum\", \"doge\"." } },
       required: ["coin"],
+    },
+  },
+  {
+    name: "translate",
+    description: "Translate text — or a whole web page — into another language. Use this for \"translate X to Spanish\", \"how do you say X in Japanese\", \"read me this page in English: <url>\". Pass the user's request verbatim; I detect the target language + the text or URL. Adds a pronunciation line for a short phrase into a non-Latin script.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The user's translate request verbatim, e.g. \"translate 'where is the pharmacy' to Portuguese\" or \"translate this page to English: <url>\"." } },
+      required: ["request"],
     },
   },
   {
@@ -337,6 +347,7 @@ Tools:
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "get_time" (request): current time in another city/timezone, or convert a time between zones. Use this — NOT web_search — for "what time is it in Tokyo"/"time in London"/"9am PT in London"/"convert 3pm EST to Tokyo". Pass the request verbatim. Standard-time offsets (may be an hour off during daylight saving).
+- "translate" (request): translate text or a whole page into another language. Use for "translate X to Spanish"/"how do you say X in Japanese"/"read me this page in English: <url>". Pass the request verbatim.
 - "calculate" (expression): compute arithmetic/financial math EXACTLY. Use for chained math, bill-splits, tips, percentages, loan payments — anything past a trivial one-step sum (don't do it in your head, that's silently wrong). loanpayment(principal, annualRatePct, years) for a monthly payment.
 - "get_news" (topic?): today's top news headlines, or about a topic. Use this — NOT web_search — for "what's the news"/"top headlines"/"news about X"/"latest on Y". Omit topic for general top stories.
 - "get_scores" (request): today's sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight". Pass the request verbatim. Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
@@ -852,6 +863,20 @@ export async function runAgent(
         const answer = parsed ? runWorldClock(parsed, nowForTz) : null;
         if (!answer) { push("get_time", `Couldn't resolve a timezone in "${request}" (unknown city/abbreviation). Report that you couldn't place that zone + ask which city/UTC offset, or try web_search for an unusual place.`); continue; }
         push("get_time", `${answer}\n\nReport this to the user (include the daylight-saving caveat only if it's relevant / they're near a DST change).`);
+        continue;
+      }
+
+      if (call.name === "translate") {
+        const request = String(call.args.request ?? "").trim();
+        const parsed = parseTranslateRequest(request);
+        if (!parsed) { push("translate", `That doesn't look like a translate request. If the user pasted text to translate, translate it directly in your reply.`); continue; }
+        try {
+          const out = await translate(parsed, deps.llm, (url) => backend.scrape(url).then((r) => ({ content: r.content })).catch(() => null));
+          if (!out) { push("translate", `Couldn't translate that${parsed.url ? ` page (${parsed.url})` : ""}. Ask the user to paste the text, or check the link.`); continue; }
+          push("translate", `${out}\n\nReport this translation to the user verbatim (into ${parsed.target}).`);
+        } catch (e) {
+          push("translate", `ERROR translating: ${e instanceof Error ? e.message : String(e)}`);
+        }
         continue;
       }
 

@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "define", "directions", "get_news", "get_scores", "get_time", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "type", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "define", "directions", "get_news", "get_scores", "get_time", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "web_search"].sort()
     );
   });
 
@@ -102,6 +102,19 @@ describe("runAgent dispatch", () => {
     ]);
     await runAgent("define escrow", { llm, backend: b });
     expect(hits).toContain("defineWord:escrow");
+  });
+
+  it("translate uses an LLM sub-call for pasted text, no scrape, reaches reply", async () => {
+    const { b, hits } = recordingBackend();
+    // The dispatch calls deps.llm.complete for the translation; ScriptLLM answers the sub-call as text.
+    const llm = new ScriptLLM([
+      { toolCall: { name: "translate", args: { request: "translate 'hola' to English" } } as ToolCall },
+      { text: "hello" }, // the translate sub-call
+      { toolCall: { name: "reply", args: { text: "It means 'hello'." } } as ToolCall },
+    ]);
+    const out = await runAgent("translate hola to english", { llm, backend: b });
+    expect(out.reply).toMatch(/hello/i);
+    expect(hits.filter((h) => h.startsWith("scrape"))).toHaveLength(0); // pasted text -> no page fetch
   });
 
   it("calculate computes exactly with no backend/network, reaches reply", async () => {

@@ -1976,7 +1976,7 @@
       "title": "Translate-anything tool (text or a page)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Translation is a top assistant ask + a glaring gap next to define-a-word; only implicit inline now (no consistency, no discoverability, weak on long text / pages).",
       "how": "A translate tool: for pasted text, LLM-translate inline with the target language; for a URL, scrape then translate. Add tool + prompt + help. Optionally romaji/pronunciation like define."
     }
@@ -2749,6 +2749,10 @@
     {
       "item": "alert-series-poisoned-by-error-number",
       "note": "Fixed chart/trend series poisoned by a stray number in a non-degraded error reply. recordPoint recorded any extractable number, so 'the price page returned a 404 error' stored 404 -> a phantom spike in the watch's series. New looksLikeErrorReply (alerts.ts) flags soft-failure shapes (error/failed/couldn't/no data/timed out/blocked + status codes ONLY inside an explicit error phrase, so a real $450/Nasdaq 5900 isn't flagged); recordPoint now skips those. 5 new tests (looksLikeErrorReply true/false cases + recordPoint skips 404-reply but records a $450 price). Suite 1448 green, tsc clean."
+    },
+    {
+      "item": "translate-tool",
+      "note": "Added a translate tool: new src/lib/translate.ts (parseTranslateRequest + buildTranslatePrompt + translate) wrapping the in-loop LLM — 'translate X to Spanish' / 'how do you say X in Japanese' / 'read me this page in English: <url>'. Pasted text translates via an LLM sub-call; a URL is scraped (backend.scrape) then translated. Prompt asks for only the translation + a pronunciation line for short phrases into non-Latin scripts. Chose the LLM over a keyless MT endpoint (MyMemory transliterated 'good morning' -> グッドモーリング; live-probed). Wired agent.ts (TOOLS, dispatch, prompt), pinned tool list, HELP. 11 new tests. Suite 1459 green, tsc clean. call-tested:false (LLM sub-call is offline-mocked; live LLM path unchanged)."
     }
   ],
   "audits": [
@@ -2907,6 +2911,9 @@
     },
     {
       "note": "AUDIT (backlog dry, only owner-gated). A/new-user: transit-mode directions, flight status, flight-SEARCH (flagship demo) fails on bot-walled aggregators, local showtimes, compose-cant-send. B/reliability: error-path memory clobber (S,fixed), scores team-not-playing bypassed with a league word (S), reminderOnly no isCancelled guard (S), alert series poisoned by error-number (M), calc bare % modulo dead (S,low). C/power: translate tool, standing personal-context layer, source citations, interactive co-browsing. Seeded: error-path-memory-clobber(built), scores-team-not-playing-with-league-word, reminderonly-no-cancel-guard, alert-series-poisoned-by-error-number, translate-tool."
+    },
+    {
+      "note": "No 3-agent audit this run (translate-tool was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
     }
   ]
 }
