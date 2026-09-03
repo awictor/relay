@@ -1197,6 +1197,18 @@ describe("chained recipe run (recipe-chaining)", () => {
     expect(ran).toBe("price of bitcoin");  // single task via the agent, chain runner untouched
   });
 
+  it("an ambiguous multi-slot fill asks for a clearer form, doesn't run a mis-split task (multi-slot-multiword-value)", async () => {
+    let ran = false;
+    const { handle, sent } = harness({
+      recipeResolve: (_c, t) => /^\/run track/.test(t) ? { name: "track", ambiguousArgs: true as const, slots: ["item", "store"] } : null,
+      runAgentFn: async () => { ran = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("/run track oat milk HEB", 5));
+    expect(ran).toBe(false);                          // did NOT run against a mis-split value
+    expect(sent[0]!.text).toMatch(/item=… store=…|comma-separated/); // asked for a clean form
+    expect(sent[0]!.text).toMatch(/item, store/);
+  });
+
   it("flags a partial answer when the chain stops early instead of passing it off as complete (chain-progress-partial)", async () => {
     const { handle, sent } = harness({
       recipeResolve: (_c, t) => /^\/run flow/.test(t) ? { name: "flow", task: "check price >> if under: buy" } : null,

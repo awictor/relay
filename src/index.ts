@@ -25,7 +25,7 @@ import { ScheduleStore, parseSchedule, parseSnoozeCommand, tzOffsetMin, quietUnt
 import { formatWhen } from "./lib/format-when.js";
 import { formatDashboard, type DashboardData } from "./lib/dashboard.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
-import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots } from "./lib/recipes.js";
+import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots, slotsAmbiguous, slotNames } from "./lib/recipes.js";
 import { matchRecipe } from "./lib/task-suggest.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
@@ -390,6 +390,9 @@ const handle = createHandler({
     if (!rec) return null;
     // A slotted recipe run with no value would substitute empty + run a broken task — ask instead.
     if (hasSlots(rec.task) && !parsed.args.trim()) return { name: rec.name, missingArg: true };
+    // A multi-slot recipe filled positionally with a token/slot mismatch (a multi-word value, no commas/
+    // pairs) would silently mis-map — ask for a clearer form instead of a confident wrong run.
+    if (slotsAmbiguous(rec.task, parsed.args)) return { name: rec.name, ambiguousArgs: true, slots: slotNames(rec.task) };
     return { name: rec.name, task: applySlots(rec.task, parsed.args) };
   },
   // Run a chained recipe (">>"-separated steps) sequentially, feeding each step's output to the next.

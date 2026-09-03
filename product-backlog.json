@@ -23,7 +23,7 @@
       "title": "multi-slot recipe with a multi-word first value silently mis-splits",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "applySlots whitespace-splits a no-comma multi-slot arg positionally, so '/run track oat milk HEB' on 'track {item} at {store}' fills item='oat', store='milk', drops 'HEB' — a confident WRONG run on a saved automation, no error (audit B#2).",
       "how": "When positional filling a multi-slot recipe from a no-comma arg string and token count != slot count, either require name=value pairs (ask for them) or assign the LAST token to the last slot and the remainder to the first, or reply asking to use 'slot=value' form. Add tests for the multi-word case."
     },
@@ -1853,6 +1853,10 @@
     {
       "id": "empty-digest-fires-noise",
       "note": "A scheduled digest whose member recipes were ALL deleted (but the digest kept) fired a contentless '📋 name' — or a briefing of nothing but '(no such recipe anymore)' removal notices — on cadence: recurring noise from a dead automation. runDigest now returns null when NO member produced real content (0 members, or every section is a placeholder — deleted/slotted/failed), and the schedule-runner treats a null digest like a deleted recipe: complete (advance/drop) + no send. A digest with >=1 real section still sends normally (a transient '(couldn't fetch)' on one member doesn't blank it). The inbound /run path already shows 'empty or gone' on null, so it's consistent. Each section now carries a real/placeholder flag. 5 tests (all-deleted -> null / no-members -> null / >=1 real still sends / chain-empty-alongside-real / existing cases). call-tested: false (offline unit). 1157 tests green."
+    },
+    {
+      "id": "multi-slot-multiword-value",
+      "note": "A multi-slot recipe filled positionally with a multi-word value silently mis-mapped: '/run track oat milk HEB' on 'track {item} at {store}' whitespace-split to item='oat', store='milk', dropped 'HEB' — a confident WRONG run on a saved automation with no signal. Added slotsAmbiguous(task,args): flags a 2+-slot recipe filled positionally (no name=value pairs, no comma) whose whitespace token count != slot count. index recipeResolve returns an {ambiguousArgs, slots} shape in that case (like the existing missingArg path); the handler asks for a clean form ('item=… store=…' or comma-separated) instead of running the mis-split task. A matching token count, comma form, or name=value pairs still fill unambiguously; a single-slot recipe still takes the whole arg. 10 tests (5 slotsAmbiguous unit: mismatch flagged / 2=2 + comma + pairs unambiguous / single-slot never / empty-args never; + handler asks-not-runs). call-tested: false (pure parse + routing). 1162 tests green."
     }
   ],
   "audits": [

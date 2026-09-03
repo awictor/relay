@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, parseSaveThatAs, parseWatchThat, parseScheduleThat, applySlots, slotNames, hasSlots, parseChainSteps, isChain, RecipeStore } from "../src/lib/recipes.js";
+import { parseRecipeCommand, parseRunCommand, parseRunWithArgs, parseSaveThatAs, parseWatchThat, parseScheduleThat, applySlots, slotNames, hasSlots, slotsAmbiguous, parseChainSteps, isChain, RecipeStore } from "../src/lib/recipes.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -83,6 +83,25 @@ describe("slotNames", () => {
   it("returns distinct slot names in first-appearance order", () => {
     expect(slotNames("track {item} at {store} for {item}")).toEqual(["item", "store"]);
     expect(slotNames("no slots here")).toEqual([]);
+  });
+});
+
+describe("slotsAmbiguous (multi-slot-multiword-value)", () => {
+  it("flags a positional multi-slot fill whose token count != slot count", () => {
+    expect(slotsAmbiguous("track {item} at {store}", "oat milk HEB")).toBe(true); // 3 tokens, 2 slots
+    expect(slotsAmbiguous("track {item} at {store}", "milk")).toBe(true);         // 1 token, 2 slots
+  });
+  it("does NOT flag an unambiguous form", () => {
+    expect(slotsAmbiguous("track {item} at {store}", "milk HEB")).toBe(false);        // 2 tokens = 2 slots
+    expect(slotsAmbiguous("track {item} at {store}", "oat milk, HEB")).toBe(false);    // comma-separated
+    expect(slotsAmbiguous("track {item} at {store}", "item=oat milk store=HEB")).toBe(false); // pairs
+  });
+  it("never flags a single-slot or no-slot recipe (whole arg fills it)", () => {
+    expect(slotsAmbiguous("price of {item}", "oat milk cartons")).toBe(false);
+    expect(slotsAmbiguous("check bitcoin price", "anything")).toBe(false);
+  });
+  it("empty args is not ambiguous (handled by the missing-arg path)", () => {
+    expect(slotsAmbiguous("track {item} at {store}", "")).toBe(false);
   });
 });
 

@@ -156,6 +156,22 @@ export function hasSlots(task: string): boolean {
   return /\{[a-z0-9_]+\}/i.test(task);
 }
 
+/** Would applySlots mis-fill this multi-slot recipe (multi-slot-multiword-value)? For 2+ distinct slots
+ * filled POSITIONALLY (no name=value pairs, no commas) the arg string is whitespace-split, so a
+ * multi-word value silently corrupts the mapping ("oat milk HEB" -> item="oat", store="milk", drops
+ * "HEB"). Ambiguous exactly when: >1 slot, args non-empty, no name=value pair, no comma, and the
+ * whitespace token count != the slot count. A comma or name=value form is unambiguous; a matching token
+ * count is taken at face value. Lets the caller ask for a clearer form instead of a confident wrong run. */
+export function slotsAmbiguous(task: string, args: string): boolean {
+  const names = slotNames(task);
+  if (names.length < 2) return false;
+  const a = args.trim();
+  if (!a) return false; // handled by the missing-arg path
+  if (/[a-z0-9_]+\s*=\s*\S/i.test(a)) return false; // name=value pairs -> unambiguous
+  if (a.includes(",")) return false;                 // comma-separated -> unambiguous
+  return a.split(/\s+/).filter(Boolean).length !== names.length; // token/slot mismatch -> ambiguous
+}
+
 function normalizeName(s: string): string {
   return s.trim().replace(/^["']|["']$/g, "").replace(/\s+/g, " ").toLowerCase().slice(0, 60);
 }

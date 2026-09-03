@@ -133,7 +133,7 @@ export interface HandlerDeps {
   recipeSaveNamed?: (chatId: number, name: string, task: string) => { ok: true; name: string } | { ok: false; reason: "capped" };
   // parses a run command + looks up. { missingArg } = a slotted recipe was run with no value, so the
   // handler asks for it instead of running a broken (empty-slot) task (product-loop).
-  recipeResolve?: (chatId: number, text: string) => { name: string; task: string } | { name: string; missingArg: true } | null;
+  recipeResolve?: (chatId: number, text: string) => { name: string; task: string } | { name: string; missingArg: true } | { name: string; ambiguousArgs: true; slots: string[] } | null;
   // Run a chained recipe (task with ">>" steps) sequentially, returning the final output (recipe-chaining).
   // Optional; absent -> a chained task just runs as one agent task (the ">>" is inert).
   // A chained recipe returns the final output plus whether it stopped early (an if-gate failed or a
@@ -906,6 +906,13 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       }
       const hit = deps.recipeResolve?.(msg.chatId, msg.text);
       if (hit && "missingArg" in hit) { await deps.sendMessage(msg.chatId, `"${hit.name}" needs a value — try "/run ${hit.name} <value>".`); return; }
+      // A multi-slot recipe with an ambiguous positional fill (multi-word value, no commas/pairs): ask for
+      // a form that maps cleanly rather than silently running against a mis-split value.
+      if (hit && "ambiguousArgs" in hit) {
+        const ex = hit.slots.map((s) => `${s}=…`).join(" ");
+        await deps.sendMessage(msg.chatId, `"${hit.name}" has ${hit.slots.length} fill-ins (${hit.slots.join(", ")}). To avoid mixing up multi-word values, give them as "${ex}" or comma-separated in order.`);
+        return;
+      }
       // A chained recipe (task has ">>") runs its steps sequentially via runChainRecipe rather than as
       // one agent task (recipe-chaining). Rate-limited like an agent turn; result cached for drilldown.
       if (hit && "task" in hit && deps.runChainRecipe && isChain(hit.task)) {
