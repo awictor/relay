@@ -1,0 +1,90 @@
+import { describe, it, expect } from "vitest";
+import { airQualityUrl, isAirRequest, isUvRequest, airPlace, aqiCategory, uvRisk, parseAirQuality, formatAirQuality, getAirQuality } from "../src/lib/airquality.js";
+
+describe("aqiCategory / uvRisk", () => {
+  it("maps AQI to EPA bands", () => {
+    expect(aqiCategory(30)).toBe("Good");
+    expect(aqiCategory(75)).toBe("Moderate");
+    expect(aqiCategory(120)).toBe("Unhealthy for sensitive groups");
+    expect(aqiCategory(175)).toBe("Unhealthy");
+    expect(aqiCategory(250)).toBe("Very unhealthy");
+    expect(aqiCategory(400)).toBe("Hazardous");
+  });
+  it("maps UV to risk words", () => {
+    expect(uvRisk(1)).toBe("low");
+    expect(uvRisk(4)).toBe("moderate");
+    expect(uvRisk(7)).toBe("high");
+    expect(uvRisk(9)).toBe("very high");
+    expect(uvRisk(12)).toBe("extreme");
+  });
+});
+
+describe("isAirRequest / isUvRequest / airPlace", () => {
+  it("recognizes air + UV asks", () => {
+    for (const t of ["how's the air", "is it smoky today", "what's the AQI", "safe to run outside?", "do I need sunscreen", "what's the UV"]) expect(isAirRequest(t), t).toBe(true);
+    expect(isAirRequest("what's the weather")).toBe(false);
+  });
+  it("flags UV-specific asks so the reply leads with UV", () => {
+    expect(isUvRequest("do I need sunscreen")).toBe(true);
+    expect(isUvRequest("what's the uv index")).toBe(true);
+    expect(isUvRequest("how's the air")).toBe(false);
+  });
+  it("extracts a trailing 'in <place>', rejecting time/adjective tails", () => {
+    expect(airPlace("is the air bad in Los Angeles")).toBe("Los Angeles");
+    expect(airPlace("air quality in 2 hours")).toBeNull();
+    expect(airPlace("how's the air")).toBeNull();
+  });
+});
+
+describe("parseAirQuality / formatAirQuality", () => {
+  const body = JSON.stringify({ current: { us_aqi: 48, pm2_5: 3, pm10: 3.7, ozone: 39, uv_index: 7 } });
+  it("parses the current block", () => {
+    const a = parseAirQuality(body, "Austin")!;
+    expect(a).toMatchObject({ place: "Austin", aqi: 48, category: "Good", pm25: 3, uv: 7 });
+  });
+  it("null when the current block or us_aqi is missing", () => {
+    expect(parseAirQuality(JSON.stringify({ current: {} }), "x")).toBeNull();
+    expect(parseAirQuality("nope", "x")).toBeNull();
+  });
+  it("leads with AQI for an air ask, appends UV", () => {
+    const out = formatAirQuality(parseAirQuality(body, "Austin")!, false);
+    expect(out).toMatch(/^Air quality in Austin: AQI 48 \(Good\), PM2\.5 3µg\/m³\. UV index 7 \(high — wear sunscreen\)\./);
+  });
+  it("leads with UV for a sunscreen ask", () => {
+    const out = formatAirQuality(parseAirQuality(body, "Austin")!, true);
+    expect(out).toMatch(/^Austin: UV index 7 \(high — wear sunscreen\)\. Air quality/);
+  });
+  it("no 'wear sunscreen' nudge when UV is low", () => {
+    const low = parseAirQuality(JSON.stringify({ current: { us_aqi: 40, uv_index: 1 } }), "Reykjavik")!;
+    expect(formatAirQuality(low)).toMatch(/UV index 1 \(low\)\./);
+    expect(formatAirQuality(low)).not.toMatch(/wear sunscreen/);
+  });
+});
+
+describe("getAirQuality (injected fetch)", () => {
+  it("geocodes a named place then fetches air quality", async () => {
+    const urls: string[] = [];
+    const a = await getAirQuality({ text: "is the air bad in Denver", place: "Denver" }, async (url) => {
+      urls.push(url);
+      if (url.includes("geocoding")) return JSON.stringify({ results: [{ latitude: 39.7, longitude: -105, name: "Denver", country: "USA" }] });
+      return JSON.stringify({ current: { us_aqi: 90, pm2_5: 20, uv_index: 5 } });
+    });
+    expect(a!.place).toBe("Denver, USA");
+    expect(a!.aqi).toBe(90);
+    expect(urls[1]).toContain("air-quality");
+  });
+  it("uses saved coords directly (no geocode) when no place is named", async () => {
+    let geocoded = false;
+    const a = await getAirQuality({ text: "how's the air", lat: 30, lng: -97 }, async (url) => {
+      if (url.includes("geocoding")) { geocoded = true; return "{}"; }
+      return JSON.stringify({ current: { us_aqi: 42, uv_index: 3 } });
+    });
+    expect(geocoded).toBe(false);
+    expect(a!.place).toBe("your location");
+    expect(a!.category).toBe("Good");
+  });
+  it("null on an unknown place / fetch failure (caller falls back)", async () => {
+    expect(await getAirQuality({ place: "Nowheresville" }, async () => JSON.stringify({ results: [] }))).toBeNull();
+    expect(await getAirQuality({ lat: 1, lng: 2 }, async () => { throw new Error("net"); })).toBeNull();
+  });
+});

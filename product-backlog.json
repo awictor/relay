@@ -2129,9 +2129,45 @@
       "title": "no air-quality / UV tool (\"is the air OK to run\", \"need sunscreen?\")",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'is the air bad / smoky', 'UV today / do I need sunscreen' fall through to a flaky web_search/scrape; no AQI/UV tool exists. High seasonal/health value.",
       "how": "New tool near weather: Open-Meteo air-quality API is keyless + takes the same lat/lng weather already resolves+stores per-chat. Fetch + pure formatter + unit tests, mirroring weather.ts. New TOOLS[] entry + dispatch + prompt line + HELP + sorted tool-list test."
+    },
+    {
+      "id": "delete-persist-hedge",
+      "title": "cancel/forget/remove/clear confirm success even when the disk write failed",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "The SAVE path hedges ('couldn't save to disk') via atomicWriteJson's bool + lastSaveOk, but the DELETE path doesn't: schedule.remove/notes.forget+clear/lists.remove+clear/contacts.forget all drop persist()'s return. So 'cancel my 3pm reminder' / 'forget I'm allergic to peanuts' / 'forget everything about me' get a clean confirm, but on a failed write the data resurrects on restart — a cancelled reminder fires again, a deleted privacy fact keeps getting injected into answers. Worse than a failed save because the user believes it's done.",
+      "how": "Plumb the persist bool through the destructive paths (return removed+saved, mirror the add-side pattern) so the handler hedges ('I removed it for now but couldn't save the change to disk — try again'). Cover schedule cancel, forgetFact/clear, list remove/clear, contact forget. Offline-testable with an unwritable store (parent-is-a-file trick already used in tests)."
+    },
+    {
+      "id": "clocktime-once-restamp",
+      "title": "a wall-clock \"once\" set before location fires at the wrong hour, never re-stamped",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "restampTz recomputes daily/weekly on setlocation but EXCLUDES `once` (comment claims a clock once 'fires just once shortly anyway' — false for 'remind me tomorrow at 8am'). Its dueMs was baked as an absolute instant at offset 0, so after the user sets US-Eastern it still fires at 8am UTC = 3am local, with no warning. Distinct from the parked DST issue — a create-before-location ordering bug.",
+      "how": "In restampTz, also re-stamp clockTime `once` schedules whose dueMs is future: shift the UTC instant by the offset delta (same math as the daily/weekly branch) so it keeps the intended wall-clock time. clockTime already flags these. Offline test: create a clock once at offset 0, restamp to -300, assert dueMs shifts to hold local 8am."
+    },
+    {
+      "id": "qr-code-tool",
+      "title": "no QR-code generation (\"make a QR for this link / my wifi\")",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "'make a QR code for this link' floods into a floundering browse or refusal, though the sendPhoto image channel is already wired. High-delight, instant proof the bot does real work.",
+      "how": "Add a keyless QR tool: build a chart/QR image URL (quickchart.io/qr or api.qrserver.com — already keyless img sources) or generate offline; return the PNG via the existing chart/sendPhoto path. New TOOLS[] entry + dispatch + prompt + HELP + sorted tool-list test. Offline-test the URL/payload builder."
+    },
+    {
+      "id": "feed-key-collision",
+      "title": "feedItemKey truncates to 120 chars — distinct long titles collide, a new item never pings",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "feedItemKey = normalizeForCompare(item).slice(0,120). Two different feed entries sharing a 120-char prefix (verbose news/marketplace titles) get the same dedup key; the second is treated as already-seen and never surfaces — a job/listing/headline the user waits for silently never pings, reads as 'nothing new'.",
+      "how": "Key on a stable id when present (the follow-feed path already does; the agent-driven checkAlert path keys title-only), else hash the FULL normalized title instead of a 120-char prefix slice. Offline test: two titles sharing a long prefix get distinct keys."
     }
   ],
   "history": [
@@ -2966,6 +3002,10 @@
     {
       "item": "hourly-rain-weather",
       "note": "Weather now answers time-of-day rain questions with WHEN, not a whole-day max. Added &hourly=precipitation_probability,temperature_2m to the existing keyless Open-Meteo call; parseForecast now builds an hours[] array (local date+hour+precip+temp from timezone=auto). New resolveHourWindow maps named dayparts (morning/afternoon/evening/tonight/noon), a specific 'at 3pm'/'at 15:00', and 'later today'/'rest of the day' (anchored to the location's current local hour) to an hour window; formatWeatherHourly slices those hours and summarizes rain likelihood + the peak-rain hour + temp range ('Austin afternoon: likely rain (up to 80%, around 3pm), 72-75F'). Dispatch resolves most-specific-first: hourly window -> future day -> current; nowHour from nowMs+tzOffsetMin. Tool `when` + prompt updated to route 'this afternoon'/'tonight'/'at 3pm'. 8 new tests; live-probed the Open-Meteo hourly URL (200, local timestamps, 168h) so call-tested:true for the data source (agent wiring offline-tested)."
+    },
+    {
+      "item": "air-quality-uv",
+      "note": "Added a keyless get_air_quality tool. New src/lib/airquality.ts (near-clone of suntimes.ts): Open-Meteo air-quality API returns US AQI + PM2.5/PM10/ozone + current UV in ONE call, at the same lat/lng weather resolves + stores per-chat. isAirRequest/isUvRequest/airPlace detectors, aqiCategory (EPA bands) + uvRisk mappers, parseAirQuality, formatAirQuality (leads with UV for a 'sunscreen' ask, AQI otherwise, 'wear sunscreen' nudge when UV>=3). Wired: TOOLS[] entry + dispatch (threads saved coords like get_suntimes) + BrowserBackend.getAirQuality method + defaultBackend + prompt line + HELP + sorted tool-list test. 13 new tests; live-probed the Open-Meteo AQI URL (200, us_aqi/pm2_5/uv_index present) so call-tested:true for the data source, agent wiring offline-tested. Previously 'is it smoky'/'need sunscreen' fell to a flaky scrape."
     }
   ],
   "audits": [
@@ -3142,6 +3182,9 @@
     },
     {
       "note": "3-lens audit (sticky-reminders shipped, backlog down to owner-gated confirm-to-act). RELIABILITY lens found 2 REGRESSIONS in the just-shipped sticky feature: (1) one 'done' wipes ALL sticky reminders not just the pinged one; (2) a send-failure burns a sticky's fire budget + can self-drop it unseen. Also: alerts extractValue prefers a lone decimal over the real integer (false 'below X' crossing); feed seen-set cap re-reports an aged-out but still-present item; fixed-offset TZ DST drift (known/parked). NEW-USER lens: no hourly/rain-timing weather, no air-quality/UV, flight-status (partly owner-gated/L). POWER lens: reply-to-message threaded refinement, persistent upload memory + doc Q&A, group/shared mode, self-service authenticated browsing (L), live-location geofence. Seeded 4: the 2 sticky regressions (high) + hourly-rain (high/S) + air-quality (med/S). Parked the rest as future candidates."
+    },
+    {
+      "note": "3-lens audit (air-quality shipped, backlog down to owner-gated confirm-to-act). RELIABILITY (top): the DELETE path (cancel/forget/remove/clear) confirms success without checking the persist write — mirror of the save-side hedge; a failed write resurrects a cancelled reminder or a deleted privacy fact on restart. Also: a wall-clock `once` set before location is never re-stamped (fires wrong-hour); feedItemKey 120-char truncation collides distinct long titles (new item never pings). NEW-USER: nutrition/calorie lookup (M), QR code (S), secure password gen (S), flight status (partly owner-gated). POWER: inbound photo understanding (M), inbound voice transcription (M), inline-button one-tap actions (M), vacation/pause-all (S), trend sparkline in alert pings (S). Seeded 4: delete-persist-hedge (high/M), clocktime-once-restamp (high/S), qr-code (med/S), feed-key-collision (med/S). Parked the rest."
     }
   ]
 }
