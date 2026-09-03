@@ -378,3 +378,26 @@ describe("runAgent directions (directions-eta)", () => {
     expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/no saved location/i);
   });
 });
+
+describe("runAgent calendar_event (ics-calendar-export)", () => {
+  it("returns an add-to-calendar artifact (gcal link + .ics), no browser", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "calendar_event", args: { title: "Dentist", startDate: "2024-07-04", location: "Clinic" } } },
+      { toolCall: { name: "reply", args: { text: "Added a calendar link for you." } } },
+    ]);
+    await runAgent("add dentist on July 4 to my calendar", { llm });
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/📅 Dentist — 2024-07-04/);
+    expect(toolMsg!.content).toMatch(/calendar\.google\.com/);
+    expect(toolMsg!.content).toMatch(/data:text\/calendar/);
+    expect(toolMsg!.content).toMatch(/NOT adding it/i);
+  });
+  it("errors on a missing title", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "calendar_event", args: { startDate: "2024-07-04" } } },
+      { toolCall: { name: "reply", args: { text: "What's the event?" } } },
+    ]);
+    await runAgent("add to calendar", { llm });
+    expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/no event title/i);
+  });
+});

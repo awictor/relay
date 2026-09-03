@@ -18,6 +18,7 @@ import { getWeather as fetchWeather, formatWeather } from "./lib/weather.js";
 import { formatDraft, type Draft } from "./lib/compose.js";
 import { findNearby as fetchNearby, formatPlaces } from "./lib/places.js";
 import { getDirections as fetchDirections, formatRoute, routeMode } from "./lib/directions.js";
+import { formatCalendar, type CalEvent } from "./lib/calendar.js";
 
 // Does the user's task ask for a keepable file (csv-export-compare)? A compare/extract then attaches
 // a CSV document instead of only pasting a truncated JSON blob in chat.
@@ -174,6 +175,22 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "calendar_event",
+    description: "Turn an event/deadline/appointment into an add-to-calendar artifact (a Google Calendar link + an .ics file) for the user to import. Use when the user says \"add this to my calendar\", \"remind me on <date>\" as an event, or after you find an event they want to keep. You never touch their calendar — they tap to add.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Event title" },
+        startMs: { type: "number", description: "Start as epoch ms for a TIMED event (UTC). Use the current-datetime context to compute it." },
+        startDate: { type: "string", description: "OR an all-day date \"YYYY-MM-DD\" (no time)." },
+        durationMin: { type: "number", description: "Timed event length in minutes (default 60)." },
+        location: { type: "string", description: "Optional location." },
+        description: { type: "string", description: "Optional details." },
+      },
+      required: ["title"],
+    },
+  },
+  {
     name: "transcript",
     description: "Fetch the spoken transcript (captions) of a YouTube video by URL. Use this — NOT scrape — whenever the user gives a YouTube link (youtube.com/watch, youtu.be, /shorts) and wants it summarized, quoted, or answered from (\"summarize this video\", \"what does this video say about X\", \"tldr\"). Returns the plain transcript text; then summarize/answer from it. If captions are unavailable it says so.",
     parameters: { type: "object", properties: { url: { type: "string", description: "A YouTube video URL (watch/youtu.be/shorts)" } }, required: ["url"] },
@@ -215,6 +232,7 @@ Tools:
 - "get_weather" (place?): current weather + today's high/low. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location.
 - "find_nearby" (what, near?): find places near the user (coffee, pharmacy, ATM, gas...). Use this — NOT web_search — for "X near me"/"nearest Y". Omit near to use the user's location.
 - "directions" (to, from?, mode?): distance + travel time between places. Use this — NOT web_search — for "how far is X"/"directions to Y"/"how long to drive to Z". Omit from to start from the user's location.
+- "calendar_event" (title, startMs|startDate, ...): turn an event/deadline into an add-to-calendar link + .ics for the user to import ("add this to my calendar"). You never add it — pass the artifact verbatim.
 - "compose" (kind, to?, subject?, body): draft an email/text for the user to SEND THEMSELVES (you write the body; it returns a copy block + a mailto:/sms: link). Use for "write/draft/reply to..." asks. You never send — pass the returned draft to the user verbatim in reply.
 - "reply" (text): finish.
 
@@ -673,6 +691,20 @@ export async function runAgent(
         } catch (e) {
           push("directions", `ERROR getting directions: ${e instanceof Error ? e.message : String(e)}`);
         }
+        continue;
+      }
+
+      if (call.name === "calendar_event") {
+        const title = String(call.args.title ?? "").trim();
+        if (!title) { push("calendar_event", "ERROR: no event title given."); continue; }
+        const ev: CalEvent = { title,
+          ...(Number.isFinite(Number(call.args.startMs)) ? { startMs: Number(call.args.startMs) } : {}),
+          ...(call.args.startDate ? { startDate: String(call.args.startDate) } : {}),
+          ...(Number.isFinite(Number(call.args.durationMin)) ? { durationMin: Number(call.args.durationMin) } : {}),
+          ...(call.args.location ? { location: String(call.args.location) } : {}),
+          ...(call.args.description ? { description: String(call.args.description) } : {}),
+        };
+        push("calendar_event", `${formatCalendar(ev, deps.nowMs ?? Date.now())}\n\n(Give this to the user verbatim — the title/when line + both links. You are NOT adding it to their calendar; they tap to add.)`);
         continue;
       }
 

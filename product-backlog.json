@@ -1121,7 +1121,7 @@
       "title": ".ics calendar export in the composer",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A found event/deadline dead-ends at text; no add-to-calendar. compose.ts already proves the non-gated artifact pattern.",
       "how": "compose kind:calendar -> a data:text/calendar VEVENT + a Google-cal deep link; pure formatting, never trips the send guard."
     },
@@ -1528,6 +1528,10 @@
     {
       "id": "directions-eta",
       "note": "Added a directions tool — \"how far is the airport\"/\"directions to X\" (advertised but unbuilt) now returns distance + travel time via keyless OSM: Nominatim geocodes both endpoints, OSRM public server routes them (driving/walking/cycling inferred from phrasing). New src/lib/directions.ts (osrmUrl lng,lat order, routeMode, parseOsrm, formatRoute, getDirections w/ injected fetch, reuses places nominatim) + backend.getDirections + agent tool/dispatch/prompt; from = user coords when omitted, honors unit pref (mi/km). Live-verified OSRM (Austin downtown->airport 18.2km/22min). 1024 tests green."
+    },
+    {
+      "id": "ics-calendar-export",
+      "note": "Added a calendar_event tool — an event/deadline now ends in the user calendar instead of dead-ending at text. Emits a Google Calendar template link + an .ics VEVENT as a data: URL (all-day date or timed UTC). New src/lib/calendar.ts (buildIcs RFC-5545-escaped, gcalLink, formatCalendar) + agent tool/dispatch/prompt; pure formatting, never touches the send/pay guard (user taps to add). 1032 tests green."
     }
   ],
   "audits": [

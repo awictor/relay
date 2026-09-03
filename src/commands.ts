@@ -34,6 +34,8 @@ const HELP = `Relay — what I can do:
 
 Draft correspondence: "write an email to my landlord that rent is late" or "text mom I'll be late" → I draft it and give you a copy block + a one-tap send link. You review and send — I never send for you.
 
+Add to your calendar: "add dentist Thursday 2pm to my calendar" → I give you a Google Calendar link + an .ics file to import. You tap to add.
+
 Limits: I won't log in as you, pay, buy, or do anything destructive. If a task needs that, I'll say so.
 
 Schedule me: "remind me to X in 10 min", "every morning tell me Y", "every Monday at 9am ...", "every weekday at 8 ...", or "every 2 hours ..." — I'll text you when it's time. /schedules lists them, /cancel <id> (or /cancel all) removes them.
