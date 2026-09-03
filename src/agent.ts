@@ -19,6 +19,7 @@ import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
 import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
 import { getFact as factFetch, formatFact } from "./lib/wikifact.js";
 import { getNutrition as nutritionFetch, formatNutrition } from "./lib/nutrition.js";
+import { parseWatchQuery, formatWatchWhere } from "./lib/watch-where.js";
 import { parseWorldClock, runWorldClock } from "./lib/worldclock.js";
 import { runDateCalc, type Ymd } from "./lib/datecalc.js";
 import { getScores as scoresFetch, formatScores, getNextGame as nextGameFetch, formatNextGame, wantsNextGame } from "./lib/scores.js";
@@ -231,6 +232,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { word: { type: "string", description: "The single English word to define, e.g. \"obsequious\" or \"escrow\"." } },
       required: ["word"],
+    },
+  },
+  {
+    name: "where_to_watch",
+    description: "Find where a movie/TV show is streaming, to rent, or to buy (keyless, instant). Use this — NOT web_search/scrape, and NEVER claim a specific service from memory — for \"where can I watch X\", \"is X on Netflix\", \"how do I stream X\". Returns a JustWatch link with accurate per-region availability (it changes constantly + varies by country, so the link is the source, not a guess). Pass the TITLE. For a rating or plot, use get_fact instead.",
+    parameters: {
+      type: "object",
+      properties: { title: { type: "string", description: "The movie/show title, e.g. \"Dune Part Two\", \"Oppenheimer\"." } },
+      required: ["title"],
     },
   },
   {
@@ -468,6 +478,7 @@ Tools:
 - "define" (word): a word's definition, pronunciation, and synonyms. Use this — NOT web_search/scrape — for "what does X mean"/"define X"/"synonyms for X"/"how do you spell X". English words only; pass the single word.
 - "get_fact" (query): a quick cited Wikipedia summary. Use this — NOT web_search — for "who is X"/"what is X"/"how tall/old/big is X"/"tell me about X" general-knowledge asks. Pass the ENTITY (not the whole sentence). Falls back to web_search on a miss/ambiguous term.
 - "get_nutrition" (food): calories + macros from USDA. Use this — NOT web_search, NEVER guess — for "calories in X"/"protein in X"/"carbs in X"/"is X healthy". Per-100g for the closest match; say "not sure" on a miss instead of inventing numbers.
+- "where_to_watch" (title): where a movie/show streams/rents/buys. Use this — NOT web_search, NEVER claim a service from memory — for "where can I watch X"/"is X on Netflix". Returns a JustWatch per-region link (the source of truth). For a rating/plot use get_fact.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
 - "get_flight" (flight): flight route + live position by number. Use this — NOT web_search — for "is AA100 on time"/"where's UA83"/"when does DL215 land". Returns airline + from→to + airborne-now + a tracker link; it CAN'T get scheduled gate/on-time — report honestly, don't invent a gate/delay.
@@ -1025,6 +1036,17 @@ export async function runAgent(
         } catch (e) {
           push("define", `ERROR looking up definition: ${e instanceof Error ? e.message : String(e)}`);
         }
+        continue;
+      }
+
+      if (call.name === "where_to_watch") {
+        // Pure tool (no backend): a title arg -> a JustWatch availability link. Accept the raw arg, or
+        // parse it out of a sentence the model passed verbatim. Honest link-bridge (no keyless streaming
+        // API exists), so it never claims a specific service.
+        const raw = String(call.args.title ?? "").trim();
+        const title = raw && !/\b(watch|stream)\b/i.test(raw) ? raw : (parseWatchQuery(raw) ?? raw);
+        if (!title) { push("where_to_watch", "No title given — ask the user which movie/show."); continue; }
+        push("where_to_watch", `${formatWatchWhere(title)}\n\nGive the user this JustWatch link + the honest note; don't name a specific streaming service yourself.`);
         continue;
       }
 

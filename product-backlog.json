@@ -2714,7 +2714,7 @@
       "title": "'where can I stream X' / movie rating has no tool -> cold web_search",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "'is Dune 2 any good' / 'where can I watch Oppenheimer' is a top evening errand that falls to a flaky logged-out scrape floating a number with no source or streaming answer.",
       "how": "anvil drives a JustWatch (or Google) title page for streaming availability + a rating; reuse the browse/extract tools. Or a keyless-ish source if one exists. Report rating + where-to-stream + a link, honest on a miss."
     }
@@ -3795,6 +3795,10 @@
     {
       "item": "nutrition-lookup",
       "note": "Nutrition lookup (nutrition-lookup): 'calories in a banana' / 'protein in chicken breast' / 'carbs in a Big Mac' now answered from USDA FoodData Central instead of a web_search guess or invented figures. New src/lib/nutrition.ts: nutritionUrl (keyless USDA search, restricted to whole-food datasets Foundation/SR-Legacy/Survey so 'banana' isn't a random branded product; public DEMO_KEY, optional USDA_API_KEY for a real quota) + parseNutrition (top match -> per-100g kcal/protein/carb/fat; takes the KCAL energy row, NEVER lets a KJ value land in kcal; null when no macros) + formatNutrition (matched-food name so a mismatch is visible + a per-100g/source note) + getNutrition (null on miss/throw). Wired get_nutrition tool + dispatch (miss -> 'say not sure, don't invent') + BrowserBackend.getNutrition + defaultBackend + prompt menu + HELP + pinned tool-name list (42 tools) + USDA_API_KEY .env.example parity. 11 new tests (url, parse KCAL-vs-KJ/fallback/null, format, getNutrition resolve/throw/empty; 2 dispatch incl no-fabricate-on-miss). suite 1844 green, tsc clean. Live-probed USDA (200, banana/chicken/big-mac clean per-100g macros) so call-tested:true for the source; agent path offline-tested. Anvil-independent (keyless)."
+    },
+    {
+      "item": "movie-where-to-watch",
+      "note": "Where-to-watch (movie-where-to-watch): 'where can I watch Dune Part Two' / 'is Oppenheimer streaming' now returns a JustWatch per-region availability link instead of a cold logged-out scrape guessing a service. Probed the keyless options — TMDb/OMDb need a key (signup=owner-gated), iTunes movie search returns empty, JustWatch has no keyless API + needs anvil (down) — so, like the transit-directions bridge, built an HONEST link tool rather than inventing 'it's on Netflix'. New src/lib/watch-where.ts: parseWatchQuery (title out of 'where can I watch X'/'is X on Netflix', strips platform clause + 'the movie' filler, gated on a watch/stream cue) + justWatchUrl (per-region search URL, verified 200) + formatWatchWhere (link + a can't-confirm-a-service note). Wired a PURE where_to_watch tool (no backend) + dispatch (accepts a raw title or parses a verbatim sentence) + prompt menu + HELP + pinned tool-name list (43 tools). Tool desc steers rating/plot asks to get_fact. 5 new tests (parse extract/reject, url per-region, format honest-no-service; dispatch no-browser). suite 1849 green, tsc clean. Live-probed JustWatch search (200). Offline/anvil-independent (link-only, no fetch)."
     }
   ],
   "audits": [

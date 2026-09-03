@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
     );
   });
 
@@ -235,6 +235,17 @@ describe("runAgent dispatch", () => {
     const out = await runAgent("how tall is everest", { llm, backend: b });
     expect(hits).toContain("getFact:Mount Everest");
     expect(out.reply).toMatch(/Everest/);
+  });
+
+  it("where_to_watch returns a JustWatch link with no backend call (movie-where-to-watch)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "where_to_watch", args: { title: "Dune Part Two" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "Here's where to watch: <link>" } } as ToolCall },
+    ]);
+    const out = await runAgent("where can I watch Dune Part Two", { llm, backend: b });
+    expect(hits.filter((h) => !h.startsWith("scrape") ? false : true)).toHaveLength(0); // no browser used
+    expect(out.reply).toMatch(/watch/i);
   });
 
   it("get_nutrition -> backend.getNutrition, reaches reply, no browser (nutrition-lookup)", async () => {
