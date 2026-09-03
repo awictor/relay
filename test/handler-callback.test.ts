@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createHandler, type HandlerDeps } from "../src/handler.js";
 import type { InboundMessage } from "../src/telegram.js";
 import type { LLMMessage } from "../src/llm.js";
-import { encodeCallback } from "../src/lib/callbacks.js";
+import { encodeCallback, TRY_EXAMPLES } from "../src/lib/callbacks.js";
 
 // inline-tap-buttons: a callback InboundMessage (a tapped button) is routed to the bounded action,
 // acked, and never runs the agent flow. Offline via injected deps.
@@ -124,6 +124,34 @@ describe("handler — inline-button callbacks", () => {
     await handle(tap(encodeCallback({ kind: "pick", index: 0 })!));
     expect(sent[0]!.text).toMatch(/isn't available/i);
     expect(acked[0]).toMatch(/Expired/);
+  });
+
+  it("a first /start reply carries tap-to-try buttons (onboarding-tap-to-try)", async () => {
+    const { handle, sent } = harness({ handleCommand: (t) => (t === "/start" ? "👋 I'm Relay..." : null) });
+    await handle({ chatId: 1, from: "u", text: "/start", messageId: 1 } as InboundMessage);
+    expect(sent[0]!.hasButtons).toBe(true);
+  });
+
+  it("a returning user's /start (non-empty history) gets NO buttons", async () => {
+    const { handle, sent } = harness({
+      handleCommand: (t) => (t === "/start" ? "👋 I'm Relay..." : null),
+      memoryGet: () => [{ role: "user", content: "prior" }] as never,
+    });
+    await handle({ chatId: 1, from: "u", text: "/start", messageId: 1 } as InboundMessage);
+    expect(sent[0]!.hasButtons).toBe(false);
+  });
+
+  it("a try tap runs the canned example through the normal flow", async () => {
+    let ranText = "";
+    const { handle, sent, acked } = harness({
+      handleCommand: () => null,
+      runAgentFn: async (text) => { ranText = text; return { reply: "sunny, 72°", steps: 1, tools: [] }; },
+    });
+    // index 0 is "weather" — a keyless example. Tap it.
+    await handle(tap(encodeCallback({ kind: "try", index: 0 })!));
+    expect(ranText).toBe(TRY_EXAMPLES[0]!.text);
+    expect(sent[sent.length - 1]!.text).toMatch(/sunny/);
+    expect(acked[0]).toBeTruthy();
   });
 
   it("rate-limited tap does not act", async () => {

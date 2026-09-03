@@ -20,7 +20,7 @@ import { isAnswerRecall, relativeAge } from "./lib/answer-log.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./lib/recipes.js";
 import { getTemplate, templateCatalog } from "./lib/templates.js";
 import { photoNeedsAgent, photoIsQrScan } from "./lib/photo-intent.js";
-import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, type InlineKeyboard } from "./lib/callbacks.js";
+import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, tryButtons as buildTryButtons, TRY_EXAMPLES, type InlineKeyboard } from "./lib/callbacks.js";
 import { parseResultList, firstUrl, type ResultItem } from "./lib/result-list.js";
 
 export interface HandlerDeps {
@@ -378,6 +378,14 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     const rl = deps.checkRateLimit(chatId);
     if (!rl.allowed) return `Slow down — ${rl.retryAfterSec}s`;
     try {
+      if (action.kind === "try") {
+        // Onboarding tap-to-try (onboarding-tap-to-try): run the canned example as if the user typed it,
+        // so the first tap produces a real answer through the normal flow (command/agent routing).
+        const ex = TRY_EXAMPLES[action.index];
+        if (!ex) { await deps.sendMessage(chatId, "That example isn't available — just text me a task."); return null; }
+        await handleOne({ chatId, from: "tap", text: ex.text, messageId: 0 } as InboundMessage);
+        return ex.label.replace(/^\S+\s/, ""); // toast without the emoji
+      }
       if (action.kind === "pick") {
         // Resend the picked list item (inline-result-picker). The list was cached when the reply was
         // sent; a tap on a stale/replaced list either hits the current list's item N or falls out of
@@ -1340,7 +1348,16 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
 
     // Slash commands reply instantly — no rate-limit/agent.
     const cmd = deps.handleCommand(msg.text);
-    if (cmd) { await deps.sendMessage(msg.chatId, cmd); return; }
+    if (cmd) {
+      // Onboarding tap-to-try (onboarding-tap-to-try): the START/greeting reply (opens with 👋) gets a
+      // row of one-tap example buttons so a brand-new user gets an instant first success instead of
+      // reading the wall + hand-typing. Only on START (not /help/status), only on a channel with buttons
+      // + on the FIRST contact (empty history) so we don't re-badge a returning user's /start.
+      const isStart = cmd.startsWith("👋");
+      const kb = isStart && deps.answerCallback && deps.memoryGet(msg.chatId).length === 0 ? buildTryButtons() : undefined;
+      await deps.sendMessage(msg.chatId, cmd, kb);
+      return;
+    }
 
     // Follow-up on the last answer (last-result-drilldown): "more"/"full" pages out the tail a
     // phone-size trim dropped; "send the link" returns the source URLs — both from cache, no agent

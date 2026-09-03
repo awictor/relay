@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   encodeCallback, decodeCallback, alertButtons, digestButtons, recipeButtons, buttonsForTask, pickButtons,
-  CALLBACK_MAX_BYTES,
+  tryButtons, TRY_EXAMPLES, CALLBACK_MAX_BYTES,
 } from "../src/lib/callbacks.js";
 
 describe("callback codec", () => {
@@ -78,6 +78,21 @@ describe("keyboard builders", () => {
     expect(decodeCallback("pk|x")).toBeNull();
     expect(decodeCallback("pk|-1")).toBeNull();
     expect(decodeCallback("pk|2")).toEqual({ kind: "pick", index: 2 });
+  });
+
+  it("try buttons: one per example, 2 per row, round-trip to the example index", () => {
+    const kb = tryButtons();
+    const flat = kb.flat();
+    expect(flat).toHaveLength(TRY_EXAMPLES.length);
+    expect(kb[0]!.length).toBe(2); // two per row
+    expect(decodeCallback(flat[0]!.callback_data)).toEqual({ kind: "try", index: 0 });
+    expect(decodeCallback(flat[flat.length - 1]!.callback_data)).toEqual({ kind: "try", index: TRY_EXAMPLES.length - 1 });
+    for (const b of flat) expect(new TextEncoder().encode(b.callback_data).length).toBeLessThanOrEqual(CALLBACK_MAX_BYTES);
+  });
+
+  it("try decodes reject a non-integer index", () => {
+    expect(decodeCallback("ty|x")).toBeNull();
+    expect(decodeCallback("ty|0")).toEqual({ kind: "try", index: 0 });
   });
 
   it("buttonsForTask maps the schedule marker to the right keyboard", () => {

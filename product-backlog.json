@@ -2483,6 +2483,42 @@
       "status": "done",
       "why": "The inline-result-picker attaches 1/2/3 buttons to INBOUND agent answers, but a scheduled/alert list ping (a watchlist restock, new listings feed) still arrives as a text wall with no pick. Same value, other half of the surface.",
       "how": "In schedule-runner, parseResultList the proactive sendText; when it's a 2+ item list, attach pickButtons AND cache the items into the shared lastResult/pick store keyed by chat so a tap on a proactive ping resends the item. Reuse result-list.ts + the handler's pick routing already built."
+    },
+    {
+      "id": "onboarding-tap-to-try",
+      "title": "onboarding is a text wall — no tap-to-try first errand",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "A new user texts hi, gets the START wall, must read + hand-type before anything happens; many bounce before first success.",
+      "how": "Attach one-tap example buttons to START that RUN a canned keyless errand via the existing callback plumbing."
+    },
+    {
+      "id": "memory-write-silent-fail",
+      "title": "MemoryStore write failures are silent (no hedge, unlike every other store)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "After a restart on a full/unwritable disk the bot has silently forgotten recent conversation, with no 'couldn't save' notice — the one store left un-hedged.",
+      "how": "memory-store.ts persist() ignores atomicWriteJson's boolean; track lastWriteOk + expose lastSaveOk() like schedule/alert/recipe stores, and surface a one-time heads-up via the corrupt-notice path."
+    },
+    {
+      "id": "quiet-hours-persistent-alerts",
+      "title": "quiet hours bypassed for ALL alert types — feed/page/value watches buzz at 3am",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "A feed watch, page-diff, or plain price-change alert wakes the user at 3am even when the change persists and could wait until morning.",
+      "how": "schedule-runner skips the quiet-defer for every alert: task; the exemption (an edge-triggered crossing could revert) only applies to predicate/weather alerts. Defer the SEND for feed/page/value-change alerts (change persists); keep predicate/weather exempt."
+    },
+    {
+      "id": "chatty-watch-starves-daily",
+      "title": "a noisy watch silently drops the user's plain daily briefing when the hourly cap is hit",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "A relied-upon 'every morning: weather + news' silently no-shows because a spammy alert filled the per-chat hourly send counter.",
+      "how": "In schedule-runner give a plain daily/recipe the same defer-then-force grace as once/monthly/digest (graceEligible) so it isn't dropped over-cap; or don't count edge-triggered alert sends toward the cap that starves content."
     }
   ],
   "history": [
@@ -3461,6 +3497,10 @@
     {
       "item": "picker-on-proactive-pings",
       "note": "Extended the one-tap result picker to PROACTIVE list pings (picker-on-proactive-pings). Made the handler's pick-list cache injectable (pickListStore dep) + shared it with the schedule-runner via index; the runner now parseResultList's each proactive sendText and, on a 2+ item numbered/bulleted ping (a watchlist restock, a feed of new listings), caches the items + appends a '1 2 3…' pick row BELOW any Refresh/Stop marker row — so a tap resends that item via the same handler pick routing built earlier. A tap resolves against whichever list the chat last saw, inbound answer or unprompted ping. 2 new runner tests (numbered ping attaches+caches; pick row merges below an alert's Refresh/Stop). suite 1709 green, tsc clean. Offline (no data source); anvil-independent."
+    },
+    {
+      "item": "onboarding-tap-to-try",
+      "note": "Onboarding tap-to-try (onboarding-tap-to-try): the first /start (or greeting) reply now carries a row of one-tap example buttons (☀️ Weather, 📖 Define a word, 💸 Tip split, 🎲 Flip a coin) so a brand-new user gets an instant first success instead of reading the START wall + hand-typing. New TRY_EXAMPLES list (keyless/instant errands only, no anvil dependency so the first tap can't dead-end on a down browser) + tryButtons() (2 per row) + a 'try' callback op (ty|<index>) in callbacks.ts. Handler attaches the buttons ONLY on the START reply (opens with the wave), on a channel with callbacks, and on FIRST contact (empty history) so a returning user's /start isn't re-badged; a try tap runs the canned text through handleOne exactly as if typed (command/agent routing). 7 new tests (try codec cap+reject, buttons shape, first-start attaches, returning-user no-buttons, tap runs example). suite 1714 green, tsc clean. Offline (no data source); anvil-independent (examples are keyless)."
     }
   ],
   "audits": [
@@ -3664,6 +3704,9 @@
     },
     {
       "note": "3-lens audit (watch-magnitude-suffix shipped, backlog down to owner-gated confirm-to-act). RELIABILITY found a CRITICAL regression in my just-shipped extractValue: the untagged branch still has bare k/b, so '4 boxes'->4e9, '3 km'->3000, '2 kg'->2000 — false-fires + phantom chart spikes across count/inventory/rental watches. Also: timer/short-reminder deferred by quiet-hours (no clockTime exemption); all-failed digest with gone members mislabels a dead automation as transient. NEW-USER: weather-conditional alert ('text me if it rains', M, flagship), sunset-anchored reminders (M), leave-by ETA reminder (L), reverse-geocode pin (S, parked), named-place open-now (S, parked). POWER (audit says the strongest moves are PARKED — say so): inline one-tap buttons (M, highest-leverage cheap), confirm-to-submit (L), my-info vault (M), weekly recap (S). Seeded 4: extractvalue-bare-kb-overscale (high/S), timer-quiet-hours-defer (med/S), weather-conditional-alert (high/M), inline-tap-buttons (high/M). Parked the rest."
+    },
+    {
+      "note": "Backlog dry (only low/M + owner-gated left) -> ran 3-agent audit. A (new-user): onboarding text wall no tap-to-try [SEEDED+BUILT], first clock-time reminder UTC-warn-only, sports today-only no next-game, voice-in/text-out. B (reliability): quiet-hours bypassed for all alerts [SEEDED], alerts exempt from anti-spam cap, chatty watch starves daily [SEEDED], MemoryStore silent write fail [SEEDED]. C (power): threshold value alerts (ALREADY BUILT-below/above/in_stock), notes+profile context (ALREADY injected), voice replies TTS, group/household mode, per-chat cookie vault (owner-gated). Seeded: onboarding-tap-to-try(built), memory-write-silent-fail, quiet-hours-persistent-alerts, chatty-watch-starves-daily."
     }
   ]
 }

@@ -24,7 +24,10 @@ export type CallbackAction =
   | { kind: "recipe"; action: "run"; name: string }
   // Pick one result from a numbered list the bot just sent (inline-result-picker). Carries the 0-based
   // index into the cached list, not a name — so the payload stays tiny regardless of the item's text.
-  | { kind: "pick"; index: number };
+  | { kind: "pick"; index: number }
+  // Run a canned first-errand example from the onboarding buttons (onboarding-tap-to-try). Carries the
+  // 0-based index into the fixed TRY_EXAMPLES list so the payload is tiny + stable.
+  | { kind: "try"; index: number };
 
 // Opcode <-> action for the NAME-carrying actions. 2-char ops keep the payload short so long-ish
 // names still fit the 64-byte cap. The pick action (index-carrying) uses opcode "pk" handled separately.
@@ -39,8 +42,20 @@ const OP_FOR = new Map<string, string>(
   Object.entries(OP).map(([op, v]) => [`${v.kind}:${v.action}`, op]),
 );
 const PICK_OP = "pk";
+const TRY_OP = "ty";
 
 const utf8Len = (s: string): number => new TextEncoder().encode(s).length;
+
+// The canned first-errand examples offered as tap-to-try buttons on onboarding (onboarding-tap-to-try).
+// A tap runs the text through the normal handler flow, so a brand-new user gets an instant first
+// success instead of reading the START wall and hand-typing. Keyless/instant errands only (no anvil
+// dependency) so the very first tap can't dead-end on a browser that isn't running.
+export const TRY_EXAMPLES: Array<{ label: string; text: string }> = [
+  { label: "☀️ Weather", text: "weather" },
+  { label: "📖 Define a word", text: "what does serendipity mean" },
+  { label: "💸 Tip split", text: "20% tip on $47 split 3 ways" },
+  { label: "🎲 Flip a coin", text: "flip a coin" },
+];
 
 /** Encode an action to callback_data, or null if it wouldn't fit Telegram's 64-byte cap (caller omits
  * the button). The name is passed through verbatim (may contain any char except we never split on it
@@ -49,6 +64,8 @@ const utf8Len = (s: string): number => new TextEncoder().encode(s).length;
 export function encodeCallback(a: CallbackAction): string | null {
   const data = a.kind === "pick"
     ? `${PICK_OP}|${a.index}`
+    : a.kind === "try"
+    ? `${TRY_OP}|${a.index}`
     : (() => { const op = OP_FOR.get(`${a.kind}:${a.action}`); return op ? `${op}|${a.name}` : null; })();
   if (data === null) return null;
   return utf8Len(data) <= CALLBACK_MAX_BYTES ? data : null;
@@ -66,6 +83,10 @@ export function decodeCallback(data: string | undefined | null): CallbackAction 
   if (op === PICK_OP) {
     if (!/^\d+$/.test(rest)) return null; // index must be a non-negative integer
     return { kind: "pick", index: Number(rest) };
+  }
+  if (op === TRY_OP) {
+    if (!/^\d+$/.test(rest)) return null;
+    return { kind: "try", index: Number(rest) };
   }
   const spec = OP[op];
   if (!spec || !rest) return null;
@@ -111,6 +132,20 @@ export function digestButtons(name: string): InlineKeyboard | undefined {
 export function recipeButtons(name: string): InlineKeyboard | undefined {
   const run = encodeCallback({ kind: "recipe", action: "run", name });
   return run ? [[{ text: "🔁 Run again", callback_data: run }]] : undefined;
+}
+
+/** Buttons for the onboarding tap-to-try row (onboarding-tap-to-try): one button per TRY_EXAMPLES
+ * entry, each carrying its index. Two per row so labels stay readable on a phone. */
+export function tryButtons(): InlineKeyboard {
+  const kb: InlineKeyboard = [];
+  for (let i = 0; i < TRY_EXAMPLES.length; i++) {
+    const data = encodeCallback({ kind: "try", index: i });
+    if (!data) continue;
+    const btn = { text: TRY_EXAMPLES[i]!.label, callback_data: data };
+    if (kb.length && kb[kb.length - 1]!.length < 2) kb[kb.length - 1]!.push(btn);
+    else kb.push([btn]);
+  }
+  return kb;
 }
 
 /** Given a proactive schedule's task marker ("alert:<name>" / "digest:<name>" / "recipe:<name>"),
