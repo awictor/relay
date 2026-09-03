@@ -197,7 +197,10 @@ export class ProfileStore {
     const obj = readJsonSafe<{ items?: Profile[] }>(this.file);
     if (obj && Array.isArray(obj.items)) this.items = obj.items.filter((p) => p && typeof p.chatId === "number");
   }
-  private persist(): void { atomicWriteJson(this.file, { v: 1, items: this.items }); }
+  private lastWriteOk = true;
+  /** Did the most recent write to disk succeed? (persist-bool-all-stores) */
+  lastSaveOk(): boolean { return this.lastWriteOk; }
+  private persist(): boolean { return (this.lastWriteOk = atomicWriteJson(this.file, { v: 1, items: this.items })); }
 
   get(chatId: number): Profile | undefined { return this.items.find((p) => p.chatId === chatId); }
 

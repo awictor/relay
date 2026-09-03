@@ -199,8 +199,13 @@ export class RecipeStore {
     }
   }
 
-  private persist(): void {
-    atomicWriteJson(this.file, { v: 1, items: this.items });
+  // Whether the LAST persist() write reached disk (persist-bool-all-stores) — read synchronously
+  // right after save() to hedge a "saved recipe" confirmation when the write failed. Defaults true.
+  private lastWriteOk = true;
+  /** Did the most recent write to disk succeed? */
+  lastSaveOk(): boolean { return this.lastWriteOk; }
+  private persist(): boolean {
+    return (this.lastWriteOk = atomicWriteJson(this.file, { v: 1, items: this.items }));
   }
 
   /** Add or overwrite a recipe by name. Returns the record, or null if the chat is at cap

@@ -439,8 +439,13 @@ export class AlertStore {
     if (obj && Array.isArray(obj.items)) this.items = obj.items.filter((a) => a && typeof a.name === "string" && typeof a.task === "string");
   }
 
-  private persist(): void {
-    atomicWriteJson(this.file, { v: 1, items: this.items });
+  // Whether the LAST persist() write reached disk (persist-bool-all-stores) — read synchronously
+  // right after save() to hedge a "watching X" confirmation when the write failed. Defaults true.
+  private lastWriteOk = true;
+  /** Did the most recent write to disk succeed? */
+  lastSaveOk(): boolean { return this.lastWriteOk; }
+  private persist(): boolean {
+    return (this.lastWriteOk = atomicWriteJson(this.file, { v: 1, items: this.items }));
   }
 
   /** Add/overwrite by name (update-in-place, cap-exempt). */

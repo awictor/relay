@@ -522,8 +522,14 @@ export class ScheduleStore {
     if (typeof obj.seq === "number") this.seq = obj.seq;
   }
 
-  private persist(): void {
-    atomicWriteJson(this.file, { v: 1, seq: this.seq, items: this.items });
+  // Whether the LAST persist() write reached disk. Read synchronously right after add()/save() (no
+   // await between, so it's race-free) to hedge a "saved" confirmation when the disk write failed
+   // (persist-bool-all-stores). Defaults true so a read before any write isn't a false alarm.
+  private lastWriteOk = true;
+  /** Did the most recent write to disk succeed? See lastWriteOk. */
+  lastSaveOk(): boolean { return this.lastWriteOk; }
+  private persist(): boolean {
+    return (this.lastWriteOk = atomicWriteJson(this.file, { v: 1, seq: this.seq, items: this.items }));
   }
 
   /** Add a schedule for a chat. Returns the stored record, or null if the chat is at its cap. */

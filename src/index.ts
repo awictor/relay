@@ -364,7 +364,7 @@ const handle = createHandler({
     // A relative "in N min/hours" reminder has no wall-clock dependency, so it's never flagged.
     const isClockTime = rec.kind === "daily" || rec.kind === "weekly" || /\bat\s+\d/i.test(text) || /\b(morning|evening|night|noon|midnight)\b/i.test(text);
     const noTz = isClockTime && profiles.offsetMin(chatId) === undefined && tzOffsetMin() === 0;
-    return { ok: true, kind: rec.kind, task: rec.task, whenMs: rec.dueMs, whenText, noTz };
+    return { ok: true, kind: rec.kind, task: rec.task, whenMs: rec.dueMs, whenText, noTz, saved: schedules.lastSaveOk() };
   },
   // First-reminder tz (first-reminder-tz-ask): would this message schedule a CLOCK-TIME task with no
   // saved tz? If so the handler asks the city first (city→tz) rather than scheduling wrong-at-UTC.
@@ -444,13 +444,13 @@ const handle = createHandler({
     if (!p) return { ok: false, reason: "unparsed" };
     const rec = recipes.add(chatId, p, Date.now());
     if (!rec) return { ok: false, reason: "capped" };
-    return { ok: true, name: rec.name };
+    return { ok: true, name: rec.name, saved: recipes.lastSaveOk() };
   },
   // "save that as <name>" (product-loop): store a name + the handler-supplied prior task.
   recipeSaveNamed: (chatId, name, task) => {
     const rec = recipes.add(chatId, { name, task }, Date.now());
     if (!rec) return { ok: false, reason: "capped" };
-    return { ok: true, name: rec.name };
+    return { ok: true, name: rec.name, saved: recipes.lastSaveOk() };
   },
   recipeResolve: (chatId, text) => {
     // Parse name + args so a recipe with {slots} runs with the user's values (product-loop).
@@ -506,7 +506,7 @@ const handle = createHandler({
     if (!p) return { ok: false, reason: "unparsed" };
     const rec = digests.add(chatId, p, Date.now());
     if (!rec) return { ok: false, reason: "capped" };
-    return { ok: true, name: rec.name, members: rec.members.length };
+    return { ok: true, name: rec.name, members: rec.members.length, saved: digests.lastSaveOk() };
   },
   digestList: (chatId) => digests.list(chatId).map((d) => ({ name: d.name, members: d.members, schedule: d.schedule })),
   digestForget: (chatId, name) => {
@@ -540,9 +540,13 @@ const handle = createHandler({
     // stack a 2nd/3rd cadence row — each would run a redundant anvil check forever + fill /schedules.
     // Clear any existing marker first so the schedule is idempotent per alert name (audit 15 B#1).
     schedules.removeByTask(chatId, `alert:${rec.name}`);
+    const alertSaved = alerts.lastSaveOk();
     const sp = parseScheduleFor(ALERT_CADENCE, `alert:${rec.name}`, now, profiles.offsetMin(chatId));
     if (sp) schedules.add(chatId, sp, now);
-    return { ok: true, name: rec.name, feed: rec.feed, then: rec.then, members: rec.members?.length };
+    // saved = both the alert row AND its cadence schedule reached disk (either failing means the watch
+    // won't survive a restart / won't actually fire) — persist-bool-all-stores.
+    const saved = alertSaved && (!sp || schedules.lastSaveOk());
+    return { ok: true, name: rec.name, feed: rec.feed, then: rec.then, members: rec.members?.length, saved };
   },
   // Run one check right after define (product-loop) via the same path the scheduler uses.
   alertRunNow: (chatId, name) => alertCheck(chatId, name),

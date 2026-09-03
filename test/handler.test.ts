@@ -1382,4 +1382,15 @@ describe("first-reminder tz ask (first-reminder-tz-ask)", () => {
     expect(sent.some((m) => /what city/i.test(m.text))).toBe(false);
     expect(added).toHaveLength(1);
   });
+
+  it("warns instead of confirming a reminder when the write failed (persist-bool-all-stores)", async () => {
+    const { handle, sent } = harness({
+      scheduleNeedsTz: () => false,
+      captureLocation: () => null,
+      scheduleAdd: () => ({ ok: true, kind: "once", task: "meds", whenMs: 0, saved: false }),
+    });
+    await handle(msg("remind me to take meds in 10 min", 5));
+    expect(sent[0]!.text).toMatch(/couldn't save it to disk/i);
+    expect(sent[0]!.text).not.toMatch(/I'll remind you/i); // must NOT falsely confirm
+  });
 });

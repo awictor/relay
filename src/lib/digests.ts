@@ -63,8 +63,13 @@ export class DigestStore {
     }
   }
 
-  private persist(): void {
-    atomicWriteJson(this.file, { v: 1, items: this.items });
+  // Whether the LAST persist() write reached disk (persist-bool-all-stores) — read synchronously
+  // right after define() to hedge a confirmation when the write failed. Defaults true.
+  private lastWriteOk = true;
+  /** Did the most recent write to disk succeed? */
+  lastSaveOk(): boolean { return this.lastWriteOk; }
+  private persist(): boolean {
+    return (this.lastWriteOk = atomicWriteJson(this.file, { v: 1, items: this.items }));
   }
 
   /** Add/overwrite a digest by name. Members capped. Returns record, or null if at chat cap

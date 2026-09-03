@@ -117,7 +117,7 @@ export interface HandlerDeps {
   describeDocument?: (fileId: string, caption: string, fileName?: string, mimeType?: string) => Promise<string>;
   // Scheduled/proactive tasks (m4 sched-3). All optional so older wiring stays valid; when
   // absent, a "remind me" message just falls through to the normal agent.
-  scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number; whenText?: string; noTz?: boolean } | { ok: false; reason: "unparsed" | "capped" };
+  scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number; whenText?: string; noTz?: boolean; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" };
   // First-reminder tz (first-reminder-tz-ask): true when this message parses to a CLOCK-TIME schedule
   // AND the chat has no timezone set — so the handler asks "what city are you in?" (city→tz infer)
   // BEFORE scheduling, instead of scheduling wrong-at-UTC then warning. Optional.
@@ -133,10 +133,10 @@ export interface HandlerDeps {
   // Saved recipes (m7 recipe-2). All optional so older wiring stays valid. recipeSave parses a
   // "save <name>: <task>" message (null if it isn't one); recipeResolve returns a saved task by
   // name (null if unknown); recipeList/recipeForget manage them.
-  recipeSave?: (chatId: number, text: string) => { ok: true; name: string } | { ok: false; reason: "unparsed" | "capped" };
+  recipeSave?: (chatId: number, text: string) => { ok: true; name: string; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" };
   // "save that as <name>" (product-loop): save a name + an explicit task (the prior turn's task,
   // resolved by the handler from memory) without the user retyping it. Optional.
-  recipeSaveNamed?: (chatId: number, name: string, task: string) => { ok: true; name: string } | { ok: false; reason: "capped" };
+  recipeSaveNamed?: (chatId: number, name: string, task: string) => { ok: true; name: string; saved?: boolean } | { ok: false; reason: "capped" };
   // parses a run command + looks up. { missingArg } = a slotted recipe was run with no value, so the
   // handler asks for it instead of running a broken (empty-slot) task (product-loop).
   recipeResolve?: (chatId: number, text: string) => { name: string; task: string } | { name: string; missingArg: true } | { name: string; ambiguousArgs: true; slots: string[] } | null;
@@ -156,7 +156,7 @@ export interface HandlerDeps {
   recipeSchedule?: (chatId: number, name: string, whenClause: string, now: number) =>
     { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" | "needsarg" };
   // Digests (m9 digest-3): bundle recipes into one briefing. All optional.
-  digestDefine?: (chatId: number, text: string) => { ok: true; name: string; members: number } | { ok: false; reason: "unparsed" | "capped" };
+  digestDefine?: (chatId: number, text: string) => { ok: true; name: string; members: number; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" };
   digestList?: (chatId: number) => Array<{ name: string; members: string[]; schedule?: string }>;
   digestForget?: (chatId: number, name: string) => boolean;
   // Is <name> a digest for this chat? (so /run + schedule dispatch digest vs recipe).
@@ -167,7 +167,7 @@ export interface HandlerDeps {
     { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" };
   // Change-alerts (m10 alert-3): "watch <name>: <task>" defines + auto-schedules a check.
   // All optional. alertDefine parses + stores + schedules (default cadence); returns the cadence.
-  alertDefine?: (chatId: number, text: string, now: number) => { ok: true; name: string; feed?: boolean; then?: string; members?: number } | { ok: false; reason: "unparsed" | "capped" };
+  alertDefine?: (chatId: number, text: string, now: number) => { ok: true; name: string; feed?: boolean; then?: string; members?: number; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" };
   // Run one check immediately on define (product-loop): baseline + notify if the predicate already
   // holds, instead of ~24h of silence until the first scheduled cadence check. Returns the notify
   // message or null (silent). Optional; absent -> define just schedules as before.
@@ -689,6 +689,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         // No timezone set + a clock-time schedule -> it fires against UTC (likely the user's night).
         // Flag it so they can fix it now instead of finding out when the first one lands at 3am.
         const tzWarn = r.noTz ? ` ⚠️ No timezone set, so this is UTC — set yours with "/setlocation <city> UTC-5" so it fires at your local time.` : "";
+        // saved===false: the write to disk failed — don't claim the reminder is set when it won't
+        // survive a restart (persist-bool-all-stores). Reminders are the highest-trust feature.
+        if (r.saved === false) {
+          await deps.sendMessage(msg.chatId, `I've set that up for now, but I couldn't save it to disk — it may be lost if I restart. Please set it again in a moment.`);
+          return;
+        }
         await deps.sendMessage(msg.chatId, `Got it — I'll ${verb}: "${r.task}".${when}${tzWarn} Manage with /schedules.`);
         return;
       }
@@ -787,6 +793,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     if (deps.alertDefine && /^\s*(?:alert(?:\s+me)?|watch)\s+[^:]+:\s*\S/i.test(msg.text)) {
       const r = deps.alertDefine(msg.chatId, msg.text, deps.now());
       if (r.ok) {
+        // Write to disk failed -> the watch won't survive a restart (persist-bool-all-stores). Don't
+        // confirm it as active, and skip the run-now check (it'd imply a live watch that isn't saved).
+        if (r.saved === false) {
+          await deps.sendMessage(msg.chatId, `I've set up "${r.name}" for now, but I couldn't save it to disk — it may be lost if I restart. Please set it again in a moment.`);
+          return;
+        }
         const thenNote = r.then ? ` Then I'll run your "${r.then}" recipe and include its result.` : "";
         await deps.sendMessage(msg.chatId, (r.members
           ? `Watching "${r.name}" — ${r.members} items in one list; I'll send a single update with only the ones that change.`
@@ -829,7 +841,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // "define digest <name>: a, b, c" -> store a digest. No agent run.
     if (deps.digestDefine && /^\s*(?:define\s+)?digest\s+[^:]+:\s*\S/i.test(msg.text)) {
       const r = deps.digestDefine(msg.chatId, msg.text);
-      if (r.ok) { await deps.sendMessage(msg.chatId, `Saved digest "${r.name}" (${r.members} recipe${r.members === 1 ? "" : "s"}). Run it with /run ${r.name}.`); return; }
+      if (r.ok) {
+        if (r.saved === false) { await deps.sendMessage(msg.chatId, `I've got digest "${r.name}" for now, but I couldn't save it to disk — it may be lost if I restart. Try again shortly.`); return; }
+        await deps.sendMessage(msg.chatId, `Saved digest "${r.name}" (${r.members} recipe${r.members === 1 ? "" : "s"}). Run it with /run ${r.name}.`); return;
+      }
       if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the digest limit — /forget-digest one first."); return; }
       // unparsed: fall through
     }
@@ -866,7 +881,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           && !/^\[(photo|document)\]/.test(m.content as string));
         if (!prior) { await deps.sendMessage(msg.chatId, "Nothing recent to save — run a task first, then \"save that as <name>\"."); return; }
         const r = deps.recipeSaveNamed(msg.chatId, staName, (prior.content as string).trim());
-        if (r.ok) { await deps.sendMessage(msg.chatId, `Saved recipe "${r.name}" from your last task. Run it anytime with /run ${r.name}.`); return; }
+        if (r.ok) {
+          if (r.saved === false) { await deps.sendMessage(msg.chatId, `I've got "${r.name}" for now, but I couldn't save it to disk — it may be lost if I restart. Try again shortly.`); return; }
+          await deps.sendMessage(msg.chatId, `Saved recipe "${r.name}" from your last task. Run it anytime with /run ${r.name}.`); return;
+        }
         await deps.sendMessage(msg.chatId, "You've hit the recipe limit — /forget one first.");
         return;
       }
@@ -918,7 +936,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // "save <name>: <task>" -> store a recipe. No agent run.
     if (deps.recipeSave && /^\s*save(\s+recipe)?\s+[^:]+:\s*\S/i.test(msg.text)) {
       const r = deps.recipeSave(msg.chatId, msg.text);
-      if (r.ok) { await deps.sendMessage(msg.chatId, `Saved recipe "${r.name}". Run it anytime with /run ${r.name}.`); return; }
+      if (r.ok) {
+        if (r.saved === false) { await deps.sendMessage(msg.chatId, `I've got "${r.name}" for now, but I couldn't save it to disk — it may be lost if I restart. Try again shortly.`); return; }
+        await deps.sendMessage(msg.chatId, `Saved recipe "${r.name}". Run it anytime with /run ${r.name}.`); return;
+      }
       if (r.reason === "capped") { await deps.sendMessage(msg.chatId, "You've hit the recipe limit — /forget one first."); return; }
       // unparsed: fall through
     }

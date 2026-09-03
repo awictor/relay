@@ -387,6 +387,23 @@ function tmpFile() { const d = mkdtempSync(join(tmpdir(), "relay-sched-")); dirs
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
+describe("ScheduleStore.lastSaveOk (persist-bool-all-stores)", () => {
+  it("reports success after a normal add", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    s.add(1, { kind: "once", task: "meds", dueMs: NOW + 60 * MIN, offsetMin: 0 }, NOW);
+    expect(s.lastSaveOk()).toBe(true);
+  });
+  it("reports failure when the store file can't be written", () => {
+    // A path whose parent is a FILE can't be written -> persist returns false -> lastSaveOk false.
+    const { writeFileSync } = require("fs");
+    const d = mkdtempSync(join(tmpdir(), "relay-sfail-")); dirs.push(d);
+    const asFile = join(d, "afile"); writeFileSync(asFile, "x");
+    const s = new ScheduleStore({ file: join(asFile, "cant.json") });
+    s.add(1, { kind: "once", task: "meds", dueMs: NOW + 60 * MIN, offsetMin: 0 }, NOW);
+    expect(s.lastSaveOk()).toBe(false);
+  });
+});
+
 describe("ScheduleStore.restampTz (tz-restamp-on-setlocation)", () => {
   it("re-stamps daily/weekly to the new tz + recomputes dueMs; skips interval/once; returns the count", async () => {
     const { nextDailyMs } = await import("../src/lib/schedule.js");
