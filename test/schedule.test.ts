@@ -23,6 +23,24 @@ describe("parseSchedule — relative", () => {
     expect(c.task).toMatch(/invoice/);
   });
 
+  it("worded durations resolve to a relative once (worded-duration-reminders)", () => {
+    expect(parseSchedule("remind me to leave in an hour", NOW)!.dueMs - NOW).toBe(HR);
+    expect(parseSchedule("remind me in half an hour to check the oven", NOW)!.dueMs - NOW).toBe(30 * MIN);
+    expect(parseSchedule("ping me in a couple hours", NOW)!.dueMs - NOW).toBe(2 * HR);
+    const few = parseSchedule("in a few minutes take the pizza out", NOW)!;
+    expect(few.dueMs - NOW).toBe(3 * MIN);
+    expect(few.task).toBe("take the pizza out"); // count word stripped, not left in the task
+  });
+  it("alarm phrasing schedules a wake-up once, incl. a bare hour (worded-duration-reminders)", () => {
+    const a = parseSchedule("set an alarm for 7am", NOW)!;
+    expect(a.kind).toBe("once");
+    expect(a.reminderOnly).toBe(true);
+    expect(new Date(a.dueMs).getUTCHours()).toBe(7);
+    const w = parseSchedule("wake me at 6", NOW)!; // bare hour, no am/pm — the generic 'at' branch rejects it
+    expect(w.kind).toBe("once");
+    expect(new Date(w.dueMs).getUTCHours()).toBe(6);
+    expect(parseSchedule("set an alarm for 9pm", NOW)!.dueMs && new Date(parseSchedule("set an alarm for 9pm", NOW)!.dueMs).getUTCHours()).toBe(21);
+  });
   it("returns null for a non-schedule message", () => {
     expect(parseSchedule("what's the top HN story", NOW)).toBeNull();
     expect(parseSchedule("compare these two links", NOW)).toBeNull();

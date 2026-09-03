@@ -156,13 +156,42 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
   const raw = text.trim();
   const lower = raw.toLowerCase();
 
+  // --- alarm (worded-duration-reminders): "set an alarm for 7am" / "wake me (up) at 6" — a headline
+  // assistant expectation. Parse the clock time (am/pm, or a BARE hour which we bias am->pm sensibly for
+  // "wake me": a bare 6 means 6am, a bare 9pm-ish stays as given) into a once at the next occurrence, with
+  // a "wake up" reminder-only note. Handled here so a bare-hour alarm ("wake me at 6") that the generic
+  // 'at' branch rejects (no am/pm) still works. ---
+  const alarm = lower.match(/\b(?:set\s+(?:an?\s+)?alarm(?:\s+for)?|wake\s+me(?:\s+up)?(?:\s+at)?)\s+([0-9]{1,2})(?::([0-9]{2}))?\s*(am|pm)?\b/);
+  if (alarm) {
+    let hh = parseInt(alarm[1]!, 10);
+    const mm = alarm[2] ? parseInt(alarm[2], 10) : 0;
+    if (alarm[3]) hh = to24h(hh, alarm[3]);            // explicit am/pm
+    else if (hh >= 1 && hh <= 11) { /* bare morning hour: 6 -> 6am, keep as-is */ }
+    if (hh <= 23 && mm <= 59) {
+      return { kind: "once", task: "wake up", dueMs: nextDailyMs(now, hh, mm, offsetMin), reminderOnly: true };
+    }
+  }
+
   // --- relative: "in 10 minutes", "in 2 hours", "in 1 day", "in 3 weeks" ---
-  const rel = lower.match(/\bin\s+(\d+)\s*(min(?:ute)?s?|hours?|hrs?|days?|weeks?|wks?)\b/);
+  // Worded quantities (worded-duration-reminders): "in an hour" / "in half an hour" / "in a couple days"
+  // / "in a few minutes" have no digit, so the \d+ match below missed them and the bot re-asked "when?"
+  // though the user said exactly when. Normalize the count word to a digit first: a/an -> 1, couple -> 2,
+  // few/several -> 3, half -> handled by a dedicated half-hour/half-an-hour rule (30 min).
+  let relLower = lower.replace(/\bin\s+half\s+an?\s+hour\b/g, "in 30 minutes").replace(/\bin\s+half\s+a\s+day\b/g, "in 12 hours");
+  relLower = relLower.replace(/\bin\s+(?:an?|one)\s+(min(?:ute)?s?|hour|hr|day|week|wk)\b/g, "in 1 $1")
+    .replace(/\bin\s+(?:a\s+couple(?:\s+of)?|two)\s+(min(?:ute)?s?|hours?|hrs?|days?|weeks?|wks?)\b/g, "in 2 $1")
+    .replace(/\bin\s+(?:a\s+few|several|three)\s+(min(?:ute)?s?|hours?|hrs?|days?|weeks?|wks?)\b/g, "in 3 $1");
+  const rel = relLower.match(/\bin\s+(\d+)\s*(min(?:ute)?s?|hours?|hrs?|days?|weeks?|wks?)\b/);
   if (rel) {
     const n = parseInt(rel[1]!, 10);
     const unit = rel[2]!;
     const ms = /^w/.test(unit) ? n * 7 * DAY : /^h/.test(unit) ? n * HOUR : /^d/.test(unit) ? n * DAY : n * MINUTE;
-    const task = cleanTask(raw, rel[0]!);
+    // Strip the ORIGINAL time phrase from the task, not the normalized one — the original may be worded
+    // ("in half an hour"), which the normalized "in 30 minutes" wouldn't match in `raw`.
+    // Longest alternatives FIRST so "a couple"/"a few"/"half an" win before the bare "a"/"an" (else "an?"
+    // eats just the article and leaves "couple hours" in the task).
+    const origClause = lower.match(/\bin\s+(?:half\s+an?\s+\w+|a\s+couple(?:\s+of)?\s+\w+|a\s+few\s+\w+|several\s+\w+|one\s+\w+|two\s+\w+|three\s+\w+|an?\s+\w+|\d+\s*\w+)/)?.[0] ?? rel[0]!;
+    const task = cleanTask(raw, origClause);
     if (!task) return null;
     return { kind: "once", task, dueMs: now + ms, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
   }

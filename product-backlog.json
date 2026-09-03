@@ -14,7 +14,7 @@
       "title": "'remind me in an hour' / 'set an alarm for 7am' aren't recognized",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The reminder cue keys on 'in \\d+' + 'remind me', so worded durations ('in an hour', 'in half an hour', 'in a couple hours') and alarm phrasings ('set an alarm for 7am', 'wake me at 6') miss the scheduler and bounce with 'when should I remind you?' even though the user said exactly when — reads as the bot not understanding plain English (audit 28 A#3+A#4).",
       "how": "In parseSchedule: map worded quantities (a/an=1, half=0.5, a couple=2, a few=3) to the relative-duration branch; treat 'alarm for <time>' / 'wake me (up) at <time>' as a clock-time once. Widen the handler scheduleCue to match. Tests for each phrasing."
     },
@@ -2144,6 +2144,10 @@
     {
       "id": "crypto-quote-tool",
       "note": "Fixed the weakest path on the MOST-promoted first errand: crypto price ('save btc: check the price of bitcoin' is the literal /start + README example) had no tool — get_quote was equities-only + rejected 'bitcoin', so 'price of bitcoin' fell to a slow, flaky web_search+scrape and the flagship demo looked broken. New src/lib/crypto.ts hits the keyless CoinGecko API: a common-coin map (btc/eth/sol/doge/... -> id, skipping a round-trip) else the /search endpoint (top market-cap hit, so 'btc' -> Bitcoin not a clone), then simple/price for usd + 24h change; formatCrypto shows '▲/▼ +N% 24h' + extra precision for sub-$1 coins. Added a get_crypto agent tool + backend method + defaultBackend wiring + SYSTEM_PROMPT + help ('crypto + stock prices ... instantly'). 16 tests (crypto unit: common/search/parse/format/getQuote + 2 agent dispatch). LIVE call-tested: btc/eth (common, no search) + pepe (search->id) all resolved w/ price + 24h change. 1214 tests green."
+    },
+    {
+      "id": "worded-duration-reminders",
+      "note": "Fixed a plain-English gap that bounced natural reminders: 'in an hour' / 'in half an hour' / 'in a couple hours' / 'in a few minutes' had no digit so the 'in \\d+' relative match missed them (re-asked 'when?'), and 'set an alarm for 7am' / 'wake me at 6' (bare hour, no am/pm — the generic 'at' branch rejects it) never scheduled. parseSchedule now: (a) normalizes worded quantities to a digit (a/an/one=1, couple/two=2, few/several/three=3, half-an-hour=30min) before the relative match, stripping the ORIGINAL worded clause from the task (not the normalized one); (b) has an alarm branch parsing 'set an alarm for <time>' / 'wake me (up) (at) <time>' incl. a bare hour into a reminderOnly 'wake up' once at the next occurrence. Widened the handler scheduleCue to cue both. 2 tests (worded durations resolve + strip / alarm phrasing incl. bare hour). call-tested: false (pure parse). 1216 tests green."
     }
   ],
   "audits": [
