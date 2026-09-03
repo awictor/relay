@@ -2651,7 +2651,7 @@
       "title": "tabular results can't be exported ('send that as a spreadsheet')",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "to-csv.ts (rowsToCsv) is already built but wired to NO tool; a compare/extract/watchlist/list result is lost the moment the chat scrolls.",
       "how": "Wire a to_csv tool (or an 'as a CSV' modifier on compare/extract) that turns rows into a .csv sent via the existing sendDocument path. Reuse rowsToCsv."
     }
@@ -3704,6 +3704,10 @@
     {
       "item": "softfail-missing-feed-watchlist",
       "note": "Extended silent-watch-death coverage to feed + watchlist alerts (softfail-missing-feed-watchlist). The failed-watch receipt only fires on softFail, which alert-runner set on the value/page/weather paths but NOT the feed-source or watchlist branches — so a persistently-dead RSS/Reddit/HN follow or an all-error stock basket looked armed forever with no receipt. feedSource branch: an empty result now flags softFail when the fetch THREW or the feed was already seeded (an empty pre-seed first check is just 'not ready', not dead). Watchlist branch: track anyReadable across members (a real non-error value = alive) and flag softFail when the no-change return had ZERO readable members (all null/degraded/error). The agent-driven feed + single-value degraded/error paths already flagged softFail upstream, unchanged. 7 new tests (feed: dead-seeded->softFail, empty-first-check->not, throw->softFail; watchlist: all-error->softFail, one-readable->healthy, unchanged->healthy). suite 1794 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "csv-export-tabular",
+      "note": "Named-list CSV export (csv-export-tabular). Audit finding was partly stale — rowsToCsv was ALREADY wired to the compare tool (CSV_REQUEST_RE -> comparison.csv), and extract is inherently single-record-per-URL (extractFieldsResult coerces to one object) so an extract-CSV branch was dead code (built + reverted). The real remaining keepable-tabular gap was NAMED LISTS, read back only as bullets + lost on scroll. Added parseListExport ('export/download/send/save my <name> list [as csv/spreadsheet/file]', requires an export verb + a 'list' target so 'download my invoice'/'my grocery list' show don't hijack) + a listExport handler dep (returns the list's items) + handler routing BEFORE listCommand that builds a CSV via the existing rowsToCsv + sends it through sendDocument (falls back to bullet text on a channel w/o documents; empty/unknown list -> honest note). index wires listExport via lists.show. HELP line. 4 new tests (parseListExport parse/reject; handler sends grocery.csv; empty-list note no-doc). suite 1798 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [

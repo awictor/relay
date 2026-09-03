@@ -22,6 +22,7 @@ import { getTemplate, templateCatalog } from "./lib/templates.js";
 import { photoNeedsAgent, photoIsQrScan } from "./lib/photo-intent.js";
 import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, tryButtons as buildTryButtons, actButtons, TRY_EXAMPLES, type InlineKeyboard } from "./lib/callbacks.js";
 import { parseResultList, firstUrl, type ResultItem } from "./lib/result-list.js";
+import { rowsToCsv } from "./lib/to-csv.js";
 
 // Tap-to-watch gating (tap-to-watch-on-answers). Only offer the "make this recurring" buttons on a
 // task that's a plausible standing errand — NOT a command-shaped message (already an automation / a
@@ -158,6 +159,10 @@ export interface HandlerDeps {
   // rendered reply string (op-specific: added/removed/shown/cleared), or null if the message isn't a
   // list command (so it falls through to the scheduler + agent). Optional so older wiring is unaffected.
   listCommand?: (chatId: number, text: string) => string | null;
+  // Export a named list as CSV (csv-export-tabular): "export/download my grocery list [as csv]" -> the
+  // list's items so the handler sends a keepable .csv document via sendDocument. Returns null when it's
+  // not an export command, or { name, items:[] } for an unknown/empty list (handler says so). Optional.
+  listExport?: (chatId: number, text: string) => { name: string; items: string[] } | null;
   // Auto-suggest saving a repeated ask as a recipe (product-loop). When true, a reply to a task that
   // closely matches an earlier one this chat asked gets a one-line "want me to save this?" nudge.
   suggestSaves?: boolean;
@@ -945,6 +950,23 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // "remove milk from my list" / "clear my list" — a durable collection the user manages. Detected
     // before the scheduler + agent so a list op isn't run as a web task. Returns null (falls through)
     // when the message isn't a list command, so "add a comment to the PR" still reaches the agent.
+    // Export a list as a keepable CSV (csv-export-tabular): "export/download my grocery list as csv".
+    // Before listCommand so "export my list" isn't read as a show. Sends a .csv document (falls back to
+    // text if the channel has no sendDocument); an unknown/empty list gets an honest note.
+    if (deps.listExport) {
+      const ex = deps.listExport(msg.chatId, msg.text);
+      if (ex) {
+        if (!ex.items.length) { await deps.sendMessage(msg.chatId, `Your ${ex.name} list is empty (or I don't have one by that name) — nothing to export.`); return; }
+        const csv = rowsToCsv(ex.items.map((item) => ({ item })));
+        if (csv && deps.sendDocument) {
+          await deps.sendDocument(msg.chatId, new TextEncoder().encode(csv), `${ex.name.replace(/[^\w-]+/g, "_")}.csv`, `Your ${ex.name} list (${ex.items.length} item${ex.items.length === 1 ? "" : "s"})`);
+        } else {
+          // No document channel (console) — fall back to the readable list text.
+          await deps.sendMessage(msg.chatId, `Your ${ex.name} list:\n${ex.items.map((i) => `• ${i}`).join("\n")}`);
+        }
+        return;
+      }
+    }
     if (deps.listCommand) {
       const r = deps.listCommand(msg.chatId, msg.text);
       if (r) { await deps.sendMessage(msg.chatId, r); return; }

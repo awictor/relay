@@ -38,7 +38,7 @@ import { parseChartRequest, renderChart } from "./lib/chart.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
-import { ListStore, parseListCommand, splitItems } from "./lib/lists.js";
+import { ListStore, parseListCommand, parseListExport, splitItems } from "./lib/lists.js";
 import { ContactStore, parseSaveContact, parseForgetContact } from "./lib/contacts.js";
 import { isTextualDoc, decodeTextDoc, buildDocPrompt } from "./lib/docs.js";
 import { setCorruptHandler } from "./lib/safe-store.js";
@@ -357,6 +357,13 @@ const handle = createHandler({
   // Named lists (personal-notes-lists-store): parse a list op + render the reply. Null falls through
   // to the scheduler/agent when it isn't a list command. Reads back the full list on every mutation so
   // the user sees the current state (a grocery list is only useful if you can see what's on it).
+  // Export a named list as CSV (csv-export-tabular): parse the export command + hand the handler the
+  // list's items (it builds the .csv + sends it). null when it isn't an export command.
+  listExport: (chatId, text) => {
+    const p = parseListExport(text);
+    if (!p) return null;
+    return { name: p.list, items: lists.show(chatId, p.list) };
+  },
   listCommand: (chatId, text) => {
     const cmd = parseListCommand(text);
     if (!cmd) return null;

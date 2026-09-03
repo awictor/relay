@@ -106,7 +106,7 @@ Save named places: "my work is 500 5th Ave", "save gym: Gold's on Main" — then
 
 Remember things about you: "remember I'm vegetarian", "remember my wife's birthday is June 3" — I'll factor them into every answer. Ask "what do you know about me" to see them; "forget that I'm vegetarian" or "forget everything you know" to clear.
 
-Keep a list: "add eggs to my grocery list", "add milk and bread to groceries" — I'll keep a running list you can read back with "what's on my grocery list", drop from with "remove eggs from my list", or wipe with "clear my list". Handy for groceries, packing, to-dos.
+Keep a list: "add eggs to my grocery list", "add milk and bread to groceries" — I'll keep a running list you can read back with "what's on my grocery list", drop from with "remove eggs from my list", or wipe with "clear my list". Handy for groceries, packing, to-dos. Say "export my grocery list as csv" to get it as a spreadsheet file you can keep.
 
 Recall a past answer: "what was that sushi place you found?" or "resend the flights" — I search what I've told you before, no need to re-run it.
 

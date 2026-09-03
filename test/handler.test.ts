@@ -4,7 +4,7 @@ import type { InboundMessage } from "../src/telegram.js";
 import type { LLMMessage } from "../src/llm.js";
 import { formatReply } from "../src/lib/format-reply.js";
 import { NotesStore, parseRemember, parseForgetFact } from "../src/lib/notes.js";
-import { ListStore, parseListCommand, splitItems } from "../src/lib/lists.js";
+import { ListStore, parseListCommand, parseListExport, splitItems } from "../src/lib/lists.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "../src/lib/places-store.js";
 import { parseCityReply } from "../src/lib/profile.js";
 import { mkdtempSync } from "fs";
@@ -1067,6 +1067,27 @@ describe("named lists routing (personal-notes-lists-store)", () => {
     const { handle, recorded } = listHarness();
     await handle(msg("what's the weather in Paris", 7));
     expect(recorded).toHaveLength(1); // reached the agent
+  });
+
+  it("'export my grocery list as csv' sends a .csv document (csv-export-tabular)", async () => {
+    const store = new ListStore({ file: join(mkdtempSync(join(tmpdir(), "relay-h-lx-")), "l.json") });
+    store.add(7, "grocery", ["eggs", "milk"]);
+    const { handle, docs } = harness({
+      listExport: (chatId, text) => { const p = parseListExport(text); if (!p) return null; return { name: p.list, items: store.show(chatId, p.list) }; },
+      listCommand: () => null,
+    });
+    await handle(msg("export my grocery list as csv", 7));
+    expect(docs).toHaveLength(1);
+    expect(docs[0]!.filename).toBe("grocery.csv");
+  });
+
+  it("exporting an empty/unknown list gives an honest note, no doc", async () => {
+    const { handle, sent, docs } = harness({
+      listExport: () => ({ name: "grocery", items: [] }),
+    });
+    await handle(msg("export my grocery list", 7));
+    expect(docs).toHaveLength(0);
+    expect(sent[0]!.text).toMatch(/empty|nothing to export/i);
   });
 });
 

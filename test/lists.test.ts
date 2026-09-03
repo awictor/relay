@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseListCommand, normalizeListName, splitItems, ListStore } from "../src/lib/lists.js";
+import { parseListCommand, parseListExport, normalizeListName, splitItems, ListStore } from "../src/lib/lists.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -19,6 +19,21 @@ describe("normalizeListName", () => {
     expect(normalizeListName("list")).toBe("list");
     expect(normalizeListName("my list")).toBe("list");
     expect(normalizeListName("")).toBe("list");
+  });
+});
+
+describe("parseListExport (csv-export-tabular)", () => {
+  it("parses export/download of a named list, with or without an 'as csv' tail", () => {
+    expect(parseListExport("export my grocery list")).toEqual({ list: "grocery" });
+    expect(parseListExport("download my grocery list as csv")).toEqual({ list: "grocery" });
+    expect(parseListExport("send me the packing list as a spreadsheet")).toEqual({ list: "packing" });
+    expect(parseListExport("save my to-do list to a file")).toEqual({ list: "to-do" });
+  });
+  it("requires an export verb + a 'list' target (doesn't hijack show/download-other)", () => {
+    expect(parseListExport("my grocery list")).toBeNull();        // a show, handled elsewhere
+    expect(parseListExport("what's on my grocery list")).toBeNull();
+    expect(parseListExport("download my invoice")).toBeNull();     // not a list
+    expect(parseListExport("export the data")).toBeNull();
   });
 });
 
