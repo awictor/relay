@@ -130,6 +130,7 @@ describe("handleCommand", () => {
         setLocation: (_id, t) => (/^\/setlocation\b/i.test(t) ? { location: "Testville" } : null),
         profileView: () => "Home location is Testville",
         profileClear: () => true,
+        dashboardView: () => "dashboard",
         scheduleList: () => [],
         scheduleCancel: () => ({ removed: 0 }),
         recipeList: () => [],

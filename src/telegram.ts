@@ -40,6 +40,7 @@ export function hasToken(): boolean {
 export const BOT_COMMANDS: Array<{ command: string; description: string }> = [
   { command: "start", description: "What Relay can do + examples" },
   { command: "help", description: "Full list of capabilities" },
+  { command: "dashboard", description: "One view of everything you've set up" },
   { command: "schedules", description: "List your reminders + scheduled tasks" },
   { command: "cancel", description: "Cancel a schedule: /cancel <id> or /cancel all" },
   { command: "recipes", description: "List saved recipes (/run <name> to use one)" },

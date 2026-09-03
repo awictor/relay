@@ -1238,7 +1238,7 @@
       "title": "unified /dashboard of all automations",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Schedules/recipes/digests/alerts are 4 separate list commands; a user loses track + stops adding. One rollup (next-fire, last-value/trend, status) is the retention surface.",
       "how": "Aggregate the existing stores into one /dashboard view; pure read."
     },
@@ -1696,6 +1696,10 @@
     {
       "id": "snooze-automations",
       "note": "Users could only turn off an automation with the DESTRUCTIVE /cancel|/forget, so they deleted configs they'd have kept through travel/noise. Added a non-destructive pause/resume: 'snooze btc 3 days' / 'pause my morning digest' / 'snooze all' / 'resume btc'. Every proactive thing (reminders, dailies, alerts, digests, recipes) is a Schedule record — reminders directly, alerts/digests/recipes as alert:/digest:/recipe: markers — so ONE pausedUntil flag on Schedule + a single runner skip covers all of them. New parseSnoozeCommand (duration grammar: min/hour/day/week; indefinite=PAUSE_INDEFINITE) + ScheduleStore.pause/resume/matchByRef/clearExpiredPause. matchByRef resolves an id, a marker name, or a task substring; 'all' hits every schedule. The runner skips a paused schedule WITHOUT firing or completing (so it resumes on its original schedule), and auto-clears an elapsed timed snooze; resume() pulls a stale recurring dueMs forward to now so it fires next tick without a backlog storm. Handler branch runs before the schedule cue so 'pause/snooze/resume' aren't misread as new reminders; help text + wiring added. 17 tests (parser / store pause+resume+expire / runner skip+auto-resume / handler routing). call-tested: false (offline unit; no live keys needed — pure scheduler logic). 1115 tests green."
+    },
+    {
+      "id": "unified-dashboard",
+      "note": "Schedules/recipes/digests/alerts each had their own /list command, so a user with a few automations ran four commands to see what's running and lost track. Added /dashboard (+ /dash alias): one at-a-glance rollup — reminders with next-fire, watches with their trigger + last-seen value, digests with member count + cadence, recipes with run hint, and a ⏸ paused marker (with resume time) on anything snoozed. New pure src/lib/dashboard.ts formatDashboard (empty -> onboarding nudge, empty sections omitted, long tasks one-lined); index dashboardView gathers from the live stores, owning the tz offset (formatWhen) + reading pause state off each automation's scheduled marker row. Registered in setMyCommands + help + KNOWN_COMMANDS. 7 tests (formatter: empty/sections/paused/digest+recipe/truncation + handler routing /dashboard & /dash). call-tested: false (pure read of local stores, no live keys). 1122 tests green."
     }
   ],
   "audits": [

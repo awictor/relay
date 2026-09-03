@@ -271,3 +271,17 @@ describe("handler — snooze/resume routing (snooze-automations)", () => {
     expect(calls()).toBe(0);
   });
 });
+
+describe("handler — /dashboard routing (unified-dashboard)", () => {
+  it("/dashboard sends the dashboardView string, no agent", async () => {
+    const { handle, sent, calls } = harness({ dashboardView: (c) => `DASH for ${c}` });
+    await handle(msg("/dashboard", 5));
+    expect(sent[0]).toBe("DASH for 5");
+    expect(calls()).toBe(0);
+  });
+  it("/dash alias also works", async () => {
+    const { handle, sent } = harness({ dashboardView: () => "DASH" });
+    await handle(msg("/dash", 5));
+    expect(sent[0]).toBe("DASH");
+  });
+});

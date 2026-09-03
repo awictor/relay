@@ -23,6 +23,7 @@ import { friendlyError } from "./lib/failure.js";
 import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
 import { ScheduleStore, parseSchedule, parseSnoozeCommand, tzOffsetMin, quietUntilMs, PAUSE_INDEFINITE } from "./lib/schedule.js";
 import { formatWhen } from "./lib/format-when.js";
+import { formatDashboard, type DashboardData } from "./lib/dashboard.js";
 import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots } from "./lib/recipes.js";
 import { matchRecipe } from "./lib/task-suggest.js";
@@ -303,6 +304,49 @@ const handle = createHandler({
     return isClockTime;
   },
   scheduleList: (chatId) => schedules.list(chatId).map((s) => ({ id: s.id, kind: s.kind, task: s.task, dueMs: s.dueMs })),
+  // Unified dashboard (unified-dashboard): aggregate every store into one rollup. Pure read — it gathers
+  // from the live stores (owning the tz offset + pause state) and hands formatDashboard ready strings.
+  dashboardView: (chatId) => {
+    const now = Date.now();
+    const off = profiles.offsetMin(chatId) ?? tzOffsetMin();
+    const sched = schedules.list(chatId);
+    // A schedule whose task is an alert:/digest:/recipe: marker drives another automation — surface its
+    // PAUSE state under that automation, not as a raw reminder. Map marker-name -> its pause info.
+    const markerPause = new Map<string, { paused: boolean; untilText?: string }>();
+    const pauseInfo = (s: (typeof sched)[number]) => {
+      const paused = s.pausedUntil !== undefined && now < s.pausedUntil;
+      const untilText = paused && s.pausedUntil !== Number.MAX_SAFE_INTEGER ? formatWhen(s.pausedUntil!, off, now) : undefined;
+      return { paused, ...(untilText ? { untilText } : {}) };
+    };
+    for (const s of sched) {
+      const m = s.task.match(/^(alert|digest|recipe):(.+)$/i);
+      if (m) markerPause.set(`${m[1]!.toLowerCase()}:${m[2]!.toLowerCase()}`, pauseInfo(s));
+    }
+    const data: DashboardData = {
+      // Reminders: schedules that AREN'T markers (a real "remind me"/"every morning" task).
+      schedules: sched.filter((s) => !/^(alert|digest|recipe):/i.test(s.task)).map((s) => {
+        const p = pauseInfo(s);
+        return { kind: s.kind, task: s.task, whenText: formatWhen(s.dueMs, off, now), paused: p.paused, pausedUntilText: p.untilText };
+      }),
+      alerts: alerts.list(chatId).map((a) => {
+        const trigger = a.members?.length ? `watchlist, ${a.members.length} items`
+          : a.feed ? "new items"
+          : a.condition ? (a.condition.op === "in_stock" ? "in stock" : `${a.condition.op} ${a.condition.operand}`)
+          : a.threshold ? `±${a.threshold}` : "on change";
+        const p = markerPause.get(`alert:${a.name.toLowerCase()}`) ?? { paused: false };
+        return { name: a.name, trigger, lastValue: a.lastValue, paused: p.paused, pausedUntilText: p.untilText };
+      }),
+      digests: digests.list(chatId).map((d) => {
+        const p = markerPause.get(`digest:${d.name.toLowerCase()}`) ?? { paused: false };
+        return { name: d.name, memberCount: d.members.length, scheduleText: d.schedule, paused: p.paused, pausedUntilText: p.untilText };
+      }),
+      recipes: recipes.list(chatId).map((r) => {
+        const p = markerPause.get(`recipe:${r.name.toLowerCase()}`) ?? { paused: false };
+        return { name: r.name, scheduled: !!r.schedule, scheduleText: r.schedule, paused: p.paused, pausedUntilText: p.untilText };
+      }),
+    };
+    return formatDashboard(data);
+  },
   scheduleCancel: (chatId, which) => {
     if (which.toLowerCase() === "all") {
       const all = schedules.list(chatId);

@@ -113,6 +113,9 @@ export interface HandlerDeps {
   // BEFORE scheduling, instead of scheduling wrong-at-UTC then warning. Optional.
   scheduleNeedsTz?: (chatId: number, text: string, now: number) => boolean;
   scheduleList?: (chatId: number) => Array<{ id: string; kind: string; task: string; dueMs: number }>;
+  // Unified dashboard (unified-dashboard): one rollup of every automation (schedules/alerts/digests/
+  // recipes) with next-fire + last-value + paused status. Returns a ready-to-send string. Optional.
+  dashboardView?: (chatId: number) => string;
   scheduleCancel?: (chatId: number, which: string) => { removed: number };
   // Snooze (snooze-automations): pause/resume a schedule/alert/digest by name or id instead of the
   // destructive /cancel|/forget. Returns how many were paused/resumed. Optional.
@@ -398,7 +401,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // silently never schedules. If it's a bare mistyped command (one /token, no args) suggest the
     // nearest real one; otherwise strip the stray slash so the rest routes normally ("/remind me ..."
     // -> "remind me ..." reaches the schedule matcher; "/weather Paris" -> the agent as plain text).
-    const KNOWN_COMMANDS = new Set(["/start", "/help", "/menu", "/commands", "/reset", "/clear", "/status", "/sites", "/profile", "/setlocation", "/schedules", "/cancel", "/recipes", "/templates", "/run", "/forget", "/forget-recipe", "/forget-alert", "/digests", "/forget-digest", "/alerts"]);
+    const KNOWN_COMMANDS = new Set(["/start", "/help", "/menu", "/commands", "/reset", "/clear", "/status", "/sites", "/profile", "/setlocation", "/dashboard", "/dash", "/schedules", "/cancel", "/recipes", "/templates", "/run", "/forget", "/forget-recipe", "/forget-alert", "/digests", "/forget-digest", "/alerts"]);
     if (first && first.startsWith("/") && !KNOWN_COMMANDS.has(first)) {
       const afterCmd = msg.text.trim().slice(first.length).trim(); // args after the /token
       if (!afterCmd) {
@@ -544,6 +547,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         await deps.sendMessage(msg.chatId, `Got it — I'll remember that ${r.fact}.${dropped}`);
         return;
       }
+    }
+
+    // /dashboard: one rollup of every automation (schedules/alerts/digests/recipes). Pure read, no agent.
+    if ((first === "/dashboard" || first === "/dash") && deps.dashboardView) {
+      await deps.sendMessage(msg.chatId, deps.dashboardView(msg.chatId));
+      return;
     }
 
     // /schedules: list this chat's pending scheduled tasks. No agent run.
