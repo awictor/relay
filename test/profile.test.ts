@@ -188,6 +188,20 @@ describe("inferTzFromLocation (city-to-tz-inference)", () => {
   it("a bare 'LA' still means Los Angeles, not Louisiana (no abbrev collision)", () => {
     expect(inferTzFromLocation("LA")).toBe(-480);
   });
+  it("an UNKNOWN foreign region tail returns null, not a wrong-continent city guess (inferTz-region-tail-wrong)", () => {
+    // "San Jose" is a US city (California, -480), but ", Costa Rica" says it's NOT — we can't place Costa
+    // Rica, so leave tz unset (ask) rather than fire reminders 2h off on Pacific time.
+    expect(inferTzFromLocation("San Jose, Costa Rica")).toBeNull();
+    expect(inferTzFromLocation("San Jose, Nicaragua")).toBeNull();
+    expect(inferTzFromLocation("Springfield, Narnia")).toBeNull();
+    // (a KNOWN foreign region tail still resolves — regression guard.)
+    expect(inferTzFromLocation("Cordoba, Argentina")).toBe(-180);
+  });
+  it("a US country/state tail still resolves the city (no regression)", () => {
+    expect(inferTzFromLocation("Austin, USA")).toBe(-360);
+    expect(inferTzFromLocation("New York, United States")).toBe(-300);
+    expect(inferTzFromLocation("Portland, OR")).toBe(-480); // OR omitted from the table, but 2-letter -> US -> city wins
+  });
   it("null for an unknown place (never a wrong guess)", () => {
     expect(inferTzFromLocation("Smallville")).toBeNull();
     expect(inferTzFromLocation("")).toBeNull();

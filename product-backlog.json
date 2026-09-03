@@ -1841,7 +1841,7 @@
       "title": "City,Region tz guess wrong when region unknown (San Jose, Costa Rica -> PT)",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "inferTzFromLocation falls back to the leftmost known city token when the region tail is not in the table, so \"San Jose, Costa Rica\" resolves to California (UTC-8) and reminders fire 2h off — the fn contract promised \"never guesses wrong\".",
       "how": "When a comma region tail is present but unknown, do NOT fall back to a bare city token that is a US-city collision; leave tz unset (ask) instead."
     }
@@ -2550,6 +2550,10 @@
     {
       "item": "get-news-tool",
       "note": "Added get_news tool: new src/lib/news.ts (newsUrl/parseHeadlines/formatNews/getNews) over the keyless Google News RSS feed (general top stories, or a topic search), reusing feeds.ts parseXmlItems + stripping the ' - Publisher' tail + deduping. Wired agent.ts (TOOLS, backend.getNews + defaultBackend, dispatch, prompt), pinned tool list, HELP. 'what's the news'/'top headlines'/'news about AI' now instant instead of a slow paywalled-front-page scrape (START already promised 'weather + top news'). 16 new tests, suite 1401 green, tsc clean. call-tested:true (live Google News general + topic feeds fetched + parsed via ctx_execute)."
+    },
+    {
+      "item": "inferTz-region-tail-wrong",
+      "note": "Fixed inferTzFromLocation: a 'City, Region' whose region tail is a spelled-out place we don't know + isn't US no longer falls back to the leftmost US-city token. 'San Jose, Costa Rica' returned California (-480) -> reminders 2h off, silently; now returns null (caller asks). A US country marker (USA/United States) or a 2-letter US-state-shaped tail (incl. the collision-omitted OR/IN/etc) still falls through to the city, so 'Austin, USA'/'Portland, OR' resolve. Known foreign tails (Paris, France; Cordoba, Argentina) unchanged. 2 new test cases (foreign-unknown->null, US-tail->city). Suite 1403 green, tsc clean."
     }
   ],
   "audits": [

@@ -144,16 +144,30 @@ export function inferTzFromLocation(location: string): number | null {
   // 1. whole string ("new york")
   if (norm in CITY_TZ) return CITY_TZ[norm]!;
   // 2. comma-separated "City, Region" — the REGION tail DISAMBIGUATES the city, so resolve it FIRST
-  // (region-qualifier-tz-inference): "Paris, TX" must be US-Central (tx=-360), NOT Paris-France (60), and
-  // the old leftmost-first loop returned the France match. Only when the tail isn't a known region do we
-  // fall back to the leftmost city token. A single-part location (no comma) skips straight to the city.
+  // (region-qualifier-tz-inference): "Paris, TX" must be US-Central (tx=-360), NOT Paris-France (60).
   const parts = norm.split(",").map((p) => p.trim()).filter(Boolean);
   if (parts.length >= 2) {
     const tail = parts[parts.length - 1]!;
     if (tail in CITY_TZ) return CITY_TZ[tail]!;         // region wins ("..., tx" / "..., france")
+    // Treat the tail as US (and fall through to the leftmost city token) when it's a US country marker
+    // OR a 2-letter US-state-shaped code. Some state abbrevs (or/in/hi/la/de/ok/id/ne) are deliberately
+    // OMITTED from CITY_TZ because they collide with common words, so "Portland, OR" has an unknown tail
+    // that's still clearly a US state — the city ("portland") gives the right zone.
+    const US_MARKERS = new Set(["usa", "us", "u s", "united states", "united states of america", "america"]);
+    const isUsStateShaped = /^[a-z]{2}$/.test(tail);
+    if (!US_MARKERS.has(tail) && !isUsStateShaped) {
+      // The user QUALIFIED the city with a spelled-out region we don't recognize and isn't US ("San
+      // Jose, Costa Rica"). Falling back to the leftmost city token would guess the wrong continent (San
+      // Jose -> California, -480) and fire every reminder hours off, silently (inferTz-region-tail-wrong).
+      // The point of a tail is to disambiguate; an unknown foreign tail means we CAN'T, so leave tz unset
+      // (the caller asks) — matching the "a miss just leaves tz unset, never guesses wrong" contract.
+      return null;
+    }
+    // US-marker / state-shaped tail: fall through to the leftmost known city token (a US city).
   }
-  for (const p of parts) if (p in CITY_TZ) return CITY_TZ[p]!; // else the leftmost known token
-  // 3. any whole word / adjacent word pair
+  // 3. try the single-token city, then any whole word / adjacent word pair (reached for a no-comma
+  // location, or a "City, USA" whose US-marker tail fell through above). Commas stripped so a city token
+  // beside the marker still matches.
   const words = norm.replace(/,/g, " ").split(/\s+/).filter(Boolean);
   for (let i = 0; i < words.length; i++) {
     const pair = i + 1 < words.length ? `${words[i]} ${words[i + 1]}` : "";
