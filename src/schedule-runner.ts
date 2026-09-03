@@ -321,22 +321,29 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // the caller's post-send commit still gates the baseline advance. A genuine burst of alert
         // notifications is rare (each needs a distinct change) so this can't storm like a misfiring daily.
         const isAlertCheck = /^alert:/.test(s.task);
+        // A digest is user-requested CONTENT ("my morning briefing"), not spammy repetition — dropping
+        // its occurrence when the hour is capped makes the relied-upon briefing silently no-show for the
+        // day (digest-dropped-over-cap). So a digest gets the same defer-then-force grace as a once
+        // (leave it due, retry when a slot frees; force it past the grace window rather than lose it),
+        // not the plain-daily drop. A plain daily/weather still drops its occurrence (it re-fires on its
+        // own cadence + isn't a bundle the user explicitly assembled).
+        const isDigest = /^digest:/.test(s.task);
+        const graceEligible = s.kind === "once" || isDigest;
         if (overCap(s.chatId, deps.now()) && !isAlertCheck) {
-          if (s.kind === "once") {
-            // A "once" reminder is an explicit single promise; defer past the cap rather than drop it.
-            // BUT a chat with many recurring watches can stay over-cap indefinitely, starving the
-            // reminder past its time forever (once-reminder-cap-starvation). So once it's overdue by
-            // more than the grace window, deliver it ANYWAY — an explicit promise ("meds at 3pm")
-            // outweighs anti-spam. Under the grace window, keep deferring for a free slot.
+          if (graceEligible) {
+            // Defer past the cap rather than drop it. BUT a chat with many recurring watches can stay
+            // over-cap indefinitely, starving it past its time forever (once-reminder-cap-starvation):
+            // once overdue beyond the grace window, deliver it ANYWAY — the promise/briefing outweighs
+            // anti-spam. Under the grace window, keep deferring for a free slot.
             if (deps.now() - s.dueMs <= ONCE_CAP_GRACE_MS) {
               log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, deferred: "rate_cap" })}`);
-              continue; // keep it in the store; retried next tick
+              continue; // keep it due in the store; retried next tick
             }
             log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: true, over_cap_forced: Math.round((deps.now() - s.dueMs) / 60000) })}`);
             // fall through to fire it despite the cap
           } else {
             log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, skipped: "rate_cap" })}`);
-            safeComplete(s); // daily: drop this occurrence, it advances to the next
+            safeComplete(s); // plain daily: drop this occurrence, it advances to the next
             continue;
           }
         }

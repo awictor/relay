@@ -1868,7 +1868,7 @@
       "title": "A due daily digest is silently dropped when over the hourly cap",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Only once-reminders (grace-defer) + alert-checks are cap-exempt; a daily/digest: over the cap hits safeComplete+continue and vanishes for the day with only an operator log — the relied-upon morning briefing just no-shows.",
       "how": "Give a daily/digest the same defer-past-cap grace as a once (leave due, retry next tick) instead of dropping the occurrence; or exempt digests like alert-checks."
     },
@@ -2611,6 +2611,10 @@
     {
       "item": "scores-ambiguous-team-wrong-sport",
       "note": "Dropped cross-sport ambiguous team names (giants, rangers) from scores TEAM_LEAGUE. Was: 'did the Giants win' always answered SF Giants (MLB, never NY NFL); 'Rangers' always NHL (never Texas Rangers MLB / Rangers FC) — a confident wrong-sport answer, no hedge. Now a bare ambiguous name resolves to null -> get_scores tells the user it doesn't cover it + they can name the league; 'giants NFL score' / 'rangers MLB' still resolve via the league word-match. Only unambiguous team names remain in the table. 1 new test (ambiguous->null, league-named->resolves). Suite 1407 green, tsc clean."
+    },
+    {
+      "item": "digest-dropped-over-cap",
+      "note": "A due digest over the hourly send-cap is no longer silently dropped for the day. Was: only once-reminders (grace-defer) + alert-checks were cap-exempt; a digest: (daily kind) hit safeComplete+continue -> advanced to tomorrow -> the relied-upon morning briefing just no-showed with an operator log. Now a digest gets the same defer-then-force grace as a once (leave it due, retry when a slot frees; force past the grace window rather than lose it). A plain daily/weather still drops its occurrence (re-fires on its own cadence, not a user-assembled bundle). 2 new tests (digest deferred+delivered later; plain daily still drops). Suite 1409 green, tsc clean."
     }
   ],
   "audits": [

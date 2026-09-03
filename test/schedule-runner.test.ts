@@ -526,6 +526,44 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
     expect(store.list(1)).toHaveLength(0); // and completed
   });
 
+  it("an over-cap DIGEST is deferred (kept), not dropped for the day (digest-dropped-over-cap)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    const { store, runner } = harness(clock, {
+      maxPerChatPerHour: 1,
+      runAgent: async (task) => ({ reply: `did:${task}` }),
+      send: async (_c, text) => { sent.push(text); },
+      digestRun: async (_c, name) => `📋 ${name}\n• weather\n• hn`,
+    });
+    store.add(1, { kind: "once", task: "filler", dueMs: NOW - 1 }, NOW);          // consumes the 1 slot
+    store.add(1, { kind: "daily", task: "digest:morning", dueMs: NOW - 1, hourMin: "09:00" }, NOW); // over cap
+    await runner.tick();
+    expect(sent).toHaveLength(1);                        // only the filler; digest deferred, not sent
+    const digest = store.list(1).find((s) => s.task === "digest:morning")!;
+    expect(digest).toBeTruthy();                          // still queued (NOT advanced to tomorrow)
+    expect(digest.dueMs).toBeLessThanOrEqual(NOW);        // left DUE so a later tick delivers it
+    // an hour later the cap clears -> the digest finally sends.
+    clock.t = NOW + 3_600_001;
+    await runner.tick();
+    expect(sent.some((t) => /morning/.test(t))).toBe(true);
+  });
+
+  it("a plain daily (not a digest) still drops its occurrence when over cap (no storm)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    const { store, runner } = harness(clock, {
+      maxPerChatPerHour: 1,
+      runAgent: async (task) => ({ reply: `did:${task}` }),
+      send: async (_c, text) => { sent.push(text); },
+    });
+    store.add(1, { kind: "once", task: "filler", dueMs: NOW - 1 }, NOW);          // consumes the slot
+    store.add(1, { kind: "daily", task: "weather", dueMs: NOW - 1, hourMin: "09:00" }, NOW); // over cap
+    await runner.tick();
+    expect(sent).toHaveLength(1);                         // filler only
+    const daily = store.list(1).find((s) => s.task === "weather")!;
+    expect(daily.dueMs).toBeGreaterThan(NOW);             // advanced to tomorrow (dropped this occurrence)
+  });
+
   it("an over-cap once-reminder is delivered anyway once overdue past the grace window (once-reminder-cap-starvation)", async () => {
     const clock = { t: NOW };
     const sent: string[] = [];
