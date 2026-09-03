@@ -85,7 +85,7 @@ export interface HandlerDeps {
   // count, or a "cleared all" total); notesList returns the remembered facts for a "what do you know
   // about me" recall. profileContext already carries facts into the agent via the wired contextLine.
   // All optional so older wiring/tests are unaffected.
-  rememberFact?: (chatId: number, text: string) => { fact: string; evicted: string[] } | null;
+  rememberFact?: (chatId: number, text: string) => { fact: string; evicted: string[]; saved?: boolean } | null;
   forgetFact?: (chatId: number, text: string) => { removed: number; all: boolean; forgotten: string[] } | null;
   notesList?: (chatId: number) => string[];
   // Named lists (personal-notes-lists-store): a durable, editable collection the user reads back +
@@ -570,6 +570,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         const dropped = r.evicted.length
           ? ` (I was at my memory limit, so I let go of: ${r.evicted.map((e) => `"${e}"`).join(", ")} — tell me again if that still matters.)`
           : "";
+        // saved===false: the disk write failed — don't claim it's remembered when it isn't
+        // (lists-remove-atomic-write-failure). Held in memory this session, gone on restart.
+        if (r.saved === false) {
+          await deps.sendMessage(msg.chatId, `I've got "${r.fact}" for now, but I couldn't save it to disk — it may be lost if I restart. Please tell me again in a bit.`);
+          return;
+        }
         await deps.sendMessage(msg.chatId, `Got it — I'll remember that ${r.fact}.${dropped}`);
         return;
       }

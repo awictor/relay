@@ -1643,7 +1643,7 @@
       "title": "atomicWriteJson swallows write failures → false confirms",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "On a full/unwritable disk Relay says \"saved\"/\"reminder set\" but nothing persisted; user never told, data vanishes on restart.",
       "how": "atomicWriteJson return success bool; callers surface a soft warning when a persist fails (schedule/notes/lists/profile/alerts)."
     },
@@ -2281,6 +2281,10 @@
     {
       "item": "ssrf-fail-closed-parity",
       "note": "Backported mcp-forge DEV-0211: relay url-validator DoH rebind guard now FAILS CLOSED (both A+AAAA lookups failing -> treat host as blocked) instead of fail-open. Fixes a real SSRF hole (attacker forces DoH timeout to reach metadata IP) + restores shared-lib-parity (was red). Updated host-resolves tests to assert fail-closed + a clean-empty-still-allowed case. mcp-forge untouched (relay copy only)."
+    },
+    {
+      "item": "lists-remove-atomic-write-failure",
+      "note": "atomicWriteJson now RETURNS a success bool + reports failures to a persist-error sink (setPersistErrorHandler, defaults to stderr) instead of silently swallowing. Threaded through NotesStore.add + ListStore.add (new saved flag). rememberFact + list-add confirmations now HEDGE honestly on a failed write (couldn't save to disk, may be lost on restart) instead of falsely confirming. 5 new tests. Suite 1298 green, tsc clean."
     }
   ],
   "audits": [

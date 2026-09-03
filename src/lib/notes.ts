@@ -65,7 +65,7 @@ export class NotesStore {
       this.items = obj.items.filter((c) => c && typeof c.chatId === "number" && Array.isArray(c.notes));
     }
   }
-  private persist(): void { atomicWriteJson(this.file, { v: 1, items: this.items }); }
+  private persist(): boolean { return atomicWriteJson(this.file, { v: 1, items: this.items }); }
 
   private forChat(chatId: number): ChatNotes {
     let c = this.items.find((x) => x.chatId === chatId);
@@ -79,19 +79,21 @@ export class NotesStore {
    * room and returns its text in `evicted` so the caller can warn the user (a silent drop of the
    * earliest fact — often the most important — reads as "you forgot" — notes-cap-silent-evict). `dup`
    * marks an exact repeat (nothing stored). */
-  add(chatId: number, text: string, now: number): { note: Note; evicted: string[]; dup: boolean } {
+  add(chatId: number, text: string, now: number): { note: Note; evicted: string[]; dup: boolean; saved: boolean } {
     const c = this.forChat(chatId);
     const norm = text.trim().toLowerCase();
     const existing = c.notes.find((n) => n.text.trim().toLowerCase() === norm);
-    if (existing) return { note: existing, evicted: [], dup: true }; // already known — don't duplicate
+    if (existing) return { note: existing, evicted: [], dup: true, saved: true }; // already known — don't duplicate
     const note: Note = { text: text.trim(), created: now };
     c.notes.push(note);
     let evicted: string[] = [];
     if (c.notes.length > MAX_NOTES_PER_CHAT) {
       evicted = c.notes.splice(0, c.notes.length - MAX_NOTES_PER_CHAT).map((n) => n.text);
     }
-    this.persist();
-    return { note, evicted, dup: false };
+    // saved=false when the disk write failed — the caller must NOT claim "I'll remember that" as if it
+    // persisted (lists-remove-atomic-write-failure): it's in memory for now but gone on restart.
+    const saved = this.persist();
+    return { note, evicted, dup: false, saved };
   }
 
   /** Score how well a stored fact matches a forget `term`, higher = better; 0 = no match.

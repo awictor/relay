@@ -240,7 +240,7 @@ const handle = createHandler({
   profileView: (chatId) => { const l = profiles.contextLine(chatId); return l ? l.charAt(0).toUpperCase() + l.slice(1) : null; },
   profileClear: (chatId) => profiles.clear(chatId),
   // Long-term memory (remember-facts-store): parse+store "remember X", forget matching facts, list them.
-  rememberFact: (chatId, text) => { const f = parseRemember(text); if (!f) return null; const r = notes.add(chatId, f, Date.now()); return { fact: f, evicted: r.evicted }; },
+  rememberFact: (chatId, text) => { const f = parseRemember(text); if (!f) return null; const r = notes.add(chatId, f, Date.now()); return { fact: f, evicted: r.evicted, saved: r.saved }; },
   forgetFact: (chatId, text) => {
     const p = parseForgetFact(text);
     if (!p) return null;
@@ -265,7 +265,10 @@ const handle = createHandler({
       if (!r) return `You've hit my limit of saved lists — clear one first with "clear my <name> list".`;
       if (!r.added.length) return `Already on your ${label}. It has:\n${render(r.list)}`;
       const what = r.added.length === 1 ? `"${r.added[0]}"` : `${r.added.length} items`;
-      return `Added ${what} to your ${label}. Now:\n${render(r.list)}`;
+      // saved=false: the disk write failed. Don't claim it's kept — tell the truth so the user can retry
+      // (lists-remove-atomic-write-failure). It's in memory this session but won't survive a restart.
+      const warn = r.saved ? "" : `\n\n⚠️ Heads up — I couldn't save that to disk, so it may be lost if I restart. Try again in a moment.`;
+      return `Added ${what} to your ${label}. Now:\n${render(r.list)}${warn}`;
     }
     if (cmd.op === "remove") {
       const removed = lists.remove(chatId, cmd.list, cmd.item);

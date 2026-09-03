@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { atomicWriteJson, readJsonSafe } from "../src/lib/safe-store.js";
+import { atomicWriteJson, readJsonSafe, setPersistErrorHandler } from "../src/lib/safe-store.js";
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -30,6 +30,27 @@ describe("atomicWriteJson", () => {
     const asFile = join(d, "afile");
     writeFileSync(asFile, "x");
     expect(() => atomicWriteJson(join(asFile, "cant.json"), { x: 1 })).not.toThrow();
+  });
+  it("returns true on success, false on failure (lists-remove-atomic-write-failure)", () => {
+    const f = join(tmp(), "s.json");
+    expect(atomicWriteJson(f, { ok: true })).toBe(true);
+    // parent is a file -> write fails -> false, not a thrown error, not a silent true
+    const asFile = join(tmp(), "afile");
+    writeFileSync(asFile, "x");
+    expect(atomicWriteJson(join(asFile, "cant.json"), { x: 1 })).toBe(false);
+  });
+  it("reports a write failure to the persist-error sink (observability)", () => {
+    const seen: string[] = [];
+    const prev = setPersistErrorHandler((file) => { seen.push(file); });
+    try {
+      const asFile = join(tmp(), "afile");
+      writeFileSync(asFile, "x");
+      const bad = join(asFile, "cant.json");
+      atomicWriteJson(bad, { x: 1 });
+      expect(seen).toContain(bad);
+    } finally {
+      setPersistErrorHandler(prev); // restore so other tests aren't affected
+    }
   });
 });
 

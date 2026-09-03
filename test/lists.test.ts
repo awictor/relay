@@ -69,7 +69,9 @@ describe("splitItems", () => {
 describe("ListStore", () => {
   it("adds, dedupes case-insensitively, and shows", () => {
     const s = new ListStore({ file: tmp() });
-    expect(s.add(1, "grocery", ["eggs", "milk"])!.added).toEqual(["eggs", "milk"]);
+    const first = s.add(1, "grocery", ["eggs", "milk"])!;
+    expect(first.added).toEqual(["eggs", "milk"]);
+    expect(first.saved).toBe(true); // persisted OK (lists-remove-atomic-write-failure)
     const r = s.add(1, "grocery", ["EGGS", "bread"]);
     expect(r!.added).toEqual(["bread"]); // eggs deduped
     expect(s.show(1, "grocery")).toEqual(["eggs", "milk", "bread"]);

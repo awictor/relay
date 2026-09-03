@@ -71,7 +71,7 @@ export class ListStore {
     const obj = readJsonSafe<{ items?: ChatLists[] }>(this.file);
     if (obj && Array.isArray(obj.items)) this.items = obj.items.filter((c) => c && typeof c.chatId === "number" && Array.isArray(c.lists));
   }
-  private persist(): void { atomicWriteJson(this.file, { v: 1, items: this.items }); }
+  private persist(): boolean { return atomicWriteJson(this.file, { v: 1, items: this.items }); }
   private forChat(chatId: number): ChatLists {
     let c = this.items.find((x) => x.chatId === chatId);
     if (!c) { c = { chatId, lists: [] }; this.items.push(c); }
@@ -83,7 +83,7 @@ export class ListStore {
 
   /** Add items to a list (creating it, capped). Skips exact-dup items (case-insensitive). Returns the
    * items actually added + the full list after. Null if the per-chat list cap is hit on a NEW list. */
-  add(chatId: number, name: string, items: string[]): { added: string[]; list: string[] } | null {
+  add(chatId: number, name: string, items: string[]): { added: string[]; list: string[]; saved: boolean } | null {
     const c = this.forChat(chatId);
     let l = c.lists.find((x) => x.name === name);
     if (!l) {
@@ -97,8 +97,9 @@ export class ListStore {
       if (l.items.some((x) => x.toLowerCase() === item.toLowerCase())) continue; // dedupe
       l.items.push(item); added.push(item);
     }
-    this.persist();
-    return { added, list: [...l.items] };
+    // saved=false when the write failed — the caller must not confirm the addition as durable.
+    const saved = this.persist();
+    return { added, list: [...l.items], saved };
   }
 
   /** Remove list item(s) matching `item` by WHOLE-WORD relevance, NOT raw substring — so "remove milk"

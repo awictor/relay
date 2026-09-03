@@ -59,7 +59,7 @@ describe("isRecallRequest", () => {
 describe("NotesStore", () => {
   it("adds, lists, and injects facts into the agent context line", () => {
     const s = new NotesStore({ file: tmp() });
-    s.add(1, "I'm vegetarian", NOW);
+    expect(s.add(1, "I'm vegetarian", NOW).saved).toBe(true); // persist reports success (atomic-write-failure)
     s.add(1, "my wife's birthday is June 3", NOW + 1);
     expect(s.list(1).map((n) => n.text)).toEqual(["I'm vegetarian", "my wife's birthday is June 3"]);
     expect(s.contextLine(1)).toBe("things the user asked me to remember: I'm vegetarian; my wife's birthday is June 3");

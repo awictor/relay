@@ -826,6 +826,15 @@ describe("long-term memory (remember-facts-store)", () => {
     expect(ctx()).toMatch(/asked me to remember: I'm vegetarian/);
   });
 
+  it("warns instead of confirming when a fact fails to persist (atomic-write-failure)", async () => {
+    const { handle, sent } = harness({
+      rememberFact: () => ({ fact: "I'm vegetarian", evicted: [], saved: false }),
+    });
+    await handle(msg("remember I'm vegetarian", 9));
+    expect(sent[0]!.text).toMatch(/couldn't save it to disk/i);
+    expect(sent[0]!.text).not.toMatch(/I'll remember that/); // must NOT falsely confirm
+  });
+
   it("'what do you know about me' recites the stored facts, no agent run", async () => {
     const { handle, sent, recorded } = notesHarness();
     await handle(msg("remember I park in section G", 5));
