@@ -32,7 +32,7 @@
       "title": "a space/dash-separated tracking number ('9400 1118 ...') fails to parse",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "parseTrackingRequest tokenizes the RAW text on \\b[0-9A-Z]{10,}\\b before norm() strips spaces/dashes, so a number pasted the way carriers PRINT it ('9400 1118 9922 3817 6123 45', '1Z 999 AA1 ...') splits into sub-10-char fragments that match nothing -> 'couldn't tell which carrier', despite the module's whole premise being 'users paste them' (audit 25 B#5).",
       "how": "Normalize (strip spaces/dashes) BEFORE tokenizing, or also try collapsing whitespace runs of alnum groups into a candidate. Then detectCarrier the joined form. Test: a spaced USPS + spaced UPS number both resolve."
     },
@@ -1996,6 +1996,10 @@
     {
       "id": "plural-weekday-recurring",
       "note": "Fixed a regression in the single-weekday-once rule: 'remind me mondays at 9am' scheduled ONCE then never again — the recurring test was every|group|weekdays.length>1, and a plural 'mondays' still resolves to one day [1] with no 'every', so the clear plural-'s' repetition signal was swallowed. The weekly branch now also treats a plural weekday token (mondays/fridays/tuesdays...) as recurring. The SINGULAR one-shot ('monday at 9am' -> once) is unaffected. 3 tests (mondays/fridays -> weekly / singular monday still once). call-tested: false (pure parse). 1188 tests green."
+    },
+    {
+      "id": "parse-tracking-spaced-number",
+      "note": "A tracking number pasted the way carriers PRINT it ('9400 1118 9922 3817 6123 45', '1Z 999 AA1 ...', '1234-5678-9012') failed to parse — parseTrackingRequest tokenized the raw text on \\b[0-9A-Z]{10,}\\b before norm() stripped separators, so a spaced number split into sub-10-char fragments matching nothing -> 'couldn't tell which carrier', despite the module's premise being 'users paste them'. Now also matches a spaced/dashed run of alnum GROUPS (each group required to contain a digit, so a leading 'TRACK'/'PACKAGE' word isn't swallowed), collapses the separators, and detects on the joined form; the single-run + 1Z patterns still catch no-space forms. 3 tests (spaced USPS + spaced UPS + dashed FedEx all resolve). call-tested: false (pure parse). 1189 tests green."
     }
   ],
   "audits": [

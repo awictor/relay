@@ -58,8 +58,15 @@ export function carrierName(carrier: Carrier): string {
  * carrier explicitly ("fedex 123456789012") that overrides shape detection. Exported for tests. */
 export function parseTrackingRequest(text: string): TrackingRef | null {
   const t = String(text ?? "");
-  // Candidate tokens: alnum runs (incl. a trailing "US"), length >=10 (the shortest carrier form is DHL 10).
-  const tokens = t.toUpperCase().match(/\b[0-9A-Z]{10,}\b|\b1Z[0-9A-Z]{16}\b/g) ?? [];
+  const upper = t.toUpperCase();
+  // Candidate tokens: a single alnum run (>=10), OR a spaced/dashed run of alnum GROUPS collapsed — a
+  // tracking number pasted the way carriers PRINT it ("9400 1118 9922 3817 6123 45", "1Z 999 AA1 ...")
+  // must resolve, so match multi-group runs and strip the separators before detecting (parse-tracking-
+  // spaced-number). The single-run + 1Z patterns still catch the no-space forms.
+  const single = upper.match(/\b[0-9A-Z]{10,}\b|\b1Z[0-9A-Z]{16}\b/g) ?? [];
+  // Each group must contain a DIGIT so a leading word ("TRACK", "PACKAGE") isn't swallowed into the run.
+  const grouped = (upper.match(/\b(?=[0-9A-Z]*\d)[0-9A-Z]{2,}(?:[ -](?=[0-9A-Z]*\d)[0-9A-Z]{2,}){2,}\b/g) ?? []).map((g) => g.replace(/[ -]/g, ""));
+  const tokens = [...new Set([...single, ...grouped])].filter((tok) => tok.length >= 10);
   const explicit = /\bups\b/i.test(t) ? "ups" : /\bfedex\b/i.test(t) ? "fedex" : /\busps\b/i.test(t) ? "usps" : /\bdhl\b/i.test(t) ? "dhl" : null;
   for (const tok of tokens) {
     const c = detectCarrier(tok);

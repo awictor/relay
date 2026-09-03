@@ -52,6 +52,11 @@ describe("parseTrackingRequest", () => {
     // 12 digits would shape-detect FedEx, but the user said USPS.
     expect(parseTrackingRequest("track my usps package 123456789012")).toEqual({ carrier: "usps", number: "123456789012" });
   });
+  it("resolves a number pasted with spaces/dashes the way carriers print it (parse-tracking-spaced-number)", () => {
+    expect(parseTrackingRequest("track 9400 1118 9922 3817 6123 45")).toEqual({ carrier: "usps", number: "9400111899223817612345" });
+    expect(parseTrackingRequest("where's my package 1Z 999 AA1 01 2345 6784")).toEqual({ carrier: "ups", number: "1Z999AA10123456784" });
+    expect(parseTrackingRequest("track 1234-5678-9012")).toEqual({ carrier: "fedex", number: "123456789012" }); // dashed FedEx
+  });
   it("null when there's no tracking-number-shaped token", () => {
     expect(parseTrackingRequest("where is my order")).toBeNull();
     expect(parseTrackingRequest("track the news")).toBeNull();
