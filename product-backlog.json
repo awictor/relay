@@ -2528,6 +2528,51 @@
       "status": "done",
       "why": "A very common casual sports ask ('next Arsenal game', 'when do the Lakers play next') gets today's score or 'not playing today', never the upcoming fixture — a high-frequency errand goes unanswered.",
       "how": "scores.ts already hits the keyless ESPN scoreboard which has scheduled/'pre' games; surface the next scheduled game (date/time/opponent) when there's no game today or the user asks 'next'. Keyless, extends an existing path."
+    },
+    {
+      "id": "tap-to-watch-on-answers",
+      "title": "a fresh inbound answer has no one-tap 'watch this / save this' button",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Inline buttons only attach to PROACTIVE pings; a fresh answer gets at most a text save-nudge nobody acts on. One tap to turn any answer into a recurring watch/alert/saved recipe is the retention flywheel, and the button + alert/recipe backends already exist.",
+      "how": "On a clean inbound text answer, attach a small keyboard (Watch this / Save / Daily) via the existing callbacks codec; a tap wires the alert/recipe the save-nudge currently only describes in prose. Reuse callbacks.ts + handler routing."
+    },
+    {
+      "id": "transit-answered-as-driving",
+      "title": "transit directions silently answered as a car ETA",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "'how long downtown by subway/bus/train' returns an OSRM car ETA labeled 'drive' — a confidently wrong answer, violating the no-silent-wrong-answer principle.",
+      "how": "directions.ts routeMode() maps transit->driving with no note; detect transit intent and either say so + hand back a Google Maps transit link, or label the estimate honestly as driving-only."
+    },
+    {
+      "id": "relative-once-quiet-defer",
+      "title": "a 3-24h 'remind me in N hours' set at night is deferred to quiet-end, firing hours late",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "'remind me in 4 hours' at 11pm lands at 7am (quiet-end) not 3am — a deliberate duration silently broken; isShortOnce only exempts onces due within 3h.",
+      "how": "schedule-runner: a relative once (no clockTime) of ANY horizon names a deliberate instant — exempt it from the quiet-hours defer (or raise the short-once window), like a clock-time alarm; a recurring daily/digest still defers."
+    },
+    {
+      "id": "digest-silent-on-member-delete",
+      "title": "a digest/recipe goes permanently silent when its member recipes are deleted",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The relied-upon morning briefing just stops arriving with zero explanation when a member recipe is forgotten; the runner completes+advances silently on a null compose.",
+      "how": "When digestRun/recipeResolveTask returns null (members gone), send a one-time 'your <name> briefing has no content left — its recipes were removed' notice instead of silently advancing forever."
+    },
+    {
+      "id": "sticky-ack-too-broad",
+      "title": "a bare 'ok'/'stop' silently deletes an active sticky nag",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "A standing 'nag me to take meds until done' sticky was deleted by an unrelated 'ok'/'got it' reply hours after it last pinged — the highest-trust safety-net reminder destroyed by a filler word.",
+      "how": "Gate the bare-ack sticky-stop on a RECENTLY-fired (or not-yet-fired) sticky."
     }
   ],
   "history": [
@@ -3526,6 +3571,10 @@
     {
       "item": "sports-next-game",
       "note": "Sports is no longer today-only (sports-next-game): 'when do the Lakers play next', 'next Arsenal game', 'upcoming NFL' now return the next scheduled fixture. Live-probed the keyless ESPN cdn scoreboard — it accepts a dates=YYYYMMDD-YYYYMMDD range that returns scheduled 'pre' games with ISO kickoff dates. scores.ts: added date to GameScore + parse it (event.date/competition.date), wantsNextGame() intent detector, nextGameUrl() (forward now-1d..now+45d range), pickNextGame() (soonest not-final game >= now-3h), getNextGame() (resolve league -> fetch range -> team-filter with the same not-playing guard so another team's game isn't returned -> soonest), formatNextGame(). agent.ts get_scores dispatch: a 'next'/'upcoming'/'when do they play' request routes to getNextGame(nowMs); AND a team with no game today now auto-looks-up its next game instead of dead-ending. get_scores tool desc + prompt menu updated; new getNextGame backend method + defaultBackend wiring (no new TOOLS entry, so pinned-tool tests unaffected). 8 new tests (intent detect, url range, pick soonest/none, getNextGame team-filter + none + unresolvable, format). suite 1728 green, tsc clean. Live-probed data source (ESPN range 200, scheduled games present) so call-tested:true for the source; runner/agent path offline-tested."
+    },
+    {
+      "item": "sticky-ack-too-broad",
+      "note": "Fixed a bare 'ok'/'got it'/'stop' silently deleting an active sticky nag (sticky-ack-only-when-recent). hasSticky gated a bare ack but ignored whether a sticky recently PINGED, so an unrelated 'ok' hours after the meds/water nag last fired wiped the safety-net reminder. Added ScheduleStore.hasRecentlyFiredSticky(chatId,now,windowMs) — true only when a sticky pinged within the window (user plausibly replying to it) or hasn't fired yet (ack about the setup); index's stickyAck now gates on it (RELAY_STICKY_ACK_WINDOW_MS, default 90m) so a bare ack outside the window routes as a normal message. .env.example parity added. 1 new store test (not-yet-fired counts, 30m-ago counts, 3h-ago doesn't, hasSticky still true). suite 1729 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
@@ -3732,6 +3781,9 @@
     },
     {
       "note": "Backlog dry (only low/M + owner-gated left) -> ran 3-agent audit. A (new-user): onboarding text wall no tap-to-try [SEEDED+BUILT], first clock-time reminder UTC-warn-only, sports today-only no next-game, voice-in/text-out. B (reliability): quiet-hours bypassed for all alerts [SEEDED], alerts exempt from anti-spam cap, chatty watch starves daily [SEEDED], MemoryStore silent write fail [SEEDED]. C (power): threshold value alerts (ALREADY BUILT-below/above/in_stock), notes+profile context (ALREADY injected), voice replies TTS, group/household mode, per-chat cookie vault (owner-gated). Seeded: onboarding-tap-to-try(built), memory-write-silent-fail, quiet-hours-persistent-alerts, chatty-watch-starves-daily."
+    },
+    {
+      "note": "Backlog dry (only low/M + owner-gated) -> 3-agent audit. A(new-user): transit-as-driving [SEEDED], flight status, streaming availability, retailer-order honesty. B(reliability): bare-ok-kills-sticky [SEEDED+BUILT], relative-once quiet-defer [SEEDED], DST drift on recurring, digest-silent-on-member-delete [SEEDED], sticky self-cap silent stop. C(power): tap-to-watch on every answer [SEEDED], replayable browse macros, named saved places, auto-assembled briefing. Seeded: sticky-ack(built), tap-to-watch-on-answers, transit-answered-as-driving, relative-once-quiet-defer, digest-silent-on-member-delete."
     }
   ]
 }

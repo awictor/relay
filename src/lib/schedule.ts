@@ -863,6 +863,16 @@ export class ScheduleStore {
     return this.items.some((s) => s.chatId === chatId && s.sticky);
   }
 
+  /** True if a bare "ok"/"done" plausibly refers to a sticky nag (sticky-ack-only-when-recent): a sticky
+   * either PINGED within `windowMs` (the user is dismissing the ping they just saw) OR hasn't fired yet
+   * (just created — the ack is about the setup). Without this, a bare "ok" replying to an UNRELATED
+   * answer hours after the nag last pinged silently deleted the meds/water safety-net reminder. */
+  hasRecentlyFiredSticky(chatId: number, now: number, windowMs: number): boolean {
+    return this.items.some((s) =>
+      s.chatId === chatId && s.sticky &&
+      (s.lastFiredMs === undefined || now - s.lastFiredMs <= windowMs));
+  }
+
   /** Schedules due at/before now. */
   dueNow(now: number): Schedule[] {
     // Exclude a once whose fire already completed but whose removal-write may have failed

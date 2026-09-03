@@ -193,6 +193,9 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
   return { message: r.notify ? r.message : null, commit: r.commit };
 };
 const ALERT_CADENCE = process.env.RELAY_ALERT_CADENCE ?? "every day at 09:00"; // default alert check cadence
+// How long after a sticky reminder last pinged a bare "ok"/"done" still counts as dismissing IT
+// (sticky-ack-only-when-recent). Longer than a typical nag interval + reply lag; env-tunable. Default 90m.
+const STICKY_ACK_WINDOW_MS = intEnv(process.env.RELAY_STICKY_ACK_WINDOW_MS, { fallback: 90 * 60_000, min: 60_000 });
 // Quiet-hours window (hours 0-23, local per-chat tz). Equal start===end (default) = disabled. Set
 // RELAY_QUIET_START/END (e.g. 22 and 7) to hold proactive sends overnight until the window ends.
 const QUIET_START = intEnv(process.env.RELAY_QUIET_START, { fallback: 0, min: 0 }) % 24;
@@ -550,8 +553,13 @@ const handle = createHandler({
   },
   // Sticky ack (sticky-acknowledged-reminders): a bare "done"/"stop" stops the chat's re-pinging sticky
   // reminders. Returns [] when the chat has none (so the handler leaves a normal "done" alone).
+  // Gate on a RECENTLY-fired (or not-yet-fired) sticky (sticky-ack-only-when-recent): a bare "ok"/"got
+  // it" replying to some UNRELATED answer hours after the nag last pinged used to silently DELETE the
+  // meds/water safety-net reminder. Only treat the ack as dismissing the nag when a sticky pinged within
+  // the window (the user is plausibly replying to it) or hasn't fired yet (the ack is about the setup).
   stickyAck: (chatId, text) => {
     if (!isStickyAck(text) || !schedules.hasSticky(chatId)) return [];
+    if (!schedules.hasRecentlyFiredSticky(chatId, Date.now(), STICKY_ACK_WINDOW_MS)) return [];
     return schedules.acknowledgeSticky(chatId).map((s) => s.task);
   },
   recipeSave: (chatId, text) => {

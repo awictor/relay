@@ -639,6 +639,22 @@ describe("ScheduleStore — sticky reminders (sticky-acknowledged-reminders)", (
     // A second "done" then clears the remaining (now the only) sticky.
     expect(s.acknowledgeSticky(1).map((x) => x.task)).toEqual(["take meds"]);
   });
+  it("hasRecentlyFiredSticky: a bare ack only counts within the window of a ping / for a not-yet-fired sticky (sticky-ack-only-when-recent)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const meds = s.add(1, { kind: "interval", task: "meds", dueMs: NOW, intervalMs: 15 * MIN, reminderOnly: true, sticky: true }, NOW)!;
+    const WINDOW = 90 * MIN;
+    // Not-yet-fired sticky -> the ack is about the setup -> counts.
+    expect(s.hasRecentlyFiredSticky(1, NOW, WINDOW)).toBe(true);
+    // Pinged 30 min ago -> within window -> counts (user is dismissing that ping).
+    s.markStickyFired(meds.id, NOW - 30 * MIN);
+    expect(s.hasRecentlyFiredSticky(1, NOW, WINDOW)).toBe(true);
+    // Pinged 3 hours ago -> outside window -> a bare "ok" now is an UNRELATED reply, must NOT count
+    // (else it would silently delete the meds nag).
+    s.markStickyFired(meds.id, NOW - 3 * 60 * MIN);
+    expect(s.hasRecentlyFiredSticky(1, NOW, WINDOW)).toBe(false);
+    // hasSticky still true (the reminder is alive) — only the ack-scoping is gated.
+    expect(s.hasSticky(1)).toBe(true);
+  });
   it("a sticky whose fire keeps FAILING to send does not burn its cap budget (sticky-send-fail-burns-budget)", () => {
     const s = new ScheduleStore({ file: tmpFile() });
     const r = s.add(1, { kind: "interval", task: "meds", dueMs: NOW - 1, intervalMs: 15 * MIN, reminderOnly: true, sticky: true, stickyMax: 2 }, NOW)!;
