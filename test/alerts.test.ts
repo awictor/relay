@@ -253,6 +253,18 @@ describe("feed-watch (new-item-feed-watch)", () => {
     const reply = "Here are the latest jobs:\n• Senior React dev — Acme\n2. Frontend eng — Beta\n- Staff eng — Gamma\n";
     expect(extractListItems(reply)).toEqual(["Senior React dev — Acme", "Frontend eng — Beta", "Staff eng — Gamma"]);
   });
+  it("a PROSE reply is NOT treated as a feed item, so a reworded fact can't false-fire 'new' (feed-agent-prose-false-new)", () => {
+    // The agent rewords the same fact between checks; a one-line prose answer must yield NO items so the
+    // feed watch stays silent instead of pinging "1 new" every check.
+    expect(extractListItems("The top remote React role right now is a Senior role at Acme, posted today.")).toEqual([]);
+    expect(extractListItems("I couldn't find any new listings matching that.")).toEqual([]);
+    // A single bare title line is also not a list (needs >=2 unmarked lines to count as a bare list).
+    expect(extractListItems("Senior React dev at Acme")).toEqual([]);
+  });
+  it("a bare (unmarked) multi-line list of short titles still counts as a feed", () => {
+    const reply = "Senior React dev — Acme\nFrontend eng — Beta\nStaff eng — Gamma";
+    expect(extractListItems(reply)).toEqual(["Senior React dev — Acme", "Frontend eng — Beta", "Staff eng — Gamma"]);
+  });
   it("feedItemKey is stable across phrasing/case/punctuation drift", () => {
     expect(feedItemKey("• Senior React Dev — Acme!")).toBe(feedItemKey("senior react dev acme"));
   });

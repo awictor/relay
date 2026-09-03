@@ -74,25 +74,30 @@ function memberLabel(task: string): string {
   return task.trim().replace(/^(?:the\s+|price of\s+|check\s+)/i, "").split(/\s+/).slice(0, 4).join(" ").slice(0, 40) || task.slice(0, 40);
 }
 
-/** Split an agent reply into candidate list items. A feed reply is usually a bulleted/numbered list
- * ("• Senior React dev — Acme\n• ...") or newline-separated lines; fall back to lines. Each item is
- * trimmed of its bullet/number marker. Blank + obvious non-item lines (a lead-in like "Here are the
- * latest jobs:") are dropped so they don't count as entries. Exported for tests. */
+// A "sentence-y" line: ends with terminal punctuation or is long with no bullet — prose, not a list item.
+const SENTENCE_RE = /[.!?]$/;
+
+/** Split an agent reply into candidate feed items. A feed reply is a LIST (jobs/listings/restocks): a
+ * bulleted/numbered set, or several short title-ish lines. This MUST NOT treat a prose reply as a single
+ * "item" — the agent rewords the same fact between checks, so a one-line-prose item false-fires "1 new"
+ * every time (feed-agent-prose-false-new). So: (1) if any lines carry an explicit bullet/ordinal marker,
+ * take ONLY those (a real list, lead-in prose ignored); (2) else accept multiple short, non-sentence
+ * lines as a bare list; (3) a reply with no marked items and <2 qualifying lines (i.e. prose) yields []
+ * — the feed path then finds nothing new + stays silent instead of crying wolf. Exported for tests. */
 export function extractListItems(reply: string): string[] {
-  const out: string[] = [];
-  for (const rawLine of reply.split(/\r?\n/)) {
-    let line = rawLine.trim();
-    if (!line) continue;
-    // Strip a leading bullet (-, *, •, ·) or "1." / "1)" ordinal marker.
-    const stripped = line.replace(/^\s*(?:[-*•·]|\d+[.)])\s+/, "").trim();
-    // A lead-in / trailing note ("Here are the latest ...:", "Let me know ...") isn't an item: it ends
-    // with a colon, or is the only line, or has no bullet AND reads like a sentence to the user.
-    if (stripped.endsWith(":")) continue;
-    if (stripped.length < 2) continue;
-    line = stripped;
-    out.push(line);
+  const lines = reply.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const MARKER = /^\s*(?:[-*•·]|\d+[.)])\s+/;
+  const marked = lines.filter((l) => MARKER.test(l));
+  const clean = (l: string) => l.replace(MARKER, "").trim();
+  if (marked.length) {
+    // Explicit list: take the marked items (drop any that are just a lead-in ending in ":").
+    return marked.map(clean).filter((l) => l.length >= 2 && !l.endsWith(":"));
   }
-  return out;
+  // No markers: accept a BARE list only if there are >=2 short, non-sentence lines (titles/entries).
+  // A single line, or lines that read like sentences (prose), are NOT a feed -> [] (stay silent).
+  const candidates = lines.filter((l) => l.length >= 2 && !l.endsWith(":") && !(SENTENCE_RE.test(l) && l.length > 80));
+  if (candidates.length >= 2) return candidates;
+  return [];
 }
 
 /** A stable-ish key for a feed item so re-phrasing/reordering doesn't read as new. Lowercased, punctuation

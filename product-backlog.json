@@ -1922,7 +1922,7 @@
       "title": "Agent-driven feed watch false-fires on prose rewording",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "extractListItems keeps any non-bullet non-colon line as a feed item; an agent reply that is a plain sentence gets keyed by feedItemKey, so a reworded same-fact next check reads as \"1 new\" — crying wolf on the agent-driven alert.feed path (the keyless feedSource path is safe, uses stable ids).",
       "how": "Require an actual list shape (bullet/ordinal, >=2 items) before treating a reply as a feed; else fall back to change-detection for prose."
     },
@@ -2684,6 +2684,10 @@
     {
       "item": "digest-drilldown-trims-tail",
       "note": "Fixed scheduled-digest 'more'/'link' drilldown. recordSend cached the TRIMMED sent text as `full` (with sent=full.length), so 'more' said 'nothing more to show' + 'link' lost URLs on cut lines. recordSend dep now takes (chatId, full, sentLen); the scheduled path caches the UNTRIMMED composed digest + the trimmed send length (mirrors the inbound /run path). index recordSend updated. 1 new test (untrimmed digest cached, sent<full so a tail is pageable). Suite 1441 green, tsc clean."
+    },
+    {
+      "item": "feed-agent-prose-false-new",
+      "note": "Fixed agent-driven feed watch false-firing on prose. extractListItems kept ANY non-blank line as a feed item, so a one-line prose reply became an 'item' the agent reworded each check -> false '1 new' every time. Now: explicit bullet/ordinal markers -> take only those; no markers -> accept a bare list only when >=2 short non-sentence lines; otherwise (prose / single line) -> [] so the feed path finds nothing new + stays silent. The keyless feedSource path (stable ids) was already safe. 2 new tests (prose->[], bare multi-line list still counts). Suite 1443 green, tsc clean."
     }
   ],
   "audits": [
@@ -2836,6 +2840,9 @@
     },
     {
       "note": "AUDIT (backlog dry, only owner-gated). A/new-user: no calculator (chained/financial math wrong), no translation tool, no showtimes/events, no flight status, transit-mode directions. B/reliability: scores team-not-playing dumps slate (S,fixed), scheduled-digest drilldown pages trimmed copy (S), agent-feed prose false-new (M), news same-headline dedup collapse (S). C/power: when-then recipe-on-alert, automation-health notices, record-replay browser macros, conditional-branch recipes. Seeded: scores-team-not-playing(built), calculator-tool, digest-drilldown-trims-tail, feed-agent-prose-false-new, when-then-recipe-on-alert."
+    },
+    {
+      "note": "No 3-agent audit this run (feed-agent-prose-false-new was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
     }
   ]
 }
