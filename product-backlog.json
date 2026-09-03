@@ -2771,6 +2771,42 @@
       "status": "done",
       "why": "Reminders exist but aren't tied to a PERSON, and contacts.ts is a passive lookup. 'nudge me to reply to my landlord' / 'follow up with Sarah Fri' should fire AND pull that contact's details + offer a tap-to-draft (compose) in the same ping — a lightweight personal-CRM loop, the 'assistant that has your back' behavior.",
       "how": "Parse 'follow up with <contact> <when>' -> a reminder-once whose task references the contact; on fire, resolve the saved contact + append their email/phone + a compose deep-link. Reuse schedule + contacts + compose."
+    },
+    {
+      "id": "immediate-alert-commit-not-send-gated",
+      "title": "an immediate alert check (define/edit/refresh) eats the crossing if its ping fails to send",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "The four inbound run-now sites (define, edit, watch-that, refresh) did 'await sendMessage(...); commit()' unconditionally; sendMessage returns false on a failed send (doesn't throw), so a 429/network drop advanced the baseline anyway — the crossing is eaten + the watch looks armed but won't re-fire until it crosses again.",
+      "how": "Gate each message-path commit on (await sendMessage(...)) !== false, mirroring the scheduler's send-gated commit."
+    },
+    {
+      "id": "media-memory-not-send-gated",
+      "title": "photo/doc reply memory write isn't gated on delivery",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The text path was fixed (inbound-send-fail-swallowed) but the photo/document/photo-to-action branches call memorySet unconditionally after the send — a failed image/PDF answer is still recorded as delivered, so the next message is read as a follow-up to an answer the user never saw.",
+      "how": "Gate the media-branch memorySet on the sendPhoto/sendDocument result (=== false skip), mirroring the text path."
+    },
+    {
+      "id": "scheduled-chain-partial-unflagged",
+      "title": "a scheduled chained recipe that stops early is delivered as if complete",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "The inbound /run path flags stoppedEarly/stepsDone, but the scheduled path's runChain dep returns Promise<string> — a chain halted at an if-gate or degraded step is pushed as a normal complete-looking briefing every period, no '⚠️ couldn't finish'.",
+      "how": "Change the scheduler's runChain dep to return the structured { final, stoppedEarly, stepsDone } the inbound path consumes + prefix a partial-answer banner on a proactive fire."
+    },
+    {
+      "id": "starter-automation-gallery",
+      "title": "the recurring-automation engine is under-adopted (no tap-to-install)",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "Recipes/digests/alerts/watchlists are deep but activation needs 'save X:'/'digest morning: ...' syntax users never discover; onboarding tap-to-try only fires ONE-SHOT errands. Retention is gated on setting up >=1 recurring automation.",
+      "how": "An /automations (or onboarding) row of ~10 curated recurring automations ('Daily weather + top news', 'Watch a product price', 'Job feed', 'Morning briefing') that a tap installs into the existing recipe/alert/digest stores — a new 'install' callback op reusing callbacks.ts + a static list like TRY_EXAMPLES."
     }
   ],
   "history": [
@@ -3877,6 +3913,10 @@
     {
       "item": "contact-followup-nudge",
       "note": "Person-anchored follow-up nudges (contact-followup-nudge). 'follow up with Sarah in 3 days' / 'remind me to reply to my landlord tomorrow' now schedule a reminder that, on fire, names the person AND (if saved) carries their email/phone + a one-tap mailto:/sms: draft link — a lightweight personal-CRM loop joining reminders + contacts + compose (all pre-existing; no new store/runner). New parseFollowUp in contacts.ts (splits contact name from the when clause; gated on a follow-up/get-back-to/reply-to verb). index.followUpAdd resolves the contact NOW + bakes handle+draft-link into a reminderOnly schedule via parseScheduleFor (reuses relative/on-Friday/next-week grammar). Handler routes on the follow-up verb before the generic schedule cue; an UNPARSED time falls through to the normal scheduler/agent (no dead-end). HELP line. 5 new tests (parseFollowUp split + reject; handler schedule/confirm, unparsed-fallthrough, non-followup-not-captured). suite 1884 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "immediate-alert-commit-not-send-gated",
+      "note": "Extended the send-gated-commit invariant to the four INBOUND immediate-alert-check sites (immediate-alert-commit-not-send-gated). alert define, conversational edit, 'watch that', and the Refresh button each did 'await sendMessage(ping); commit()' unconditionally — but sendMessage returns false on a failed send (best-effort, doesn't throw), so a 429/network drop advanced the alert baseline anyway, eating the crossing (the watch looked armed but wouldn't re-fire until it crossed again). Now each message-path commit is gated on (await sendMessage(...)) !== false, mirroring the scheduler's already-correct gating; the silent path (no message) still commits (nothing to lose). 2 new tests (refresh send-fail -> no commit; define send-fail -> no commit). suite 1886 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
@@ -4113,6 +4153,9 @@
     },
     {
       "note": "No audit this run — built from the prior queue (quick-log-tracker). Refilled by promoting a parked Agent-C finding: contact-followup-nudge (medium/S, reminder x contacts x compose). Remaining: contact-followup-nudge, callback-edit-in-place(low), confirm-to-act(owner-gated)."
+    },
+    {
+      "note": "Backlog dry (low/M+owner-gated) -> 3-agent audit. A(new-user): location-pin-sets-no-tz, help-is-a-wall, voice-out(L), local-showtimes/events. B(reliability): immediate-alert-commit-not-send-gated [SEEDED+BUILT], media-memory-not-send-gated [SEEDED], scheduled-chain-partial-unflagged [SEEDED], extractValue percent-only false-fire. C(power): starter-automation gallery [SEEDED], bundle-and-upgrade nudge, automations cockpit, auto-brief from history, shareable recipes. Seeded: immediate-alert-commit(built), media-memory-not-send-gated, scheduled-chain-partial-unflagged, starter-automation-gallery."
     }
   ]
 }

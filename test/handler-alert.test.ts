@@ -76,6 +76,16 @@ describe("handler — alert routing", () => {
     expect(sent[1]).toMatch(/48,000/);          // immediate check second
   });
 
+  it("a define whose immediate crossing-ping FAILS to send does NOT commit the baseline (immediate-alert-commit-not-send-gated)", async () => {
+    let committed = false;
+    const { handle } = harness({
+      sendMessage: async () => false, // both the confirmation + the crossing ping "fail"
+      alertRunNow: async () => ({ message: "🔔 btc:\n$48,000 (below 50000)", commit: () => { committed = true; } }),
+    });
+    await handle(msg("watch btc: price of bitcoin below 50000"));
+    expect(committed).toBe(false); // crossing not eaten — re-fires on the next scheduled check
+  });
+
   it("skips the immediate check when the chat is over its rate limit (inline-cmd-rate-limit)", async () => {
     let ran = 0;
     const { handle, sent } = harness({

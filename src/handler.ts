@@ -496,7 +496,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         if (action.action === "refresh") {
           if (!deps.alertRunNow) { await deps.sendMessage(chatId, `I can't refresh "${action.name}" right now.`); return null; }
           const r = await deps.alertRunNow(chatId, action.name);
-          if (r.message) { await deps.sendMessage(chatId, r.message, buildAlertKeyboard(action.name)); r.commit(); return "Refreshed"; }
+          // Gate the baseline commit on delivery (immediate-alert-commit-not-send-gated): if the crossing
+          // ping fails to send, DON'T advance the baseline — else the crossing is eaten + the watch looks
+          // armed but won't re-fire until it crosses again. Mirrors the scheduler's send-gated commit.
+          if (r.message) { const ok = await deps.sendMessage(chatId, r.message, buildAlertKeyboard(action.name)); if (ok !== false) r.commit(); return "Refreshed"; }
           r.commit();
           await deps.sendMessage(chatId, `🔄 "${action.name}": no change since last check.`, buildAlertKeyboard(action.name));
           return "No change";
@@ -1291,7 +1294,9 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         // Rate-gate the immediate check: it's a full LLM+anvil run, so skip it when the chat is over
         // its limit (the scheduled cadence still covers it) rather than letting spam open sessions.
         if (deps.alertRunNow && deps.checkRateLimit(msg.chatId).allowed) {
-          try { const c = await deps.alertRunNow(msg.chatId, r.name); if (c.message) { await deps.sendMessage(msg.chatId, c.message); c.commit(); } else c.commit(); }
+          // Commit only on a delivered ping (immediate-alert-commit-not-send-gated): a failed send must
+          // leave the baseline so the crossing re-fires next check, not be silently eaten.
+          try { const c = await deps.alertRunNow(msg.chatId, r.name); if (c.message) { if (await deps.sendMessage(msg.chatId, c.message) !== false) c.commit(); } else c.commit(); }
           catch { /* a flaky post-edit check must not break the update confirmation */ }
         }
         return;
@@ -1343,7 +1348,8 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         if (deps.alertRunNow && deps.checkRateLimit(msg.chatId).allowed) {
           try {
             const c = await deps.alertRunNow(msg.chatId, r.name);
-            if (c.message) { await deps.sendMessage(msg.chatId, c.message); c.commit(); } else c.commit();
+            // Commit only on a delivered ping (immediate-alert-commit-not-send-gated).
+            if (c.message) { if (await deps.sendMessage(msg.chatId, c.message) !== false) c.commit(); } else c.commit();
           } catch { /* a flaky first check must not break the define confirmation */ }
         }
         return;
@@ -1444,7 +1450,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           const r = deps.alertDefine(msg.chatId, `watch ${name}: ${task}${watchThat.clause ? " " + watchThat.clause : ""}`, deps.now());
           if (r.ok) {
             await deps.sendMessage(msg.chatId, `Watching "${r.name}" — I'll message you when it changes. See /alerts.`);
-            if (deps.alertRunNow && deps.checkRateLimit(msg.chatId).allowed) { try { const c = await deps.alertRunNow(msg.chatId, r.name); if (c.message) { await deps.sendMessage(msg.chatId, c.message); c.commit(); } else c.commit(); } catch { /* flaky first check */ } }
+            if (deps.alertRunNow && deps.checkRateLimit(msg.chatId).allowed) { try { const c = await deps.alertRunNow(msg.chatId, r.name); if (c.message) { if (await deps.sendMessage(msg.chatId, c.message) !== false) c.commit(); } else c.commit(); } catch { /* flaky first check */ } }
             return;
           }
           await deps.sendMessage(msg.chatId, r.reason === "capped" ? "You've hit the alert limit — /forget-alert one first." : "I couldn't set that watch — try \"watch <name>: <task>\".");

@@ -41,6 +41,16 @@ describe("handler — inline-button callbacks", () => {
     expect(calls()).toBe(0);
   });
 
+  it("alert Refresh whose crossing-ping FAILS to send does NOT commit (immediate-alert-commit-not-send-gated)", async () => {
+    let committed = false;
+    const { handle } = harness({
+      sendMessage: async () => false, // delivery fails
+      alertRunNow: async () => ({ message: "🔔 btc crossed $65k", commit: () => { committed = true; } }),
+    });
+    await handle(tap(encodeCallback({ kind: "alert", action: "refresh", name: "btc" })!));
+    expect(committed).toBe(false); // baseline NOT advanced -> the crossing re-fires next check
+  });
+
   it("alert Refresh with no change says so + commits", async () => {
     let committed = false;
     const { handle, sent, acked } = harness({
