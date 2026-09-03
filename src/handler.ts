@@ -276,7 +276,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     const clearBgProgress = () => { if (bgProgress !== null) { bgClearTimer(bgProgress); bgProgress = null; } };
     void (async () => {
       try {
-        const r = await runIt(errand, { llm: deps.llm, context: deps.profileContext?.(chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(chatId) ?? 0, weatherCoords: deps.weatherCoords?.(chatId), weatherUnits: deps.weatherUnits?.(chatId), maxSteps: BACKGROUND_MAX_STEPS }, bgHistory);
+        const r = await runIt(errand, { llm: deps.llm, context: deps.profileContext?.(chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(chatId) ?? 0, weatherCoords: deps.weatherCoords?.(chatId), weatherUnits: deps.weatherUnits?.(chatId), ...(deps.recallAnswers ? { recall: (q: string) => deps.recallAnswers!(chatId, q) } : {}), maxSteps: BACKGROUND_MAX_STEPS }, bgHistory);
         clearBgProgress();
         const parts = formatReplyParts(r.reply);
         const out = r.degraded ? `⚠️ Here's what I got (I couldn't fully finish):\n\n${parts.shown}` : `✅ Done with "${errand}":\n\n${parts.shown}`;
@@ -1072,7 +1072,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         ? `The user is replying to this message I just sent them: "${cachedPing.full.slice(0, 600)}". Answer their follow-up in that context.`
         : "";
       const context = [profileCtx, pingCtx].filter(Boolean).join(" ") || undefined;
-      const { reply, steps, tools, photo, doc, docName, degraded } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, weatherCoords: deps.weatherCoords?.(msg.chatId), weatherUnits: deps.weatherUnits?.(msg.chatId) }, history);
+      const { reply, steps, tools, photo, doc, docName, degraded } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, weatherCoords: deps.weatherCoords?.(msg.chatId), weatherUnits: deps.weatherUnits?.(msg.chatId), ...(deps.recallAnswers ? { recall: (q: string) => deps.recallAnswers!(msg.chatId, q) } : {}) }, history);
       clearProgress();
       // A degraded reply is a soft-failure fallback (agent ran out of steps / produced no answer,
       // DEV-0176), not a real answer. Prepend a one-line hint so a live-bot user knows the result is

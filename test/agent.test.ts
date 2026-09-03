@@ -277,6 +277,45 @@ describe("runAgent get_quote (stock-quote-tool)", () => {
   });
 });
 
+describe("runAgent recall (recall-answer-log-tool)", () => {
+  const backend = () => ({
+    scrape: async (url: string) => ({ title: "", content: "", url }),
+    createSession: async () => ({ id: "s" }),
+    navigate: async (_i: string, url: string) => ({ url, title: "" }),
+    click: async () => {}, type: async () => {},
+    readCurrent: async () => ({ title: "", content: "", url: "" }),
+    releaseSession: async () => {},
+    discoverLinks: async () => [],
+    fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+  });
+  it("pulls a past answer from the log instead of re-fetching", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "recall", args: { query: "sushi restaurant" } } },
+      { toolCall: { name: "reply", args: { text: "You saved Nobu earlier." } } },
+    ]);
+    let seenQuery = "";
+    const { reply } = await runAgent("what was that sushi place you found me", { llm, backend: backend(),
+      recall: (q: string) => { seenQuery = q; return [{ task: "best sushi near me", reply: "Nobu, 4.6 stars", at: Date.now() - 3_600_000 }]; },
+    });
+    expect(seenQuery).toBe("sushi restaurant");
+    expect(reply).toMatch(/Nobu/);
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/Past answers I gave/);
+    expect(toolMsg!.content).toMatch(/Nobu, 4\.6 stars/);
+    expect(toolMsg!.content).toMatch(/1h ago/); // age shown so a stale recall reads as past
+  });
+  it("reports no match gracefully (agent offers to look it up fresh)", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "recall", args: { query: "dentist" } } },
+      { toolCall: { name: "reply", args: { text: "I don't have that — want me to look it up?" } } },
+    ]);
+    const { reply } = await runAgent("what was that dentist you mentioned", { llm, backend: backend(), recall: () => [] });
+    expect(reply).toMatch(/look it up/i);
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/No past answer of mine matches/);
+  });
+});
+
 describe("runAgent track_package (package-tracking-watcher)", () => {
   it("detects the carrier + scrapes the official tracking page, no web_search", async () => {
     const llm = new MockLLM([

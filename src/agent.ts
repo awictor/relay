@@ -16,6 +16,7 @@ import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
+import { relativeAge } from "./lib/answer-log.js";
 import { getWeather as fetchWeather, formatWeather, formatWeatherWhen } from "./lib/weather.js";
 import { formatDraft, type Draft } from "./lib/compose.js";
 import { findNearby as fetchNearby, formatPlaces } from "./lib/places.js";
@@ -111,6 +112,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { symbol: { type: "string", description: "Ticker symbol, e.g. \"AAPL\" or \"TSLA\". Non-US: add a market suffix like \"VOD.UK\"." } },
       required: ["symbol"],
+    },
+  },
+  {
+    name: "recall",
+    description: "Search what I've PREVIOUSLY told this user (my own past answers) — use for \"what was that restaurant you found\", \"the flight price you got me last week\", \"resend the article\", or any reference to something I said earlier that isn't in the current conversation. Returns past answers with how long ago. NOT for facts the user told me about themselves.",
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string", description: "Keywords for the thing to recall, e.g. \"sushi restaurant\" or \"Lisbon flights\"." } },
+      required: ["query"],
     },
   },
   {
@@ -255,6 +265,7 @@ Tools:
 - "pdf" (url): render a page to a PDF and send it as a document. Use when the user wants to SAVE or KEEP a page ("save as PDF", "send me a PDF of X"). Then call reply with a short caption.
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
+- "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
 - "get_quote" (symbol): latest stock/equity price. Use this — NOT web_search/scrape — for any "what's Tesla at"/"AAPL price"/"how's NVDA doing" question; it's instant. Pass the ticker (AAPL, TSLA); non-US add a market suffix (VOD.UK).
 - "get_weather" (place?, when?): current weather, today's high/low, + up to a 7-day forecast. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location. For a future day, pass "when" with the user's words ("tomorrow", "this weekend", "Saturday") so the RIGHT day is reported, not today.
@@ -443,6 +454,11 @@ export interface AgentDeps {
   // uses their location and renders in their units. Optional; absent -> place is required + F default.
   weatherCoords?: { lat: number; lng: number };
   weatherUnits?: "metric" | "imperial";
+  // Recall past answers (recall-answer-log-tool): search THIS chat's answer-log so the agent can pull up
+  // "that restaurant you found" / "the flight price last week" mid-reasoning instead of re-fetching or
+  // shrugging. Bound to the chatId by the caller. Optional; absent -> the recall tool reports it's
+  // unavailable. Returns most-relevant past {task, reply, at(epoch ms)} entries.
+  recall?: (query: string) => Array<{ task: string; reply: string; at: number }>;
   // Background errands (async-background-errands): a raised per-run step budget for a long,
   // dispatch-and-ping task ("find the 5 cheapest flights and get back to me") that a normal ~8-step
   // synchronous run would truncate. Optional; absent/<=0 -> the RELAY_MAX_STEPS default. Clamped to a
@@ -679,6 +695,20 @@ export async function runAgent(
         } catch (e) {
           push("get_quote", `ERROR getting quote: ${e instanceof Error ? e.message : String(e)}`);
         }
+        continue;
+      }
+
+      if (call.name === "recall") {
+        if (!deps.recall) { push("recall", "ERROR: I can't search past answers here."); continue; }
+        const query = String(call.args.query ?? "").trim();
+        const hits = deps.recall(query);
+        if (!hits.length) { push("recall", `No past answer of mine matches "${query}". Tell the user you don't have a record of that + offer to look it up fresh.`); continue; }
+        const now = deps.nowMs ?? Date.now();
+        const body = hits.map((h) => {
+          const age = relativeAge(now - h.at); // so a recalled price/story reads as past, not current
+          return `• They asked "${h.task}"${age ? ` (${age})` : ""} — I said:\n${h.reply}`;
+        }).join("\n\n");
+        push("recall", `Past answers I gave this user:\n${body}\n\nUse these to answer; mention how long ago if it might be stale (a price/score/story), and offer to refresh it.`);
         continue;
       }
 

@@ -32,7 +32,7 @@
       "title": "the agent can't recall what it told the user before (answer-log is write-only)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The persistent answer-log (100 timestamped task+reply pairs/chat) has a search() method but NO agent tool exposes it — so 'what did you tell me that restaurant was?' / 'what was the flight price last week?' can't be answered from Relay's own memory; the agent re-fetches or shrugs. The long-term-memory moat Instinct markets is one ~30-line tool away (audit 27 C#2).",
       "how": "Add a recall(query) agent tool that calls answerLog.search(chatId, keywords) + returns the top matching past answers for the model to relay. Keyless, offline-testable against a mock log. Note: an isAnswerRecall handler heuristic already exists — this exposes it as a first-class agent tool so the LLM can invoke it mid-reasoning."
     },
@@ -2096,6 +2096,10 @@
     {
       "id": "region-qualifier-tz-inference",
       "note": "Fixed a same-named-city timezone bug: inferTzFromLocation looped comma-parts leftmost-first, so 'Paris, TX' matched the CITY token (paris->UTC+1) before the disambiguating REGION token (tx->UTC-6) and fired every daily reminder ~7h off (also Dublin OH, Athens GA, Portland ME). Now a 'City, Region' form resolves the TAIL first (region wins), falling back to the leftmost city token only when the tail isn't a known region — so 'Paris, TX'->-360, 'Dublin, OH'->-300, 'Portland, ME'->-300, while 'Paris, France'->60 + 'Dublin, Ireland'->0 still resolve. Also filled in the missing US state abbrevs (ME/NH/VT/CT/RI/MD/WV/KY/WI/IA/KS/AR/AL/MS/ND/SD/MT/WY/AK) while OMITTING ones that collide with a city code or common English word (in/or/hi/la=Los Angeles/de/ok/id/ne) so a bare 'LA' still means Los Angeles. 3 tests (region disambiguation / foreign cities intact / LA no-collision). call-tested: false (pure inference). 1197 tests green."
+    },
+    {
+      "id": "recall-answer-log-tool",
+      "note": "The persistent answer-log (100 timestamped task+reply pairs/chat) had a search() but was write-only to the agent — only a whole-message isAnswerRecall regex in the handler could surface it, so a recall reference buried mid-request ('book me a table at that sushi place you found') never reached the log. Added a first-class recall(query) agent tool: a `recall` dep on AgentDeps (bound to the chatId by the handler via the existing recallAnswers/recallKeywords path), a tool def + dispatch that returns the top past answers with a relativeAge ('1h ago') so a stale price/story reads as past, and a graceful no-match ('offer to look it up fresh'). Wired into both the inbound + background runIt calls; the handler's whole-message recall fast-path stays. 4 tests (recall pulls past answer + shows age / no-match graceful + tool-surface pin). call-tested: false (offline unit; the LLM chooses to call it live). 1199 tests green."
     }
   ],
   "audits": [
