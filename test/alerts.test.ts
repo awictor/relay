@@ -296,3 +296,30 @@ describe("watch time series (watch-time-series)", () => {
     expect(s.seriesOf(1, "nope")).toEqual([]);
   });
 });
+
+describe("watchlists", () => {
+  it("parses a semicolon-separated task into members", () => {
+    const p = parseAlertCommand("watch markets: btc price; eth price; gold price")!;
+    expect(p.name).toBe("markets");
+    expect(p.members!.map((m) => m.task)).toEqual(["btc price", "eth price", "gold price"]);
+    expect(p.members!.map((m) => m.label)).toEqual(["btc price", "eth price", "gold price"]);
+    expect(p.threshold).toBeUndefined();
+    expect(p.condition).toBeUndefined();
+  });
+  it("a single task (no semicolon) is NOT a watchlist", () => {
+    expect(parseAlertCommand("watch btc: price of bitcoin")!.members).toBeUndefined();
+  });
+  it("caps members", () => {
+    const tasks = Array.from({ length: 12 }, (_, i) => `item ${i}`).join("; ");
+    expect(parseAlertCommand(`watch big: ${tasks}`)!.members).toHaveLength(8);
+  });
+  it("store persists members + setMemberLasts records per-member value, replace preserves last by label", () => {
+    const s = new AlertStore({ file: tmpFile() });
+    s.add(1, { name: "mk", task: "a; b", members: [{ label: "a", task: "a" }, { label: "b", task: "b" }] }, NOW);
+    s.setMemberLasts(1, "mk", [{ label: "a", value: "$1" }, { label: "b", value: "$2" }]);
+    expect(s.get(1, "mk")!.members!.find((m) => m.label === "a")!.last).toBe("$1");
+    // re-state (same labels) preserves each member's last
+    s.add(1, { name: "mk", task: "a; b", members: [{ label: "a", task: "a" }, { label: "b", task: "b" }] }, NOW);
+    expect(s.get(1, "mk")!.members!.find((m) => m.label === "a")!.last).toBe("$1");
+  });
+});

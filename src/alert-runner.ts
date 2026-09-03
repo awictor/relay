@@ -40,6 +40,9 @@ export interface AlertRunnerDeps {
   runThen?: (chatId: number, recipeName: string) => Promise<string | null>;
   // Current epoch ms for stamping time-series points (watch-time-series). Optional; default Date.now.
   now?: () => number;
+  // Watchlist (watchlists): record the members that changed this check (by label) so an unchanged
+  // member doesn't re-fire. Called by the caller's post-send commit. Optional.
+  setMemberLasts?: (chatId: number, name: string, updates: Array<{ label: string; value: string }>) => void;
 }
 
 /**
@@ -52,6 +55,38 @@ export interface AlertRunnerDeps {
  */
 export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<AlertRunResult> {
   const noop = () => {};
+
+  // Watchlist (watchlists): run each member sub-task, compare to its own last value, and send ONE
+  // grouped ping of only the members that CHANGED. First run seeds every member silently (no dump).
+  // Member-last advances are deferred to the caller's post-send commit (a failed send re-reports).
+  if (alert.members?.length) {
+    const ctx = deps.contextFor?.(alert.chatId) || undefined;
+    const results = await Promise.all(alert.members.map(async (mem) => {
+      try {
+        const res = await deps.runAgent(mem.task, { llm: deps.llm, context: ctx }, []);
+        if (res.degraded) return { mem, value: null as string | null };
+        return { mem, value: deps.formatReply(res.reply).trim() };
+      } catch { return { mem, value: null as string | null }; }
+    }));
+    const firstRunWl = alert.members.every((m) => m.last === undefined);
+    const updates: Array<{ label: string; value: string }> = [];
+    const changedLines: string[] = [];
+    for (const { mem, value } of results) {
+      if (value === null) continue; // couldn't read this member this tick — leave its baseline
+      updates.push({ label: mem.label, value });
+      if (!firstRunWl && mem.last !== undefined && changed(mem.last, value)) {
+        changedLines.push(`• ${mem.label}: ${value}`);
+      }
+    }
+    const commit = () => deps.setMemberLasts?.(alert.chatId, alert.name, updates);
+    if (firstRunWl) { commit(); return { notify: false, message: null, value: "", commit: noop }; } // seed silently
+    if (!changedLines.length) return { notify: false, message: null, value: "", commit: noop };
+    const shown = changedLines.slice(0, 10);
+    const more = changedLines.length > shown.length ? `\n…and ${changedLines.length - shown.length} more` : "";
+    const message = `🔔 ${alert.name} — ${changedLines.length} update${changedLines.length === 1 ? "" : "s"}:\n${shown.join("\n")}${more}`;
+    return { notify: true, message, value: "", commit };
+  }
+
   // The baseline advance for this value, run only by the caller (after a successful send on notify).
   const advance = (v: string) => () => deps.setLast(alert.chatId, alert.name, v);
   let value: string;

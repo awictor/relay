@@ -27,8 +27,16 @@ export interface Alert {
   // so a user can ask "how has X moved this week" / min-max / trend — answered from stored data, no LLM.
   // Capped; oldest-first drop. Only numeric watches accumulate a series (a prose watch has no value).
   series?: Array<{ t: number; v: number }>;
+  // Watchlist (watchlists): track N items as ONE watch — each member is its own sub-task with its own
+  // last value; a check runs them all and sends ONE grouped ping of only the members that CHANGED, so a
+  // basket (5 stocks / 3 job feeds) is a single standing dashboard, not N separate alerts + N pings. A
+  // watchlist alert has members instead of a single trigger. `label` is a short human name per member.
+  members?: Array<{ label: string; task: string; last?: string }>;
   created: number;
 }
+
+// Cap watchlist members so one check can't fan out into an unbounded burst of agent runs.
+const MAX_WATCHLIST_MEMBERS = 8;
 
 // Cap the per-alert time series so a long-lived watch can't grow unbounded. ~1 point/check; at a daily
 // cadence this is ~1 year, at hourly ~2 weeks — enough for "this week/month" trend answers.
@@ -52,6 +60,12 @@ export interface ParsedAlert {
   condition?: AlertCondition;
   feed?: boolean; // notify on a NEW list item, not on a value change
   then?: string;  // run this saved recipe when the alert fires (trigger-to-action-alerts)
+  members?: Array<{ label: string; task: string }>; // watchlist: N sub-watches, one grouped ping
+}
+
+/** Derive a short human label for a watchlist member from its task (first few salient words). */
+function memberLabel(task: string): string {
+  return task.trim().replace(/^(?:the\s+|price of\s+|check\s+)/i, "").split(/\s+/).slice(0, 4).join(" ").slice(0, 40) || task.slice(0, 40);
 }
 
 /** Split an agent reply into candidate list items. A feed reply is usually a bulleted/numbered list
@@ -133,6 +147,16 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
   // clause) so the price/stock/feed parsing below still sees a clean task tail.
   const thenClause = task.match(/\s+then\s+(?:run\s+)?(?:recipe\s+)?([a-z0-9][\w -]{0,58})\s*$/i);
   if (thenClause) { then = normalizeName(thenClause[1]!); task = task.slice(0, thenClause.index).trim(); }
+
+  // Watchlist (watchlists): a SEMICOLON-separated task is a basket of sub-watches — "watch markets: btc
+  // price; eth price; gold price" -> one grouped ping of only the members that moved. Checked before the
+  // single-trigger parsing (which assumes one task). At least 2 non-empty parts required.
+  const parts = task.split(";").map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    const members = parts.slice(0, MAX_WATCHLIST_MEMBERS).map((p) => ({ label: memberLabel(p), task: p }));
+    if (!name) return null;
+    return { name, task, members };
+  }
 
   // Feed-watch: a trailing "for new items/listings/jobs/posts" or a leading "new " in the task
   // ("watch jobs: new remote react roles") means notify on a NEW list entry, not a value change.
@@ -362,9 +386,17 @@ export class AlertStore {
       existing.task = a.task; existing.threshold = a.threshold; existing.condition = a.condition; existing.then = a.then;
       // Switching an existing alert to/from a feed watch resets its baseline so the new mode seeds fresh.
       if (!!existing.feed !== !!a.feed) { existing.feed = a.feed; existing.seen = undefined; existing.lastValue = undefined; }
+      // Re-stating a watchlist replaces its members (preserving each member's last value by label so an
+      // unchanged member doesn't re-fire), or clears them when it's no longer a watchlist.
+      if (a.members) {
+        const prevLast = new Map((existing.members ?? []).map((m) => [m.label, m.last]));
+        existing.members = a.members.map((m) => ({ label: m.label, task: m.task, last: prevLast.get(m.label) }));
+      } else if (existing.members) {
+        existing.members = undefined;
+      }
       this.persist(); return existing;
     }
-    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, feed: a.feed, then: a.then, created: now };
+    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, feed: a.feed, then: a.then, members: a.members?.map((m) => ({ label: m.label, task: m.task })), created: now };
     this.items.push(rec);
     this.persist();
     return rec;
@@ -399,6 +431,20 @@ export class AlertStore {
   setLast(chatId: number, name: string, value: string): void {
     const a = this.get(chatId, name);
     if (a) { a.lastValue = value; this.persist(); }
+  }
+
+  /** Watchlist (watchlists): record the latest value of the members named in `updates` (by label), so
+   * an unchanged member doesn't re-fire next check. Called by the caller's post-send commit. No-op if
+   * the alert / member isn't found. */
+  setMemberLasts(chatId: number, name: string, updates: Array<{ label: string; value: string }>): void {
+    const a = this.get(chatId, name);
+    if (!a?.members) return;
+    let changed = false;
+    for (const u of updates) {
+      const m = a.members.find((x) => x.label === u.label);
+      if (m && m.last !== u.value) { m.last = u.value; changed = true; }
+    }
+    if (changed) this.persist();
   }
 
   /** Time series (watch-time-series): append a numeric point {t,v} to the alert's series (capped,

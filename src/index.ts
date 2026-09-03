@@ -119,6 +119,7 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
     setLast: (c, n, v) => alerts.setLast(c, n, v),
     recordSeen: (c, n, keys) => alerts.recordSeen(c, n, keys),
     recordPoint: (c, n, v, t) => alerts.recordPoint(c, n, v, t),
+    setMemberLasts: (c, n, updates) => alerts.setMemberLasts(c, n, updates),
     now: () => Date.now(),
     contextFor: (c) => profiles.contextLine(c),
     // Trigger-to-action (trigger-to-action-alerts): run the named recipe's CURRENT task on fire.
@@ -390,7 +391,7 @@ const handle = createHandler({
     schedules.removeByTask(chatId, `alert:${rec.name}`);
     const sp = parseScheduleFor(ALERT_CADENCE, `alert:${rec.name}`, now, profiles.offsetMin(chatId));
     if (sp) schedules.add(chatId, sp, now);
-    return { ok: true, name: rec.name, feed: rec.feed, then: rec.then };
+    return { ok: true, name: rec.name, feed: rec.feed, then: rec.then, members: rec.members?.length };
   },
   // Run one check right after define (product-loop) via the same path the scheduler uses.
   alertRunNow: (chatId, name) => alertCheck(chatId, name),
@@ -405,7 +406,7 @@ const handle = createHandler({
       : `on any change of ${rec.threshold}`;
     return { ok: true, name: rec.name, summary: `now alerts ${summary}` };
   },
-  alertList: (chatId) => alerts.list(chatId).map((a) => ({ name: a.name, task: a.task, lastValue: a.lastValue, threshold: a.threshold, feed: a.feed, then: a.then })),
+  alertList: (chatId) => alerts.list(chatId).map((a) => ({ name: a.name, task: a.task, lastValue: a.lastValue, threshold: a.threshold, feed: a.feed, then: a.then, members: a.members?.length })),
   alertForget: (chatId, name) => {
     // Also cancel the auto-scheduled "alert:<name>" check so a forgotten alert stops running on its
     // cadence forever (orphaned-schedule-on-forget).

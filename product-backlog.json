@@ -1022,7 +1022,7 @@
       "title": "watchlists — N items, one grouped ping",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A user with a basket (5 stocks / 3 job feeds) must define N separate alerts + get N pings; a watchlist groups them into one standing dashboard.",
       "how": "A member array on an alert + a combined formatter reusing the alert store; ping only the moved items in one message."
     }
@@ -1355,6 +1355,10 @@
     {
       "id": "websearch-fallback-provider",
       "note": "web_search no longer a single point of failure: Bing stays primary, but on an empty result (bot-check / markup change) it now falls back to DuckDuckGo no-JS HTML endpoint (html.duckduckgo.com/html/). Refactored into searchBing/searchDuck + shared collectResults; unwrapDuckUrl recovers the //duckduckgo.com/l/?uddg= redirect target. Each provider its own session, deduped+SSRF-filtered. 938 tests green."
+    },
+    {
+      "id": "watchlists",
+      "note": "Track N items as ONE watch: \"watch markets: btc price; eth price; gold price\" (semicolon-separated) creates a watchlist whose members each carry their own last value; a check runs them all and sends ONE grouped ping of only the members that CHANGED. First run seeds silently; per-member advances deferred to the post-send commit. Alert.members + memberLabel + setMemberLasts store method; checkAlert watchlist branch (parallel member runs, changed-only lines); /alerts + confirm surface it. 946 tests green."
     }
   ],
   "audits": [

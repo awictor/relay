@@ -297,3 +297,53 @@ describe("checkAlert — time series (watch-time-series)", () => {
     expect(points).toEqual([]);
   });
 });
+
+describe("checkAlert — watchlists", () => {
+  // Member-aware harness: runAgent replies per-task from a map; captures setMemberLasts commits.
+  function wlDeps(replies: Record<string, string>) {
+    const committed: Array<{ label: string; value: string }> = [];
+    return {
+      d: {
+        llm: {} as never,
+        runAgent: async (task: string) => ({ reply: replies[task] ?? "n/a" }),
+        formatReply: (t: string) => t,
+        setLast: () => {},
+        setMemberLasts: (_c: number, _n: string, updates: Array<{ label: string; value: string }>) => committed.push(...updates),
+      },
+      committed,
+    };
+  }
+  const wl = (members: Array<{ label: string; task: string; last?: string }>): Alert =>
+    ({ chatId: 1, name: "mk", task: "wl", members, created: NOW });
+
+  it("first run seeds every member silently (no notify), commit records all", async () => {
+    const { d, committed } = wlDeps({ "btc": "$60k", "eth": "$3k" });
+    const r = await checkAlert(wl([{ label: "btc", task: "btc" }, { label: "eth", task: "eth" }]), d);
+    expect(r.notify).toBe(false);
+    expect(committed).toEqual([{ label: "btc", value: "$60k" }, { label: "eth", value: "$3k" }]); // seeded (commit runs immediately on first run)
+  });
+
+  it("notifies ONLY the changed members, grouped in one message", async () => {
+    const { d } = wlDeps({ "btc": "$65k", "eth": "$3k" });
+    // btc moved ($60k -> $65k), eth unchanged ($3k).
+    const r = await checkAlert(wl([{ label: "btc", task: "btc", last: "$60k" }, { label: "eth", task: "eth", last: "$3k" }]), d);
+    expect(r.notify).toBe(true);
+    expect(r.message).toMatch(/mk — 1 update/);
+    expect(r.message).toMatch(/btc: \$65k/);
+    expect(r.message).not.toMatch(/eth/); // unchanged member omitted
+  });
+
+  it("stays silent when no member changed", async () => {
+    const { d } = wlDeps({ "btc": "$60k", "eth": "$3k" });
+    const r = await checkAlert(wl([{ label: "btc", task: "btc", last: "$60k" }, { label: "eth", task: "eth", last: "$3k" }]), d);
+    expect(r.notify).toBe(false);
+  });
+
+  it("commit records the changed member's new value (deferred to post-send)", async () => {
+    const { d, committed } = wlDeps({ "btc": "$65k", "eth": "$3k" });
+    const r = await checkAlert(wl([{ label: "btc", task: "btc", last: "$60k" }, { label: "eth", task: "eth", last: "$3k" }]), d);
+    expect(committed).toEqual([]);   // not yet
+    r.commit();
+    expect(committed).toContainEqual({ label: "btc", value: "$65k" });
+  });
+});

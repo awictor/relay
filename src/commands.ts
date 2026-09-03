@@ -42,6 +42,8 @@ Watch for NEW items in a list: "watch jobs: remote react roles for new listings"
 
 Watch, then DO: add "then run <recipe>" to any watch — "watch jobs: new remote roles for new listings then run summarize-jobs" — and when it fires I'll also run that saved recipe and include its result.
 
+Watch a whole list at once: separate items with semicolons — "watch markets: btc price; eth price; gold price" — and I track them as one watchlist, sending a single update with only the ones that moved.
+
 See a watch's trend: "how has btc moved this week" or "btc trend" — I chart the value from my logged checks (first→last, high/low), no re-fetch.
 
 Set your location: "/setlocation Austin, TX" (or just "I'm in London") so "weather" and "near me" work without repeating the city. Add "(metric)" or "(imperial)" for units, and "UTC-5" so daily reminders fire at YOUR local time. /profile shows what's stored; "/profile clear" forgets it.
