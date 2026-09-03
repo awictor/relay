@@ -160,6 +160,11 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
     setMemberLasts: (c, n, updates) => alerts.setMemberLasts(c, n, updates),
     fetchFeed: (src) => fetchFeedItems(src, defaultFetchText), // follow-feed-subscriptions: keyless direct fetch
     fetchPage: (url) => defaultFetchText(url), // watch-any-page-diff: SSRF-guarded direct page fetch
+    bumpFlap: (c, n) => alerts.bumpFlap(c, n),  // page-diff-flap-guard
+    resetFlap: (c, n) => alerts.resetFlap(c, n),
+    // Auto-mute a flapping page watch: pause its schedule indefinitely (user resumes by name). Reuse the
+    // snooze machinery — pausing the "alert:<name>" schedule stops the runner firing it.
+    muteWatch: (c, n) => { schedules.pause(c, `alert:${n}`, PAUSE_INDEFINITE); },
     now: () => Date.now(),
     contextFor: (c) => profiles.contextLine(c, Date.now()),
     // Trigger-to-action (trigger-to-action-alerts): run the named recipe's CURRENT task on fire.

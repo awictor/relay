@@ -118,6 +118,23 @@ describe("checkAlert", () => {
     expect(second.message).toMatch(/changed/i);
     expect(second.message).toMatch(/in stock/i);
   });
+  it("a page that changes every check auto-mutes after the flap cap instead of firehosing (page-diff-flap-guard)", async () => {
+    let flaps = 0; let muted = false;
+    // Each check returns genuinely-different content (not just volatile tokens) -> a real change every time.
+    let n = 0;
+    const dd = {
+      llm: {} as never, runAgent: async () => ({ reply: "" }), formatReply: (t: string) => t,
+      setLast: () => {}, fetchPage: async () => `<p>content ${n++}</p>`,
+      bumpFlap: () => ++flaps, resetFlap: () => { flaps = 0; }, muteWatch: () => { muted = true; },
+    };
+    // With flaps already at the cap-1, this change trips the mute.
+    flaps = 2; // PAGE_FLAP_CAP default 3; bumpFlap -> 3
+    const r = await checkAlert(alert({ pageUrl: "https://x.com/p", lastValue: "old content" }), dd);
+    expect(r.notify).toBe(true);
+    expect(r.message).toMatch(/paused it|changing on nearly every check/i);
+    r.commit();
+    expect(muted).toBe(true); // the watch was auto-muted
+  });
   it("a page-diff watch stays silent when the page is unchanged (only whitespace drift)", async () => {
     const r = await checkAlert(alert({ pageUrl: "https://x.com/p", lastValue: "In stock" }),
       deps("unused", { fetchPage: async () => "<p>in   stock</p>" }).d);

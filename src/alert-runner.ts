@@ -15,6 +15,10 @@ import type { AgentEnv } from "./chain-runner.js";
 // + inbound dispatch use. Env-tunable; default 3.
 const WATCHLIST_CONCURRENCY = Math.max(1, Number(process.env.RELAY_WATCHLIST_CONCURRENCY) || 3);
 
+// After this many CONSECUTIVE changed checks, a page-diff watch auto-mutes (page-diff-flap-guard) — a
+// dynamic page that changes every fetch is a firehose, not a signal. Env-tunable; default 3.
+const PAGE_FLAP_CAP = Math.max(2, Number(process.env.RELAY_PAGE_FLAP_CAP) || 3);
+
 export interface AlertRunResult {
   notify: boolean;   // did the value change (or first run)?
   message: string | null; // the text to send when notify (null when unchanged)
@@ -62,6 +66,11 @@ export interface AlertRunnerDeps {
   // watch. Returns null/empty on any failure (the page path then stays silent, never a false change).
   // Absent -> a pageUrl alert falls back to the agent value path.
   fetchPage?: (url: string) => Promise<string>;
+  // Page-diff flap guard (page-diff-flap-guard): count consecutive changes / reset / auto-mute a page
+  // watch that changes on every check. All optional; absent -> no flap guard (old behavior).
+  bumpFlap?: (chatId: number, name: string) => number;
+  resetFlap?: (chatId: number, name: string) => void;
+  muteWatch?: (chatId: number, name: string) => void;
 }
 
 /**
@@ -102,10 +111,21 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
       return { notify: false, message: null, value: snapshot, commit: noop };
     }
     if (pageKey(alert.lastValue) === pageKey(snapshot)) {
-      return { notify: false, message: null, value: snapshot, commit: noop }; // unchanged, stay silent
+      // Unchanged (after masking volatile tokens) — stay silent + reset the flap counter (page-diff-flap-guard).
+      deps.resetFlap?.(alert.chatId, alert.name);
+      return { notify: false, message: null, value: snapshot, commit: noop };
     }
     const d = diffPages(alert.lastValue, snapshot);
-    if (!d.changed) return { notify: false, message: null, value: snapshot, commit: noop }; // only whitespace/case drift
+    if (!d.changed) { deps.resetFlap?.(alert.chatId, alert.name); return { notify: false, message: null, value: snapshot, commit: noop }; }
+    // Flap guard (page-diff-flap-guard): a page that changes on EVERY check (dynamic content the volatile
+    // mask didn't catch) would ping forever AND bypass the anti-spam cap + quiet-hours (alerts are exempt).
+    // Count consecutive changes; once over the cap, auto-mute the watch + send ONE heads-up instead of a
+    // firehose. Advance the snapshot so we don't re-diff the same content when it resumes.
+    const flaps = deps.bumpFlap?.(alert.chatId, alert.name) ?? 0;
+    if (deps.muteWatch && flaps >= PAGE_FLAP_CAP) {
+      const muted = `⚠️ "${alert.name}" is changing on nearly every check — that page looks dynamic, so I've paused it to avoid spamming you. Re-enable with "resume ${alert.name}", or point me at a more specific page.`;
+      return { notify: true, message: muted, value: snapshot, commit: () => { deps.setLast(alert.chatId, alert.name, snapshot); deps.muteWatch!(alert.chatId, alert.name); deps.resetFlap?.(alert.chatId, alert.name); } };
+    }
     // Notify with the what-changed diff; DEFER the snapshot advance to the caller's post-send commit so a
     // failed send re-fires the same diff next check instead of silently swallowing the change.
     const message = await withThen(formatPageDiff(alert.name, d));

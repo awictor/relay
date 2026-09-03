@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pageText, pageKey, diffPages, formatPageDiff, pageWatchUrl } from "../src/lib/pagediff.js";
+import { pageText, pageKey, stableText, diffPages, formatPageDiff, pageWatchUrl } from "../src/lib/pagediff.js";
 
 describe("pageText / pageKey", () => {
   it("strips tags/scripts/styles + collapses whitespace to comparable lines", () => {
@@ -11,6 +11,20 @@ describe("pageText / pageKey", () => {
   });
   it("pageKey ignores whitespace + case drift", () => {
     expect(pageKey("<p>In Stock</p>")).toBe(pageKey("<p>in   stock</p>\n"));
+  });
+  it("caps the extracted text so a huge page can't bloat the store (page-diff-snapshot-cap)", () => {
+    const huge = "<p>" + "word ".repeat(20000) + "</p>"; // ~100KB of text
+    expect(pageText(huge).length).toBeLessThanOrEqual(16_000);
+  });
+  it("pageKey masks volatile tokens so a nonce/timestamp re-render isn't a change (page-diff-flap-guard)", () => {
+    // Same content, different CSRF nonce + timestamp + 'N minutes ago' each load -> equal keys.
+    const a = "<p>In stock</p><input name=csrf value=a1b2c3d4e5f60718><span>Updated 2026-09-03T10:00:00</span><span>3 minutes ago</span>";
+    const b = "<p>In stock</p><input name=csrf value=ffeeddccbbaa9988><span>Updated 2026-09-03T11:30:00</span><span>8 minutes ago</span>";
+    expect(pageKey(a)).toBe(pageKey(b));
+    // But a REAL content change (Out of stock -> In stock) still differs.
+    const c = "<p>Out of stock</p><input name=csrf value=a1b2c3d4e5f60718>";
+    expect(pageKey(a)).not.toBe(pageKey(c));
+    expect(stableText(a)).toContain("§"); // volatile tokens masked
   });
 });
 

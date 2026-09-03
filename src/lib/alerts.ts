@@ -23,6 +23,11 @@ export interface Alert {
   // (restocks, policy/status/appointment pages) — the page is fetched directly (no agent) and diffed
   // against the last snapshot. `pageUrl` marks it; `lastValue` holds the last page text for the diff.
   pageUrl?: string;
+  // Page-diff flap guard (page-diff-flap-guard): consecutive checks that saw a change. A page that
+  // changes on EVERY fetch (dynamic content the volatile-token mask didn't catch) would ping forever +
+  // bypasses the anti-spam cap/quiet-hours (alerts are exempt), so after too many straight changes the
+  // watch auto-mutes (pausedUntil) instead of firehosing the user. Reset to 0 on any unchanged check.
+  flapCount?: number;
   // Follow-feed subscriptions (follow-feed-subscriptions): a KEYLESS feed source (RSS/Reddit/HN/YouTube)
   // fetched DIRECTLY on each check instead of running the flaky agent. When set, the alert is a feed
   // watch whose items come from feedSource.url via lib/feeds.ts — reuses the whole seen-set/new-item
@@ -565,6 +570,22 @@ export class AlertStore {
   setLast(chatId: number, name: string, value: string): void {
     const a = this.get(chatId, name);
     if (a) { a.lastValue = value; this.persist(); }
+  }
+
+  /** Page-diff flap guard (page-diff-flap-guard): bump the consecutive-change counter on a page watch
+   * that changed AGAIN this check; returns the new count. The runner uses it to auto-mute a page that
+   * changes on every fetch (a firehose) rather than pinging forever. Reset with resetFlap. */
+  bumpFlap(chatId: number, name: string): number {
+    const a = this.get(chatId, name);
+    if (!a) return 0;
+    a.flapCount = (a.flapCount ?? 0) + 1;
+    this.persist();
+    return a.flapCount;
+  }
+  /** Clear a page watch's flap counter (an unchanged check). No-op if not found / already 0. */
+  resetFlap(chatId: number, name: string): void {
+    const a = this.get(chatId, name);
+    if (a && a.flapCount) { a.flapCount = 0; this.persist(); }
   }
 
   /** Watchlist (watchlists): record the latest value of the members named in `updates` (by label), so

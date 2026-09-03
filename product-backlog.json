@@ -2282,7 +2282,7 @@
       "title": "watch-any-page on a dynamic page pings every check, bypassing cap + quiet hours",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A page that legitimately changes every load (nonce/CSRF token, embedded timestamp, 'X min ago', rotating ad) makes diffPages see a change on EVERY fetch, so the watch fires each scheduler tick — including 3am. Alerts are EXEMPT from the anti-spam cap AND quiet-hours defer (premise: 'an alert only sends on a rare real change'), which is FALSE for page-diff — the one watch type that can flap is the one allowed to storm. Regression in the just-shipped watch-any-page.",
       "how": "Add a flap guard: track consecutive-change count per page watch; after N straight changes (e.g. 3), auto-mute or downgrade to 'this page changes constantly — stop watching?' instead of pinging. Alternatively strip volatile tokens (digits/timestamps) harder in pageText before diffing. Offline test: a page that changes every fetch stops pinging after the cap."
     },
@@ -2291,7 +2291,7 @@
       "title": "page-diff snapshot stored uncapped — a big page bloats the whole alerts store",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The page snapshot is stored as lastValue with NO cap, unlike MAX_SERIES_POINTS(400) + MAX_SEEN_KEYS(200). A big page (long terms/policy/search-results, hundreds of KB) inflates every atomic rewrite of the shared alerts file; on a constrained disk the write starts failing and atomicWriteJson failure means EVERY user's alerts silently stop persisting.",
       "how": "Cap the stored page snapshot to the first N KB (e.g. slice to ~16KB of normalized text) in the page-diff branch before setLast, mirroring the series/seen caps. Offline test: a huge page's stored snapshot is bounded."
     },
@@ -3210,6 +3210,10 @@
     {
       "item": "read-qr-from-photo",
       "note": "Relay can now READ a QR from a sent photo (symmetric with make_qr). Send a photo + 'scan this QR' -> the payload is decoded by a keyless reader instead of the vision describe (which can't reliably read it). New src/lib/qr-decode.ts: parseQrRead (pull the payload from the api.qrserver.com read-endpoint JSON) + readQrFromBytes (injected multipart POST, null on no-code/failure). photo-intent gains photoIsQrScan (scan/read/decode + qr/barcode). Handler photo branch: a QR-scan caption calls readQr FIRST (before photo-to-action/describe), frames a URL payload as a link + other payloads as text, or says 'couldn't find a QR' + falls back. index wires readQr (download + multipart POST to the fixed qrserver host — no SSRF surface since no user URL). 8 new tests (lib parse/decode + intent + 2 handler routes); live-probed the qrserver read endpoint with real QR bytes (200, exact payload decoded) so call-tested:true for the decoder, handler offline-tested. suite 1627 green, tsc clean."
+    },
+    {
+      "item": "page-diff-snapshot-cap + page-diff-flap-guard",
+      "note": "Fixed 2 coupled regressions in the just-shipped watch-any-page. (1) SNAPSHOT CAP: the page snapshot was stored as lastValue with NO cap (unlike MAX_SERIES_POINTS/MAX_SEEN_KEYS) — a big page (long terms/search-results, hundreds of KB) inflated every atomic rewrite of the shared alerts file + could fail all persists. pageText now caps extracted text at 16KB. (2) FLAP FIREHOSE: a dynamic page (nonce/CSRF/timestamp/'N min ago') diffed as a change EVERY fetch, and alerts are exempt from the anti-spam cap + quiet-hours -> a 3am firehose. Two-layer fix: pageKey now compares stableText (masks long hex tokens, ISO timestamps, clock times, 'N ago', long digit runs) so a volatile-only re-render is NOT a change; plus a consecutive-change flap counter (bumpFlap/resetFlap) that auto-mutes the watch after PAGE_FLAP_CAP=3 straight real changes (pauses its schedule + sends ONE heads-up: 'that page looks dynamic, paused it, resume <name>'). 5 new tests (cap, token-mask, real-change-still-differs, flap auto-mute), .env.example RELAY_PAGE_FLAP_CAP added, suite 1630 green, tsc clean. call-tested:false (offline lib + runner)."
     }
   ],
   "audits": [

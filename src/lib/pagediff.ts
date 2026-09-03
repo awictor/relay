@@ -4,22 +4,43 @@
 // re-fetches, and on a real change the notification shows the added/removed lines (a "what changed"
 // diff), not just "it changed". Pure normalize + diff helpers; the fetch is injected in the runner.
 
+// Cap the stored/compared page text so a huge page (long terms/search-results, hundreds of KB) can't
+// bloat the shared alerts store + break every user's persist (page-diff-snapshot-cap). ~16KB of visible
+// text is plenty to detect a real content change.
+const MAX_PAGE_TEXT = 16_000;
+
 /** Reduce raw page text/HTML to its stable, comparable content: strip tags, collapse whitespace, drop
  * blank lines. Volatile cruft (scripts/styles) is removed so a page's real content change fires but a
- * re-render with the same text doesn't. Exported for tests. */
+ * re-render with the same text doesn't. Capped to MAX_PAGE_TEXT chars. Exported for tests. */
 export function pageText(raw: string): string {
-  return String(raw ?? "")
+  const out = String(raw ?? "")
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, "\n")        // tags -> line breaks so block content stays on its own line
     .replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
     .split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n");
+  return out.length > MAX_PAGE_TEXT ? out.slice(0, MAX_PAGE_TEXT) : out;
 }
 
-/** A stable comparison key for a page snapshot: its normalized text, lowercased. Two fetches with only
- * whitespace/case drift compare equal; a real content change differs. Exported for tests. */
+/** A page snapshot with VOLATILE tokens masked, for change comparison only (page-diff-flap-guard). A
+ * page that legitimately re-renders every load — an embedded CSRF/nonce, a rotating session id, a
+ * timestamp, "3 minutes ago" — otherwise diffs as a change on EVERY fetch and pings forever. Masking
+ * these before comparing means only a REAL content change registers. Not shown to the user (the diff
+ * still displays the real lines); only pageKey uses this. Exported for tests. */
+export function stableText(raw: string): string {
+  return pageText(raw)
+    .replace(/\b[0-9a-f]{16,}\b/gi, "§")                         // long hex tokens (nonces, session ids)
+    .replace(/\b\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}(?::\d{2})?\b/gi, "§") // ISO timestamps
+    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?\b/gi, "§")  // clock times
+    .replace(/\b\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago\b/gi, "§") // "3 minutes ago"
+    .replace(/\b\d{10,}\b/g, "§");                               // long digit runs (epoch ms, ids)
+}
+
+/** A stable comparison key for a page snapshot: normalized text with volatile tokens masked, lowercased.
+ * Two fetches differing only in whitespace/case OR in a nonce/timestamp/"N ago" compare equal, so a page
+ * that re-renders every load doesn't flap (page-diff-flap-guard). A real content change differs. Tests. */
 export function pageKey(raw: string): string {
-  return pageText(raw).toLowerCase();
+  return stableText(raw).toLowerCase();
 }
 
 export interface PageDiff { changed: boolean; added: string[]; removed: string[] }
