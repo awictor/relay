@@ -24,6 +24,11 @@ describe("parseTranslateRequest", () => {
     expect(parseTranslateRequest("what's the weather")).toBeNull();
     expect(parseTranslateRequest("remind me to call mom")).toBeNull();
   });
+  it("takes the FINAL 'to/in <lang>' as the target, not an interior in/to (translate-wrong-target-language)", () => {
+    // Sentence full of 'to'/'in' — the target must be the trailing language, not the first preposition.
+    expect(parseTranslateRequest("translate I want to go to the beach to Spanish")).toEqual({ target: "Spanish", text: "I want to go to the beach" });
+    expect(parseTranslateRequest("how do you say I live in Berlin in German")).toEqual({ target: "German", text: "I live in Berlin" });
+  });
 });
 
 describe("buildTranslatePrompt", () => {

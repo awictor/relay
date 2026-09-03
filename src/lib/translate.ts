@@ -18,25 +18,27 @@ export function parseTranslateRequest(text: string): { target: string; text?: st
   const t = text.trim();
   if (!/\b(translate|translation|how (?:do|would) (?:you|i) say|what(?:'?s| is)\s+.+\s+in\s+[a-z]+)\b/i.test(t)) return null;
 
-  // Pull an explicit "to/into/in <language>" target (last one wins; a URL tail ignored).
-  const tgtMatch = t.match(/\b(?:in ?to|into|to|in)\s+([a-z][a-z \-]*?)(?:\s*[:?.]|\s*$|\s+(?:https?:\/\/|from\b))/i);
+  // A URL anywhere -> translate that page. The target is a trailing "to/into/in <lang>" clause; capture
+  // it BEFORE stripping the URL so "translate <url> to French" still gets French.
+  const url = t.match(/https?:\/\/\S+/i)?.[0];
+
+  // The target language is the FINAL "to/into/in <lang>" clause (anchored to end-of-string), so a
+  // sentence full of "in"/"to" ("I want to go to the beach to Spanish") no longer grabs the FIRST one
+  // as the language (translate-wrong-target-language). `$` (with an optional URL/punct tail) forces the
+  // last clause; the language is 1-2 words of letters only. Absent -> English.
+  const tail = t.replace(/https?:\/\/\S+\s*$/i, "").trim(); // drop a trailing URL for the target scan
+  const tgtMatch = tail.match(/\b(?:in ?to|into|to|in)\s+([a-z]+(?:\s+[a-z]+)?)\s*[:?.!]*\s*$/i);
   const target = (tgtMatch?.[1] ?? "English").trim().replace(/\s+/g, " ") || "English";
 
-  // A URL anywhere -> translate that page.
-  const url = t.match(/https?:\/\/\S+/i)?.[0];
   if (url) return { target, url: url.replace(/[.,)]+$/, "") };
 
-  // Otherwise the text to translate is the request with the verb + target clause stripped.
-  let body = t
+  // The text to translate = the request minus the leading verb and the FINAL target clause only.
+  let body = tail
     .replace(/^\s*(?:please\s+)?(?:translate|translation of)\s+/i, "")
     .replace(/^\s*how (?:do|would) (?:you|i) say\s+/i, "")
-    .replace(/^\s*what(?:'?s| is)\s+/i, "")
-    .replace(/\b(?:in ?to|into|to|in)\s+[a-z][a-z \-]*\s*[:?.]?\s*$/i, "")
-    .replace(/^["']|["']$/g, "")
-    .replace(/[?]+\s*$/, "")
-    .trim();
-  // Strip surrounding quotes again if the target-strip left them.
-  body = body.replace(/^["']|["']$/g, "").trim();
+    .replace(/^\s*what(?:'?s| is)\s+/i, "");
+  if (tgtMatch) body = body.slice(0, body.length - tgtMatch[0].length); // strip only the matched end clause
+  body = body.replace(/^["']|["']$/g, "").replace(/[?]+\s*$/, "").trim().replace(/^["']|["']$/g, "").trim();
   if (!body) return null;
   return { target, text: body };
 }
