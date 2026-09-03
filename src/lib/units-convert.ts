@@ -54,6 +54,22 @@ export function normalizeUnit(raw: string): string {
   return u;
 }
 
+/** Reduce an amount+unit to its base quantity + dimension (length=m, mass=g, volume=ml), for cross-size
+ * comparison like unit pricing (unit-price-compare). Returns null for an unknown or temperature unit
+ * (no meaningful "per unit" price). A bare "oz"/"ounce" is MASS here (a package weight); "fl oz" is
+ * volume. `count`/"ct"/"pack"/"each" map to a dimensionless COUNT dim so "12 for $6" compares per-item.
+ * Exported for the unit-price tool. */
+export function toBaseAmount(amount: number, unit: string): { base: number; dim: string } | null {
+  if (!Number.isFinite(amount)) return null;
+  const u = normalizeUnit(unit);
+  if (/^(ct|count|counts|pack|packs|pk|each|ea|item|items|unit|units|piece|pieces|roll|rolls|ct\.)$/.test(u) || u === "") {
+    return { base: amount, dim: "count" }; // dimensionless per-item
+  }
+  const uu = UNITS[u];
+  if (!uu) return null; // unknown or temperature -> no unit price
+  return { base: amount * uu.toBase, dim: uu.dim };
+}
+
 const cToBase = (v: number, u: string) => u === "f" ? (v - 32) * 5 / 9 : u === "k" ? v - 273.15 : v; // -> Celsius
 const cFromBase = (c: number, u: string) => u === "f" ? c * 9 / 5 + 32 : u === "k" ? c + 273.15 : c;
 

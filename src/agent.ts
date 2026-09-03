@@ -25,6 +25,7 @@ import { getFun as funFetch } from "./lib/fun.js";
 import { calc, formatResult } from "./lib/calc.js";
 import { parseTranslateRequest, translate } from "./lib/translate.js";
 import { runConvert } from "./lib/units-convert.js";
+import { runUnitPrice } from "./lib/unitprice.js";
 import { parseMealRequest, getMeals, formatMealIdeas, formatFullMeal } from "./lib/meals.js";
 import { getSunTimes as sunFetch, formatSunTimes, sunPlace } from "./lib/suntimes.js";
 import { getAirQuality as airFetch, formatAirQuality, airPlace, isUvRequest, isPollenRequest } from "./lib/airquality.js";
@@ -172,6 +173,15 @@ export const TOOLS: ToolSpec[] = [
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The conversion verbatim, e.g. \"180C to F\" or \"2 cups in ml\"." } },
+      required: ["request"],
+    },
+  },
+  {
+    name: "unit_price",
+    description: "Compare two+ package sizes/prices and name the better buy by price-per-unit EXACTLY (no key, instant). Use this — NOT mental math — for \"which is cheaper, 500g for $4 or 1.2kg for $9\", \"$3.99 for 12oz vs $5.49 for 20oz\", \"better deal: 12 for $6 or 30 for $13\". Handles weight/volume/length/count; normalizes mixed units. Pass the user's question verbatim.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The compare question verbatim, e.g. \"500g for $4 or 1.2kg for $9\"." } },
       required: ["request"],
     },
   },
@@ -417,6 +427,7 @@ Tools:
 - "date_math" (request): date/calendar math EXACTLY. Use this — NOT mental counting or web_search — for "how many days until Christmas/my birthday/July 4", "what day of the week is/was <date>", "how old if born <date>", "days between two dates", "date in 10 days". Knows common US holidays by name. Reckons from the user's local today.
 - "meal_ideas" (request): cooking meal ideas or a recipe. Use this — NOT web_search — for "what can I make with chicken"/"dinner ideas"/"random meal"/"recipe for X". FOOD, not Relay's saved automation recipes.
 - "convert_units" (request): convert units of measure EXACTLY (temperature/length/weight/volume/cooking). Use for "180C to F"/"5 foot 11 in cm"/"2 cups in grams"/"10 miles in km". NOT currency (use convert_currency).
+- "unit_price" (request): compare package sizes + name the better buy by price-per-unit EXACTLY. Use for "which is cheaper, 500g for $4 or 1.2kg for $9"/"$3.99 for 12oz vs $5.49 for 20oz"/"12 for $6 or 30 for $13". NOT mental math.
 - "translate" (request): translate text or a whole page into another language. Use for "translate X to Spanish"/"how do you say X in Japanese"/"read me this page in English: <url>". Pass the request verbatim.
 - "calculate" (expression): compute arithmetic/financial math EXACTLY. Use for chained math, bill-splits, tips, percentages, loan payments — anything past a trivial one-step sum (don't do it in your head, that's silently wrong). loanpayment(principal, annualRatePct, years) for a monthly payment.
 - "get_news" (topic?): today's top news headlines, or about a topic. Use this — NOT web_search — for "what's the news"/"top headlines"/"news about X"/"latest on Y". Omit topic for general top stories.
@@ -1020,6 +1031,14 @@ export async function runAgent(
         const out = runConvert(request);
         if (!out) { push("convert_units", `Couldn't convert "${request}" (unknown units, or a cross-type conversion like kg->miles). For money use convert_currency; else check the units.`); continue; }
         push("convert_units", `${out}. Report this exact result to the user.`);
+        continue;
+      }
+
+      if (call.name === "unit_price") {
+        const request = String(call.args.request ?? "").trim();
+        const out = runUnitPrice(request);
+        if (!out) { push("unit_price", `Couldn't compare "${request}" — I need 2+ options each with a quantity, unit, and price (e.g. "500g for $4 or 1.2kg for $9"), and the units must be the same kind (can't compare weight to volume).`); continue; }
+        push("unit_price", `${out}\n\nReport this to the user.`);
         continue;
       }
 

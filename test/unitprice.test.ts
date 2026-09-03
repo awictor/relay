@@ -1,0 +1,55 @@
+import { describe, it, expect } from "vitest";
+import { parseUnitPrice, compareUnitPrice, formatUnitPrice, runUnitPrice } from "../src/lib/unitprice.js";
+
+describe("parseUnitPrice", () => {
+  it("parses '<qty><unit> for $<price>' options split on or/vs", () => {
+    expect(parseUnitPrice("which is cheaper, 500g for $4 or 1.2kg for $9?")).toEqual([
+      { qty: 500, unit: "g", price: 4 }, { qty: 1.2, unit: "kg", price: 9 },
+    ]);
+    expect(parseUnitPrice("$3.99 for 12oz vs $5.49 for 20oz")).toEqual([
+      { qty: 12, unit: "oz", price: 3.99 }, { qty: 20, unit: "oz", price: 5.49 },
+    ]);
+  });
+  it("parses a bare count ('12 for $6 or 30 for $13')", () => {
+    expect(parseUnitPrice("better deal: 12 for $6 or 30 for $13")).toEqual([
+      { qty: 12, unit: "", price: 6 }, { qty: 30, unit: "", price: 13 },
+    ]);
+  });
+  it("null when it isn't a compare (fewer than 2 parseable options)", () => {
+    expect(parseUnitPrice("500g for $4")).toBeNull();
+    expect(parseUnitPrice("what's the weather or the news")).toBeNull();
+  });
+});
+
+describe("compareUnitPrice", () => {
+  it("normalizes mixed units + picks the cheapest per base", () => {
+    // 500g @ $4 = $0.008/g ; 1.2kg @ $9 = $0.0075/g -> the kg is cheaper.
+    const r = compareUnitPrice([{ qty: 500, unit: "g", price: 4 }, { qty: 1.2, unit: "kg", price: 9 }])!;
+    expect(r.cheapest).toBe(1);
+    expect(r.options[1]!.perBase).toBeLessThan(r.options[0]!.perBase);
+  });
+  it("null when options mix dimensions (weight vs volume)", () => {
+    expect(compareUnitPrice([{ qty: 500, unit: "g", price: 4 }, { qty: 1, unit: "L", price: 9 }])).toBeNull();
+  });
+  it("null on a bad price/qty or unknown unit", () => {
+    expect(compareUnitPrice([{ qty: 0, unit: "g", price: 4 }, { qty: 1, unit: "kg", price: 9 }])).toBeNull();
+    expect(compareUnitPrice([{ qty: 5, unit: "blorp", price: 4 }, { qty: 1, unit: "kg", price: 9 }])).toBeNull();
+  });
+});
+
+describe("runUnitPrice", () => {
+  it("names the better buy with normalized per-unit prices", () => {
+    const out = runUnitPrice("which is cheaper, 500g for $4 or 1.2kg for $9?")!;
+    expect(out).toMatch(/Better buy/);
+    expect(out).toMatch(/✅ \$9\.00 for 1\.2kg = \$0\.75 per 100g/); // cheaper one flagged
+    expect(out).toMatch(/• \$4\.00 for 500g = \$0\.80 per 100g/);
+  });
+  it("count options compare per-item", () => {
+    const out = runUnitPrice("12 for $6 or 30 for $13")!;
+    expect(out).toMatch(/= \$0\.50 each/);   // 12/$6
+    expect(out).toMatch(/✅.*= \$0\.43 each/); // 30/$13 cheaper
+  });
+  it("null for a non-compare request (falls through to the agent)", () => {
+    expect(runUnitPrice("what's the price of bitcoin")).toBeNull();
+  });
+});

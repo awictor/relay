@@ -2381,9 +2381,45 @@
       "title": "no unit-price \"better buy\" compare (\"500g for $4 or 1.2kg for $9?\")",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'which is cheaper, 500g for $4 or 1.2kg for $9' has no owner — calculate does raw arithmetic + convert_units converts measures, but nothing normalizes to price-per-unit + names the winner, so the agent hand-normalizes mixed units (the silently-wrong mental math the prompt warns against). Common in-aisle everyday errand.",
       "how": "Add a keyless deterministic unit-price tool: parse (qty, unit, price) pairs, convert each to a common base (reuse units-convert), compute price-per-base-unit, declare the cheaper. Pure, offline-testable. New TOOLS[] entry + dispatch + prompt + HELP + sorted tool-list test."
+    },
+    {
+      "id": "reminder-time-from-task-body",
+      "title": "reminder grabs an HH:MM from the TASK text, fires at the wrong hour",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "The 24-hour branch (at24) runs before am/pm and its 'at' is optional, so 'remind me at 9am to submit the 10:30 report' grabs the FIRST bare HH:MM anywhere (10:30 inside the task) ahead of the explicit 'at 9am' -> fires 10:30, stores a mangled task. User is told a next-fire time but it lands at the wrong hour. Reminders are the highest-trust feature; wrong-time is worse than a loud fail.",
+      "how": "Require the at24 colon-time to be anchored ('at'/'tomorrow' immediately before it), OR only take at24 when the am/pm branch found no time. Prefer: if an explicit am/pm time exists anywhere, it wins over a bare colon-time in the body. Offline test: 'at 9am to submit the 10:30 report' fires 09:00, task='submit the 10:30 report'."
+    },
+    {
+      "id": "unitprice-thousands-comma",
+      "title": "unit_price breaks on a thousands-separated price (\"$1,299 for 3\")",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "parseUnitPrice splits on s*[;,]s* BEFORE per-option comma-stripping, so '$1,299 for 3 vs $1,499 for 4' splits into '$1'/'299 for 3' -> both unparseable -> null -> the model falls back to mental math (the silently-wrong arithmetic the tool exists to prevent). Bulk/electronics compares routinely have 4-digit prices. Regression in the just-shipped unit_price.",
+      "how": "Strip in-number thousands commas (comma between digits) BEFORE the or/vs/comma separator split in parseUnitPrice. Offline test: '$1,299 for 3 vs $1,499 for 4' parses to 2 options."
+    },
+    {
+      "id": "checkon-todo-browses",
+      "title": "\"remind me to check on mom\" runs a browser errand instead of echoing",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "FETCH_CUE_RE still includes 'check on' + 'check the', which dominate personal caretaking to-dos ('check on mom at 8pm', 'check on the baby every hour') — so the reminder is NOT reminder-only + at fire time runs a confused 20-40s browser agent/refusal instead of echoing the note. The block comment says the list was narrowed for exactly this (reminder-only-common-verb) but these two remain.",
+      "how": "Drop 'check on' from FETCH_CUE_RE; keep 'check the <data-noun>' only when followed by a real lookup noun (weather/price/score/news/status), not a person. Offline test: 'check on mom' + 'check on the baby' -> reminderOnly true; 'check the weather' stays agent-path."
+    },
+    {
+      "id": "watch-magnitude-suffix",
+      "title": "a watch reads \"1.2M subscribers\" as 1.2 (off by 6 orders of magnitude)",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "extractValue excludes bare m/t from the untagged magnitude branch (to avoid '3m ago'/'5t'), but a plain '1.2M subscribers' (no $ or %) collapses to 1.2 -> a 'below 50000'/'above 2000000' predicate fires/never-fires against a value off by 6+ orders, + the series records garbage. Same class as the fixed $60k bug, uncaught for non-currency counts (followers/subs/views/tokens).",
+      "how": "Accept a magnitude suffix (k/m/b/t) when glued to the number AND followed by a word boundary/plural noun (not a bare standalone letter) even without a currency tag: '1.2M subscribers' -> 1200000, '3m ago' stays untouched. Offline test in alerts extractValue."
     }
   ],
   "history": [
@@ -3318,6 +3354,10 @@
     {
       "item": "uv-instant-not-daily-peak",
       "note": "'do I need sunscreen' now answers from TODAY'S PEAK UV, not the instant reading. formatAirQuality printed the current uv_index with no time qualifier, so an 8am UV of 2 (low) said 'you're fine' even when midday peaks at 9 — a confidently misleading whole-day call; at night it read 0. Added daily=uv_index_max&forecast_days=1 to the SAME keyless air-quality call (no extra request), parse -> uvMax, and formatAirQuality now leads UV off the peak ('UV peaks at 9 today (very high — wear sunscreen midday), 2 right now') with the current value as context; falls back to the instant reading labeled 'right now' when no daily peak. 4 new/updated tests (peak leads not instant; low-peak no nudge; no-daily fallback), suite 1648 green, tsc clean; live-probed Open-Meteo (peak 9.1 vs instant 3.3) so call-tested:true for the source, formatting offline-tested."
+    },
+    {
+      "item": "unit-price-compare",
+      "note": "Added a keyless unit_price tool: 'which is cheaper, 500g for $4 or 1.2kg for $9' / '$3.99 for 12oz vs $5.49 for 20oz' / '12 for $6 or 30 for $13' now compare price-per-unit + name the winner, instead of the agent hand-normalizing mixed units (the silently-wrong mental math the prompt forbids). New src/lib/unitprice.ts: parseUnitPrice (splits on or/vs/comma; handles '<qty><unit> for $<price>', '$<price> for/per/<qty><unit>', '$<price>/unit'), compareUnitPrice (reuses new units-convert.toBaseAmount to normalize weight/volume/length + a dimensionless 'count' dim; rejects mixed dimensions), formatUnitPrice (per-100g/100ml/m/each + a % cheaper). Wired like convert_units (pure, no backend): TOOLS[] + dispatch + prompt + sorted tool-list test + HELP. 9 new tests, suite 1657 green, tsc clean. call-tested:false (pure lib + dispatch)."
     }
   ],
   "audits": [
@@ -3515,6 +3555,9 @@
     },
     {
       "note": "3-lens audit (pollen shipped, backlog down to owner-gated confirm-to-act). RELIABILITY found a shared-root bug: AlertStore.add overwrite branch omits pageUrl/series/flapCount -> re-defining a watch by name silently becomes the wrong type + blends trend history across entities (phantom crash). Also: UV 'sunscreen' answer uses the instant reading not the day's peak (misleading 'you're fine' at 8am). NEW-USER: weekday reminder cadence (S, likely partial), unit-price compare (S), intra-day countdown to a clock time (S), timezone working-hours overlap (M), recipe scaling (M). POWER: personal metric tracker/quantified-self log (M, strongest new retention engine — chart/trend wired only to alerts today), read-later queue+summary digest (S), my-info vault+autofill (M, parked), inline buttons (M, parked). Seeded 4: alert-redefine-stale-fields (high/S), uv-instant-not-daily-peak (high/M), weekday-reminder-cadence (high/S), unit-price-compare (med/S). Parked the rest."
+    },
+    {
+      "note": "3-lens audit (unit_price shipped, backlog down to owner-gated confirm-to-act). RELIABILITY found NEW bugs: (1) reminder grabs an HH:MM from the task body -> wrong-hour fire; (2) unit_price splits on comma before stripping thousands-separators -> '$1,299' breaks (just-shipped regression); (3) 'check on mom' still routes to the browser agent not reminder-only; (4) watch reads '1.2M subscribers' as 1.2 (non-currency magnitude). NEW-USER: movie/TV lookup (M, TVmaze keyless), reverse-dictionary/typo-tolerant define (S, Datamuse), single-named-place open-now (S, openhours already built), Wikipedia fact lookup (parked), moon phase (S). POWER: inline one-tap buttons (M, parked, flagged highest-leverage — task-suggest already computes suggestions), weekly value recap (S), voice-note input (M), fan-out a task over a saved list (M). Seeded 4: reminder-time-from-task-body (high/M), unitprice-thousands-comma (med/S), checkon-todo-browses (high/S), watch-magnitude-suffix (med/M). Parked the rest."
     }
   ]
 }

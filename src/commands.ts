@@ -41,6 +41,7 @@ const HELP = `Relay — what I can do:
 • Flip / roll / pick: "flip a coin", "roll a d20", "random number 1-100", "pick one: tacos or sushi" → a genuinely random answer.
 • Convert currency: "how much is 200 USD in EUR" → I use the live rate, instantly.
 • Convert units: "180C to F", "5 foot 11 in cm", "2 cups of flour in grams", "10 miles in km" → exact, instantly.
+• Better buy: "which is cheaper, 500g for $4 or 1.2kg for $9?" → I compare price-per-unit and name the winner.
 • Do the math: "split $127.50 three ways with 20% tip", "monthly payment on a $30k loan at 6% for 5 years" → I compute it exactly, not a guess.
 • Translate: "how do you say 'where's the pharmacy' in Spanish", "translate this page to English: <link>" → the translation (with pronunciation for non-Latin scripts).
 • Define a word: "what does obsequious mean", "synonyms for happy" → definition, pronunciation, and synonyms, instantly.
