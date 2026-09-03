@@ -548,7 +548,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         if (action.action === "snooze") {
           if (!deps.scheduleSnooze) return null;
           const res = deps.scheduleSnooze(chatId, `snooze ${action.name} 1 day`, deps.now());
-          if (res && res.count > 0) { await deps.sendMessage(chatId, `💤 Snoozed "${action.name}" for 1 day${res.untilText ? ` (until ${res.untilText})` : ""}. Say "resume ${action.name}" to turn it back on sooner.`); return "Snoozed 1d"; }
+          if (res && res.count > 0) {
+            // Quiet the tapped ping's buttons while snoozed (callback-edit-terminal-actions-more): a
+            // Refresh tap would defeat the snooze the user just asked for. The reply says how to resume.
+            if (messageId) await deps.editReplyMarkup?.(chatId, messageId).catch(() => {});
+            await deps.sendMessage(chatId, `💤 Snoozed "${action.name}" for 1 day${res.untilText ? ` (until ${res.untilText})` : ""}. Say "resume ${action.name}" to turn it back on sooner.`); return "Snoozed 1d";
+          }
           await deps.sendMessage(chatId, `I couldn't snooze "${action.name}" — it may already be off.`);
           return null;
         }
@@ -565,6 +570,9 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         if (!deps.digestRun) return null;
         await deps.sendTyping(chatId).catch(() => {});
         const text = digestDisplay(await deps.digestRun(chatId, action.name));
+        // Gone (null) -> the digest was removed; retire the stale card's Run-again button so a re-tap
+        // doesn't keep hitting a dead digest (callback-edit-terminal-actions-more).
+        if (!text && messageId) await deps.editReplyMarkup?.(chatId, messageId).catch(() => {});
         await deps.sendMessage(chatId, text ?? `I couldn't run the "${action.name}" briefing — it may have been removed.`, text ? buildDigestKeyboard(action.name) : undefined);
         return text ? "Done" : null;
       }
@@ -572,6 +580,8 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       if (!deps.recipeRunByName) return null;
       await deps.sendTyping(chatId).catch(() => {});
       const out = await deps.recipeRunByName(chatId, action.name);
+      // Gone (null, no value) -> retire the stale card's Run-again button (callback-edit-terminal-actions-more).
+      if (!out && messageId) await deps.editReplyMarkup?.(chatId, messageId).catch(() => {});
       await deps.sendMessage(chatId, out ?? `I couldn't run "${action.name}" — it may have been removed or needs a value.`, out ? buildRecipeKeyboard(action.name) : undefined);
       return out ? "Done" : null;
     } catch (e) {

@@ -123,6 +123,49 @@ describe("handler — inline-button callbacks", () => {
     expect(sent[0]!.text).toMatch(/flight found/);
   });
 
+  it("alert Snooze retires the tapped card's buttons so a Refresh can't defeat the snooze (callback-edit-terminal-actions-more)", async () => {
+    const edits: number[] = [];
+    const { handle } = harness({
+      scheduleSnooze: () => ({ count: 1, untilText: "tomorrow 9am" }),
+      editReplyMarkup: async (_c, messageId) => { edits.push(messageId); },
+    });
+    const t = { chatId: 1, from: "u", text: "", messageId: 42, callback: { data: encodeCallback({ kind: "alert", action: "snooze", name: "btc" })!, callbackQueryId: "q1" } } as InboundMessage;
+    await handle(t);
+    expect(edits).toEqual([42]);
+  });
+  it("digest Run again on a GONE digest retires the stale card's button (callback-edit-terminal-actions-more)", async () => {
+    const edits: number[] = [];
+    const { handle, sent } = harness({
+      digestRun: async () => null, // removed
+      editReplyMarkup: async (_c, messageId) => { edits.push(messageId); },
+    });
+    const t = { chatId: 1, from: "u", text: "", messageId: 42, callback: { data: encodeCallback({ kind: "digest", action: "run", name: "gone" })!, callbackQueryId: "q1" } } as InboundMessage;
+    await handle(t);
+    expect(edits).toEqual([42]);
+    expect(sent[0]!.text).toMatch(/may have been removed/);
+    expect(sent[0]!.hasButtons).toBe(false); // the new message carries no button either
+  });
+  it("recipe Run again on a GONE recipe retires the stale card's button", async () => {
+    const edits: number[] = [];
+    const { handle } = harness({
+      recipeRunByName: async () => null,
+      editReplyMarkup: async (_c, messageId) => { edits.push(messageId); },
+    });
+    const t = { chatId: 1, from: "u", text: "", messageId: 42, callback: { data: encodeCallback({ kind: "recipe", action: "run", name: "gone" })!, callbackQueryId: "q1" } } as InboundMessage;
+    await handle(t);
+    expect(edits).toEqual([42]);
+  });
+  it("a SUCCESSFUL digest/recipe run does NOT strip buttons (keeps Run-again live)", async () => {
+    const edits: number[] = [];
+    const { handle } = harness({
+      digestRun: async () => "brief content",
+      editReplyMarkup: async (_c, messageId) => { edits.push(messageId); },
+    });
+    const t = { chatId: 1, from: "u", text: "", messageId: 42, callback: { data: encodeCallback({ kind: "digest", action: "run", name: "morning" })!, callbackQueryId: "q1" } } as InboundMessage;
+    await handle(t);
+    expect(edits).toHaveLength(0);
+  });
+
   it("a stale/garbage payload is handled gracefully, no agent", async () => {
     const { handle, sent, acked, calls } = harness();
     await handle(tap("zz|nope"));

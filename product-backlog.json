@@ -3101,7 +3101,7 @@
       "title": "Retire buttons on other terminal taps (snooze, digest/recipe gone)",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Stop now strips the tapped ping's buttons; other end-states leave a stale card — a Snoozed watch still shows a live Refresh, and a Run-again on a since-deleted digest/recipe keeps offering the button. editReplyMarkup is already wired, so extending it is cheap.",
       "how": "On snooze, swap the keyboard to a single 'Resume' (or strip Refresh); when digestRun/recipeRunByName returns null (gone), strip the tapped ping's buttons via editReplyMarkup(messageId) like Stop does."
     },
@@ -4367,6 +4367,10 @@
     {
       "id": "callback-edit-in-place",
       "note": "Terminal Stop tap now retires the tapped ping's inline buttons in place instead of leaving a dead card that can be re-tapped. Added editMessageReplyMarkup to telegram.ts + Channel.editReplyMarkup + handler dep; threaded the tapped messageId through handleCallback; on a successful alertForget, strip the buttons via editReplyMarkup(chatId, messageId). Best-effort + gated on a REAL stop (a no-op forget leaves buttons). Scoped to the terminal action (full every-reply-in-place edit was heavier than the low warranted). +2 tests, 2013 green."
+    },
+    {
+      "id": "callback-edit-terminal-actions-more",
+      "note": "Extended the retire-buttons-in-place fix beyond Stop: a Snooze tap now strips the tapped ping's buttons (a Refresh would defeat the snooze the user just set; reply says how to resume), and a Run-again tap on a GONE digest/recipe (null result) strips its stale button so a re-tap can't keep hitting a dead automation. A SUCCESSFUL run keeps its Run-again button. Reuses the wired editReplyMarkup. +4 tests, 2017 green."
     }
   ],
   "audits": [
@@ -4684,6 +4688,9 @@
     },
     {
       "note": "Cleared the last non-owner todo (callback-edit-in-place, terminal-Stop slice). Backlog was down to owner-gated confirm-to-act only -> seeded callback-edit-terminal-actions-more (extend the just-built edit) + anvil-live-e2e-when-up (the honest gap: long offline streak, nothing call-tested). confirm-to-act (high) remains owner-gated: needs Alex's confirm-before-acting product decision."
+    },
+    {
+      "note": "anvil DOWN -> anvil-live-e2e-when-up still blocked (long offline streak, nothing call-tested — the one real gap). Built callback-edit-terminal-actions-more. Non-owner backlog now empty except the anvil-gated e2e; confirm-to-act (high) owner-gated. The product surface is converged: remaining levers are confirm-to-act (owner product decision) + a live e2e pass (needs anvil started). Worth surfacing both to Alex rather than mining further."
     }
   ]
 }
