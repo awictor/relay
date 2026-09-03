@@ -49,6 +49,14 @@ describe("runUnitPrice", () => {
     expect(out).toMatch(/= \$0\.50 each/);   // 12/$6
     expect(out).toMatch(/✅.*= \$0\.43 each/); // 30/$13 cheaper
   });
+  it("handles thousands-separated prices and quantities (unitprice-thousands-comma)", () => {
+    // $1,299/3 = $433 each ; $1,499/4 = $374.75 each -> the 4-pack is cheaper.
+    const out = runUnitPrice("$1,299 for 3 vs $1,499 for 4")!;
+    expect(out).toMatch(/Better buy/);
+    expect(out).toMatch(/✅ \$1499\.00 for 4 = \$374\.75 each/);
+    // A comma in the QUANTITY too.
+    expect(runUnitPrice("1,200g for $4 or 1.2kg for $9")).not.toBeNull();
+  });
   it("null for a non-compare request (falls through to the agent)", () => {
     expect(runUnitPrice("what's the price of bitcoin")).toBeNull();
   });

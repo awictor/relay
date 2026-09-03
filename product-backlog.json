@@ -2399,7 +2399,7 @@
       "title": "unit_price breaks on a thousands-separated price (\"$1,299 for 3\")",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "parseUnitPrice splits on s*[;,]s* BEFORE per-option comma-stripping, so '$1,299 for 3 vs $1,499 for 4' splits into '$1'/'299 for 3' -> both unparseable -> null -> the model falls back to mental math (the silently-wrong arithmetic the tool exists to prevent). Bulk/electronics compares routinely have 4-digit prices. Regression in the just-shipped unit_price.",
       "how": "Strip in-number thousands commas (comma between digits) BEFORE the or/vs/comma separator split in parseUnitPrice. Offline test: '$1,299 for 3 vs $1,499 for 4' parses to 2 options."
     },
@@ -3366,6 +3366,10 @@
     {
       "item": "reminder-time-from-task-body",
       "note": "Fixed a reminder grabbing an HH:MM from the TASK body + firing at the wrong hour. The 24-hour (at24) branch ran before am/pm and its 'at' was OPTIONAL, so 'remind me at 9am to submit the 10:30 report' matched the bare '10:30' in the note -> fired 10:30 instead of the explicit 9am. Anchored the colon-time regex to require 'at' or 'tomorrow' immediately before it; a bare time inside the task body is now ignored, and 'at 9am' (no colon) falls through to the am/pm branch -> fires 09:00. 'at 14:30'/'tomorrow at 09:00'/'tomorrow 9:30' still parse. 2 new tests (explicit am/pm wins over body 10:30; a body HH:MM under 'in 20 min' isn't hijacked), suite 1660 green, tsc clean. call-tested:false (offline parse)."
+    },
+    {
+      "item": "unitprice-thousands-comma",
+      "note": "Fixed unit_price breaking on a thousands-separated number. parseUnitPrice split on the ',' option separator BEFORE per-option comma-stripping, so '$1,299 for 3 vs $1,499 for 4' split into '$1'/'299 for 3' -> unparseable -> null -> the model fell back to mental math (the silently-wrong arithmetic the tool exists to prevent). Now strips in-number thousands commas (a comma between a digit and exactly-3-more-digits, via lookbehind/lookahead — the (?:D|$) tail so '1,200g' works too) BEFORE the separator split. 2 new assertions ('$1,299 for 3 vs $1,499 for 4' compares; comma in the qty too), suite 1661 green, tsc clean. call-tested:false (pure parse)."
     }
   ],
   "audits": [

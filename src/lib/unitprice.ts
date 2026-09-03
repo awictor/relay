@@ -29,7 +29,11 @@ function parseOption(s: string): { qty: number; unit: string; price: number } | 
 /** Parse a free-text "better buy" question into its options (2+), or null if it isn't one. Splits on
  * "or"/"vs"/","/";" and requires each part to parse to qty+unit+price. Exported for tests. */
 export function parseUnitPrice(text: string): Array<{ qty: number; unit: string; price: number }> | null {
-  const t = text.trim().replace(/[?.!]+$/, "").replace(/^\s*(which(?:'s| is)?\s+(?:cheaper|the better (?:buy|deal|value))|better (?:buy|deal|value)|best (?:buy|deal|value)|cheaper|compare)\b[:,]?\s*/i, "");
+  // Strip thousands-separator commas (a comma BETWEEN digits) FIRST (unitprice-thousands-comma): otherwise
+  // the "," option separator below splits "$1,299 for 3" into "$1" + "299 for 3" — both unparseable — so
+  // a bulk/electronics compare with a 4-digit price silently fell to the model's mental math.
+  const t = text.trim().replace(/[?.!]+$/, "").replace(/(?<=\d),(?=\d{3}(?:\D|$))/g, "")
+    .replace(/^\s*(which(?:'s| is)?\s+(?:cheaper|the better (?:buy|deal|value))|better (?:buy|deal|value)|best (?:buy|deal|value)|cheaper|compare)\b[:,]?\s*/i, "");
   const parts = t.split(/\s+(?:or|vs\.?|versus)\s+|\s*[;,]\s*/i).map((p) => p.trim()).filter(Boolean);
   if (parts.length < 2) return null;
   const opts = parts.map(parseOption);
