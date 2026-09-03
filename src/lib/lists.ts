@@ -8,7 +8,7 @@ interface List { name: string; items: string[] }
 interface ChatLists { chatId: number; lists: List[] }
 
 const MAX_LISTS_PER_CHAT = 20;
-const MAX_ITEMS_PER_LIST = 100;
+export const MAX_ITEMS_PER_LIST = 100;
 const MAX_ITEM_LEN = 200;
 
 /** Normalize a list name: lowercased, trimmed, strip a leading "my "/"the " + a trailing "list". So
@@ -99,24 +99,28 @@ export class ListStore {
   }
 
   /** Add items to a list (creating it, capped). Skips exact-dup items (case-insensitive). Returns the
-   * items actually added + the full list after. Null if the per-chat list cap is hit on a NEW list. */
-  add(chatId: number, name: string, items: string[]): { added: string[]; list: string[]; saved: boolean } | null {
+   * items actually added, any DROPPED because the list is full (`capped` — distinct from a silent
+   * dedupe so the caller can tell the user their list is full instead of losing items quietly,
+   * lists-cap-silent-drop), + the full list after. Null if the per-chat list cap is hit on a NEW list. */
+  add(chatId: number, name: string, items: string[]): { added: string[]; capped: string[]; list: string[]; saved: boolean } | null {
     const c = this.forChat(chatId);
     let l = c.lists.find((x) => x.name === name);
     if (!l) {
       if (c.lists.length >= MAX_LISTS_PER_CHAT) return null;
       l = { name, items: [] }; c.lists.push(l);
     }
-    const added: string[] = [];
+    const added: string[] = [], capped: string[] = [];
     for (const raw of items) {
       const item = raw.slice(0, MAX_ITEM_LEN);
-      if (!item || l.items.length >= MAX_ITEMS_PER_LIST) continue;
-      if (l.items.some((x) => x.toLowerCase() === item.toLowerCase())) continue; // dedupe
+      if (!item) continue;
+      if (l.items.some((x) => x.toLowerCase() === item.toLowerCase())) continue; // dedupe (already present)
+      // Full list: record the drop so the caller can warn, rather than silently swallowing the item.
+      if (l.items.length >= MAX_ITEMS_PER_LIST) { capped.push(item); continue; }
       l.items.push(item); added.push(item);
     }
     // saved=false when the write failed — the caller must not confirm the addition as durable.
     const saved = this.persist();
-    return { added, list: [...l.items], saved };
+    return { added, capped, list: [...l.items], saved };
   }
 
   /** Remove list item(s) matching `item` by WHOLE-WORD relevance, NOT raw substring — so "remove milk"

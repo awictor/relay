@@ -3038,9 +3038,18 @@
       "title": "Audit memory/notes/store eviction + persistence-failure UX for silent data loss",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "several stores cap per-chat + drop oldest; a silent eviction of the earliest (often most important) item, or a persist failure not surfaced, reads as 'the bot forgot' — worth a sweep for any store that evicts/fails without telling the user (notes already warns; others may not).",
       "how": "Probe NotesStore/SavedStore/ListStore/ContactStore/PlacesStore add() at the cap + lastSaveOk() paths; ensure eviction returns what was dropped + the handler surfaces it, and a failed persist hedges the confirmation. Fix any that silently lose."
+    },
+    {
+      "id": "digest-recipe-cap-silent-drop",
+      "title": "Audit digest/recipe/alert member caps for the same silent-drop class",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "lists had a silent over-cap drop; a digest caps members (maxMembers/slice), a watchlist caps sub-watches (MAX_WATCHLIST_MEMBERS slice), a recipe chain may cap steps — each may silently drop the tail without telling the user, the same trust bug just fixed for lists.",
+      "how": "Probe DigestStore.add member slice, AlertStore watchlist member slice, and any recipe/chain step cap; where the definition exceeds the cap, surface 'kept the first N, dropped X' instead of a silent slice."
     }
   ],
   "history": [
@@ -4251,6 +4260,10 @@
     {
       "id": "dangerous-action-runtime-gate-verify",
       "note": "Traced the click/type dispatch (agent.ts:964-983): isDangerousAction(label+selector) at L972 refuses + continues BEFORE backend.click/type at L977-978 — the guard IS wired. Added 3 integration tests via the recording backend: 'click Pay now' -> refused (backend.click never runs) + agent replies it can't; 'click Read more' -> click:.read-more DOES reach the backend (no over-block); a danger named only in the SELECTOR (#delete-account-btn, no label) -> also refused (guard sees label+selector). Proves the hardened regex is enforced at runtime, not just unit-tested — a wiring regression now fails a test. +3 tests, 1998 green."
+    },
+    {
+      "id": "memory-store-eviction-audit",
+      "note": "Swept every per-chat store for silent data loss. NotesStore (evicted[] returned + handler warns), SavedStore (evicted[] + oldest-drop, lastSaveOk hedge), Contacts/Places/new-List cap (return null -> handler says 'hit the limit'), all persist paths (lastSaveOk hedges) — CLEAN. Found ONE real silent loss: ListStore.add dropped items over MAX_ITEMS_PER_LIST (100) via a bare `continue`, indistinguishable from a dedupe, so the handler said 'Added N' / 'Already on your list' while quietly losing the rest (lists-cap-silent-drop). Now returns `capped[]`; the handler tells the user which items didn't fit + that the list is full. +4 tests (store capped/dedupe-distinct + unit), 2000 green."
     }
   ],
   "audits": [
@@ -4535,6 +4548,9 @@
     },
     {
       "note": "Self-audit follow-through (agent cap 200/200): verified the dangerous-action guard is wired to the click/type dispatch at runtime (not just regex-tested) with 3 integration tests. Closes the safety-hardening arc (widen regex -> prove enforced). Seeded memory-store-eviction-audit as the next self-audit target."
+    },
+    {
+      "note": "Self-audit inline (agent cap 200/200): swept memory/notes/saved/lists/contacts/places stores for silent eviction + persist-failure UX. All CLEAN except ListStore.add, which silently dropped over-cap items as if deduped. Fixed (capped[] + handler warning). Seeded digest-recipe-cap-silent-drop to sweep the SAME class in digest/watchlist/chain member caps."
     }
   ]
 }

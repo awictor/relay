@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseListCommand, parseListExport, normalizeListName, splitItems, ListStore } from "../src/lib/lists.js";
+import { parseListCommand, parseListExport, normalizeListName, splitItems, ListStore, MAX_ITEMS_PER_LIST } from "../src/lib/lists.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -141,5 +141,24 @@ describe("ListStore", () => {
     const s = new ListStore({ file: tmp() });
     for (let i = 0; i < 20; i++) expect(s.add(1, `l${i}`, ["x"])).not.toBeNull();
     expect(s.add(1, "l20", ["x"])).toBeNull(); // 21st list rejected
+  });
+  it("reports items dropped because the list is FULL as `capped`, not silently (lists-cap-silent-drop)", () => {
+    const s = new ListStore({ file: tmp() });
+    const fill = Array.from({ length: MAX_ITEMS_PER_LIST }, (_, i) => `item${i}`);
+    const full = s.add(1, "grocery", fill)!;
+    expect(full.added).toHaveLength(MAX_ITEMS_PER_LIST);
+    expect(full.capped).toEqual([]);
+    // The list is now at the cap — two more items can't fit + must be reported, not swallowed.
+    const over = s.add(1, "grocery", ["overflow-a", "overflow-b"])!;
+    expect(over.added).toEqual([]);
+    expect(over.capped).toEqual(["overflow-a", "overflow-b"]);
+    expect(s.show(1, "grocery")).toHaveLength(MAX_ITEMS_PER_LIST); // nothing beyond the cap stored
+  });
+  it("a dedupe is NOT reported as capped (distinct signals)", () => {
+    const s = new ListStore({ file: tmp() });
+    s.add(1, "grocery", ["eggs"]);
+    const r = s.add(1, "grocery", ["eggs", "milk"])!; // eggs dedupes, milk adds, nothing capped
+    expect(r.added).toEqual(["milk"]);
+    expect(r.capped).toEqual([]);
   });
 });

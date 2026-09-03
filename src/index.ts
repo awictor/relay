@@ -41,7 +41,7 @@ import { SavedStore, parseSavePage, parseSavedRecall, hostLabel, readingRecap, i
 import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
 import { LogStore, parseLogCommand, parseLogQuery, sumSeries } from "./lib/logs.js";
-import { ListStore, parseListCommand, parseListExport, splitItems } from "./lib/lists.js";
+import { ListStore, parseListCommand, parseListExport, splitItems, MAX_ITEMS_PER_LIST } from "./lib/lists.js";
 import { ContactStore, parseSaveContact, parseForgetContact, parseFollowUp } from "./lib/contacts.js";
 import { mailtoLink, smsLink } from "./lib/compose.js";
 import { isTextualDoc, decodeTextDoc, buildDocPrompt } from "./lib/docs.js";
@@ -487,12 +487,21 @@ const handle = createHandler({
       if (!items.length) return null;
       const r = lists.add(chatId, cmd.list, items);
       if (!r) return `You've hit my limit of saved lists — clear one first with "clear my <name> list".`;
-      if (!r.added.length) return `Already on your ${label}. It has:\n${render(r.list)}`;
+      // Items dropped because the list is FULL (lists-cap-silent-drop): tell the user which + that the list
+      // is at its cap, instead of silently losing them. Shown whether or not anything else was added.
+      const cappedNote = r.capped.length
+        ? `\n\n⚠️ Your ${label} is full (${MAX_ITEMS_PER_LIST} max), so I couldn't add: ${r.capped.map((i) => `"${i}"`).join(", ")}. Remove a few first.`
+        : "";
+      if (!r.added.length) {
+        return r.capped.length
+          ? `Your ${label} is full (${MAX_ITEMS_PER_LIST} max) — I couldn't add ${r.capped.map((i) => `"${i}"`).join(", ")}. Remove some with "remove <item> from my ${label}".`
+          : `Already on your ${label}. It has:\n${render(r.list)}`;
+      }
       const what = r.added.length === 1 ? `"${r.added[0]}"` : `${r.added.length} items`;
       // saved=false: the disk write failed. Don't claim it's kept — tell the truth so the user can retry
       // (lists-remove-atomic-write-failure). It's in memory this session but won't survive a restart.
       const warn = r.saved ? "" : `\n\n⚠️ Heads up — I couldn't save that to disk, so it may be lost if I restart. Try again in a moment.`;
-      return `Added ${what} to your ${label}. Now:\n${render(r.list)}${warn}`;
+      return `Added ${what} to your ${label}. Now:\n${render(r.list)}${cappedNote}${warn}`;
     }
     // A failed disk write on a delete brings the item back on restart, contradicting the confirmation —
     // hedge it (delete-persist-hedge), mirroring the add path's warn.
