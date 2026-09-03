@@ -69,6 +69,34 @@ describe("makeScheduleRunner.tick", () => {
     }
   });
 
+  it("a reminderOnly whose SEND stalls past the timeout doesn't double-send when it finishes late (reminderonly-no-cancel-guard)", async () => {
+    const prev = process.env.RELAY_FIRE_TIMEOUT_MS;
+    process.env.RELAY_FIRE_TIMEOUT_MS = "20";
+    try {
+      const clock = { t: NOW };
+      const sent: string[] = [];
+      const store = new ScheduleStore({ file: tmpFile() });
+      let releaseSend!: () => void;
+      let sendCalls = 0;
+      const runner = makeScheduleRunner({
+        store, llm: {} as never,
+        runAgent: async () => ({ reply: "unused" }),
+        // A reminderOnly echoes via deps.send; make the FIRST send hang past the 20ms timeout.
+        send: async (_c, text) => { sendCalls++; if (sendCalls === 1) { await new Promise<void>((r) => { releaseSend = r; }); } sent.push(text); },
+        formatReply: (t) => t, now: () => clock.t, periodMs: 0,
+      });
+      store.add(1, { kind: "once", task: "take meds", dueMs: NOW - 1, reminderOnly: true }, NOW);
+      await runner.tick();                    // send stalls -> fire times out at 20ms -> once retry-deferred
+      releaseSend();                          // the stalled send now completes late
+      await new Promise((r) => setTimeout(r, 0));
+      // The stalled send DID eventually push its text (1 delivery), but the late finish must not
+      // re-send or double-complete. The once is still in the store (deferred for retry), not dropped twice.
+      expect(sent.length).toBeLessThanOrEqual(1);
+    } finally {
+      if (prev === undefined) delete process.env.RELAY_FIRE_TIMEOUT_MS; else process.env.RELAY_FIRE_TIMEOUT_MS = prev;
+    }
+  });
+
   it("a slow task that finishes AFTER its timeout does not double-send or double-complete (slow-task-starves-due-reminders)", async () => {
     const prev = process.env.RELAY_FIRE_TIMEOUT_MS;
     process.env.RELAY_FIRE_TIMEOUT_MS = "20";

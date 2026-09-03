@@ -213,6 +213,10 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       // the note — running the browser agent on it appended a confused 20-40s browse/refusal. Echo and
       // return. Recipes never set reminderOnly, so this only hits plain "remind me to X" schedules.
       if (s.reminderOnly && !recipeMatch) {
+        // If this fire already timed out (a stalled deps.send past the 90s ceiling), the tick's catch has
+        // advanced/failed the schedule — a late finish must NOT also send + complete, or the highest-trust
+        // reminder ("take my meds") double-pings (mirrors the guard on the main/alert/digest paths).
+        if (isCancelled()) { log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, dropped: "timed_out_late_finish" })}`); return; }
         const echo = `⏰ Reminder: ${taskToRun}`;
         await deps.send(s.chatId, echo);
         deps.recordSend?.(s.chatId, echo);

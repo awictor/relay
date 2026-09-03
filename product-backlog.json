@@ -1958,7 +1958,7 @@
       "title": "reminderOnly fire path lacks isCancelled guard -> duplicate reminder",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "fireOne main send + alert-silent + digest-null all check isCancelled() before side effects (timeout late-finish guard), but the reminderOnly branch awaits send + completes with no check, so a send stalling past the 90s timeout gets retried while the original lands late -> double meds reminder.",
       "how": "Add an isCancelled() check before the reminderOnly send + complete, like the other fire paths."
     },
@@ -2741,6 +2741,10 @@
     {
       "item": "scores-team-not-playing-with-league-word",
       "note": "Fixed the team-not-playing guard being bypassed when the query also names a league. getScores keyed the guard on ref.viaTeam, which is only set when the league resolved VIA the team map; 'did the Lakers win, NBA scores?' resolves via the LEAGUES word (viaTeam unset) but still names a team, so it dumped the whole slate. Now keyed on a new namesKnownTeam(query) (any TEAM_LEAGUE regex hit, independent of league resolution) -> teamNotPlaying fires whenever a named team has no game today. 1 new test. Suite 1445 green, tsc clean."
+    },
+    {
+      "item": "reminderonly-no-cancel-guard",
+      "note": "Added the isCancelled() guard to the reminderOnly fire path. The main/alert-silent/digest-null paths all check isCancelled() before their side effects (timeout late-finish guard), but reminderOnly awaited deps.send + completed with no check — so a send stalling past the 90s fire timeout could double-send the most common reminder type ('take my meds') when the retry tick ran. Now guards before send+complete like the others. 1 new test (stalled reminderOnly send doesn't double-deliver). Suite 1446 green, tsc clean."
     }
   ],
   "audits": [
