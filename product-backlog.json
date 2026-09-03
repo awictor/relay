@@ -1877,7 +1877,7 @@
       "title": "Concurrent sync turn erases a background errand's memory",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The errand-completion path now re-reads memory, but the INBOUND sync turn still writes [...snapshot] captured before its agent ran; if an errand finishes mid-turn (the ack invites more texts), the sync write erases the errand turn -> a follow-up has no memory of it.",
       "how": "Apply the same re-read-before-write discipline on the sync path (or serialize via the per-chat chain), so neither side clobbers the other."
     },
@@ -2615,6 +2615,10 @@
     {
       "item": "digest-dropped-over-cap",
       "note": "A due digest over the hourly send-cap is no longer silently dropped for the day. Was: only once-reminders (grace-defer) + alert-checks were cap-exempt; a digest: (daily kind) hit safeComplete+continue -> advanced to tomorrow -> the relied-upon morning briefing just no-showed with an operator log. Now a digest gets the same defer-then-force grace as a once (leave it due, retry when a slot frees; force past the grace window rather than lose it). A plain daily/weather still drops its occurrence (re-fires on its own cadence, not a user-assembled bundle). 2 new tests (digest deferred+delivered later; plain daily still drops). Suite 1409 green, tsc clean."
+    },
+    {
+      "item": "sync-turn-clobbers-errand-memory",
+      "note": "The inbound sync turn wrote memory as [...history,...] using the pre-run snapshot read minutes earlier; a detached background errand (runs off the chain, the ack invites more texts) completing mid-turn had its result erased -> a follow-up had no memory of the errand. Now re-reads current memory at write time (memoryGet -> append -> memorySet, race-free with no await between), mirroring the errand-completion path's own re-read fix. 1 new regression test (interim errand write survives the sync turn). Suite 1410 green, tsc clean."
     }
   ],
   "audits": [

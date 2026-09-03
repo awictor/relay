@@ -1228,7 +1228,13 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         await deps.sendMessage(msg.chatId, out);
       }
 
-      const next: LLMMessage[] = [...history, { role: "user", content: msg.text }, { role: "assistant", content: out }];
+      // Append this turn to the CURRENT memory, not the pre-run `history` snapshot taken minutes ago
+      // (sync-turn-clobbers-errand-memory). A detached background errand runs off the per-chat chain and
+      // can write its result to memory WHILE this agent run is in flight (the ack invites "keep texting
+      // meanwhile"); writing [...history, ...] here would erase that errand turn. Re-reading is race-free
+      // (no await between get + set), mirroring the errand-completion path's own re-read fix.
+      const cur = deps.memoryGet(msg.chatId);
+      const next: LLMMessage[] = [...cur, { role: "user", content: msg.text }, { role: "assistant", content: out }];
       deps.memorySet(msg.chatId, next);
       // Log a CLEAN answer to the searchable history (answer-history-recall) so "what was that X you
       // found" works later. Skip degraded (partial) replies + binaries (no text answer to recall).

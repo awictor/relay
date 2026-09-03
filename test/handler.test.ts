@@ -56,6 +56,25 @@ describe("createHandler", () => {
     expect(mem.size).toBe(0);
   });
 
+  it("appends to CURRENT memory, not the pre-run snapshot, so a concurrent errand write survives (sync-turn-clobbers-errand-memory)", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    const { handle } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      // While THIS sync agent runs, a detached errand completes and writes its result to memory.
+      runAgentFn: async () => {
+        mem.set(1, [{ role: "user", content: "[errand] find flights" }, { role: "assistant", content: "Found 5 flights." }]);
+        return { reply: "here's the weather", steps: 1, tools: [] };
+      },
+    });
+    await handle(msg("what's the weather in Paris", 1));
+    const h = mem.get(1)!;
+    // The errand turn (written mid-run) must survive; the sync turn is appended AFTER it, not overwriting
+    // from the empty pre-run snapshot.
+    expect(h.some((m) => m.content === "Found 5 flights.")).toBe(true);
+    expect(h[h.length - 1]).toEqual({ role: "assistant", content: "here's the weather" });
+  });
+
   it("/reset clears the chat's memory, confirms, and does NOT run the agent (DEV-0023)", async () => {
     let agentCalled = false;
     const { handle, sent, mem } = harness({
