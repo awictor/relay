@@ -74,8 +74,11 @@ export interface ScheduleRunnerDeps {
   recipeResolveTask?: (chatId: number, name: string) => string | null;
   // Recipe chaining (recipe-chaining): run a ">>"-chained recipe task as a sequential workflow, same as
   // the inbound /run path — so a SCHEDULED chained recipe doesn't fire the literal "step1 >> step2" as
-  // one confused agent task. Returns the final output. Optional; absent -> a chain runs as one task.
-  runChain?: (chatId: number, task: string) => Promise<string>;
+  // one confused agent task. Returns the final output + whether the chain STOPPED EARLY (an if-gate
+  // failed / a step produced nothing), so a proactive fire can flag a partial result instead of pushing
+  // an intermediate output as the complete briefing (scheduled-chain-partial-unflagged) — mirroring the
+  // inbound /run path. A bare-string return is still accepted (legacy: treated as complete). Optional.
+  runChain?: (chatId: number, task: string) => Promise<string | { final: string; stoppedEarly?: boolean; stepsDone?: number; stepsTotal?: number }>;
   // Record a proactive send into the shared last-result cache so a user can reply "more"/"send the
   // link" to a digest/alert ping (proactive-ping-drilldown-cache). Optional.
   // Cache a proactive send for a "more"/"send the link" follow-up. `full` is the UNTRIMMED text; `sentLen`
@@ -372,7 +375,12 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       // path (recipe-chaining) — not the literal string as one agent task. runChain already formats.
       if (recipeMatch && deps.runChain && isChain(taskToRun)) {
         const chained = await deps.runChain(s.chatId, taskToRun);
-        res = { reply: chained };
+        // Accept the structured result (or a legacy bare string). A chain that STOPPED EARLY (an if-gate
+        // wasn't met / a step produced nothing) is a PARTIAL result — mark it degraded so the partial-
+        // banner + not-ok metric below fire, instead of pushing the intermediate output as the complete
+        // briefing every cadence (scheduled-chain-partial-unflagged).
+        if (typeof chained === "string") res = { reply: chained };
+        else res = { reply: chained.final, ...(chained.stoppedEarly ? { degraded: true } : {}) };
       } else {
         res = await deps.runAgent(taskToRun, { llm: deps.llm, context: deps.contextFor?.(s.chatId) || undefined, ...deps.agentEnv?.(s.chatId) }, []);
       }
@@ -385,7 +393,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       // proactive result. Marking the unprompted message as partial keeps a flaky daily from pushing a
       // failure string as if it were the briefing, and the ok:!degraded below keeps it out of the
       // success metric (DEV-0187 — schedule-runner is the 4th runAgent consumer of the degraded flag).
-      const prefix = res.degraded ? "⚠️ Partial — I ran low on steps.\n\n" : "";
+      const prefix = res.degraded ? "⚠️ Partial — this didn't fully finish.\n\n" : "";
       // Show the human task, not the "recipe:<name>" marker, in the reminder header.
       const shown = recipeMatch ? taskToRun : s.task;
       sendText = `${label}: ${shown}\n\n${prefix}${body}`;

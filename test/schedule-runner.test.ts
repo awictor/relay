@@ -345,6 +345,34 @@ describe("makeScheduleRunner.tick", () => {
     expect(sent[0]!.text).toMatch(/chained result/);
   });
 
+  it("a scheduled chain that STOPPED EARLY is flagged partial, not pushed as complete (scheduled-chain-partial-unflagged)", async () => {
+    const clock = { t: NOW };
+    const recorded: Array<{ ok: boolean }> = [];
+    const { store, runner, sent } = harness(clock, {
+      recipeResolveTask: () => "check flights >> if cheap: book-summary",
+      // structured result: the if-gate wasn't met -> stoppedEarly, only 1 of 2 steps ran.
+      runChain: async () => ({ final: "flights are $800", stoppedEarly: true, stepsDone: 1, stepsTotal: 2 }),
+      recordTurn: (t) => { recorded.push({ ok: t.ok }); },
+    });
+    store.add(1, { kind: "daily", task: "recipe:flow", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    expect(sent[0]!.text).toMatch(/Partial — this didn't fully finish/); // banner shown
+    expect(sent[0]!.text).toMatch(/flights are \$800/);                  // + the partial output
+    expect(recorded[recorded.length - 1]!.ok).toBe(false);              // not counted as a success
+  });
+
+  it("a scheduled chain that COMPLETED (structured, not stoppedEarly) has no partial banner", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock, {
+      recipeResolveTask: () => "step a >> step b",
+      runChain: async () => ({ final: "all done", stoppedEarly: false, stepsDone: 2, stepsTotal: 2 }),
+    });
+    store.add(1, { kind: "once", task: "recipe:flow", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(sent[0]!.text).toMatch(/all done/);
+    expect(sent[0]!.text).not.toMatch(/Partial/);
+  });
+
   it("a scheduled recipe edited to add a {slot} skips firing (no literal-slot garbage) (scheduled-recipe-slot-refire)", async () => {
     const clock = { t: NOW };
     const { store, runner, sent, ran } = harness(clock, {

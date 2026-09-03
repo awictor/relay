@@ -225,7 +225,10 @@ const scheduleRunner = makeScheduleRunner({
   digestRun: (chatId, name) => digestRunText(chatId, name), // scheduled digests (m9)
   alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
   recipeResolveTask: (chatId, name) => { const r = recipes.get(chatId, name); return r ? r.task : null; }, // scheduled recipes: resolve current task at fire time
-  runChain: async (chatId, task) => (await runChain(chatId, task, { llm, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor })).final, // scheduled chained recipe = sequential workflow
+  // Scheduled chained recipe = sequential workflow. Return the structured result (final + stoppedEarly)
+  // so the runner flags a partial briefing instead of pushing an intermediate step as complete
+  // (scheduled-chain-partial-unflagged).
+  runChain: async (chatId, task) => { const r = await runChain(chatId, task, { llm, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor }); return { final: r.final, stoppedEarly: r.stoppedEarly, stepsDone: r.steps.filter((s) => !s.skipped).length, stepsTotal: r.steps.length }; },
   // Proactive ping -> its OWN slot (drilldown + follow-up context), preserving the inbound answer's
   // pageable state so a ping mid-conversation can't eat the answer's unshown tail (proactive-clobbers-
   // drilldown-cache). The ping is sent whole (untrimmed), so its paging offset starts at full length

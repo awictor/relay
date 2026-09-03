@@ -2795,7 +2795,7 @@
       "title": "a scheduled chained recipe that stops early is delivered as if complete",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The inbound /run path flags stoppedEarly/stepsDone, but the scheduled path's runChain dep returns Promise<string> — a chain halted at an if-gate or degraded step is pushed as a normal complete-looking briefing every period, no '⚠️ couldn't finish'.",
       "how": "Change the scheduler's runChain dep to return the structured { final, stoppedEarly, stepsDone } the inbound path consumes + prefix a partial-answer banner on a proactive fire."
     },
@@ -2807,6 +2807,15 @@
       "status": "done",
       "why": "Recipes/digests/alerts/watchlists are deep but activation needs 'save X:'/'digest morning: ...' syntax users never discover; onboarding tap-to-try only fires ONE-SHOT errands. Retention is gated on setting up >=1 recurring automation.",
       "how": "An /automations (or onboarding) row of ~10 curated recurring automations ('Daily weather + top news', 'Watch a product price', 'Job feed', 'Morning briefing') that a tap installs into the existing recipe/alert/digest stores — a new 'install' callback op reusing callbacks.ts + a static list like TRY_EXAMPLES."
+    },
+    {
+      "id": "digest-all-failed-bypasses-gate",
+      "title": "a dead digest source sends a reassuring 'temporary blip' note forever",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "digest-runner returns an all-failed note as a normal string; the runner sends it + completes ok:true, so the softFail/fail-streak machinery never engages. A genuinely dead digest (bad recipe, permanently blocked URL) keeps sending 'I couldn't put your briefing together this time, I'll try next run' every morning with no escalation, and if THAT send fails it's silently lost.",
+      "how": "Have digest-runner signal all-failed as a soft-fail (like watches) so the runner streaks it + sends a failed-watch-style receipt after N ('your <name> briefing has failed K days — check its recipes'); gate the note send on delivery."
     }
   ],
   "history": [
@@ -3925,6 +3934,10 @@
     {
       "item": "media-memory-not-send-gated",
       "note": "Extended the send-gated-memory fix to the media reply paths (media-memory-not-send-gated). The text path already skipped the memory write on a failed send (inbound-send-fail-swallowed), but the four media branches — QR-scan reply, photo-to-action, photo describe, document describe — called memorySet unconditionally after the send, so a failed image/PDF answer was still recorded as delivered + the next message read as a follow-up to an unseen reply. Each now captures the sendMessage result + writes memory only when !== false (console channel returning void still counts delivered). 2 new tests (photo + doc answer whose send fails -> memory NOT written). suite 1893 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "scheduled-chain-partial-unflagged",
+      "note": "A scheduled chained recipe that stops early is no longer pushed as a complete briefing (scheduled-chain-partial-unflagged). The scheduler's runChain dep returned Promise<string>, so a chain halted at an if-gate or a step that produced nothing was sent as normal complete-looking content every cadence, no '⚠️ partial' — while the inbound /run path already flagged stoppedEarly. Widened the runChain dep to return string | {final, stoppedEarly?, stepsDone?, stepsTotal?} (bare string still accepted = legacy complete); the runner sets res.degraded on stoppedEarly so the existing partial-banner + ok:!degraded metric fire. Reworded the banner cause-agnostic ('Partial — this didn't fully finish', not 'ran low on steps', since a chain stops for an if-gate too). index wires the structured result from runChain's ChainResult (final + stoppedEarly + step counts). 2 new tests (stopped-early -> banner + ok:false; completed structured -> no banner); existing legacy-string chain test unchanged. suite 1895 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
@@ -4167,6 +4180,9 @@
     },
     {
       "note": "No audit this run — built from the prior queue (starter-automation-gallery). Remaining: media-memory-not-send-gated(medium/S), scheduled-chain-partial-unflagged(medium/M), callback-edit-in-place(low), confirm-to-act(owner-gated)."
+    },
+    {
+      "note": "No audit this run — built from the prior queue (scheduled-chain-partial-unflagged). Refilled by promoting a parked Agent-B finding: digest-all-failed-bypasses-gate (medium/M). Remaining: digest-all-failed-bypasses-gate, callback-edit-in-place(low), confirm-to-act(owner-gated)."
     }
   ]
 }
