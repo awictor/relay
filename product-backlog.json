@@ -2363,7 +2363,7 @@
       "title": "\"do I need sunscreen\" answers from the instant UV, not the day’s peak",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "formatAirQuality prints the current uv_index with no time qualifier, so 'UV today / do I need sunscreen' at 8am reads the morning value (2 -> low, no sunscreen) even when midday peaks at 9 (very high); at night it reads 0. The headline sunscreen use case gets a confidently misleading 'you're fine' for a whole-day plan.",
       "how": "Fetch daily=uv_index_max from Open-Meteo (forecast API — the air-quality API may not expose it; add a second field or a small forecast call) and lead the sunscreen guidance off the DAILY PEAK ('peaks at UV 9 around midday — wear sunscreen'), labeling the current reading 'right now'. Offline-testable with a fixture. Or, cheap partial: label the current value 'right now' so it's not read as the day's answer."
     },
@@ -3314,6 +3314,10 @@
     {
       "item": "weekday-reminder-cadence",
       "note": "Verified + closed the gap. The core 'every weekday at N' cadence ALREADY worked (parseSchedule maps weekday/weekdays -> weekly [1,2,3,4,5] with the right hour + reminderOnly — audit finding was mostly stale). Real gap: the synonyms 'workday'/'workdays'/'business day(s)' returned NULL. Fixed by normalizing them to 'weekday(s)' on the raw text at the top of parseSchedule (before parsing, so cleanTask still strips the clause), so 'every workday at 8' / 'every business day at 9' now -> weekly Mon-Fri. 'weekend(s)' already parsed. 2 new assertions (workday + business day synonyms), suite 1648 green, tsc clean. call-tested:false (offline parse)."
+    },
+    {
+      "item": "uv-instant-not-daily-peak",
+      "note": "'do I need sunscreen' now answers from TODAY'S PEAK UV, not the instant reading. formatAirQuality printed the current uv_index with no time qualifier, so an 8am UV of 2 (low) said 'you're fine' even when midday peaks at 9 — a confidently misleading whole-day call; at night it read 0. Added daily=uv_index_max&forecast_days=1 to the SAME keyless air-quality call (no extra request), parse -> uvMax, and formatAirQuality now leads UV off the peak ('UV peaks at 9 today (very high — wear sunscreen midday), 2 right now') with the current value as context; falls back to the instant reading labeled 'right now' when no daily peak. 4 new/updated tests (peak leads not instant; low-peak no nudge; no-daily fallback), suite 1648 green, tsc clean; live-probed Open-Meteo (peak 9.1 vs instant 3.3) so call-tested:true for the source, formatting offline-tested."
     }
   ],
   "audits": [

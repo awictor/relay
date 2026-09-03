@@ -46,18 +46,23 @@ describe("parseAirQuality / formatAirQuality", () => {
     expect(parseAirQuality(JSON.stringify({ current: {} }), "x")).toBeNull();
     expect(parseAirQuality("nope", "x")).toBeNull();
   });
-  it("leads with AQI for an air ask, appends UV", () => {
+  it("no daily uv -> falls back to the instant UV labeled 'right now'", () => {
     const out = formatAirQuality(parseAirQuality(body, "Austin")!, "aqi");
-    expect(out).toMatch(/^Air quality in Austin: AQI 48 \(Good\), PM2\.5 3µg\/m³\. UV index 7 \(high — wear sunscreen\)\./);
+    expect(out).toMatch(/UV index 7 right now \(high — wear sunscreen\)\./);
   });
-  it("leads with UV for a sunscreen ask", () => {
-    const out = formatAirQuality(parseAirQuality(body, "Austin")!, "uv");
-    expect(out).toMatch(/^Austin: UV index 7 \(high — wear sunscreen\)\. Air quality/);
+  it("with a daily peak, sunscreen guidance leads off the PEAK, not the instant (uv-instant-not-daily-peak)", () => {
+    // 8am: instant UV 2 (low) but today peaks at 9 (very high) — must NOT read as 'you're fine'.
+    const morning = parseAirQuality(JSON.stringify({ current: { us_aqi: 40, uv_index: 2 }, daily: { uv_index_max: [9] } }), "Austin")!;
+    expect(morning.uvMax).toBe(9);
+    const out = formatAirQuality(morning, "uv");
+    expect(out).toMatch(/^Austin: UV peaks at 9 today \(very high — wear sunscreen midday\), 2 right now\./);
+    expect(out).not.toMatch(/^Austin: UV index 2/); // did NOT lead with the low instant value
   });
-  it("no 'wear sunscreen' nudge when UV is low", () => {
-    const low = parseAirQuality(JSON.stringify({ current: { us_aqi: 40, uv_index: 1 } }), "Reykjavik")!;
-    expect(formatAirQuality(low)).toMatch(/UV index 1 \(low\)\./);
-    expect(formatAirQuality(low)).not.toMatch(/wear sunscreen/);
+  it("no midday-sunscreen nudge when the day's peak is low", () => {
+    const low = parseAirQuality(JSON.stringify({ current: { us_aqi: 40, uv_index: 1 }, daily: { uv_index_max: [2] } }), "Reykjavik")!;
+    const out = formatAirQuality(low);
+    expect(out).toMatch(/UV peaks at 2 today \(low\)/);
+    expect(out).not.toMatch(/wear sunscreen/);
   });
 });
 

@@ -12,7 +12,9 @@ export interface AirQuality {
   pm25?: number;      // µg/m³
   pm10?: number;      // µg/m³
   ozone?: number;     // µg/m³
-  uv?: number;        // current UV index (0-11+); may be 0 at night
+  uv?: number;        // current UV index (0-11+); may be 0 at night / early morning
+  uvMax?: number;     // TODAY's peak UV (uv-instant-not-daily-peak) — sunscreen guidance leads off this,
+                      // so an 8am reading of 2 doesn't say "you're fine" when midday peaks at 9
   // Pollen (pollen-matched-not-fetched): grains/m³ for the common allergens. Open-Meteo covers pollen in
   // EUROPE only — outside it these come back null, so `pollenCovered` is false and the formatter says so
   // instead of implying "no pollen". Present only when at least one pollen value is a real number.
@@ -24,7 +26,8 @@ export interface AirQuality {
  * Pollen fields are Europe-only (null elsewhere) — requested always, surfaced only when present. */
 export function airQualityUrl(lat: number, lng: number): string {
   return `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lng}` +
-    `&current=us_aqi,pm2_5,pm10,ozone,uv_index,grass_pollen,birch_pollen,alder_pollen,ragweed_pollen&timezone=auto`;
+    `&current=us_aqi,pm2_5,pm10,ozone,uv_index,grass_pollen,birch_pollen,alder_pollen,ragweed_pollen` +
+    `&daily=uv_index_max&timezone=auto&forecast_days=1`;
 }
 
 /** True if the ask is specifically about pollen/allergies (so the reply leads with pollen). Exported. */
@@ -83,9 +86,10 @@ export function pollenRisk(peak: number): string {
 /** Parse an Open-Meteo air-quality response, or null if malformed. Exported for tests. */
 export function parseAirQuality(body: string, place: string): AirQuality | null {
   try {
-    const obj = JSON.parse(body) as { current?: { us_aqi?: number; pm2_5?: number; pm10?: number; ozone?: number; uv_index?: number; grass_pollen?: number | null; birch_pollen?: number | null; alder_pollen?: number | null; ragweed_pollen?: number | null } };
+    const obj = JSON.parse(body) as { current?: { us_aqi?: number; pm2_5?: number; pm10?: number; ozone?: number; uv_index?: number; grass_pollen?: number | null; birch_pollen?: number | null; alder_pollen?: number | null; ragweed_pollen?: number | null }; daily?: { uv_index_max?: Array<number | null> } };
     const c = obj.current;
     if (!c || typeof c.us_aqi !== "number") return null;
+    const uvMax = obj.daily?.uv_index_max?.[0]; // today's peak UV
     // Pollen is Europe-only; outside it every field is null. Collect the numeric ones; covered iff any.
     const pollen: NonNullable<AirQuality["pollen"]> = {};
     if (typeof c.grass_pollen === "number") pollen.grass = c.grass_pollen;
@@ -99,6 +103,7 @@ export function parseAirQuality(body: string, place: string): AirQuality | null 
       ...(typeof c.pm10 === "number" ? { pm10: c.pm10 } : {}),
       ...(typeof c.ozone === "number" ? { ozone: c.ozone } : {}),
       ...(typeof c.uv_index === "number" ? { uv: c.uv_index } : {}),
+      ...(typeof uvMax === "number" ? { uvMax } : {}),
       ...(pollenCovered ? { pollen, pollenCovered: true } : {}),
     };
   } catch { return null; }
@@ -109,9 +114,18 @@ export function parseAirQuality(body: string, place: string): AirQuality | null 
 export function formatAirQuality(a: AirQuality, lead: "aqi" | "uv" | "pollen" = "aqi"): string {
   const aqiPart = `Air quality in ${a.place}: AQI ${a.aqi} (${a.category})`;
   const pm = typeof a.pm25 === "number" ? `, PM2.5 ${Math.round(a.pm25)}µg/m³` : "";
-  const uvPart = typeof a.uv === "number"
-    ? `UV index ${Math.round(a.uv)} (${uvRisk(a.uv)}${a.uv >= 3 ? " — wear sunscreen" : ""})`
-    : "";
+  // UV: base the sunscreen call on TODAY'S PEAK, not the instant reading (uv-instant-not-daily-peak) — an
+  // 8am UV of 2 shouldn't say "you're fine" when midday hits 9. Lead with the peak + a "wear sunscreen"
+  // nudge when the peak is moderate+, and note the current reading as context.
+  let uvPart = "";
+  if (typeof a.uvMax === "number") {
+    const nudge = a.uvMax >= 3 ? " — wear sunscreen midday" : "";
+    const nowNote = typeof a.uv === "number" ? `, ${Math.round(a.uv)} right now` : "";
+    uvPart = `UV peaks at ${Math.round(a.uvMax)} today (${uvRisk(a.uvMax)}${nudge})${nowNote}`;
+  } else if (typeof a.uv === "number") {
+    // No daily peak available — fall back to the instant reading, labeled honestly as "right now".
+    uvPart = `UV index ${Math.round(a.uv)} right now (${uvRisk(a.uv)}${a.uv >= 3 ? " — wear sunscreen" : ""})`;
+  }
   // Pollen line: the peak allergen level + which. Only when Europe-covered; else an honest "not available".
   let pollenPart = "";
   if (a.pollenCovered && a.pollen) {
