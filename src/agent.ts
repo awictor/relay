@@ -15,7 +15,7 @@ import { fetchYouTubeTranscript } from "./lib/youtube.js";
 import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
-import { getWeather as fetchWeather, formatWeather } from "./lib/weather.js";
+import { getWeather as fetchWeather, formatWeather, formatWeatherWhen } from "./lib/weather.js";
 import { formatDraft, type Draft } from "./lib/compose.js";
 import { findNearby as fetchNearby, formatPlaces } from "./lib/places.js";
 import { getDirections as fetchDirections, formatRoute, routeMode } from "./lib/directions.js";
@@ -114,10 +114,13 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "get_weather",
-    description: "Current weather + today's high/low for a place (keyless, instant). Use this — NOT web_search/scrape — for any \"weather\", \"forecast\", \"is it going to rain\", \"how hot is it\" question. Pass the city name; if the user gave no place but their location is known, omit place (it uses their saved coords).",
+    description: "Current weather, today's high/low, AND up to a 7-day forecast for a place (keyless, instant). Use this — NOT web_search/scrape — for any \"weather\", \"forecast\", \"is it going to rain [tomorrow/this weekend]\", \"how hot is it\" question. Pass the city name; if the user gave no place but their location is known, omit place (it uses their saved coords). For a future day, pass `when` with the user's own words (\"tomorrow\", \"this weekend\", \"Saturday\", \"this week\") so I report the RIGHT day, not today.",
     parameters: {
       type: "object",
-      properties: { place: { type: "string", description: "City/place name, e.g. \"Austin\" or \"Paris, France\". Omit to use the user's saved location." } },
+      properties: {
+        place: { type: "string", description: "City/place name, e.g. \"Austin\" or \"Paris, France\". Omit to use the user's saved location." },
+        when: { type: "string", description: "Optional future-day phrase from the user's question: \"tomorrow\", \"this weekend\", \"Saturday\", \"this week\". Omit for current/today's weather." },
+      },
       required: [],
     },
   },
@@ -240,7 +243,7 @@ Tools:
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "get_quote" (symbol): latest stock/equity price. Use this — NOT web_search/scrape — for any "what's Tesla at"/"AAPL price"/"how's NVDA doing" question; it's instant. Pass the ticker (AAPL, TSLA); non-US add a market suffix (VOD.UK).
-- "get_weather" (place?): current weather + today's high/low. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location.
+- "get_weather" (place?, when?): current weather, today's high/low, + up to a 7-day forecast. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location. For a future day, pass "when" with the user's words ("tomorrow", "this weekend", "Saturday") so the RIGHT day is reported, not today.
 - "find_nearby" (what, near?): find places near the user (coffee, pharmacy, ATM, gas...). Use this — NOT web_search — for "X near me"/"nearest Y". Omit near to use the user's location.
 - "directions" (to, from?, mode?): distance + travel time between places. Use this — NOT web_search — for "how far is X"/"directions to Y"/"how long to drive to Z". Omit from to start from the user's location.
 - "calendar_event" (title, startMs|startDate, ...): turn an event/deadline into an add-to-calendar link + .ics for the user to import ("add this to my calendar"). You never add it — pass the artifact verbatim.
@@ -675,10 +678,15 @@ export async function runAgent(
           ? { place, ...(deps.weatherCoords ? { near: deps.weatherCoords } : {}) }
           : (deps.weatherCoords ? { lat: deps.weatherCoords.lat, lng: deps.weatherCoords.lng } : {});
         if (!place && !deps.weatherCoords) { push("get_weather", "No place given and no saved location — ask the user which city."); continue; }
+        const when = String(call.args.when ?? "").trim();
         try {
           const w = await backend.getWeather(opts);
           if (!w) { push("get_weather", `Couldn't get weather for ${place || "your location"} (unknown place or fetch failed). Try a more specific city.`); continue; }
-          push("get_weather", `${formatWeather(w, deps.weatherUnits ?? "imperial")} Report this to the user.`);
+          const units = deps.weatherUnits ?? "imperial";
+          // A future-day question ("tomorrow", "this weekend", "Saturday") -> report THOSE days, not
+          // today's numbers (weather-multi-day). Falls back to the current-weather line otherwise.
+          const forecast = when ? formatWeatherWhen(w, when, units) : null;
+          push("get_weather", `${forecast ?? formatWeather(w, units)} Report this to the user.`);
         } catch (e) {
           push("get_weather", `ERROR getting weather: ${e instanceof Error ? e.message : String(e)}`);
         }

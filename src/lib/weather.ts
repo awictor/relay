@@ -4,10 +4,16 @@
 // instant, correct answer. Pure parse/format helpers exported + unit-tested; the network fetch takes
 // an injected getter so it runs offline.
 
+export interface ForecastDay { date: string; hiC: number; loC: number; hiF: number; loF: number; precipPct: number; code: number; desc: string; }
+
 export interface WeatherResult {
   place: string;      // resolved place name ("Austin, Texas, United States")
   current: { tempC: number; tempF: number; code: number; desc: string; windKph: number };
   today: { hiC: number; loC: number; hiF: number; loF: number; precipPct: number };
+  // Multi-day (weather-multi-day): daily forecast starting today (index 0). Present when the API
+  // returned a daily block; lets the tool answer "tomorrow" / "this weekend" / "this week" instead of
+  // confidently giving today's numbers to a future-day question.
+  days?: ForecastDay[];
 }
 
 // Open-Meteo WMO weather codes -> short human descriptions (the common buckets).
@@ -28,10 +34,12 @@ export function geocodeUrl(place: string): string {
   // disambiguated toward the user's region instead of always the highest-population match.
   return `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(place)}&count=5`;
 }
+// 7 days so "tomorrow", "this weekend", "this week" resolve (weather-multi-day). Open-Meteo returns the
+// daily code too, so each day gets its own condition, not just today's.
 export function forecastUrl(lat: number, lng: number): string {
   return `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
     `&current=temperature_2m,weather_code,wind_speed_10m` +
-    `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=1`;
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=7`;
 }
 
 export interface GeoCandidate { lat: number; lng: number; place: string }
@@ -77,12 +85,24 @@ export function parseForecast(body: string, place: string): WeatherResult | null
   try {
     const obj = JSON.parse(body) as {
       current?: { temperature_2m?: number; weather_code?: number; wind_speed_10m?: number };
-      daily?: { temperature_2m_max?: number[]; temperature_2m_min?: number[]; precipitation_probability_max?: number[] };
+      daily?: { time?: string[]; weather_code?: number[]; temperature_2m_max?: number[]; temperature_2m_min?: number[]; precipitation_probability_max?: number[] };
     };
     const c = obj.current, d = obj.daily;
     if (!c || typeof c.temperature_2m !== "number") return null;
     const hiC = d?.temperature_2m_max?.[0], loC = d?.temperature_2m_min?.[0];
     const code = c.weather_code ?? 0;
+    // Build the multi-day array from parallel daily arrays (weather-multi-day). Length driven by the
+    // max/min arrays; each day carries its own weather_code so "rain tomorrow?" reads the right day.
+    const n = d?.temperature_2m_max?.length ?? 0;
+    const days: ForecastDay[] = [];
+    for (let i = 0; i < n; i++) {
+      const dhi = d!.temperature_2m_max![i]!, dlo = d!.temperature_2m_min?.[i] ?? dhi;
+      const dcode = d!.weather_code?.[i] ?? 0;
+      days.push({
+        date: d!.time?.[i] ?? "", hiC: dhi, loC: dlo, hiF: cToF(dhi), loF: cToF(dlo),
+        precipPct: d!.precipitation_probability_max?.[i] ?? 0, code: dcode, desc: weatherDesc(dcode),
+      });
+    }
     return {
       place,
       current: { tempC: c.temperature_2m, tempF: cToF(c.temperature_2m), code, desc: weatherDesc(code), windKph: Math.round(c.wind_speed_10m ?? 0) },
@@ -91,6 +111,7 @@ export function parseForecast(body: string, place: string): WeatherResult | null
         hiF: cToF(hiC ?? c.temperature_2m), loF: cToF(loC ?? c.temperature_2m),
         precipPct: d?.precipitation_probability_max?.[0] ?? 0,
       },
+      ...(days.length ? { days } : {}),
     };
   } catch { return null; }
 }
@@ -104,6 +125,67 @@ export function formatWeather(w: WeatherResult, units: "metric" | "imperial" = "
   const lo = metric ? `${Math.round(w.today.loC)}°` : `${w.today.loF}°`;
   const rain = w.today.precipPct > 0 ? `, ${w.today.precipPct}% rain` : "";
   return `${w.place}: ${t}, ${w.current.desc}. High ${hi}, low ${lo}${rain}.`;
+}
+
+const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** Format a single forecast day into a human line ("Tomorrow (Sat): rain, high 68°, low 54°, 80% rain").
+ * `label` is the leading day word ("Tomorrow", "Saturday"). Honors the unit preference. */
+export function formatDay(day: ForecastDay, label: string, units: "metric" | "imperial" = "imperial"): string {
+  const metric = units === "metric";
+  const hi = metric ? `${Math.round(day.hiC)}°C` : `${day.hiF}°F`;
+  const lo = metric ? `${Math.round(day.loC)}°` : `${day.loF}°`;
+  const rain = day.precipPct > 0 ? `, ${day.precipPct}% rain` : "";
+  return `${label}: ${day.desc}, high ${hi}, low ${lo}${rain}.`;
+}
+
+/** Resolve a natural "when" phrase in a weather question to day indices into `days` (index 0 = today).
+ * Returns null when the phrase names no future day (caller then uses current/today). Handles: today,
+ * tomorrow, a named weekday (next occurrence), "this weekend" (the coming Sat+Sun), "this week"/"next
+ * N days" (a range). `todayDow` is 0..6 (Sun..Sat) for the resolved location's today. Pure + tested. */
+export function resolveWhen(text: string, todayDow: number, maxDays: number): number[] | null {
+  const t = text.toLowerCase();
+  if (/\btomorrow\b/.test(t)) return maxDays > 1 ? [1] : null;
+  if (/\bthis weekend\b|\bweekend\b/.test(t)) {
+    const idx: number[] = [];
+    for (let i = 0; i < maxDays; i++) { const dow = (todayDow + i) % 7; if (dow === 6 || dow === 0) idx.push(i); }
+    return idx.length ? idx : null;
+  }
+  if (/\bthis week\b|\bnext (?:few days|7 days|week)\b|\bweek(?:'s)? (?:forecast|weather)\b/.test(t)) {
+    return Array.from({ length: Math.min(maxDays, 7) }, (_, i) => i);
+  }
+  // A named weekday -> its next occurrence within the window.
+  for (let d = 0; d < 7; d++) {
+    if (new RegExp(`\\b${DOW[d]!.toLowerCase()}\\b`).test(t)) {
+      for (let i = 0; i < maxDays; i++) { if ((todayDow + i) % 7 === d) return i === 0 ? [0] : [i]; }
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Day label for an index: "Today", "Tomorrow", else the weekday name. */
+export function dayLabel(index: number, todayDow: number): string {
+  if (index === 0) return "Today";
+  if (index === 1) return "Tomorrow";
+  return DOW[(todayDow + index) % 7]!;
+}
+
+/** Answer a future-day weather question (weather-multi-day). Given a WeatherResult with a `days` array
+ * and the user's original question text, resolve which day(s) they asked about and format those. Returns
+ * null when the question names no specific future day (caller falls back to formatWeather / current).
+ * todayDow is derived from days[0].date (the location's own calendar day), so no clock is needed. */
+export function formatWeatherWhen(w: WeatherResult, question: string, units: "metric" | "imperial" = "imperial"): string | null {
+  if (!w.days?.length) return null;
+  const d0 = w.days[0]!.date;
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(d0) ? new Date(`${d0}T00:00:00Z`) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return null;
+  const todayDow = parsed.getUTCDay();
+  const idx = resolveWhen(question, todayDow, w.days.length);
+  if (!idx || !idx.length) return null;
+  if (idx.length === 1 && idx[0] === 0) return null; // "today" -> use the richer current-weather line
+  const lines = idx.map((i) => formatDay(w.days![i]!, dayLabel(i, todayDow), units));
+  return `${w.place}:\n${lines.join("\n")}`;
 }
 
 /**

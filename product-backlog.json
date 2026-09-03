@@ -1,6 +1,43 @@
 {
   "items": [
     {
+      "id": "weather-multi-day",
+      "title": "weather answers today-only; 'rain tomorrow?' gets today's numbers",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "get_weather called Open-Meteo with forecast_days=1 + the prompt told the agent to ALWAYS use the tool for any forecast question, so 'will it rain tomorrow?' / 'weather this weekend' confidently returned TODAY's high/low — wrong answer on a top-3 first errand.",
+      "how": "Bump forecast_days to 7 + fetch daily weather_code; parse a days[] array (each day its own code/hi/lo/precip); add a 'when' tool param + resolveWhen/formatWeatherWhen so 'tomorrow'/'this weekend'/'Saturday'/'this week' report the right day. today/current unchanged (back-compat)."
+    },
+    {
+      "id": "alert-numberless-flap-watchlist-plain",
+      "title": "watchlist + plain change-alerts flap + poison baseline on a numberless reply",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "The threshold + predicate alert paths guard a transient numberless reply (extractValue null / indeterminate), but the WATCHLIST member path and the PLAIN non-threshold change path do NOT: a successful-but-numberless reply ('N/A', 'price unavailable') isn't degraded, reads as a change via text-diff, false-pings '🔔 changed', and stores the garbage as baseline so it re-fires. Recurring false alarms + a corrupted watch for a daily-reliant user (audit B#1).",
+      "how": "Apply the same guard the threshold/predicate paths use to the watchlist-member compare (alert-runner ~84) and the plain-change path (~199): if the alert tracks a value and extractValue(new) is null (and it's not the first run), skip notify + skip setLast so the last GOOD value stays the baseline. Test both paths."
+    },
+    {
+      "id": "extractvalue-largest-magnitude-wrong",
+      "title": "extractValue 'largest magnitude' tracks the wrong number in a multi-number reply",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "extractValue falls back to the largest-magnitude number when no decimal/currency tag wins, so 'S&P at 5,900, Dow at 42,000' tracks 42,000 — an 'S&P below 5000' alert silently compares the wrong index and never fires (or fires wrong). Confidently-wrong silent miss on the headline threshold feature (audit B#2).",
+      "how": "Prefer the FIRST currency-tagged / salient number over the globally-largest; when multiple candidates exist, bias to the one nearest the watched entity's words if derivable, else the first plausible price rather than max magnitude. Add tests for multi-number replies."
+    },
+    {
+      "id": "pause-all-freezes-once-reminders",
+      "title": "'pause all' / indefinite pause silently freezes one-shot reminders forever",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "snooze-automations' matchByRef('all') + an indefinite pause matches once reminders too, so 'remind me at 3pm' set before a trip never fires until a manual resume — a discrete promise silently killed by a pause meant for recurring noise (audit B#6, a regression in the just-shipped snooze).",
+      "how": "In pause(), when which==='all' (or an indefinite pause), skip kind==='once' schedules (or cap their pause so they still fire) — pausing is for recurring automations; a one-shot promise shouldn't be frozen indefinitely. Test that 'snooze all' leaves a once reminder live."
+    }
+  ,
+    {
       "id": "web-search",
       "title": "Add web_search tool (no URL needed)",
       "impact": "high",
@@ -1700,9 +1737,16 @@
     {
       "id": "unified-dashboard",
       "note": "Schedules/recipes/digests/alerts each had their own /list command, so a user with a few automations ran four commands to see what's running and lost track. Added /dashboard (+ /dash alias): one at-a-glance rollup — reminders with next-fire, watches with their trigger + last-seen value, digests with member count + cadence, recipes with run hint, and a ⏸ paused marker (with resume time) on anything snoozed. New pure src/lib/dashboard.ts formatDashboard (empty -> onboarding nudge, empty sections omitted, long tasks one-lined); index dashboardView gathers from the live stores, owning the tz offset (formatWhen) + reading pause state off each automation's scheduled marker row. Registered in setMyCommands + help + KNOWN_COMMANDS. 7 tests (formatter: empty/sections/paused/digest+recipe/truncation + handler routing /dashboard & /dash). call-tested: false (pure read of local stores, no live keys). 1122 tests green."
+    },
+    {
+      "id": "weather-multi-day",
+      "note": "Fixed a confidently-wrong first-errand: get_weather used forecast_days=1 while the prompt told the agent to ALWAYS use it for any forecast question, so 'will it rain tomorrow?' returned TODAY's numbers. Bumped Open-Meteo to forecast_days=7 + daily weather_code; parseForecast now builds a days[] array (each day its own code/hi/lo/precip, today/current kept for back-compat). Added a 'when' tool param + resolveWhen (tomorrow/this weekend/named weekday/this week -> day indices, derives todayDow from days[0].date, no clock) + formatDay/formatWeatherWhen; the dispatch reports the requested future day(s), falling back to the current line for a today/now question. 8 tests + LIVE call-tested against Open-Meteo (7-day array w/ per-day codes + dates). 1130 tests green."
     }
   ],
   "audits": [
+    {
+      "note": "Audit 21 (post-138-features, backlog dry except owner-gated confirm-to-act). A/new-user: weather-today-only ('rain tomorrow?' gets today's numbers, TOP — built this run), set-a-timer phrasing not recognized, imperial-°F silent default for non-US, no translate tool, near-me location-pin discoverability, first-run limits not stated. B/reliability: watchlist+plain-change alerts flap+poison-baseline on a numberless reply (the threshold/predicate paths guard it, these don't), extractValue-largest-magnitude tracks wrong number in multi-number reply, atomicWriteJson no-fsync+swallows-errors, once-reminder-dropped-after-send-outage, once-clock-reminder-not-restamped-on-late-setlocation, pause-all-freezes-once-reminders (regression in just-shipped snooze), feed-watch drops colon/long-prefix items, DST. C/power: confirm-to-act(already queued, owner-gated), voice-replies-TTS, translate-tool, computed-trigger-alerts, sports-scores-tool, RSS-feed-subscribe, searchable-answer-KB, group-broadcast. Built weather-multi-day (A#1, live-verified); seeded alert-numberless-flap-watchlist-plain(M), extractvalue-largest-magnitude-wrong(M), pause-all-freezes-once-reminders(S). Deferred (strong next): set-a-timer(S), translate-tool(S/M), voice-replies(M), computed-trigger-alerts(M), sports-scores(S/M), RSS-subscribe(S/M), atomic-store-fsync(M), imperial-default-infer(M), DST(L)."
+    },
     {
       "note": "Bootstrap audit (3 lenses). A/new-user: web_search (TOP, unanimous), progress-ping, default-location/tz, read-only-expectation, clarifying-Q. B/reliability: alert-value-compare, atomic-store-writes, once-reminder-retry, tz-daily, truncation-hedge. C/power: web_search, voice-notes, multimodal-photo/pdf, confirmed-action-flow, parameterized-recipes. Seeded top 5."
     },

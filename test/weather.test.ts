@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { weatherDesc, parseGeocode, parseGeocodeAll, pickCandidate, parseForecast, formatWeather, getWeather, geocodeUrl, forecastUrl } from "../src/lib/weather.js";
+import { weatherDesc, parseGeocode, parseGeocodeAll, pickCandidate, parseForecast, formatWeather, getWeather, geocodeUrl, forecastUrl, resolveWhen, dayLabel, formatDay, formatWeatherWhen } from "../src/lib/weather.js";
 
 describe("weatherDesc (geo-tool-cluster)", () => {
   it("maps WMO codes to short descriptions", () => {
@@ -124,5 +124,71 @@ describe("getWeather (injected fetch)", () => {
     };
     const w = await getWeather({ place: "Portland", near: { lat: 42.36, lng: -71.06 } }, fetchText); // near Boston
     expect(w!.place).toMatch(/Maine/); // not the top (Oregon) result
+  });
+});
+
+describe("multi-day forecast (weather-multi-day)", () => {
+  // 2024-06-01 is a Saturday (UTC). days[0]=Sat, [1]=Sun, [2]=Mon...
+  const body = JSON.stringify({
+    current: { temperature_2m: 20, weather_code: 2, wind_speed_10m: 11 },
+    daily: {
+      time: ["2024-06-01", "2024-06-02", "2024-06-03", "2024-06-04", "2024-06-05", "2024-06-06", "2024-06-07"],
+      weather_code: [2, 61, 0, 3, 80, 0, 0],
+      temperature_2m_max: [25, 18, 27, 24, 19, 26, 28],
+      temperature_2m_min: [15, 12, 16, 14, 11, 15, 17],
+      precipitation_probability_max: [40, 80, 0, 20, 90, 0, 0],
+    },
+  });
+
+  it("parseForecast builds a per-day array with each day's own code", () => {
+    const w = parseForecast(body, "Austin")!;
+    expect(w.days).toHaveLength(7);
+    expect(w.days![1]).toMatchObject({ date: "2024-06-02", hiF: 64, desc: "light rain", precipPct: 80 }); // 18C=64F
+    expect(w.today.hiF).toBe(77); // today unchanged (back-compat)
+  });
+
+  it("resolveWhen maps phrases to day indices (todayDow=6 Sat)", () => {
+    expect(resolveWhen("will it rain tomorrow", 6, 7)).toEqual([1]);
+    expect(resolveWhen("weather this weekend", 6, 7)).toEqual([0, 1]); // Sat(0), Sun(1)
+    expect(resolveWhen("forecast for monday", 6, 7)).toEqual([2]);      // next Mon = index 2
+    expect(resolveWhen("this week's forecast", 6, 7)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(resolveWhen("how hot is it right now", 6, 7)).toBeNull();    // no future day
+  });
+
+  it("dayLabel names Today/Tomorrow/weekday", () => {
+    expect(dayLabel(0, 6)).toBe("Today");
+    expect(dayLabel(1, 6)).toBe("Tomorrow");
+    expect(dayLabel(2, 6)).toBe("Monday"); // Sat + 2
+  });
+
+  it("formatDay renders a human line honoring units", () => {
+    const w = parseForecast(body, "Austin")!;
+    expect(formatDay(w.days![1]!, "Tomorrow")).toBe("Tomorrow: light rain, high 64°F, low 54°, 80% rain.");
+    expect(formatDay(w.days![2]!, "Monday", "metric")).toBe("Monday: clear, high 27°C, low 16°.");
+  });
+
+  it("formatWeatherWhen answers the RIGHT future day, not today", () => {
+    const w = parseForecast(body, "Austin")!;
+    const tm = formatWeatherWhen(w, "will it rain tomorrow", "imperial")!;
+    expect(tm).toMatch(/Austin:/);
+    expect(tm).toMatch(/Tomorrow: light rain.*80% rain/);
+    expect(tm).not.toMatch(/High 77/); // did NOT fall back to today
+  });
+
+  it("formatWeatherWhen returns null for a today/current question (caller uses current line)", () => {
+    const w = parseForecast(body, "Austin")!;
+    expect(formatWeatherWhen(w, "weather right now", "imperial")).toBeNull();
+    expect(formatWeatherWhen(w, "weather today", "imperial")).toBeNull();
+  });
+
+  it("formatWeatherWhen returns null when there's no days array", () => {
+    const oneDay = parseForecast(JSON.stringify({ current: { temperature_2m: 20, weather_code: 0 }, daily: {} }), "x")!;
+    expect(oneDay.days).toBeUndefined();
+    expect(formatWeatherWhen(oneDay, "tomorrow", "imperial")).toBeNull();
+  });
+
+  it("forecastUrl requests 7 days + daily weather_code", () => {
+    expect(forecastUrl(30, -97)).toMatch(/forecast_days=7/);
+    expect(forecastUrl(30, -97)).toMatch(/daily=weather_code/);
   });
 });
