@@ -1778,7 +1778,7 @@
       "title": "Corrupt store file silently wipes a chat’s automations",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "readJsonSafe backs up + returns null; the store loads empty so every reminder/alert/recipe/digest vanishes with only an operator log — user never told.",
       "how": "Surface a user-facing \"your saved items couldn’t be loaded (backed up)\" notice, or refuse-to-serve that store until acknowledged, instead of silently starting empty."
     },
@@ -2489,6 +2489,10 @@
     {
       "item": "slow-task-starves-due-reminders",
       "note": "Bounded each proactive fire with a per-task wall-clock timeout (RELAY_FIRE_TIMEOUT_MS, default 90s, 0 disables). tick() runs due tasks sequentially with only step caps + per-fetch timeouts (no overall bound), so one hung anvil/LLM run blocked every other chat's due reminder. withFireTimeout races fireOne against the ceiling; a timeout rejects into the existing per-task catch (a once retries next tick, a recurring advances), so the batch moves on. Injectable timers (setTimer/clearTimer deps) for tests; real timers unref'd otherwise. 1 new test (hung task times out, 2nd chat still fires). .env.example documented. Suite 1381 green, tsc clean."
+    },
+    {
+      "item": "corrupt-store-silent-wipe",
+      "note": "A corrupt store file that loads empty (data backed up to .corrupt) no longer wipes a user's reminders/alerts/recipes silently. Added a corruption sink to safe-store (setCorruptHandler, mirrors the persist-error sink); readJsonSafe reports each corruption + backup path. index installs the handler BEFORE constructing stores, collects human labels (reminders/watches/recipes/...), and exposes a corruptNotice() dep that drains once. Handler sends a one-time heads-up before handling the first inbound message. 4 new tests (sink fires on corrupt, not on missing/valid; handler notice once-only + silent-when-clean). Suite 1385 green, tsc clean."
     }
   ],
   "audits": [
@@ -2623,6 +2627,9 @@
     },
     {
       "note": "AUDIT (backlog dry, only owner-gated). A/new-user: no sports scores (promised, unbacked), transit directions return a driving route, no flight status, compose draft-only surprise, no local showtimes/events. B/reliability: quiet-hours defers alert CHECK (overnight crossings lost), complete() ignores persist bool (once double-fire), sequential tick starves reminders, corrupt-store silent wipe. C/power: contacts book for compose, natural-language edit-automations-in-place, commitments tracker w/ proactive prep, group mode, escalating reminders. Seeded: quiet-hours-defers-alert-check(built), once-complete-ignores-persist, slow-task-starves-due-reminders, corrupt-store-silent-wipe, sports-scores-tool, contacts-book-compose."
+    },
+    {
+      "note": "No 3-agent audit this run (corrupt-store-silent-wipe was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
     }
   ]
 }

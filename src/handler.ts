@@ -197,6 +197,10 @@ export interface HandlerDeps {
   // Count a slash-command invocation (DEV-0108). Optional so existing callers/tests need not pass it;
   // commands still short-circuit before the agent — this only tallies which are used.
   recordCommand?: (name: string) => void;
+  // Corrupt-store notice (corrupt-store-silent-wipe): a one-time heads-up (drained on read) naming any
+  // stores that failed to load at startup, so a user isn't silently missing reminders/alerts. Null =
+  // nothing corrupted. Sent once before the message is handled. Optional.
+  corruptNotice?: () => string | null;
   now: () => number;
   // Progress ping (product-loop): a multi-step browse can take 30-60s and the bot otherwise goes
   // silent after the one ~5s typing indicator, so a user assumes it hung. If the agent run exceeds
@@ -329,6 +333,15 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
 
   async function handleOne(msg: InboundMessage): Promise<void> {
     log(`[in] ${msg.from}: ${msg.photoFileId ? "[photo] " : ""}${msg.voiceFileId ? "[voice] " : ""}${msg.documentFileId ? "[doc] " : ""}${msg.location ? "[location] " : ""}${deps.redactText(msg.text).slice(0, 120)}`);
+
+    // Corrupt-store notice (corrupt-store-silent-wipe): if any store failed to load at startup, tell the
+    // user ONCE (the dep drains its list) before handling their message — so a wiped set of reminders/
+    // alerts reads as an honest heads-up, not the bot silently forgetting. Fire-and-continue: the notice
+    // precedes normal handling of this same message.
+    if (deps.corruptNotice) {
+      const notice = deps.corruptNotice();
+      if (notice) await deps.sendMessage(msg.chatId, notice).catch(() => {});
+    }
 
     // Shared location pin (telegram-location-pin): a text-less pin used to be dropped silently. Save the
     // coords (so "near me"/directions resolve against them), then either run the caption as an errand

@@ -873,6 +873,26 @@ describe("long-term memory (remember-facts-store)", () => {
   });
 });
 
+describe("corrupt-store notice (corrupt-store-silent-wipe)", () => {
+  it("sends a one-time heads-up before handling the message, then never again", async () => {
+    let drained = false;
+    const { handle, sent } = harness({
+      corruptNotice: () => { if (drained) return null; drained = true; return "⚠️ Heads up — some of my saved data (reminders) couldn't be loaded and may have been reset."; },
+      handleCommand: () => "help text", // short-circuit so the message itself is trivial
+    });
+    await handle(msg("hi", 3));
+    expect(sent[0]!.text).toMatch(/couldn't be loaded/);
+    // Next message: notice already drained -> no repeat.
+    await handle(msg("hi again", 3));
+    expect(sent.filter((m) => /couldn't be loaded/.test(m.text))).toHaveLength(1);
+  });
+  it("says nothing when no store was corrupted", async () => {
+    const { handle, sent } = harness({ corruptNotice: () => null, handleCommand: () => "help" });
+    await handle(msg("hi", 3));
+    expect(sent.some((m) => /couldn't be loaded/.test(m.text))).toBe(false);
+  });
+});
+
 describe("contacts book routing (contacts-book-compose)", () => {
   it("'save mom's number is ...' stores it, no agent run; then resolveContact is threaded to the agent", async () => {
     let saved = "";

@@ -26,6 +26,22 @@ export function setPersistErrorHandler(fn: PersistErrorHandler): PersistErrorHan
   return prev;
 }
 
+// A corruption sink (corrupt-store-silent-wipe): when readJsonSafe finds a store file it can't parse, it
+// backs the file up to <file>.corrupt and starts fresh — good for crash-safety, but the user's whole set
+// of reminders/alerts/recipes silently vanished with only an operator log. This reports each corruption
+// (file + the .corrupt backup path) so index can surface a one-time user-facing "your saved items
+// couldn't be loaded (I backed them up)" notice instead of the bot just going quiet. Default logs.
+type CorruptHandler = (file: string, backupPath: string | null) => void;
+let onCorrupt: CorruptHandler = (file, backup) => {
+  try { console.error(`[safe-store] CORRUPT store ${file}${backup ? ` (backed up to ${backup})` : " (backup failed)"} — starting fresh`); } catch { /* ignore */ }
+};
+/** Override the corruption sink. Returns the previous handler. */
+export function setCorruptHandler(fn: CorruptHandler): CorruptHandler {
+  const prev = onCorrupt;
+  onCorrupt = fn;
+  return prev;
+}
+
 /** Write `obj` as JSON atomically: temp file in the same dir, then rename over the target. Creates
  * the dir. Never throws — persistence failure must not crash the worker; the temp is cleaned up on a
  * failed rename so we don't leak .tmp files. RETURNS true on success, false on failure (and reports
@@ -51,7 +67,9 @@ export function readJsonSafe<T = unknown>(file: string): T | null {
   try {
     return JSON.parse(readFileSync(file, "utf8")) as T;
   } catch {
-    try { renameSync(file, `${file}.corrupt`); } catch { /* if even that fails, leave it be */ }
+    let backup: string | null = `${file}.corrupt`;
+    try { renameSync(file, backup); } catch { backup = null; /* if even that fails, leave it be */ }
+    onCorrupt(file, backup); // report so index can tell the user their saved items didn't load (not just an op log)
     return null;
   }
 }

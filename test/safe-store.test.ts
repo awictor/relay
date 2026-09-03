@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { atomicWriteJson, readJsonSafe, setPersistErrorHandler } from "../src/lib/safe-store.js";
+import { atomicWriteJson, readJsonSafe, setPersistErrorHandler, setCorruptHandler } from "../src/lib/safe-store.js";
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -70,6 +70,27 @@ describe("readJsonSafe", () => {
     const f = join(tmp(), "s.json");
     writeFileSync(f, JSON.stringify({ hello: "world" }));
     expect(readJsonSafe<{ hello: string }>(f)!.hello).toBe("world");
+  });
+  it("reports a corruption to the corrupt sink with the backup path (corrupt-store-silent-wipe)", () => {
+    const seen: Array<{ file: string; backup: string | null }> = [];
+    const prev = setCorruptHandler((file, backup) => seen.push({ file, backup }));
+    try {
+      const f = join(tmp(), "s.json");
+      writeFileSync(f, "{ not json");
+      readJsonSafe(f);
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.file).toBe(f);
+      expect(seen[0]!.backup).toBe(`${f}.corrupt`);
+    } finally { setCorruptHandler(prev); }
+  });
+  it("does NOT call the corrupt sink for a missing or valid file", () => {
+    let calls = 0;
+    const prev = setCorruptHandler(() => { calls++; });
+    try {
+      readJsonSafe(join(tmp(), "none.json"));           // missing
+      const f = join(tmp(), "ok.json"); writeFileSync(f, "{}"); readJsonSafe(f); // valid
+      expect(calls).toBe(0);
+    } finally { setCorruptHandler(prev); }
   });
 });
 

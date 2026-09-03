@@ -36,6 +36,7 @@ import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { ListStore, parseListCommand, splitItems } from "./lib/lists.js";
 import { ContactStore, parseSaveContact, parseForgetContact } from "./lib/contacts.js";
 import { isTextualDoc, decodeTextDoc, buildDocPrompt } from "./lib/docs.js";
+import { setCorruptHandler } from "./lib/safe-store.js";
 import { AnswerLog, recallKeywords } from "./lib/answer-log.js";
 import { BackgroundStore, planErrandReplay } from "./lib/background-store.js";
 import { checkAlert } from "./alert-runner.js";
@@ -92,6 +93,18 @@ const metricsHeartbeat = makeMetricsHeartbeat({
 // Per-chat rolling memory (last few turns). Bounded to keep prompts small, and PERSISTED to a local
 // JSON file (DEV-0001) so a redeploy/restart no longer wipes every conversation. Path is env-tunable;
 // the file is gitignored. Free-infra: a plain file, no DB.
+// Corrupt-store notice (corrupt-store-silent-wipe): a store file that won't parse loads empty (its data
+// backed up to .corrupt), so a user's reminders/alerts/recipes vanish. Collect which stores corrupted
+// AT LOAD (the handler installs this before constructing the stores below) so the next inbound message
+// gets a one-time honest heads-up instead of the bot just going quiet. file -> human label.
+const CORRUPT_LABELS: Record<string, string> = {
+  [paths.schedules]: "reminders", [paths.recipes]: "saved recipes", [paths.digests]: "digests",
+  [paths.alerts]: "watches/alerts", [paths.profile]: "your saved location/profile", [paths.notes]: "remembered facts",
+  [paths.lists]: "your lists", [paths.contacts]: "contacts",
+};
+const corruptedStores: string[] = [];
+setCorruptHandler((file) => { const label = CORRUPT_LABELS[file] ?? file; if (!corruptedStores.includes(label)) corruptedStores.push(label); });
+
 const MEMORY_TURNS = 6;
 const memory = new MemoryStore({
   file: paths.memory,
@@ -623,6 +636,13 @@ const handle = createHandler({
   hasModelKey: () => !!(LLM_PROVIDER === "claude" ? process.env.ANTHROPIC_API_KEY : process.env.GEMINI_API_KEY),
   recordTurn,
   recordCommand: (name) => metrics.recordCommand(name),
+  // Corrupt-store notice (corrupt-store-silent-wipe): one-time message naming which stores failed to
+  // load, drained on first read so it fires ONCE per startup (not on every message). Null when clean.
+  corruptNotice: () => {
+    if (!corruptedStores.length) return null;
+    const which = corruptedStores.splice(0).join(", ");
+    return `⚠️ Heads up — some of my saved data (${which}) couldn't be loaded and may have been reset (I kept a backup of the unreadable file). If something you set up is missing, please set it up again.`;
+  },
   now: () => Date.now(),
   // Interim "still working" ping if an errand outlasts this (product-loop). 0 disables. Default 6s.
   progressDelayMs: Number(process.env.RELAY_PROGRESS_DELAY_MS ?? 6000),
