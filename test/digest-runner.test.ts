@@ -68,12 +68,30 @@ describe("runDigest", () => {
     expect(out).toContain("• flow: fallback");
   });
 
-  it("a chain member whose chain returns empty becomes a fallback line", async () => {
-    const out = await runDigest(digest(["flow"]), deps({
-      resolveRecipe: (_c: number, name: string) => name === "flow" ? { task: "a >> b" } : null,
+  it("a chain member whose chain returns empty becomes a fallback line (alongside a real member)", async () => {
+    const out = await runDigest(digest(["weather", "flow"]), deps({
+      resolveRecipe: (_c: number, name: string) => name === "weather" ? { task: "get the weather" } : name === "flow" ? { task: "a >> b" } : null,
       runChain: async () => "   ",
     }));
-    expect(out).toContain("• flow: (couldn't fetch)");
+    expect(out).toContain("• flow: (couldn't fetch)");     // failed member still shown as a fallback line
+    expect(out).toContain("• weather: RESULT[get the weather]"); // real member carries the digest
+  });
+
+  it("a digest whose recipes were ALL deleted returns null (empty-digest-fires-noise)", async () => {
+    const out = await runDigest(digest(["gone", "alsogone"]), deps({ resolveRecipe: () => null }));
+    expect(out).toBeNull(); // no real content -> scheduled fire stays silent, /run says "empty or gone"
+  });
+
+  it("a digest with no members returns null", async () => {
+    const out = await runDigest(digest([]), deps());
+    expect(out).toBeNull();
+  });
+
+  it("a digest with at least one real member still sends (a transient fail doesn't blank it)", async () => {
+    const out = await runDigest(digest(["weather", "gone"]), deps());
+    expect(out).not.toBeNull();
+    expect(out).toContain("• weather: RESULT[get the weather]");
+    expect(out).toContain("• gone: (no such recipe anymore)");
   });
 
   it("a failed member run becomes a fallback line, others still run", async () => {

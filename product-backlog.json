@@ -32,7 +32,7 @@
       "title": "a scheduled digest with all members removed keeps firing an empty ping",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "runDigest returns '📋 <name>\\n' with no sections when members is empty (non-null), so a digest whose recipes were all deleted (but the digest kept) fires a contentless proactive ping on schedule — recurring noise from a dead automation (audit B#4).",
       "how": "In runDigest, when no member produced a section (all removed/unknown), return null (or a sentinel) so the schedule-runner stays silent instead of sending an empty briefing; optionally note it once. Add a test."
     },
@@ -1849,6 +1849,10 @@
     {
       "id": "one-shot-location-button",
       "note": "A cold user's first 'weather'/'coffee near me' dead-ended on a typed city ask (hunt for 📎→Location or type + spell a city). The inbound location-pin path was already wired, so added a Telegram request_location reply-keyboard button: new telegram.ts sendLocationRequest (one-time, resize keyboard) + a requestLocation method on the Channel interface (telegram wires it; console omits it) + an optional requestLocation handler dep. The near-me/weather location-ask now sends the tap-to-share button (falls back to a plain sendMessage when the channel lacks it, e.g. console), and the tapped pin flows into the existing saveCoords path. The tz-ask branch stays plain text (a pin gives coords, not a tz offset). 2 handler tests (button used when wired / plain fallback when not). call-tested: false (reply_markup needs a live bot; offline unit covers routing). 1154 tests green."
+    },
+    {
+      "id": "empty-digest-fires-noise",
+      "note": "A scheduled digest whose member recipes were ALL deleted (but the digest kept) fired a contentless '📋 name' — or a briefing of nothing but '(no such recipe anymore)' removal notices — on cadence: recurring noise from a dead automation. runDigest now returns null when NO member produced real content (0 members, or every section is a placeholder — deleted/slotted/failed), and the schedule-runner treats a null digest like a deleted recipe: complete (advance/drop) + no send. A digest with >=1 real section still sends normally (a transient '(couldn't fetch)' on one member doesn't blank it). The inbound /run path already shows 'empty or gone' on null, so it's consistent. Each section now carries a real/placeholder flag. 5 tests (all-deleted -> null / no-members -> null / >=1 real still sends / chain-empty-alongside-real / existing cases). call-tested: false (offline unit). 1157 tests green."
     }
   ],
   "audits": [

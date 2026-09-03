@@ -136,7 +136,16 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       }
     } else if (digestMatch && deps.digestRun) {
       const composed = await deps.digestRun(s.chatId, digestMatch[1]!.trim());
-      res = { reply: composed ?? "(digest is empty or was removed)" };
+      // null = the digest is gone or every member recipe was deleted (empty-digest-fires-noise). Stay
+      // silent + advance/drop the schedule rather than pinging a contentless "(empty or was removed)"
+      // briefing on cadence — mirrors the deleted-recipe path above.
+      if (composed === null) {
+        deps.store.complete(s.id, deps.now());
+        log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, digest: digestMatch[1], ok: true, sent: false, empty: true })}`);
+        deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
+        return;
+      }
+      res = { reply: composed };
       sendText = deps.formatReply(res.reply); // digest text already labeled; no reminder prefix
     } else {
       // A scheduled recipe carries "recipe:<name>" — resolve its CURRENT task by name at fire time
