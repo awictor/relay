@@ -1733,7 +1733,7 @@
       "title": "\"once\" clock reminders not tz-restamped on setlocation",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "restampTz recomputes daily/weekly only; a \"remind me tomorrow at 8am\" set before tz is fixed then corrected to UTC-5 fires at 3am local, once, silently.",
       "how": "Restamp future clock-time once reminders (dueMs derived from hourMin) to the new offset, like daily/weekly; skip pure relative/interval ones."
     },
@@ -2403,6 +2403,10 @@
     {
       "item": "onboarding-copy-life-assistant",
       "note": "Rewrote /start (START copy) to lead with everyday errands (weather, tip math, define, world-clock, price, package, near-me) + a 'text me like a friend, just ask' framing + remember/remind/list/follow examples, with link/scraper power tasks moved lower and the location-unlock (paperclip -> Location) surfaced up front. Was leading with HN/extract/screenshot/PDF, framing Relay as a dev scraper to first-timers. Kept 'I'm Relay' + the Commands: line (sync tests). New guard test asserts the everyday-errand + just-ask + location framing. Suite 1336 green, tsc clean."
+    },
+    {
+      "item": "once-reminder-tz-restamp",
+      "note": "Clock-time 'once' reminders now tz-restamp on /setlocation. Added a clockTime flag set on every wall-clock once branch (at HH:MM, am/pm, alarm, next-weekday, on Month-day, on the Nth) + carried through Store.add. restampTz now shifts a FUTURE clock-time once's dueMs by the offset delta (UTC moves -Δ so wall-clock hour + calendar day hold) and updates its offsetMin; relative onces (no flag) and past-due onces are left alone. Was: 'remind me tomorrow at 8am' set before tz fixed fired at 8am UTC = 3am local, silently. 5 new tests. Suite 1339 green, tsc clean."
     }
   ],
   "audits": [

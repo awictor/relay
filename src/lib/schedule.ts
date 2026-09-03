@@ -22,6 +22,9 @@ export interface Schedule {
   intervalMs?: number; // for interval: gap between fires
   attempts?: number;   // failed fire attempts (once-reminder transient-retry); dropped after a cap
   reminderOnly?: boolean; // a pure personal to-do ("take meds"): echo the note at fire time, don't run the agent
+  clockTime?: boolean; // a "once" tied to a WALL-CLOCK time ("at 8am", "tomorrow 9:30", "on May 6") — as
+                       // opposed to a relative "in 3 hours". Only clock-time onces get tz-restamped on a
+                       // later /setlocation (once-reminder-tz-restamp); a relative once has no hour to shift.
   pausedUntil?: number; // snooze (snooze-automations): while now < this, the runner skips it WITHOUT firing
                         // or completing; auto-clears when it passes. Number.MAX_SAFE_INTEGER = indefinite.
   created: number;
@@ -40,6 +43,7 @@ export interface ParsedSchedule {
   weekdays?: number[];
   intervalMs?: number;
   reminderOnly?: boolean; // pure personal to-do: echo at fire time, don't run the agent
+  clockTime?: boolean;    // a wall-clock "once" (at 8am / on May 6), eligible for tz-restamp
 }
 
 const MINUTE = 60_000;
@@ -174,7 +178,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
       // the airport"), else a plain "wake up" (alarm-drops-task).
       const t = cleanTask(raw, alarm[0]!);
       const task = t || "wake up";
-      return { kind: "once", task, dueMs: nextDailyMs(now, hh, mm, offsetMin), reminderOnly: true };
+      return { kind: "once", task, dueMs: nextDailyMs(now, hh, mm, offsetMin), offsetMin, clockTime: true, reminderOnly: true };
     }
   }
 
@@ -236,7 +240,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
       if (dow !== undefined) {
         const dueMs = nextWeeklyMs(now, hh, mm, [dow], offsetMin);
         const task = stripTime(cleanTask(raw, nextDow[0]!));
-        if (task) return { kind: "once", task, dueMs, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+        if (task) return { kind: "once", task, dueMs, offsetMin, clockTime: true, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
       }
     }
     // "on <Month> <day>" / "<Month> <day>" (day 1-31, optional ordinal/comma-year).
@@ -252,7 +256,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
       if (mon !== undefined && day >= 1 && day <= 31) {
         const dueMs = dateAtMs(now, mon, day, hh, mm, offsetMin);
         const task = stripTime(cleanTask(raw, md[0]!));
-        if (task) return { kind: "once", task, dueMs, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+        if (task) return { kind: "once", task, dueMs, offsetMin, clockTime: true, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
       }
     }
     // "on the <Nth>" — a day-of-month in the current or next month.
@@ -262,7 +266,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
       if (day >= 1 && day <= 31) {
         const dueMs = domAtMs(now, day, hh, mm, offsetMin);
         const task = stripTime(cleanTask(raw, dom[0]!));
-        if (task) return { kind: "once", task, dueMs, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+        if (task) return { kind: "once", task, dueMs, offsetMin, clockTime: true, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
       }
     }
   }
@@ -354,7 +358,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     const due = at24[1] ? dayAtMs(now, hh, mm, 1, offsetMin) : nextDailyMs(now, hh, mm, offsetMin);
     const task = cleanTask(raw, at24[0]!);
     if (!task) return null;
-    return { kind: "once", task, dueMs: due, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+    return { kind: "once", task, dueMs: due, offsetMin, clockTime: true, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
   }
 
   // --- absolute-ish: "tomorrow at 9am", "tomorrow 9:30", "at 5pm" (today or next day) ---
@@ -366,7 +370,7 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
     const due = at[1] ? dayAtMs(now, hh, mm, 1, offsetMin) : nextDailyMs(now, hh, mm, offsetMin);
     const task = cleanTask(raw, at[0]!);
     if (!task) return null;
-    return { kind: "once", task, dueMs: due, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+    return { kind: "once", task, dueMs: due, offsetMin, clockTime: true, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
   }
 
   return null;
@@ -535,7 +539,7 @@ export class ScheduleStore {
   /** Add a schedule for a chat. Returns the stored record, or null if the chat is at its cap. */
   add(chatId: number, p: ParsedSchedule, now: number): Schedule | null {
     if (this.items.filter((s) => s.chatId === chatId).length >= this.maxPerChat) return null;
-    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, weekdays: p.weekdays, intervalMs: p.intervalMs, ...(p.reminderOnly ? { reminderOnly: true } : {}), created: now };
+    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, weekdays: p.weekdays, intervalMs: p.intervalMs, ...(p.reminderOnly ? { reminderOnly: true } : {}), ...(p.clockTime ? { clockTime: true } : {}), created: now };
     this.items.push(s);
     this.persist();
     return s;
@@ -681,6 +685,16 @@ export class ScheduleStore {
         const [hh, mm] = s.hourMin.split(":").map((n) => parseInt(n, 10));
         s.offsetMin = offsetMin;
         s.dueMs = nextWeeklyMs(now, hh!, mm!, s.weekdays, offsetMin);
+        moved++;
+      } else if (s.kind === "once" && s.clockTime && s.dueMs > now) {
+        // A FUTURE clock-time once (once-reminder-tz-restamp): "remind me tomorrow at 8am" set before the
+        // user fixed their tz would fire at 8am in the OLD zone (e.g. 8am UTC = 3am local). Shift its UTC
+        // instant by the offset delta so it keeps the same WALL-CLOCK time (+ calendar day) in the new
+        // zone. local = UTC + offset; to hold local fixed as offset changes by Δ, UTC moves by -Δ. Only
+        // future ones (a past-due once is about to fire anyway). Relative onces have no clockTime flag.
+        const deltaMin = offsetMin - (s.offsetMin ?? 0);
+        s.dueMs -= deltaMin * MINUTE;
+        s.offsetMin = offsetMin;
         moved++;
       }
     }

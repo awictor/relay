@@ -86,10 +86,16 @@ describe("parseSchedule — 24-hour clock (DEV-0189)", () => {
     expect(a).not.toBeNull();
     expect(a.kind).toBe("once");
     expect(a.task).toBe("call the vet");
+    expect(a.clockTime).toBe(true); // a wall-clock once -> eligible for tz-restamp (once-reminder-tz-restamp)
     // due is the next 14:30 in the configured zone (default UTC) — assert host-independently.
     const d = new Date(a.dueMs);
     expect(d.getUTCHours()).toBe(14);
     expect(d.getUTCMinutes()).toBe(30);
+  });
+  it("a RELATIVE once ('in 2 hours') is NOT flagged clockTime (no wall-clock to restamp)", () => {
+    const r = parseSchedule("remind me to stretch in 2 hours", NOW)!;
+    expect(r.kind).toBe("once");
+    expect(r.clockTime).toBeFalsy();
   });
   it("'tomorrow at 09:00' forces the next day", () => {
     const s = parseSchedule("tomorrow at 09:00 send the report", NOW)!;
@@ -425,6 +431,29 @@ describe("ScheduleStore.restampTz (tz-restamp-on-setlocation)", () => {
     // interval + once untouched.
     expect(s.list(1).find((x) => x.id === interval.id)!.offsetMin).toBeUndefined();
     expect(s.list(1).find((x) => x.id === once.id)!.dueMs).toBe(NOW + 60 * MIN);
+  });
+
+  it("restamps a FUTURE clock-time once, preserving its wall-clock hour + day (once-reminder-tz-restamp)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    // "remind me tomorrow at 8am" set at UTC (offset 0): dueMs is 8am UTC tomorrow.
+    const eightAmUtc = s.add(1, { kind: "once", task: "meds", dueMs: NOW + 30 * 60 * MIN, offsetMin: 0, clockTime: true }, NOW)!;
+    const before = eightAmUtc.dueMs;
+    const moved = s.restampTz(1, -300, NOW); // user sets UTC-5
+    expect(moved).toBe(1); // the clock-time once IS restamped now
+    const r = s.list(1).find((x) => x.id === eightAmUtc.id)!;
+    expect(r.offsetMin).toBe(-300);
+    // local = UTC + offset; to hold 8am local as offset goes 0 -> -300, UTC moves +300min LATER.
+    expect(r.dueMs).toBe(before + 300 * MIN);
+  });
+
+  it("leaves a RELATIVE once (no clockTime) and a PAST clock-time once alone", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const rel = s.add(1, { kind: "once", task: "in 3h", dueMs: NOW + 3 * 60 * MIN, offsetMin: 0 }, NOW)!; // no clockTime
+    const past = s.add(1, { kind: "once", task: "old", dueMs: NOW - 60 * MIN, offsetMin: 0, clockTime: true }, NOW)!;
+    const moved = s.restampTz(1, -300, NOW);
+    expect(moved).toBe(0);
+    expect(s.list(1).find((x) => x.id === rel.id)!.dueMs).toBe(NOW + 3 * 60 * MIN);
+    expect(s.list(1).find((x) => x.id === past.id)!.dueMs).toBe(NOW - 60 * MIN);
   });
 
   it("is a no-op (returns 0) when the offset already matches", () => {
