@@ -72,15 +72,24 @@ describe("hostResolvesToBlockedIp — DNS-rebinding guard (DEV-0053)", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("fails OPEN (returns false) when the resolver errors", async () => {
+  // DEV-0211 (backported from mcp-forge): the guard now fails CLOSED when the resolver is unavailable.
+  // On cloud infra the metadata endpoint is reachable, so an attacker forcing a DoH timeout must NOT
+  // slip through — an unverifiable host is treated as blocked (both A and AAAA lookups failed).
+  it("fails CLOSED (returns true) when the resolver errors", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("network down")) as unknown as typeof fetch;
-    expect(await hostResolvesToBlockedIp("unreachable.example.com")).toBe(false);
+    expect(await hostResolvesToBlockedIp("unreachable.example.com")).toBe(true);
   });
 
-  it("fails OPEN when the resolver returns a non-ok status", async () => {
+  it("fails CLOSED when the resolver returns a non-ok status", async () => {
     globalThis.fetch = vi
       .fn()
       .mockResolvedValue({ ok: false, json: async () => ({}) } as unknown as Response) as unknown as typeof fetch;
-    expect(await hostResolvesToBlockedIp("servfail.example.com")).toBe(false);
+    expect(await hostResolvesToBlockedIp("servfail.example.com")).toBe(true);
+  });
+
+  it("still allows a clean empty answer (host resolves to nothing blocked)", async () => {
+    // A genuine empty A+AAAA (both return []) is NOT a resolver failure — must stay allowed (false).
+    globalThis.fetch = vi.fn().mockResolvedValue(dohResponse([])) as unknown as typeof fetch;
+    expect(await hostResolvesToBlockedIp("empty.example.com")).toBe(false);
   });
 });

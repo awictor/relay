@@ -46,25 +46,37 @@ export function isBlockedIp(ip: string): boolean {
 
 /**
  * DNS-rebinding guard: resolve a hostname via DoH and check every A/AAAA record
- * against the blocklist. Fails OPEN on resolver error/timeout.
+ * against the blocklist. Catches public names that resolve to internal IPs
+ * (e.g. localtest.me -> 127.0.0.1). Edge-runtime safe (uses fetch, not node:dns).
+ * Fails CLOSED on resolver error/timeout (DEV-0211): the hosted executor runs on cloud infra where
+ * the metadata endpoint (169.254.169.254) is reachable, so an attacker could force a DoH timeout to
+ * bypass the rebind check. If the resolver is unavailable we now BLOCK rather than allow. A query()
+ * returns null on error (vs [] for a clean empty answer); when BOTH A and AAAA fail, we can't verify
+ * the host is safe, so fail closed. Residual TOCTOU (record flips between resolve and fetch) remains —
+ * that needs full IP pinning, tracked separately.
  */
 export async function hostResolvesToBlockedIp(hostname: string, signal?: AbortSignal): Promise<boolean> {
   const h = hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
+  // Literal IPs are already covered by isUrlSafe; skip the lookup.
   if (/^[\d.]+$/.test(h) || h.includes(":")) return false;
-  async function query(type: "A" | "AAAA"): Promise<string[]> {
+  async function query(type: "A" | "AAAA"): Promise<string[] | null> {
     try {
       const r = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(h)}&type=${type}`, {
         headers: { Accept: "application/dns-json" },
         signal: signal ?? AbortSignal.timeout(3000),
       });
-      if (!r.ok) return [];
+      if (!r.ok) return null; // resolver error -> unknown, not "clean empty"
       const j = (await r.json()) as { Answer?: { type: number; data: string }[] };
       return (j.Answer || []).filter((a) => a.type === (type === "A" ? 1 : 28)).map((a) => a.data);
     } catch {
-      return []; // fail open
+      return null; // timeout / network -> unknown
     }
   }
-  const ips = [...(await query("A")), ...(await query("AAAA"))];
+  const a = await query("A");
+  const aaaa = await query("AAAA");
+  // Both lookups failed -> resolver unavailable -> cannot verify -> FAIL CLOSED (treat as blocked).
+  if (a === null && aaaa === null) return true;
+  const ips = [...(a ?? []), ...(aaaa ?? [])];
   return ips.some((ip) => isBlockedIp(ip));
 }
 
