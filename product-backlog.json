@@ -1,6 +1,33 @@
 {
   "items": [
     {
+      "id": "capability-regex-opener-phrasings",
+      "title": "\"what's this?\" / \"what does this do?\" miss the greeting regex -> slow browse on the first message",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "CAPABILITY_RE required what/who/how + can/do/are/is + you/this, so a new user's actual opener ('what's this?', 'what does this do?', 'who are you', 'how do you work') fell through to a 10-30s floundering agent turn instead of the instant /start card — the highest-leverage first message wasted (audit A#3).",
+      "how": "Widen CAPABILITY_RE to those phrasings, anchored + gated by the existing <=6-word cap and a small closing-filler tail so a real task ('what does this error mean', 'how does this recipe work') still falls through."
+    },
+    {
+      "id": "proactive-runs-datetime-units-blind",
+      "title": "scheduled/alert/digest agent runs ignore the clock + user units (date-blind, wrong-unit)",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "The inbound path threads nowMs/tzOffsetMin/weatherCoords/weatherUnits into runAgent, but every PROACTIVE caller (schedule-runner fireOne, alert-runner, digest-runner, chain-runner) calls runAgent(task,{llm,context},[]) with none — so a scheduled 'top news today'/'days until my trip' reasons from the model's training date, and a metric user's daily weather briefing comes back in °F. The proactive half (Relay's reason for being) runs dumber than the reactive half (audit B#1).",
+      "how": "Thread the same datetime + weather deps the inbound runAgent gets into the proactive runAgent calls (per-chat: nowMs via a clock, tzOffsetMin/weatherUnits/weatherCoords from profile). Likely a shared buildRunDeps(chatId) helper reused by handler + all runners. Tests: a scheduled run passes the chat's units/now."
+    },
+    {
+      "id": "sendcap-drops-alert-checks",
+      "title": "anti-spam send-cap silently skips alert CHECKS, losing edge-triggered crossings",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "In the runner tick, an over-cap recurring schedule is safeComplete'd + advanced — but for an alert:-marked schedule that skips the CHECK entirely, not just a send. The cap is meant to throttle SENDS, so a 'below 50k' crossing during a capped hour is never evaluated and never re-fires (a below->above->below bounce is lost). The headline watch feature misses the exact event it promised (audit B#3).",
+      "how": "In the tick, when an over-cap schedule is an alert: marker, still RUN the check (it's silent unless it notifies) — only gate the SEND on the cap. Or exempt alert checks from the proactive-send cap (they self-limit via edge-trigger). Keep dailies/reminders capped. Test: an alert crossing during a capped window still notifies."
+    },
+    {
       "id": "weekly-single-weekday-once",
       "title": "'remind me Friday at 3pm' becomes a recurring weekly, pings every Friday forever",
       "impact": "high",
@@ -1857,9 +1884,16 @@
     {
       "id": "multi-slot-multiword-value",
       "note": "A multi-slot recipe filled positionally with a multi-word value silently mis-mapped: '/run track oat milk HEB' on 'track {item} at {store}' whitespace-split to item='oat', store='milk', dropped 'HEB' — a confident WRONG run on a saved automation with no signal. Added slotsAmbiguous(task,args): flags a 2+-slot recipe filled positionally (no name=value pairs, no comma) whose whitespace token count != slot count. index recipeResolve returns an {ambiguousArgs, slots} shape in that case (like the existing missingArg path); the handler asks for a clean form ('item=… store=…' or comma-separated) instead of running the mis-split task. A matching token count, comma form, or name=value pairs still fill unambiguously; a single-slot recipe still takes the whole arg. 10 tests (5 slotsAmbiguous unit: mismatch flagged / 2=2 + comma + pairs unambiguous / single-slot never / empty-args never; + handler asks-not-runs). call-tested: false (pure parse + routing). 1162 tests green."
+    },
+    {
+      "id": "capability-regex-opener-phrasings",
+      "note": "Widened the greeting/capability onboarding match so a new user's ACTUAL first message gets the instant /start card instead of a 10-30s floundering browse. CAPABILITY_RE required what/who/how + can/do/are/is + you/this, missing 'what's this?', 'what does this do?', 'who are you', 'how do you work'. Rebuilt as anchored alternatives (what's/is this[ bot] / what does this do / what can/do you do / who are you / how do you work) with a small closing-filler tail + the existing <=6-word gate, so real tasks ('what does this error mean', 'how does this recipe work in the oven', 'who are you texting for the party') still fall through to the agent. 2 tests (7 opener phrasings greet / 3 real-task guards fall through). call-tested: false (pure regex + handleCommand). 1163 tests green."
     }
   ],
   "audits": [
+    {
+      "note": "Audit 24 (backlog dry except owner-gated confirm-to-act). A/new-user: background errand no progress-ping (silent 1-3min), package-tracking unsupported, capability-regex misses 'what's this'/'what does this do' opener (TOP — built), read-my-account (calendar/email) floundering no honest bounce, no cancel-in-flight-background-errand. B/reliability: proactive runs date-blind + ignore user units (schedule/alert/digest/chain runAgent gets no nowMs/tz/units — big), digest all-transient-fail goes silent-forever no failed-watch-receipt (real:false conflates dead vs transient), send-cap silently skips alert CHECKS losing crossings, matchByRef substring over-match on pause/snooze, transient send-fail on daily alert delays crossing ~24h, parseSnoozeCommand 'for 0 hours' -> indefinite pause. C/power: package/flight/order tracking watcher (unanimous top), automation-coach (mine answer-log -> suggest standing automations, NET-NEW), self-service site-login capture, RSS-subscribe. Built capability-regex-opener-phrasings (A#3); seeded proactive-runs-datetime-units-blind(M), sendcap-drops-alert-checks(M). Deferred (strong): package-tracking-watcher(M), background-errand-progress-ping(S), automation-coach(M), digest-failstreak-receipt(M), matchByRef-word-boundary(S), snooze-zero-duration(S), read-account-honest-bounce(S), cancel-background-errand(S), site-login-capture(L), RSS(S), + prior deferred (world-clock, help-split, bare-url-summary, retry-affordance, inline-keyboards, sports-scores, translate, TTS, computed-trigger, DST, atomic-store-errors)."
+    },
     {
       "note": "Audit 23 (backlog dry except owner-gated confirm-to-act). A/new-user: one-tap location-share button (near-me/weather dead-end on typed location; pin path already wired), inline action buttons (power features gated behind typed magic phrases; no callback_query handling — L), /help firehose split, bare-URL default-to-summary, world-clock tool, teach-recovery on error replies, group-chat runs every message. B/reliability: 'remind me Friday at 3pm' -> recurring weekly forever (TOP — built), multi-slot multi-word value mis-split, parseRunWithArgs first-token-only vs parseRunCommand full-name mismatch (needs index check), empty-members digest fires contentless ping, atomicWriteJson swallows write errors (silent loss/dup), parseTrendRequest over-broad fallback. C/power: self-service site-login/session-capture (L, the Instinct battleground), package/flight/order tracking watcher, computed-trigger-alerts, generic page-change monitor, multi-retailer price-drop, user-authored trigger->chain, RSS-subscribe, voice-replies-TTS. Built weekly-single-weekday-once (B#1); seeded one-shot-location-button(S), multi-slot-multiword-value(S), empty-digest-fires-noise(S). Deferred: inline-keyboards(L), help-split(S), bare-url-summary(S), world-clock(S/M), retry-affordance(S), group-gating(M), parseRunWithArgs-multiword(S, verify index), atomic-store-errors(M), trend-fallback-overbroad(S), site-login-capture(L), tracking-watcher(M), computed-trigger(M), page-change-monitor(M), price-drop(M), RSS(S), TTS(M). NOTE confirmed: photo/voice/PDF inbound ARE built (audits keep mis-flagging as missing — they're just unadvertised; onboarding-copy deferred item covers surfacing them)."
     },

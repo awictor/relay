@@ -80,7 +80,23 @@ Just text me the task in plain English.`;
 // WHOLE message is a greeting/capability question (anchored + short) so a real task like "say hi to
 // Sam on the forum" or "what can you tell me about X" still falls through to the agent.
 const GREETING_RE = /^(?:hi|hey|hello|yo|hiya|heya|sup|howdy|gm|good morning|good evening|start|get started|help me)(?:\s+(?:there|relay|bot))?[!.?]*$/i;
-const CAPABILITY_RE = /^(?:what|who|how)\s+(?:can|do|are|is)\s+(?:you|u|this|relay)(?:\s+(?:can\s+)?do)?[\s\w]*\??$/i;
+// Widened (product-loop) to catch the phrasings people ACTUALLY open with — the old regex missed
+// "what's this", "what does this do", "who are you", "how do you work", wasting the first message on a
+// slow browse. Still anchored + gated by the <=6-word cap in handleCommand so a real task like "what can
+// you tell me about X" (longer) or "how do I reset my router" (no you/this/it subject) falls through.
+// Anchored so the WHOLE message is the question (no greedy noun tail — "what does this error mean" must
+// NOT match). Only a small closing filler ("do/for/exactly/then/really") may trail the subject.
+const CAP_TAIL = "(?:\\s+(?:do|for|exactly|then|really|actually))?\\s*[!.?]*$";
+const CAPABILITY_RE = new RegExp(
+  "^(?:" +
+    "what(?:'?s| is)\\s+(?:this|it)(?:\\s+bot)?" +                       // what's this / what is this bot
+    "|what(?:'?s| does)\\s+(?:this|it|relay)(?:\\s+bot)?\\s+do(?:es)?" + // what does this do / what's this bot do
+    "|what\\s+(?:can|do)\\s+(?:you|u|this|it|relay)(?:\\s+bot)?\\s+do" + // what can you do / what do you do
+    "|who\\s+(?:are|r)\\s+(?:you|u|this)" +                              // who are you / who r u
+    "|how\\s+(?:do|does)\\s+(?:you|this|it|relay)\\s+work" +             // how do you work
+  ")" + CAP_TAIL,
+  "i",
+);
 
 // Honest answer to a "meta / trust" question — a new user's other common opener ("is this free?",
 // "do you save my messages?", "are you a bot?"). These used to fall through to a browser turn (slow,

@@ -40,11 +40,24 @@ describe("handleCommand", () => {
     expect(handleCommand("get started")).toMatch(/I'm Relay/);
   });
 
+  it("catches the phrasings people actually open with (widened CAPABILITY_RE)", () => {
+    expect(handleCommand("what's this?")).toMatch(/I'm Relay/);
+    expect(handleCommand("what is this")).toMatch(/I'm Relay/);
+    expect(handleCommand("what does this do?")).toMatch(/I'm Relay/);
+    expect(handleCommand("what's this bot")).toMatch(/I'm Relay/);
+    expect(handleCommand("who are you")).toMatch(/I'm Relay/);
+    expect(handleCommand("who r u")).toMatch(/I'm Relay/);
+    expect(handleCommand("how do you work?")).toMatch(/I'm Relay/);
+  });
+
   it("does NOT hijack a real task that merely starts like a greeting/question", () => {
     expect(handleCommand("hi, book me a table at Nobu tonight")).toBeNull(); // too long + real task
     expect(handleCommand("say hi to Sam on the forum")).toBeNull();
     expect(handleCommand("what can you tell me about the new iPhone")).toBeNull();
     expect(handleCommand("how do I reset my router")).toBeNull();
+    expect(handleCommand("what does this error mean")).toBeNull();   // "this error", not this/it bot
+    expect(handleCommand("who are you texting for the party")).toBeNull(); // real task, >6 words
+    expect(handleCommand("how does this recipe work in the oven")).toBeNull(); // "this recipe", a real q
   });
 
   it("answers meta/trust questions with the honest fixed reply (meta-trust-canned-answers)", () => {
