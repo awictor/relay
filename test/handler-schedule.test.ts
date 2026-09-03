@@ -42,6 +42,16 @@ describe("handler — schedule routing", () => {
     expect(calls()).toBe(0);
   });
 
+  it("\"every 2 days ...\" + \"in 3 weeks ...\" reach scheduleAdd (cue covers multi-day/week gaps)", async () => {
+    const a = harness();
+    await a.handle(msg("every 2 days water the plants", 5));
+    expect(a.added).toHaveLength(1);
+    expect(a.calls()).toBe(0); // NOT a silent one-shot agent browse
+    const b = harness();
+    await b.handle(msg("remind me to renew the lease in 3 weeks", 5));
+    expect(b.added).toHaveLength(1);
+  });
+
   it("echoes the resolved next-fire time when scheduleAdd returns whenText (schedule-confirm-fire-time)", async () => {
     const { handle, sent } = harness({
       scheduleAdd: () => ({ ok: true, kind: "daily", task: "weather", whenMs: 0, whenText: "tomorrow 9:00am" }),

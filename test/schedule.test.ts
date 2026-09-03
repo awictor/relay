@@ -193,6 +193,25 @@ describe("parseSchedule — recurring (weekly / interval)", () => {
     expect(s.kind).toBe("interval");
     expect(s.intervalMs).toBe(30 * 60 * 1000);
   });
+  it("'every 2 days' -> interval (multi-day gap, was a silent no-op)", () => {
+    const s = parseSchedule("every 2 days water the plants", NOW)!;
+    expect(s.kind).toBe("interval");
+    expect(s.intervalMs).toBe(2 * DAY);
+    expect(s.dueMs).toBe(NOW + 2 * DAY);
+    expect(s.task).toMatch(/water the plants/);
+  });
+  it("'every 1 week' + 'every other week' -> interval (weekly gap / every 2 weeks)", () => {
+    expect(parseSchedule("every 1 week review the budget", NOW)!.intervalMs).toBe(7 * DAY);
+    const other = parseSchedule("every other week send the newsletter", NOW)!;
+    expect(other.kind).toBe("interval");
+    expect(other.intervalMs).toBe(14 * DAY);
+  });
+  it("'in 3 weeks' -> once, 21 days out (was unparseable -> silent one-shot browse)", () => {
+    const s = parseSchedule("remind me to renew the lease in 3 weeks", NOW)!;
+    expect(s.kind).toBe("once");
+    expect(s.dueMs - NOW).toBe(21 * DAY);
+    expect(s.task).toMatch(/renew the lease/);
+  });
   it("'every monday at 9am' -> weekly on [Mon]", () => {
     const s = parseSchedule("every monday at 9am send the report", NOW)!;
     expect(s.kind).toBe("weekly");

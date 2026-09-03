@@ -150,23 +150,26 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
   const raw = text.trim();
   const lower = raw.toLowerCase();
 
-  // --- relative: "in 10 minutes", "in 2 hours", "in 1 day" ---
-  const rel = lower.match(/\bin\s+(\d+)\s*(min(?:ute)?s?|hours?|hrs?|days?)\b/);
+  // --- relative: "in 10 minutes", "in 2 hours", "in 1 day", "in 3 weeks" ---
+  const rel = lower.match(/\bin\s+(\d+)\s*(min(?:ute)?s?|hours?|hrs?|days?|weeks?|wks?)\b/);
   if (rel) {
     const n = parseInt(rel[1]!, 10);
     const unit = rel[2]!;
-    const ms = /^h/.test(unit) ? n * HOUR : /^d/.test(unit) ? n * DAY : n * MINUTE;
+    const ms = /^w/.test(unit) ? n * 7 * DAY : /^h/.test(unit) ? n * HOUR : /^d/.test(unit) ? n * DAY : n * MINUTE;
     const task = cleanTask(raw, rel[0]!);
     if (!task) return null;
     return { kind: "once", task, dueMs: now + ms, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
   }
 
-  // --- interval: "every 2 hours", "every 30 min", "every 90 minutes" (sub-daily recurring) ---
-  const interval = lower.match(/\bevery\s+(\d+)\s*(min(?:ute)?s?|hours?|hrs?)\b/);
+  // --- interval: "every 2 hours", "every 30 min", "every 2 days", "every 2 weeks" (recurring gap) ---
+  // Sub-daily AND multi-day/week gaps: "water the plants every 2 days" / "report every other week".
+  // "every N minutes/hours/days/weeks"; "every other <unit>" = every 2. Distinct from the daily/weekly
+  // clock branches below (those fire at a wall-clock time; this is a fixed gap from now).
+  const interval = lower.match(/\bevery\s+(\d+|other)\s*(min(?:ute)?s?|hours?|hrs?|days?|weeks?|wks?)\b/);
   if (interval) {
-    const n = parseInt(interval[1]!, 10);
+    const n = interval[1] === "other" ? 2 : parseInt(interval[1]!, 10);
     const unit = interval[2]!;
-    const ms = /^h/.test(unit) ? n * HOUR : n * MINUTE;
+    const ms = /^w/.test(unit) ? n * 7 * DAY : /^d/.test(unit) ? n * DAY : /^h/.test(unit) ? n * HOUR : n * MINUTE;
     if (n >= 1 && ms >= MINUTE) {
       const task = cleanTask(raw, interval[0]!);
       if (!task) return null;

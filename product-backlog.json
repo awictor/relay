@@ -1,6 +1,42 @@
 {
   "items": [
     {
+      "id": "interval-days-weeks-reminders",
+      "title": "'every 2 days' / 'every other week' / 'in 3 weeks' silently don't schedule",
+      "impact": "high",
+      "effort": "M",
+      "status": "done",
+      "why": "The interval regex only matched min/hours and the relative regex only min/hours/days, so 'water the plants every 2 days', 'newsletter every other week', 'renew the lease in 3 weeks' fell through every branch, parseSchedule returned null, and the message ran once as a browse — the user believed a recurring reminder was set and it never fired (audit B#2).",
+      "how": "Extend the interval regex to days/weeks + 'other' (=2) and the relative regex to weeks; interval kind already advances by whole gaps on complete. Widen the handler scheduleCue so these shapes reach the parser instead of running once."
+    },
+    {
+      "id": "digest-chain-member-literal",
+      "title": "a digest member that's a >> chain runs the literal chain string as one task",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "schedule-runner special-cases isChain(task)->runChain, but digest-runner calls runAgent(rec.task) directly with no isChain check, so a chained recipe inside a briefing runs 'step a >> step b' as one confused agent task and returns garbage presented as real data (audit B#3).",
+      "how": "In digest-runner, when a member recipe's task isChain, run it via runChain (add the dep, mirror schedule-runner) instead of a single runAgent; take the chain's final output as that section."
+    },
+    {
+      "id": "watchlist-member-never-seeds",
+      "title": "watchlist member that fails its first check then recovers on a quiet tick never alerts",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "In the watchlist path, the all-unchanged tick returns commit:noop, discarding `updates` — so a member whose first check errored (last stays undefined) is never seeded, and the mem.last!==undefined guard then keeps it out of changedLines forever: a completely dead watch with no signal (audit B#1).",
+      "how": "Always persist member seeds even on a no-notify tick (run the setMemberLasts commit for newly-seen members, or seed unconditionally), so a member that missed the first run gets a baseline and can fire once it changes."
+    },
+    {
+      "id": "chain-ifgate-far-negation",
+      "title": "chain if-gate passes on the opposite condition when negation is >12 chars away",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "containsUnnegated only inspects slice(i-12, i) for a negation token, so 'not currently in stock' (‘not’ 14 chars before ‘in stock’) is read as un-negated and an 'if in stock: buy/notify' chain runs on the INVERSE of the intended condition (audit B#6).",
+      "how": "Widen the negation lookback window (or scan the whole preceding clause/sentence for a leading negation) so 'not currently in stock' / 'no longer available' correctly fail the gate. Add tests for the far-negation cases."
+    },
+    {
       "id": "weather-multi-day",
       "title": "weather answers today-only; 'rain tomorrow?' gets today's numbers",
       "impact": "high",
@@ -1753,9 +1789,16 @@
     {
       "id": "alert-numberless-flap-watchlist-plain",
       "note": "Closed the last two alert paths that flapped on a transient numberless reply (the threshold + predicate paths already guarded it). (1) PLAIN change-alert (no threshold): a reply that lost its number ('price temporarily unavailable') fell through to changed()'s text-diff, false-pinged '🔔 changed', and stored the garbage as baseline — now, if the last value tracked a number and the new one has none, skip notify + keep the last GOOD value. Non-numeric watches (top HN story) are unaffected: their baseline has no extractable number so the guard never triggers. (2) WATCHLIST members: same guard per-member — a member whose numeric baseline gets an 'N/A' this tick isn't flagged changed and its baseline isn't overwritten (used extractValue with the member's own task as hint). Also threaded the extractValue entity-hint into the watchlist changed() call. 3 tests (plain-change numberless silent+baseline-kept / non-numeric watch still fires / watchlist member numberless not-flagged+baseline-kept). call-tested: false (pure alert logic). 1138 tests green."
+    },
+    {
+      "id": "interval-days-weeks-reminders",
+      "note": "Fixed a silent no-op on common recurring cadences: the interval regex only matched min/hours and the relative regex only min/hours/days, so 'water the plants every 2 days', 'newsletter every other week', 'renew the lease in 3 weeks' all fell through parseSchedule (returned null) and ran ONCE as a browse — the user thought a recurring reminder was set and it never fired. Extended the interval regex to days/weeks + 'other' (=2 weeks/days) and the relative regex to weeks; the interval kind already advances by whole gaps on complete, so no runner change. Widened the handler scheduleCue so 'every N days/weeks' / 'in N weeks' reach the parser instead of the one-shot agent path. 4 tests (every 2 days / every 1 week + every other week / in 3 weeks / handler-cue reaches scheduleAdd). call-tested: false (pure parse + cue). 1142 tests green."
     }
   ],
   "audits": [
+    {
+      "note": "Audit 22 (backlog dry except owner-gated confirm-to-act). A/new-user: onboarding /start teaches scraping not instant errands (weather/near-me/convert/quote/directions/remind absent from Try list), photo+voice inbound invisible in help, sports-scores flaky via scrape, near-me no open-now filter, paywall read fails confusingly, flight-status flaky, first-msg clock-reminder becomes a city-question. B/reliability: interval 'every 2 days'/'every other week'/'in 3 weeks' silently don't schedule (TOP — built), watchlist member fails-first-check-then-recovers-on-quiet-tick never seeds/alerts, digest member that's a >>chain runs literal string, feed-watch re-notifies at 200-key cap, resume of a paused daily fires at wrong wall-clock hour, chain if-gate far-negation (>12 chars) passes opposite condition. C/power: photo/voice/PDF inbound + one-tap inline-keyboard buttons + time-series chart image + location-pin inbound + deep-research pagination + group-chat. Built interval-days-weeks-reminders (B#2); seeded digest-chain-member-literal(S), watchlist-member-never-seeds(S), chain-ifgate-far-negation(S). Deferred: onboarding-copy(S), photo/voice-inbound-advertise(S), sports-scores(M), near-me-open-now(S), paywall-detect(M), feed-watch-cap-refire(S), resume-wrong-hour(S), inline-keyboards(M), chart-image(S), location-pin(S), pagination(M). NOTE: 3 audits have flagged photo/voice inbound as MISSING but code + prior history say it's BUILT — likely just unadvertised; verify before building."
+    },
     {
       "note": "Audit 21 (post-138-features, backlog dry except owner-gated confirm-to-act). A/new-user: weather-today-only ('rain tomorrow?' gets today's numbers, TOP — built this run), set-a-timer phrasing not recognized, imperial-°F silent default for non-US, no translate tool, near-me location-pin discoverability, first-run limits not stated. B/reliability: watchlist+plain-change alerts flap+poison-baseline on a numberless reply (the threshold/predicate paths guard it, these don't), extractValue-largest-magnitude tracks wrong number in multi-number reply, atomicWriteJson no-fsync+swallows-errors, once-reminder-dropped-after-send-outage, once-clock-reminder-not-restamped-on-late-setlocation, pause-all-freezes-once-reminders (regression in just-shipped snooze), feed-watch drops colon/long-prefix items, DST. C/power: confirm-to-act(already queued, owner-gated), voice-replies-TTS, translate-tool, computed-trigger-alerts, sports-scores-tool, RSS-feed-subscribe, searchable-answer-KB, group-broadcast. Built weather-multi-day (A#1, live-verified); seeded alert-numberless-flap-watchlist-plain(M), extractvalue-largest-magnitude-wrong(M), pause-all-freezes-once-reminders(S). Deferred (strong next): set-a-timer(S), translate-tool(S/M), voice-replies(M), computed-trigger-alerts(M), sports-scores(S/M), RSS-subscribe(S/M), atomic-store-fsync(M), imperial-default-infer(M), DST(L)."
     },
