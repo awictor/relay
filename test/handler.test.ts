@@ -193,6 +193,23 @@ describe("createHandler", () => {
     expect(h[1]!.content).not.toMatch(/10\.0\.0\.1/); // raw error (hostnames) never enters memory
   });
 
+  it("the error path appends to CURRENT memory, not the pre-run snapshot (sync-turn-clobbers-errand-memory)", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    const { handle } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      // While this run is in flight a background errand writes its result to memory, THEN the run throws.
+      runAgentFn: async () => {
+        mem.set(9, [{ role: "user", content: "[errand] find flights" }, { role: "assistant", content: "Found 5 flights." }]);
+        throw new Error("boom");
+      },
+    });
+    await handle(msg("check the price of bitcoin", 9));
+    const h = mem.get(9)!;
+    expect(h.some((m) => m.content === "Found 5 flights.")).toBe(true); // errand turn survived the failure write
+    expect(h[h.length - 1]!.content).toMatch(/that attempt failed/i);
+  });
+
   it("a photo message is answered via describeImage, not the browser agent (product-loop)", async () => {
     let agentCalled = false;
     let gotFile = ""; let gotCaption = "";

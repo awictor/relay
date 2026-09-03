@@ -1276,7 +1276,11 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       // with zero context and the agent re-asked what the user meant. Store the FRIENDLY text (never
       // the raw error — memory feeds back into the prompt) so the next turn is coherent.
       const failNote = `(That attempt failed: ${friendly})`;
-      deps.memorySet(msg.chatId, [...history, { role: "user", content: msg.text }, { role: "assistant", content: failNote }]);
+      // Append to CURRENT memory, not the pre-run `history` snapshot — a background errand (or interim
+      // turn) that wrote to memory while this run was in flight would otherwise be erased by this failure
+      // write (sync-turn-clobbers-errand-memory, same race the success path at ~1253 already re-reads for).
+      const cur = deps.memoryGet(msg.chatId);
+      deps.memorySet(msg.chatId, [...cur, { role: "user", content: msg.text }, { role: "assistant", content: failNote }]);
     }
   }
 }

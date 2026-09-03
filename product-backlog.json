@@ -1934,6 +1934,51 @@
       "status": "done",
       "why": "Alerts fire + recipes run + one scheduler drives both, but they are wired only to NOTIFY; \"when BTC below 55k run my rebalance-check\" would convert every passive watch into IFTTT-style action — the biggest do-more unlock vs Instinct.",
       "how": "Extend alert def with an optional then-recipe; on fire, invoke the named recipe (reuse recipeResolve/runChain) + include/deliver its result. Guard against slotted recipes (needs a value)."
+    },
+    {
+      "id": "error-path-memory-clobber",
+      "title": "Error path clobbers interim/errand memory from stale snapshot",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "The handler catch wrote [...history,...] from the pre-run snapshot; a background errand (or interim turn) that wrote memory while the run was in flight got erased when the run then threw — the exact race the success path was already fixed for.",
+      "how": "Re-read current memory in the catch (memoryGet -> append), mirroring the success path."
+    },
+    {
+      "id": "scores-team-not-playing-with-league-word",
+      "title": "Team-not-playing guard bypassed when the query also names a league",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "The not-playing guard only triggers on ref.viaTeam, but resolveLeague matches the LEAGUES word first, so \"did the Lakers win, NBA scores?\" resolves without viaTeam -> filterByTeam dumps the whole slate again.",
+      "how": "In getScores run teamMatchedAny whenever the query names a KNOWN team (independent of how the league resolved), not only on viaTeam; return teamNotPlaying when it names a team with no game."
+    },
+    {
+      "id": "reminderonly-no-cancel-guard",
+      "title": "reminderOnly fire path lacks isCancelled guard -> duplicate reminder",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "fireOne main send + alert-silent + digest-null all check isCancelled() before side effects (timeout late-finish guard), but the reminderOnly branch awaits send + completes with no check, so a send stalling past the 90s timeout gets retried while the original lands late -> double meds reminder.",
+      "how": "Add an isCancelled() check before the reminderOnly send + complete, like the other fire paths."
+    },
+    {
+      "id": "alert-series-poisoned-by-error-number",
+      "title": "chart/trend series poisoned by a spurious number in a non-degraded error reply",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "recordPoint runs before the numberless/baseline-protection guards + only skips on null extractValue; a non-degraded reply like \"the page returned a 404\" yields 404, stored in the series chart/trend read -> a bogus spike.",
+      "how": "Move recordPoint after the numberless guard, or skip recording when the reply matches an error-ish shape / when extractValue would also fail the baseline guard."
+    },
+    {
+      "id": "translate-tool",
+      "title": "Translate-anything tool (text or a page)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Translation is a top assistant ask + a glaring gap next to define-a-word; only implicit inline now (no consistency, no discoverability, weak on long text / pages).",
+      "how": "A translate tool: for pasted text, LLM-translate inline with the target language; for a URL, scrape then translate. Add tool + prompt + help. Optionally romaji/pronunciation like define."
     }
   ],
   "history": [
@@ -2688,6 +2733,10 @@
     {
       "item": "feed-agent-prose-false-new",
       "note": "Fixed agent-driven feed watch false-firing on prose. extractListItems kept ANY non-blank line as a feed item, so a one-line prose reply became an 'item' the agent reworded each check -> false '1 new' every time. Now: explicit bullet/ordinal markers -> take only those; no markers -> accept a bare list only when >=2 short non-sentence lines; otherwise (prose / single line) -> [] so the feed path finds nothing new + stays silent. The keyless feedSource path (stable ids) was already safe. 2 new tests (prose->[], bare multi-line list still counts). Suite 1443 green, tsc clean."
+    },
+    {
+      "item": "error-path-memory-clobber",
+      "note": "Fixed the handler error path clobbering memory. The catch wrote [...history,...] from the pre-run snapshot (read before the agent ran), so a background errand that delivered its result to memory mid-run had it erased when the run then threw — the same race the SUCCESS path was fixed for last runs, still live in the catch. Now re-reads current memory (memoryGet) + appends the failure note. 1 new regression test (errand turn survives a failure write). Suite 1444 green, tsc clean."
     }
   ],
   "audits": [
@@ -2843,6 +2892,9 @@
     },
     {
       "note": "No 3-agent audit this run (feed-agent-prose-false-new was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
+    },
+    {
+      "note": "AUDIT (backlog dry, only owner-gated). A/new-user: transit-mode directions, flight status, flight-SEARCH (flagship demo) fails on bot-walled aggregators, local showtimes, compose-cant-send. B/reliability: error-path memory clobber (S,fixed), scores team-not-playing bypassed with a league word (S), reminderOnly no isCancelled guard (S), alert series poisoned by error-number (M), calc bare % modulo dead (S,low). C/power: translate tool, standing personal-context layer, source citations, interactive co-browsing. Seeded: error-path-memory-clobber(built), scores-team-not-playing-with-league-word, reminderonly-no-cancel-guard, alert-series-poisoned-by-error-number, translate-tool."
     }
   ]
 }
