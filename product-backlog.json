@@ -1994,7 +1994,7 @@
       "title": "Real unit/measurement conversion (temp/weight/length/volume/cooking)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "\"180C to F\", \"5ft11 in cm\", \"2 cups flour in grams\" fall to model memory (prompt literally says \"oz in a cup = 8\") — a correctness risk the prompt itself calls silently-wrong for multi-step. Only currency has a real convert tool.",
       "how": "New src/lib/units-convert.ts: deterministic conversion tables (temp/mass/length/volume + common cooking) + a convert tool mirroring convert_currency; parse \"N <unit> to <unit>\". Reject unknown units."
     },
@@ -2793,6 +2793,10 @@
     {
       "item": "profile-save-silent-failure",
       "note": "Fixed the profile store being the only one that didn't hedge a failed write. setLocation + captureLocation now return profiles.lastSaveOk(); the handler warns 'couldn't save it to disk, may be lost on restart' + doesn't falsely confirm when saved===false. Was: a failed location/tz write confirmed success then reverted to UTC -> silent wrong-hour reminders + wrong-place weather. 1 new test. Suite 1460 green, tsc clean."
+    },
+    {
+      "item": "unit-convert-tool",
+      "note": "Added convert_units: new src/lib/units-convert.ts — a DETERMINISTIC converter over fixed factor tables (temperature affine; length/mass/volume+cooking by factor) with parseUnitConvert (incl. no-space temp '180C to F', compound '5 ft 11 in' summed, 'of <thing>' ignored), convertUnit (null on unknown/cross-dimension), formatConvert, runConvert. Wired agent.ts (TOOLS, dispatch, prompt), pinned tool list, HELP; amended the ANSWER-DIRECTLY carve-out to steer ALL unit conversions to the tool (was 'oz in a cup = 8' inline mental math — a correctness risk the prompt itself flagged). No network/backend. 16 new tests. Suite 1473 green, tsc clean. call-tested:false (pure offline)."
     }
   ],
   "audits": [

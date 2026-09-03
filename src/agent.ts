@@ -22,6 +22,7 @@ import { getScores as scoresFetch, formatScores } from "./lib/scores.js";
 import { getNews as newsFetch, formatNews } from "./lib/news.js";
 import { calc, formatResult } from "./lib/calc.js";
 import { parseTranslateRequest, translate } from "./lib/translate.js";
+import { runConvert } from "./lib/units-convert.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -147,6 +148,15 @@ export const TOOLS: ToolSpec[] = [
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The user's translate request verbatim, e.g. \"translate 'where is the pharmacy' to Portuguese\" or \"translate this page to English: <url>\"." } },
+      required: ["request"],
+    },
+  },
+  {
+    name: "convert_units",
+    description: "Convert between units of measure EXACTLY (no key, instant) — temperature, length, weight/mass, volume, cooking. Use this — NOT mental math or web_search — for \"180C to F\", \"5 foot 11 in cm\", \"2 cups of flour in grams\", \"10 miles in km\", \"3 lb in kg\". NOT for currency (use convert_currency). Pass the user's request verbatim.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The conversion verbatim, e.g. \"180C to F\" or \"2 cups in ml\"." } },
       required: ["request"],
     },
   },
@@ -347,6 +357,7 @@ Tools:
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "get_time" (request): current time in another city/timezone, or convert a time between zones. Use this — NOT web_search — for "what time is it in Tokyo"/"time in London"/"9am PT in London"/"convert 3pm EST to Tokyo". Pass the request verbatim. Standard-time offsets (may be an hour off during daylight saving).
+- "convert_units" (request): convert units of measure EXACTLY (temperature/length/weight/volume/cooking). Use for "180C to F"/"5 foot 11 in cm"/"2 cups in grams"/"10 miles in km". NOT currency (use convert_currency).
 - "translate" (request): translate text or a whole page into another language. Use for "translate X to Spanish"/"how do you say X in Japanese"/"read me this page in English: <url>". Pass the request verbatim.
 - "calculate" (expression): compute arithmetic/financial math EXACTLY. Use for chained math, bill-splits, tips, percentages, loan payments — anything past a trivial one-step sum (don't do it in your head, that's silently wrong). loanpayment(principal, annualRatePct, years) for a monthly payment.
 - "get_news" (topic?): today's top news headlines, or about a topic. Use this — NOT web_search — for "what's the news"/"top headlines"/"news about X"/"latest on Y". Omit topic for general top stories.
@@ -370,7 +381,8 @@ Rules:
 - Take few steps. When you have enough, call "reply".
 - The user is on a phone. In "reply", write a short plain-text answer — never paste raw JSON. If you extracted/compared data, summarize it in a line or two (e.g. "A is $10, B is $20"). No markdown tables.
 - If something needs a login or a paid/irreversible action, call "reply" and say so plainly. Never invent data you didn't retrieve.
-- ANSWER DIRECTLY (call "reply" with NO tool first) when the answer is deterministic and needs no live data: a TRIVIAL one-step sum ("20% tip on $47" = $9.40), unit/measure conversions ("how many oz in a cup" = 8), date/time math, and stable common knowledge ("capital of France"). Don't open a browser or search for these — it just adds 10-30s.
+- ANSWER DIRECTLY (call "reply" with NO tool first) when the answer is deterministic and needs no live data: a TRIVIAL one-step sum ("20% tip on $47" = $9.40), date/time math, and stable common knowledge ("capital of France"). Don't open a browser or search for these — it just adds 10-30s.
+- Use "convert_units" (NOT mental math) for any unit/measure conversion — temperature, length, weight, volume, cooking ("180C to F", "5 foot 11 in cm", "2 cups in grams", "10 miles in km"). Guessing these from memory is silently wrong.
 - Use "calculate" (NOT mental math) for anything BEYOND a trivial one-step sum: chained math, splitting a bill, multi-step tips/percentages, or a loan payment — mental math on those is silently wrong. e.g. "$127.50 split 3 ways after 20% tip" -> calculate "(127.50*1.2)/3"; "monthly payment on a $30k loan at 6% for 5 years" -> calculate "loanpayment(30000, 6, 5)".
 - Use OTHER tools when the answer is time-sensitive or uncertain: live prices, exchange rates that move (use "convert_currency" for FX), news, weather, anything "current"/"today"/"now". When unsure whether a fact is stable, verify with a tool rather than guess.
 - OPERATE ON PASTED TEXT DIRECTLY (call "reply" with NO tool): when the user's message CONTAINS the text to work on — "summarize this: <text>", "make this shorter", "proofread/fix the grammar", "tl;dr", "rewrite this as …", "translate this to Spanish" — just do it on the text they gave you. Never web_search or scrape for text that's already in the message; that only adds delay and risks answering about a different thing.
@@ -877,6 +889,14 @@ export async function runAgent(
         } catch (e) {
           push("translate", `ERROR translating: ${e instanceof Error ? e.message : String(e)}`);
         }
+        continue;
+      }
+
+      if (call.name === "convert_units") {
+        const request = String(call.args.request ?? "").trim();
+        const out = runConvert(request);
+        if (!out) { push("convert_units", `Couldn't convert "${request}" (unknown units, or a cross-type conversion like kg->miles). For money use convert_currency; else check the units.`); continue; }
+        push("convert_units", `${out}. Report this exact result to the user.`);
         continue;
       }
 

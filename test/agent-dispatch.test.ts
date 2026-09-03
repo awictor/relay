@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "define", "directions", "get_news", "get_scores", "get_time", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "define", "directions", "get_news", "get_scores", "get_time", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "web_search"].sort()
     );
   });
 
@@ -115,6 +115,18 @@ describe("runAgent dispatch", () => {
     const out = await runAgent("translate hola to english", { llm, backend: b });
     expect(out.reply).toMatch(/hello/i);
     expect(hits.filter((h) => h.startsWith("scrape"))).toHaveLength(0); // pasted text -> no page fetch
+  });
+
+  it("convert_units computes exactly with no backend/network, reaches reply", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "convert_units", args: { request: "180C to F" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "356°F." } } as ToolCall },
+    ]);
+    await runAgent("180c to f", { llm, backend: b });
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool")!.content;
+    expect(toolMsg).toMatch(/356 °F/);
+    expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
   });
 
   it("calculate computes exactly with no backend/network, reaches reply", async () => {
