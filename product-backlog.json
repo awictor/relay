@@ -2876,9 +2876,27 @@
       "title": "Reminders fire in the wrong timezone until a manual UTC offset is set",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "'remind me at 7am' fires at the server's zone (e.g. 3am) until the user knows to append 'UTC-5' to /setlocation; a silently-wrong reminder on day one destroys trust and the code itself flags the 3am surprise.",
       "how": "Infer the tz offset from the user's saved city/location (a keyless offline city->tz table or the existing geo context) so a set location implies its timezone; keep the explicit UTC-n override as a manual win."
+    },
+    {
+      "id": "recurring-reminder-dst-drift",
+      "title": "A long-lived recurring reminder drifts an hour across a DST boundary",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "A daily/weekly stores a fixed offsetMin at creation; when the clock crosses a DST boundary the stored offset is now an hour wrong, so a '7am' daily fires at 6am (or 8am) for the rest of the season until re-set. The new city->IANA zone map lets the fire recompute the correct offset per occurrence.",
+      "how": "Store the IANA zone (not just offsetMin) on a schedule when inferred; in nextDaily/Weekly/Monthly recompute the offset via offsetForZoneAt(zone, targetMs) so each occurrence lands at the right wall-clock hour regardless of DST. Keep offsetMin as the fallback when no zone is known."
+    },
+    {
+      "id": "weather-needs-location-one-tap",
+      "title": "First weather/near-me errand dead-ends to setup instead of a one-tap share",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "A brand-new user's 'weather?'/'coffee near me' asks them to run /setlocation or share a pin from a buried tip, instead of offering an inline one-tap 'share location' button — a first-touch errand that bounces to setup reads as broken.",
+      "how": "On a needsLocationContext ask with no saved location/coords, reply with a Telegram request_location keyboard button (one tap sends the pin, already handled by the location-pin path) alongside the 'or tell me your city' text."
     }
   ],
   "history": [
@@ -4029,6 +4047,10 @@
     {
       "id": "change-watch-tracks-wrong-number",
       "note": "extractValue was already hardened (currency-tag priority, %-exclusion, hint-proximity, entity-label exclusion) so the audit's own example (AAPL $230, up 2%, 50M -> 230) already worked. Sandbox-probing found the real residual: a HISTORICAL/comparison figure ('was $8', '$150 previously, now $120', '5 left, was 8') was tracked instead of the current value, so a 'below 130' watch on 'now $120, was $150' silently never fired. Added isHistoricalValue: drop candidates adjacent to from/previously/prior/earlier + 'was/were' (only when a current-value cue like now/currently/left/in stock is also present, so 'the rate was 1.085' still tracks 1.085) + trailing last-week/ago markers. Applied across currency/count-mag/untagged branches. +1 test, 1909 green."
+    },
+    {
+      "id": "reminder-wrong-timezone-until-offset-set",
+      "note": "Base city->tz inference was already built + fully wired (parseSetLocation/parseCityReply -> profile offset -> every schedule path). Sandbox-probing confirmed the real remaining wrong-hour bug was DST: CITY_TZ bakes STANDARD offsets so an inferred zone fired an hour off Mar-Nov (US/EU). Added CITY_ZONE (city->IANA) + offsetForZoneAt (DST-correct via Intl longOffset, full ICU) + inferTzFromLocation(loc, atMs) that computes the season-correct offset at set-time; parseSetLocation/parseCityReply take atMs (index passes Date.now()). Standard table stays the no-instant fallback. +4 tests, 1913 green."
     }
   ],
   "audits": [
@@ -4280,6 +4302,9 @@
     },
     {
       "note": "Backlog down to owner-gated + low after shipping long-page-truncation. Seeded 2 parked high-impact reliability findings from prior audit-B (not re-run this iteration): change-watch-tracks-wrong-number (extractValue mis-picks a figure), reminder-wrong-timezone-until-offset-set (tz not inferred from city)."
+    },
+    {
+      "note": "Backlog down to owner-gated + low after shipping the DST fix. Seeded 2 parked findings: recurring-reminder-dst-drift (long-lived recurring needs per-fire zone recompute — the follow-on the new CITY_ZONE map enables), weather-needs-location-one-tap (audit-A first-errand friction)."
     }
   ]
 }

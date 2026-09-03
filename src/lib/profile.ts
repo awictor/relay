@@ -46,7 +46,7 @@ export function parseUtcOffset(s: string): number | null {
  *   "/setlocation Austin, TX"        "set my location to London"
  *   "i'm in Paris"                   "my location is Berlin (metric)"   "/setlocation NYC UTC-5"
  * A trailing "(metric)"/"(imperial)" or "in metric/imperial" sets units; a "UTC±N" clause sets tz. */
-export function parseSetLocation(text: string): { location: string; units?: "metric" | "imperial"; tzOffsetMin?: number } | null {
+export function parseSetLocation(text: string, atMs?: number): { location: string; units?: "metric" | "imperial"; tzOffsetMin?: number } | null {
   const t = text.trim();
   // Explicit forms (/setlocation, "set my location to", "my location is") are unambiguous. The bare
   // "I'm in X" / "I am in X" form is captured separately because it also matches ordinary chat
@@ -89,8 +89,9 @@ export function parseSetLocation(text: string): { location: string; units?: "met
   const out: { location: string; units?: "metric" | "imperial"; tzOffsetMin?: number } = { location: loc };
   if (units) out.units = units;
   // Explicit "UTC-5" wins; else infer the tz from the city name (city-to-tz-inference) so a plain
-  // "/setlocation Austin" still fires reminders at the right local hour.
-  const off = tzOffsetMin !== undefined ? tzOffsetMin : inferTzFromLocation(loc);
+  // "/setlocation Austin" still fires reminders at the right local hour — DST-correct at `atMs` when
+  // given (reminder-wrong-timezone-dst), else the standard offset.
+  const off = tzOffsetMin !== undefined ? tzOffsetMin : inferTzFromLocation(loc, atMs);
   if (off !== null && off !== undefined) out.tzOffsetMin = off;
   return out;
 }
@@ -135,10 +136,90 @@ const CITY_TZ: Record<string, number> = {
   uk: 0, ireland: 0, portugal: 0, france: 60, germany: 60, spain: 60, italy: 60, netherlands: 60, poland: 60, sweden: 60, norway: 60, switzerland: 60, greece: 120, israel: 120, india: 330, japan: 540, "south korea": 540, korea: 540, singapore_: 480, thailand: 420, australia: 600, "new zealand": 720, nz: 720, brazil: -180, argentina: -180, mexico: -360, canada: -300,
 };
 
+// City / region -> IANA zone id, so an inferred offset can be made DST-CORRECT at a given instant instead
+// of the STANDARD-only offset CITY_TZ carries (reminder-wrong-timezone-dst): "Austin 7am" set in July
+// must use -300 (CDT), not the table's -360 (CST), or it fires an hour early half the year. Keyed the same
+// (lowercased city/state/country tokens); a miss falls back to the fixed CITY_TZ offset. Mirrors CITY_TZ's
+// keys so the SAME resolution (whole string -> region tail -> word) picks a zone.
+const CITY_ZONE: Record<string, string> = {
+  "new york": "America/New_York", nyc: "America/New_York", brooklyn: "America/New_York", boston: "America/New_York", philadelphia: "America/New_York", philly: "America/New_York", atlanta: "America/New_York", miami: "America/New_York", washington: "America/New_York", dc: "America/New_York", orlando: "America/New_York", detroit: "America/New_York", pittsburgh: "America/New_York", charlotte: "America/New_York", cleveland: "America/New_York",
+  chicago: "America/Chicago", houston: "America/Chicago", dallas: "America/Chicago", austin: "America/Chicago", "san antonio": "America/Chicago", "kansas city": "America/Chicago", minneapolis: "America/Chicago", "new orleans": "America/Chicago", milwaukee: "America/Chicago", memphis: "America/Chicago", nashville: "America/Chicago", "oklahoma city": "America/Chicago",
+  denver: "America/Denver", "salt lake city": "America/Denver", albuquerque: "America/Denver", boise: "America/Boise", phoenix: "America/Phoenix", tucson: "America/Phoenix",
+  "los angeles": "America/Los_Angeles", la: "America/Los_Angeles", "san francisco": "America/Los_Angeles", sf: "America/Los_Angeles", "san diego": "America/Los_Angeles", seattle: "America/Los_Angeles", portland: "America/Los_Angeles", "san jose": "America/Los_Angeles", sacramento: "America/Los_Angeles", "las vegas": "America/Los_Angeles", vegas: "America/Los_Angeles", oakland: "America/Los_Angeles",
+  anchorage: "America/Anchorage", honolulu: "Pacific/Honolulu",
+  ny: "America/New_York", nj: "America/New_York", fl: "America/New_York", ga: "America/New_York", ma: "America/New_York", pa: "America/New_York", va: "America/New_York", nc: "America/New_York", sc: "America/New_York", oh: "America/New_York", mi: "America/New_York", me: "America/New_York", nh: "America/New_York", vt: "America/New_York", ct: "America/New_York", ri: "America/New_York", md: "America/New_York", wv: "America/New_York", ky: "America/New_York",
+  tx: "America/Chicago", il: "America/Chicago", tn: "America/Chicago", mo: "America/Chicago", mn: "America/Chicago", wi: "America/Chicago", ia: "America/Chicago", ks: "America/Chicago", ar: "America/Chicago", al: "America/Chicago", ms: "America/Chicago", nd: "America/Chicago", sd: "America/Chicago",
+  co: "America/Denver", az: "America/Phoenix", ut: "America/Denver", nm: "America/Denver", mt: "America/Denver", wy: "America/Denver", ca: "America/Los_Angeles", wa: "America/Los_Angeles", nv: "America/Los_Angeles", ak: "America/Anchorage",
+  london: "Europe/London", dublin: "Europe/Dublin", lisbon: "Europe/Lisbon", reykjavik: "Atlantic/Reykjavik",
+  paris: "Europe/Paris", berlin: "Europe/Berlin", madrid: "Europe/Madrid", rome: "Europe/Rome", amsterdam: "Europe/Amsterdam", brussels: "Europe/Brussels", vienna: "Europe/Vienna", prague: "Europe/Prague", warsaw: "Europe/Warsaw", zurich: "Europe/Zurich", milan: "Europe/Rome", munich: "Europe/Berlin", barcelona: "Europe/Madrid", stockholm: "Europe/Stockholm", oslo: "Europe/Oslo", copenhagen: "Europe/Copenhagen",
+  athens: "Europe/Athens", helsinki: "Europe/Helsinki", cairo: "Africa/Cairo", "cape town": "Africa/Johannesburg", johannesburg: "Africa/Johannesburg", kyiv: "Europe/Kyiv", kiev: "Europe/Kyiv", istanbul: "Europe/Istanbul", moscow: "Europe/Moscow", "tel aviv": "Asia/Jerusalem", dubai: "Asia/Dubai", "abu dhabi": "Asia/Dubai",
+  mumbai: "Asia/Kolkata", delhi: "Asia/Kolkata", bangalore: "Asia/Kolkata", bengaluru: "Asia/Kolkata", kolkata: "Asia/Kolkata", chennai: "Asia/Kolkata", hyderabad: "Asia/Kolkata",
+  bangkok: "Asia/Bangkok", jakarta: "Asia/Jakarta", hanoi: "Asia/Bangkok", singapore: "Asia/Singapore", "hong kong": "Asia/Hong_Kong", beijing: "Asia/Shanghai", shanghai: "Asia/Shanghai", shenzhen: "Asia/Shanghai", taipei: "Asia/Taipei", "kuala lumpur": "Asia/Kuala_Lumpur", manila: "Asia/Manila", perth: "Australia/Perth",
+  tokyo: "Asia/Tokyo", osaka: "Asia/Tokyo", seoul: "Asia/Seoul", adelaide: "Australia/Adelaide", sydney: "Australia/Sydney", melbourne: "Australia/Melbourne", brisbane: "Australia/Brisbane", canberra: "Australia/Sydney", auckland: "Pacific/Auckland", wellington: "Pacific/Auckland",
+  toronto: "America/Toronto", ottawa: "America/Toronto", montreal: "America/Toronto", vancouver: "America/Vancouver", calgary: "America/Edmonton", edmonton: "America/Edmonton", "mexico city": "America/Mexico_City", guadalajara: "America/Mexico_City", monterrey: "America/Monterrey",
+  "sao paulo": "America/Sao_Paulo", "rio de janeiro": "America/Sao_Paulo", rio: "America/Sao_Paulo", "buenos aires": "America/Argentina/Buenos_Aires", santiago: "America/Santiago", lima: "America/Lima", bogota: "America/Bogota",
+  uk: "Europe/London", ireland: "Europe/Dublin", portugal: "Europe/Lisbon", france: "Europe/Paris", germany: "Europe/Berlin", spain: "Europe/Madrid", italy: "Europe/Rome", netherlands: "Europe/Amsterdam", poland: "Europe/Warsaw", sweden: "Europe/Stockholm", norway: "Europe/Oslo", switzerland: "Europe/Zurich", greece: "Europe/Athens", israel: "Asia/Jerusalem", india: "Asia/Kolkata", japan: "Asia/Tokyo", "south korea": "Asia/Seoul", korea: "Asia/Seoul", thailand: "Asia/Bangkok", australia: "Australia/Sydney", "new zealand": "Pacific/Auckland", nz: "Pacific/Auckland", brazil: "America/Sao_Paulo", argentina: "America/Argentina/Buenos_Aires", mexico: "America/Mexico_City", canada: "America/Toronto",
+};
+
+/** The actual UTC offset (minutes east) of an IANA zone AT a specific instant — DST-correct, via Intl's
+ * longOffset (full ICU; Node 18+ ships it). Returns null if the zone is unknown/unsupported so the caller
+ * falls back to the standard table. */
+export function offsetForZoneAt(zone: string, atMs: number): number | null {
+  try {
+    const s = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longOffset" })
+      .formatToParts(new Date(atMs)).find((p) => p.type === "timeZoneName")?.value ?? "";
+    const m = s.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+    if (!m) return s === "GMT" ? 0 : null; // "GMT" (no offset shown) = UTC+0
+    return (m[1] === "-" ? -1 : 1) * (parseInt(m[2]!, 10) * 60 + (m[3] ? parseInt(m[3], 10) : 0));
+  } catch {
+    return null;
+  }
+}
+
+/** Resolve a free-text location to an IANA zone id (or null), using the SAME most-specific-first matching
+ * as inferTzFromLocation. Lets the caller get a DST-correct offset via offsetForZoneAt. Exported for tests. */
+export function inferZoneFromLocation(location: string): string | null {
+  return resolveFromTable(location, CITY_ZONE);
+}
+
+// Shared resolver for CITY_TZ (number) + CITY_ZONE (string): whole string -> comma region tail -> word.
+// Generic over the value type so both tables use identical disambiguation (region-qualifier + foreign-tail).
+function resolveFromTable<V>(location: string, table: Record<string, V>): V | null {
+  const norm = location.toLowerCase().replace(/[^\p{L}\p{N}\s,]/gu, " ").replace(/\s+/g, " ").trim();
+  if (!norm) return null;
+  if (norm in table) return table[norm]!;
+  const parts = norm.split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    const tail = parts[parts.length - 1]!;
+    if (tail in table) return table[tail]!;
+    const US_MARKERS = new Set(["usa", "us", "u s", "united states", "united states of america", "america"]);
+    const isUsStateShaped = /^[a-z]{2}$/.test(tail);
+    if (!US_MARKERS.has(tail) && !isUsStateShaped) return null; // unknown foreign tail -> can't disambiguate
+  }
+  const words = norm.replace(/,/g, " ").split(/\s+/).filter(Boolean);
+  for (let i = 0; i < words.length; i++) {
+    const pair = i + 1 < words.length ? `${words[i]} ${words[i + 1]}` : "";
+    if (pair && pair in table) return table[pair]!;
+    if (words[i]! in table) return table[words[i]!]!;
+  }
+  return null;
+}
+
 /** Infer a tz offset (minutes east of UTC) from a free-text location, or null if unknown. Matches the
  * whole location, then a trailing "City, ST"/"City, Country" token, then any word — most specific first.
- * Standard (non-DST) offsets. Exported for tests. */
-export function inferTzFromLocation(location: string): number | null {
+ * With `atMs`, returns the DST-CORRECT offset at that instant (via the IANA zone) so a reminder set in
+ * summer uses summer time (reminder-wrong-timezone-dst); without it, the STANDARD offset. Exported for tests. */
+export function inferTzFromLocation(location: string, atMs?: number): number | null {
+  if (atMs !== undefined) {
+    const zone = inferZoneFromLocation(location);
+    if (zone) { const off = offsetForZoneAt(zone, atMs); if (off !== null) return off; }
+    // zone unknown / Intl failed -> fall through to the standard table below.
+  }
+  return inferTzFromLocationStd(location);
+}
+
+/** Standard (non-DST) offset lookup — the original table-only inference. */
+function inferTzFromLocationStd(location: string): number | null {
   const norm = location.toLowerCase().replace(/[^\p{L}\p{N}\s,]/gu, " ").replace(/\s+/g, " ").trim();
   if (!norm) return null;
   // 1. whole string ("new york")
@@ -181,7 +262,7 @@ export function inferTzFromLocation(location: string): number | null {
  * EXPECTING a place here, but rejects a reply that's clearly NOT a city (a slash command, a question,
  * or a long sentence) so an abandoned capture ("actually never mind, top HN story") falls through
  * instead of being saved as a bogus location. */
-export function parseCityReply(text: string): { location: string; tzOffsetMin?: number } | null {
+export function parseCityReply(text: string, atMs?: number): { location: string; tzOffsetMin?: number } | null {
   let s = text.trim();
   if (!s || s.length > 60 || s.startsWith("/")) return null;
   if (/[?]/.test(s)) return null;                        // a question, not a place
@@ -197,7 +278,7 @@ export function parseCityReply(text: string): { location: string; tzOffsetMin?: 
   const out: { location: string; tzOffsetMin?: number } = { location };
   // Prefer an explicit "UTC-5" if given; else infer from the city name (city-to-tz-inference) so a bare
   // "Austin" still fires reminders at the right local hour without the user typing an offset.
-  const off = tz !== null ? tz : inferTzFromLocation(location);
+  const off = tz !== null ? tz : inferTzFromLocation(location, atMs);
   if (off !== null) out.tzOffsetMin = off;
   return out;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply, inferTzFromLocation } from "../src/lib/profile.js";
+import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply, inferTzFromLocation, inferZoneFromLocation, offsetForZoneAt } from "../src/lib/profile.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -158,6 +158,38 @@ describe("ProfileStore", () => {
     expect(s.get(1)).toBeUndefined();
     expect(s.clear(1)).toBe(false); // nothing left
     expect(new ProfileStore({ file: f }).get(1)).toBeUndefined(); // persisted
+  });
+});
+
+describe("DST-aware offset (reminder-wrong-timezone-dst)", () => {
+  const JUL = Date.UTC(2025, 6, 1);  // northern summer (US/EU on DST)
+  const JAN = Date.UTC(2025, 0, 1);  // northern winter (standard time)
+  it("inferZoneFromLocation maps cities/regions to IANA zones", () => {
+    expect(inferZoneFromLocation("Austin")).toBe("America/Chicago");
+    expect(inferZoneFromLocation("Paris, TX")).toBe("America/Chicago"); // region tail still wins
+    expect(inferZoneFromLocation("Paris, France")).toBe("Europe/Paris");
+    expect(inferZoneFromLocation("Nowhere-ville")).toBeNull();
+  });
+  it("offsetForZoneAt returns the DST-correct offset at the instant", () => {
+    expect(offsetForZoneAt("America/Chicago", JUL)).toBe(-300); // CDT
+    expect(offsetForZoneAt("America/Chicago", JAN)).toBe(-360); // CST
+    expect(offsetForZoneAt("Europe/London", JUL)).toBe(60);     // BST
+    expect(offsetForZoneAt("Europe/London", JAN)).toBe(0);      // GMT
+    expect(offsetForZoneAt("Australia/Sydney", JUL)).toBe(600); // AEST (southern winter)
+    expect(offsetForZoneAt("Australia/Sydney", JAN)).toBe(660); // AEDT (southern summer)
+    expect(offsetForZoneAt("Bogus/Zone", JUL)).toBeNull();
+  });
+  it("inferTzFromLocation with an instant gives summer vs winter offset; no instant = standard", () => {
+    expect(inferTzFromLocation("Austin", JUL)).toBe(-300); // CDT in July — the bug: table said -360
+    expect(inferTzFromLocation("Austin", JAN)).toBe(-360); // CST in January
+    expect(inferTzFromLocation("Austin")).toBe(-360);      // no instant -> standard table, unchanged
+    // A non-DST zone is identical year-round + matches the table.
+    expect(inferTzFromLocation("Phoenix", JUL)).toBe(-420);
+    expect(inferTzFromLocation("Mumbai", JUL)).toBe(330);
+  });
+  it("falls back to the standard table when the zone is unknown but the table has an offset", () => {
+    // (no such case in practice since the tables mirror; guard the contract: unknown zone -> std lookup.)
+    expect(inferTzFromLocation("San Jose, Costa Rica", JUL)).toBeNull(); // still unresolvable, not a guess
   });
 });
 

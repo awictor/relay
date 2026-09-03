@@ -301,7 +301,7 @@ const handle = createHandler({
   },
   // Per-user profile (product-loop): parse+store "set my location", and hand the agent a context line.
   setLocation: (chatId, text) => {
-    const p = parseSetLocation(text);
+    const p = parseSetLocation(text, Date.now()); // DST-correct inferred offset at "now" (reminder-wrong-timezone-dst)
     if (!p) return null;
     const rec = profiles.set(chatId, p);
     // Re-stamp recurring reminders to the new tz so a daily/weekly created before the user set their
@@ -477,7 +477,7 @@ const handle = createHandler({
   weatherCoords: (chatId) => profiles.freshCoords(chatId, Date.now()),
   weatherUnits: (chatId) => profiles.get(chatId)?.units,
   captureLocation: (chatId, text) => {
-    const c = parseCityReply(text);
+    const c = parseCityReply(text, Date.now()); // DST-correct inferred offset at "now" (reminder-wrong-timezone-dst)
     if (!c) return null;
     const rec = profiles.set(chatId, { location: c.location, ...(c.tzOffsetMin !== undefined ? { tzOffsetMin: c.tzOffsetMin } : {}) });
     if (c.tzOffsetMin !== undefined) schedules.restampTz(chatId, c.tzOffsetMin, Date.now());
