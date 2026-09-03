@@ -14,7 +14,7 @@ Just ask:
 Remember & remind:
 • "remind me to leave at 5:30" · "every morning: weather + top news"
 • "add milk to my grocery list" · "remember I'm vegetarian"
-• "follow r/programming" — I'll ping you when there's something new
+• "follow r/programming" / "follow github.com/rust-lang/rust" — I ping you when there's something new
 
 Bigger stuff (send a link or name a site):
 • "compare the price across these 3 links" · "summarize this video: <link>"
@@ -85,7 +85,13 @@ Bundle into a briefing: "define digest morning: weather, hn, btc" then /run morn
 
 Watch for changes: "watch btc: price of bitcoin when it changes by 1000" — I only ping you when it moves. Or set a target: "watch btc: bitcoin below 50000", "watch eth: ethereum above 4000", "watch ps5: the PS5 back in stock" — I ping once when it crosses. /alerts lists them, /forget-alert <name> stops one. Retune one anytime: "change btc to below 45000" or "make ps5 fire under 200".
 
-Follow a feed: "follow r/programming", "follow HN rust", "follow this blog https://blog.example.com/feed", or "follow" a YouTube channel link — I ping you only when a NEW post/story/video shows up. /alerts lists them, /forget-alert <name> stops one.
+Follow a feed: I ping you only when a NEW post/story/video/release shows up. Works with:
+• a subreddit ("follow r/programming") or a Reddit user ("follow reddit.com/user/spez")
+• Hacker News ("follow HN", "follow HN rust" for a topic)
+• a GitHub repo's releases ("follow github.com/rust-lang/rust")
+• any blog/RSS link ("follow https://blog.example.com/feed")
+• a YouTube channel — paste the channel URL (youtube.com/channel/UC…); an @handle link needs the channel URL, so I'll fetch it the slow way if that's all you have.
+/alerts lists your follows, /forget-alert <name> stops one.
 
 Watch for NEW items in a list: "watch jobs: remote react roles for new listings" or "watch deals: new deals on OLED TVs" — I ping you only when a NEW entry shows up (not on every check). Great for job boards, listings, restocks, releases.
 

@@ -3083,7 +3083,7 @@
       "title": "Tell users what they can follow (reddit/HN/YouTube-channel/GitHub/RSS)",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "follow now supports r/x, HN, YouTube /channel, GitHub releases, Reddit user, and any RSS URL — but HELP/START don't enumerate them, so a user won't discover 'follow github.com/owner/repo' or that a YouTube @handle needs the channel URL.",
       "how": "Add a follow-examples line to HELP + the START menu listing the supported source shapes + the YouTube channel-URL caveat."
     }
@@ -4312,6 +4312,10 @@
     {
       "id": "feed-source-audit-more",
       "note": "Probed resolveFeedSource on the URLs users actually paste. Found more dead-parse follows (returned rss but the URL has no feed -> silently never fires): youtube @handle//c//user/ + youtu.be video, reddit user page, github repo. Fixed: GitHub owner/repo -> releases.atom (keyless, new capability, blocklists settings/marketplace/etc), Reddit user -> user/.rss (keyless), and YouTube non-channel-id URLs -> null (need a handle->id lookup, so fall back to the agent feed-watch instead of a dead RSS parse). +3 tests, 2004 green."
+    },
+    {
+      "id": "followable-sources-help",
+      "note": "HELP + START now enumerate the followable sources so users discover them: subreddit, Reddit user, HN (+topic), GitHub repo releases, any RSS/blog, and a YouTube channel (with the caveat that an @handle link needs the channel URL). Surfaces the GitHub-releases + Reddit-user follows just added. Copy-only; 2004 green."
     }
   ],
   "audits": [
@@ -4608,6 +4612,9 @@
     },
     {
       "note": "Self-audit inline (agent cap 200/200): swept resolveFeedSource with paste-a-URL feeds. 3 dead-parse follows found -> GitHub-releases + Reddit-user now keyless feeds, YouTube-non-id now null (agent fallback). Seeded followable-sources-help (discoverability) + carried chain-step-cap."
+    },
+    {
+      "note": "Copy pass (agent cap 200/200, no bug this run): documented the expanded follow sources. Backlog now only low papercuts + owner-gated. Next run: self-audit a fresh surface (cookie-jar/channels, memory-store recall) for a medium+, or clear a low (chain-step-cap)."
     }
   ]
 }
