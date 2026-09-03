@@ -2309,9 +2309,45 @@
       "title": "no instant joke / fun-fact / trivia (common first message)",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'tell me a joke' / 'fun fact' / 'trivia question' — among the most common literal FIRST messages to a new bot — fall to a slow 10-30s browse or a stale from-memory answer. The first delightful instant reply earns a real errand next.",
       "how": "Add a keyless get_fun tool (official-joke-api / uselessfacts / opentdb). Fetch + format, offline-testable with fixtures. New TOOLS[] entry + dispatch + prompt + HELP + sorted tool-list test."
+    },
+    {
+      "id": "error-reply-overbroad",
+      "title": "looksLikeErrorReply swallows real alert/feed changes containing common words",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "ERROR_REPLY_RE ends with bare \berror\b + lone words (cannot/blocked/failed/unavailable/no results) that occur constantly in legitimate content. It gates EVERY non-page value path + each watchlist member, so a HN/news headline watch on 'Why you cannot trust AI benchmarks' / 'Tesla recall blocked by court' / 'No results found' is treated as a fetch failure, held at the old baseline, and goes DARK on that change forever. My error-reply-false-fires fix over-reached.",
+      "how": "Anchor the regex to real failure PHRASING (couldn't load / unable to load / error 4xx-5xx / returned a 500 / request failed / timed out), not lone words mid-sentence. Keep catching the soft-failure prose it was built for. Offline test: legit headlines with 'cannot/blocked/error' are NOT flagged; 'the page returned a 404' still is."
+    },
+    {
+      "id": "pagewatch-trailing-punct",
+      "title": "pageWatchUrl keeps trailing punctuation -> dead page watch",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "pageWatchUrl captures https?://S+ up to whitespace, so 'watch terms: https://site/policy.' stores the literal URL with the trailing period -> every fetch 404s -> pagediff silent branch forever. User is told 'Watching...' but never pinged. A black hole on the just-shipped watch-any-page.",
+      "how": "Trim trailing sentence punctuation + a dangling close-paren/bracket from the captured URL (mirror last-result.extractLinks which already does this). Offline test: a URL with a trailing period/paren yields the clean URL."
+    },
+    {
+      "id": "pagewatch-time-masked",
+      "title": "page-diff stableText masks meaningful times -> appointment/status page never pings",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "stableText masks ALL clock times + ISO timestamps to stop volatile 'last updated' flap, but that erases CONTENT-bearing times: 'Next available: 3:15pm'->'5:45pm' or 'Departs 9:00'->'10:30' mask to the same key, and pageKey equality short-circuits before diffPages runs. The appointment/departure watch — the module's advertised use case — goes silent on exactly the change it's for.",
+      "how": "Narrow the volatile-time mask to times that co-occur with a volatile lead-in ('last updated'/'as of'/'N ago'/a timestamp label), not every bare time on the page. Or diff the RAW text (unmasked) once pageKey says changed, and only use the mask to gate the flap counter. Offline test: 'Next available 3:15pm'->'5:45pm' registers as a change; a 'last updated 3:15pm' churn does not."
+    },
+    {
+      "id": "pollen-matched-not-fetched",
+      "title": "\"pollen today\" matches air-quality intent but pollen is never fetched",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "airquality.ts isAirRequest regex includes 'pollen' -> routes to get_air_quality, but the Open-Meteo query only requests us_aqi/pm2_5/pm10/ozone/uv — no pollen fields. An allergy sufferer asking 'pollen today' gets AQI+UV + zero pollen. Matched then silently dropped.",
+      "how": "Add pollen fields (alder/birch/grass/ragweed) to the Open-Meteo air-quality query + a formatter line; caveat that pollen is Europe-only (US -> nulls, say so) rather than promising it globally. Offline-testable with a fixture. Lower rank: Europe-only coverage."
     }
   ],
   "history": [
@@ -3218,6 +3254,10 @@
     {
       "item": "timer-seconds-honest",
       "note": "Seconds timers are honored exactly now. 'timer for 20 seconds' rounded UP to 60s (Math.max(MINUTE, round(n/60)*MINUTE)) — a materially wrong duration confirmed as correct; '90 seconds' fired at 120s. Now sec -> n*1000 (dueMs = now + exact seconds); the timer fires on the next scheduler tick after it's due (<= the ~30s tick interval late), not reshaped. 1 new test (20s/90s/30s honored exactly), suite 1631 green, tsc clean. call-tested:false (offline parse)."
+    },
+    {
+      "item": "get-fun-tool",
+      "note": "Added a keyless get_fun tool: 'tell me a joke' / 'fun fact' / 'quiz me' — among the most common FIRST messages to a new bot — now answer instantly instead of a slow browse or a stale from-memory reply. New src/lib/fun.ts: parseFunKind (joke default / fact / trivia), funUrl (official-joke-api / catfact.ninja / opentdb — all keyless no-signup), formatFun (joke=setup+punchline, fact, trivia=question+answer w/ HTML-entity decode). Wired like get_news: TOOLS[] entry + BrowserBackend.getFun + defaultBackend (funFetch+defaultFetchText) + dispatch + prompt line + sorted tool-list test + START ('tell me a joke') + HELP. 8 new tests; live-probed all 3 sources (joke 200, catfact 200, opentdb 200) so call-tested:true for the sources, agent wiring offline-tested. suite 1639 green, tsc clean."
     }
   ],
   "audits": [
@@ -3409,6 +3449,9 @@
     },
     {
       "note": "3-lens audit (read-qr-from-photo shipped, backlog down to owner-gated confirm-to-act). RELIABILITY found 3 REGRESSIONS in just-shipped code: (1) watch-any-page on a DYNAMIC page (nonce/timestamp) fires every check + is exempt from cap AND quiet-hours -> 3am firehose; (2) page snapshot stored UNCAPPED -> a big page bloats the shared alerts store + can fail all persists; (3) timer seconds silently rounded to a full minute. NEW-USER: get_fun (joke/fact/trivia, S, common first msg), send-a-photo-of-X image lookup (M), text-metrics word-count (S), Wikipedia fact lookup (parked). POWER: inline one-tap buttons (M, parked but highest-leverage — multiplies every feature), voice-note input (M), proactive 'watch this?' offer (M), confirm-to-submit (L, overlaps owner-gated confirm-to-act), playbooks (S). Seeded 4: page-diff-flap-guard (high/M), page-diff-snapshot-cap (high/S), timer-seconds-honest (med/S), get-fun-tool (med/S). Parked the rest."
+    },
+    {
+      "note": "3-lens audit (get_fun shipped, backlog down to owner-gated confirm-to-act). RELIABILITY found real bugs: (1) looksLikeErrorReply OVER-BROAD (my error-reply fix over-reached) — bare 'error/cannot/blocked/no results' in a legit headline makes a news/HN watch go dark; (2) pageWatchUrl keeps trailing punctuation -> dead page watch; (3) stableText masks CONTENT-bearing times -> appointment/departure page watch never pings; (4) sub-minute timer fires up to a 30s tick late despite exact confirm (parked — needs a short setTimeout, infra). NEW-USER: reverse-geocode the location pin into a city (S), acronym/shorthand expansion (S), multi-city clock (S), pollen matched-not-fetched (S), sales-tax total (M). POWER: inline one-tap buttons (M, parked, flagged highest-leverage), flight status (S), alert value-history+trend (M), nutrition lookup (M), vacation/pause-all (S). Seeded 4: error-reply-overbroad (high/M), pagewatch-trailing-punct (high/S), pagewatch-time-masked (high/M), pollen-matched-not-fetched (med/S). Parked the rest."
     }
   ]
 }

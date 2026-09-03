@@ -9,6 +9,7 @@ Just ask:
 • "20% tip on $47" · "what time is it in Tokyo?"
 • "price of bitcoin" · "is AAPL up today?"
 • "where's my package 1Z999..." · "coffee near me"
+• "tell me a joke" · "fun fact" · "quiz me"
 
 Remember & remind:
 • "remind me to leave at 5:30" · "every morning: weather + top news"
@@ -47,6 +48,7 @@ const HELP = `Relay — what I can do:
 • Dates: "how many days until Christmas", "what day is July 4 2026", "how old if born 1990-05-06", "days between two dates" → exact calendar math, instantly.
 • Sports scores: "did the Lakers win?", "Man City score", "NBA scores tonight" → today's scores + status, instantly (NBA/NFL/MLB/NHL/NCAA + major soccer).
 • News: "what's the news?", "top headlines", "news about AI" → today's top headlines, instantly.
+• Fun: "tell me a joke", "fun fact", "quiz me" → a joke, a fun fact, or a trivia question, instantly.
 • Meal ideas: "what can I make with chicken and rice", "dinner ideas", "recipe for carbonara" → dishes to cook + full recipes.
 • Sunrise/sunset: "what time is sunset today", "when's sunrise tomorrow in Denver", "how much daylight" → exact times, instantly.
 • Air quality + UV: "how's the air", "is it smoky", "safe to run outside", "do I need sunscreen today" → AQI, smoke/PM2.5, and the UV index, instantly.

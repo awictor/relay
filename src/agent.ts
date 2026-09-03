@@ -21,6 +21,7 @@ import { parseWorldClock, runWorldClock } from "./lib/worldclock.js";
 import { runDateCalc, type Ymd } from "./lib/datecalc.js";
 import { getScores as scoresFetch, formatScores } from "./lib/scores.js";
 import { getNews as newsFetch, formatNews } from "./lib/news.js";
+import { getFun as funFetch } from "./lib/fun.js";
 import { calc, formatResult } from "./lib/calc.js";
 import { parseTranslateRequest, translate } from "./lib/translate.js";
 import { runConvert } from "./lib/units-convert.js";
@@ -190,6 +191,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { topic: { type: "string", description: "Optional topic to filter headlines, e.g. \"AI\" or \"the election\". Omit for general top headlines." } },
       required: [],
+    },
+  },
+  {
+    name: "get_fun",
+    description: "Get a joke, a fun fact, or a trivia question (no key, instant). Use this — NOT web_search or your own memory — for \"tell me a joke\", \"fun fact\", \"random fact\", \"trivia question\", \"quiz me\". Pass the user's request verbatim; I pick joke/fact/trivia from it.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The user's request verbatim, e.g. \"tell me a joke\" or \"give me a fun fact\"." } },
+      required: ["request"],
     },
   },
   {
@@ -410,6 +420,7 @@ Tools:
 - "translate" (request): translate text or a whole page into another language. Use for "translate X to Spanish"/"how do you say X in Japanese"/"read me this page in English: <url>". Pass the request verbatim.
 - "calculate" (expression): compute arithmetic/financial math EXACTLY. Use for chained math, bill-splits, tips, percentages, loan payments — anything past a trivial one-step sum (don't do it in your head, that's silently wrong). loanpayment(principal, annualRatePct, years) for a monthly payment.
 - "get_news" (topic?): today's top news headlines, or about a topic. Use this — NOT web_search — for "what's the news"/"top headlines"/"news about X"/"latest on Y". Omit topic for general top stories.
+- "get_fun" (request): a joke, fun fact, or trivia question. Use this — NOT web_search or your own memory — for "tell me a joke"/"fun fact"/"trivia"/"quiz me". Pass the request verbatim; I pick joke/fact/trivia.
 - "get_scores" (request): today's sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight". Pass the request verbatim. Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
 - "define" (word): a word's definition, pronunciation, and synonyms. Use this — NOT web_search/scrape — for "what does X mean"/"define X"/"synonyms for X"/"how do you spell X". English words only; pass the single word.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
@@ -486,6 +497,9 @@ export interface BrowserBackend {
   // Optional: today's top news headlines, or about a topic (get-news-tool). Absent -> the get_news tool
   // reports it's unavailable. Returns null on a fetch failure / empty parse.
   getNews?(topic?: string): Promise<{ topic?: string; headlines: string[] } | null>;
+  // Optional: a joke / fun fact / trivia (get-fun-tool). Absent -> the get_fun tool reports it's
+  // unavailable. Returns null on a fetch failure / empty parse.
+  getFun?(request: string): Promise<{ kind: "joke" | "fact" | "trivia"; text: string } | null>;
   // Optional: cooking meal ideas / a recipe (meal-ideas-tool). Absent -> the meal_ideas tool reports
   // it's unavailable. Returns ideas-by-ingredient, a full recipe, or null on a miss.
   getMeals?(request: string): Promise<{ ideas: import("./lib/meals.js").MealIdea[]; ingredient?: string } | { meal: import("./lib/meals.js").FullMeal } | null>;
@@ -613,6 +627,7 @@ const defaultBackend: BrowserBackend = {
   defineWord: (word) => dictFetch(word, defaultFetchText),
   getScores: (query) => scoresFetch(query, defaultFetchText),
   getNews: (topic) => newsFetch(topic, defaultFetchText),
+  getFun: (request) => funFetch(request, defaultFetchText),
   getMeals: (request) => { const req = parseMealRequest(request); return req ? getMeals(req, defaultFetchText) : Promise.resolve(null); },
   getWeather: (opts) => fetchWeather(opts, defaultFetchText),
   getSunTimes: (opts) => sunFetch(opts, defaultFetchText),
@@ -1028,6 +1043,19 @@ export async function runAgent(
           push("get_news", `${formatNews(r.headlines, r.topic)}\n\nReport these to the user (today's headlines; offer to open one if they want more).`);
         } catch (e) {
           push("get_news", `ERROR getting news: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "get_fun") {
+        if (!backend.getFun) { push("get_fun", "ERROR: jokes/facts aren't available."); continue; }
+        const request = String(call.args.request ?? "").trim();
+        try {
+          const r = await backend.getFun(request);
+          if (!r) { push("get_fun", `Couldn't fetch a ${/(fact)/i.test(request) ? "fact" : /(trivia|quiz)/i.test(request) ? "trivia question" : "joke"} right now. Try again in a moment.`); continue; }
+          push("get_fun", `${r.text}\n\nReport this to the user verbatim.`);
+        } catch (e) {
+          push("get_fun", `ERROR getting a ${"joke/fact"}: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }
