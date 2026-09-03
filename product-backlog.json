@@ -962,6 +962,69 @@
       "status": "done",
       "why": "\"how has X moved this week\" impossible; alerts forget the past.",
       "how": "Append value+timestamp per check to a capped series; answer trend/min-max/since-date from stored data, no LLM."
+    },
+    {
+      "id": "bg-recovery-hardening",
+      "title": "crash-recovery replay: data-loss gap, poison loop, double-ACK",
+      "impact": "high",
+      "effort": "M",
+      "status": "done",
+      "why": "Audit of the just-shipped background-errand-persist found 3 defects: drain-then-async-reinject lost errands if recovery itself crashed; a poison errand re-injected through handle reset startedAt + had no attempt cap, so it crash-looped + re-spammed every boot; and replay double-messaged (recovery notice + a fresh ACK).",
+      "how": "Shared dispatchBackground closure + handle.resumeErrand run a replay under its EXISTING id (no new record, no ACK); store no longer drains (list+reinstate bumps attempts in place); planErrandReplay drops a poison errand after MAX_ERRAND_ATTEMPTS."
+    },
+    {
+      "id": "websearch-fallback-provider",
+      "title": "web_search single-provider (Bing scrape) no fallback",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "The headline \"ask anything\" path scrapes only bing.com/search; a bot-check or markup change makes a new user first errand return nothing, no DuckDuckGo/Brave fallback.",
+      "how": "Add a keyless fallback engine (DuckDuckGo HTML endpoint) behind the same webSearch interface; try Bing then fall back on empty/error."
+    },
+    {
+      "id": "fx-conversion-tool",
+      "title": "live FX / currency conversion via a JSON endpoint",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "\"200 USD in EUR right now\" improvises a slow web_search+scrape that is often stale/mis-parsed; should be instant.",
+      "how": "Wire a keyless exchange-rate JSON API via fetch_json (same class as the open-meteo weather path); prompt/tool hint to use it for FX."
+    },
+    {
+      "id": "telegram-location-pin",
+      "title": "Telegram location-pin messages silently dropped",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "Tapping attach->Location (the natural \"near me\" move) sends a text-less message that is dropped with no reply — reads as broken.",
+      "how": "Parse msg.location.{latitude,longitude} in the telegram intake; feed coords to the agent (enables precise near-me) or at least acknowledge + offer to save as location."
+    },
+    {
+      "id": "once-reminder-cap-starvation",
+      "title": "once reminder can be starved indefinitely behind the hourly cap",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "An over-cap \"once\" reminder is deferred with no age/attempt limit while recurring tasks eat the slots — an explicit promise (meds at 3pm) can slip indefinitely.",
+      "how": "Age-out: once a deferred once-reminder is overdue by > N, fire it regardless of cap (or notify it could not be delivered on time)."
+    },
+    {
+      "id": "csv-export-compare",
+      "title": "CSV/table export of compare & extract results",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "A multi-item compare returns a JSON array truncated in chat; a keepable CSV is far more useful + reusable.",
+      "how": "Format the compare/extract JSON array -> CSV, send via the existing sendDocument path (only pdf uses it today). Pure formatter, offline-testable."
+    },
+    {
+      "id": "watchlists",
+      "title": "watchlists — N items, one grouped ping",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "A user with a basket (5 stocks / 3 job feeds) must define N separate alerts + get N pings; a watchlist groups them into one standing dashboard.",
+      "how": "A member array on an alert + a combined formatter reusing the alert store; ping only the moved items in one message."
     }
   ],
   "history": [
@@ -1284,6 +1347,10 @@
     {
       "id": "background-errand-persist",
       "note": "Background errands now survive a restart. A dispatched errand is recorded in a persistent BackgroundStore (id+chatId+original text) + cleared when it settles; on startup the worker drains the store and, per planErrandReplay, RE-RUNS fresh errands (re-injects the original message) or sends an honest \"I was interrupted\" note for stale ones (>6h). No more silently-dropped \"I will text you when done\" promise. bgErrandAdd/Done handler deps; RELAY_BACKGROUND_FILE. 933 tests green."
+    },
+    {
+      "id": "bg-recovery-hardening",
+      "note": "Hardened the crash-recovery shipped last iteration (audit found 3 defects): replay now runs under the errand EXISTING id via a shared dispatchBackground + handle.resumeErrand — no drain-gap data loss, no second ACK; the store keeps the record (list+reinstate bumps attempts in place, no drain) so a poison task that crashes each boot is dropped after MAX_ERRAND_ATTEMPTS(3) instead of crash-looping + re-spamming. 935 tests green."
     }
   ],
   "audits": [
@@ -1355,6 +1422,9 @@
     },
     {
       "note": "Backlog dry after answer-history-recall -> 3-agent audit. A(new-user): city->tz inference gap, no maps/places tool, paywall detection, package tracking, no tappable onboarding buttons. B(reliability): NEW regressions in the shipped bg path — no memory persist, drilldown clobber, unbounded concurrency, lost-on-restart; + stale recall shown as current. C(power): trigger-to-action alerts, watch time-series, watchlists, CSV export, starter template library. BUILT the bg reliability cluster + recall staleness (both regressions in last 2 iters shipped code); seeded the rest."
+    },
+    {
+      "note": "Backlog dry after background-errand-persist -> 3-agent audit. A(new-user): maps/places/directions (Nominatim/Overpass/OSRM), Telegram location-pin dropped, web_search single-provider Bing scrape, package tracking, FX via JSON. B(reliability): NEW defects in the just-shipped crash-recovery (drain-gap data loss, poison crash-loop, double-ACK) — BUILT the fix; also once-reminder cap starvation, then-recipe re-run no dedup. C(power): watchlists, CSV export, template library, draft-to-send composer, recipe chaining. Built bg-recovery-hardening (broken just-shipped path); seeded the rest."
     }
   ]
 }

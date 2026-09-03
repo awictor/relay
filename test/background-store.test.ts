@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { BackgroundStore, planErrandReplay, STALE_ERRAND_MS } from "../src/lib/background-store.js";
+import { BackgroundStore, planErrandReplay, STALE_ERRAND_MS, MAX_ERRAND_ATTEMPTS } from "../src/lib/background-store.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -23,11 +23,15 @@ describe("BackgroundStore (background-errand-persist)", () => {
     expect(reload.size()).toBe(0);
     expect(new BackgroundStore({ file: f }).size()).toBe(0); // persisted
   });
-  it("drain returns all + clears", () => {
+  it("add stamps attempts=1; reinstate bumps it in place (poison guard)", () => {
     const s = new BackgroundStore({ file: tmp() });
-    s.add(1, "a", NOW); s.add(2, "b", NOW);
-    expect(s.drain()).toHaveLength(2);
-    expect(s.size()).toBe(0);
+    const id = s.add(1, "a", NOW);
+    expect(s.list()[0]!.attempts).toBe(1);
+    const e = s.list()[0]!;
+    expect(s.reinstate(e, NOW + 1)).toBe(2); // bumped
+    expect(s.list()[0]!.attempts).toBe(2);
+    expect(s.list()[0]!.id).toBe(id);        // same record, not a duplicate
+    expect(s.size()).toBe(1);
   });
   it("ids are unique across adds", () => {
     const s = new BackgroundStore({ file: tmp() });
@@ -47,5 +51,11 @@ describe("planErrandReplay", () => {
     expect(plan[1]!.replay).toBe(false);
     expect(plan[1]!.notice).toMatch(/got interrupted before finishing/i);
     expect(plan[1]!.notice).toMatch(/old task/);
+  });
+  it("stops replaying a poison errand after MAX_ERRAND_ATTEMPTS (crash-loop guard)", () => {
+    const poison = [{ id: "p", chatId: 5, text: "crashy task", startedAt: NOW, attempts: MAX_ERRAND_ATTEMPTS }];
+    const plan = planErrandReplay(poison, NOW);
+    expect(plan[0]!.replay).toBe(false);
+    expect(plan[0]!.notice).toMatch(/kept crashing/i);
   });
 });

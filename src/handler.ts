@@ -175,7 +175,14 @@ export interface HandlerDeps {
 }
 
 /** Build the message handler. Returns an async (msg) => void. */
-export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promise<void> {
+export interface RelayHandler {
+  (msg: InboundMessage): Promise<void>;
+  // Startup recovery hook (background-errand-persist): re-run an interrupted background errand under its
+  // existing id (no new store record, no second ACK).
+  resumeErrand: (chatId: number, text: string, errandId: string) => void;
+}
+
+export function createHandler(deps: HandlerDeps): RelayHandler {
   const runIt = deps.runAgentFn ?? runAgent;
   const log = deps.log ?? console.log;
 
@@ -209,14 +216,49 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
   // (last-result-drilldown). Uses the SHARED store when provided so a proactive digest/alert ping can
   // also be drilled into ("more"/"link" after an unprompted message); else a private in-memory map.
   const lastResult = deps.lastResultStore ?? new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
-  function handle(msg: InboundMessage): Promise<void> {
+  const handle = ((msg: InboundMessage): Promise<void> => {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
     // Store the tail; prune when this is the last link so the map doesn't grow unbounded per chat.
     chainByChat.set(msg.chatId, next);
     void next.then(() => { if (chainByChat.get(msg.chatId) === next) chainByChat.delete(msg.chatId); });
     return next;
+  }) as RelayHandler;
+  // Run a background errand DETACHED with a raised step budget, deliver the result unprompted, then
+  // clear its persisted record. Shared by the inbound dispatch (after an ACK) AND startup recovery
+  // (background-errand-persist) — recovery passes the EXISTING errandId so no new record is created and
+  // no second ACK is sent. Never throws; a failure is reported to the user (no silent black hole).
+  function dispatchBackground(chatId: number, originalText: string, errandId: string): void {
+    const errand = stripDispatchPhrasing(originalText) || originalText;
+    const bgHistory = deps.memoryGet(chatId);
+    const startedAt = deps.now();
+    bgInFlight.set(chatId, (bgInFlight.get(chatId) ?? 0) + 1);
+    void (async () => {
+      try {
+        const r = await runIt(errand, { llm: deps.llm, context: deps.profileContext?.(chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(chatId) ?? 0, maxSteps: BACKGROUND_MAX_STEPS }, bgHistory);
+        const parts = formatReplyParts(r.reply);
+        const out = r.degraded ? `⚠️ Here's what I got (I couldn't fully finish):\n\n${parts.shown}` : `✅ Done with "${errand}":\n\n${parts.shown}`;
+        // Deliver like a proactive ping: write the PING sub-slot (preserve any inbound answer's paging).
+        const prevLast = lastResult.get(chatId);
+        lastResult.set(chatId, { full: prevLast?.full ?? "", sent: prevLast?.sent ?? 0, ping: { full: parts.full, sent: deliveredLen(parts.full, parts.shown) } });
+        if (!r.degraded) {
+          deps.logAnswer?.(chatId, errand, parts.shown);
+          deps.memorySet(chatId, [...bgHistory, { role: "user", content: originalText }, { role: "assistant", content: parts.shown }]);
+        }
+        await deps.sendMessage(chatId, out);
+        deps.recordTurn({ steps: r.steps, tools: r.tools, elapsedMs: deps.now() - startedAt, ok: !r.degraded, degraded: r.degraded });
+      } catch (e) {
+        const friendly = friendlyError(e instanceof Error ? e.message : String(e));
+        deps.recordTurn({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: false });
+        await deps.sendMessage(chatId, `That background errand ("${errand}") failed: ${friendly}`).catch(() => {});
+      } finally {
+        bgInFlight.set(chatId, Math.max(0, (bgInFlight.get(chatId) ?? 1) - 1));
+        deps.bgErrandDone?.(errandId); // settled (delivered or failed) -> stop tracking (crash before here -> replay)
+      }
+    })();
   }
+  // Startup recovery (background-errand-persist): re-run an interrupted errand under its EXISTING id.
+  handle.resumeErrand = (chatId: number, text: string, errandId: string): void => dispatchBackground(chatId, text, errandId);
   return handle;
 
   async function handleOne(msg: InboundMessage): Promise<void> {
@@ -834,43 +876,12 @@ export function createHandler(deps: HandlerDeps): (msg: InboundMessage) => Promi
     // the per-chat chain isn't blocked for minutes (the user can keep texting). Guarded by the dep flag.
     if (deps.enableBackgroundErrands && isBackgroundErrand(msg.text)
         && (bgInFlight.get(msg.chatId) ?? 0) < MAX_BG_PER_CHAT) {
-      const errand = stripDispatchPhrasing(msg.text) || msg.text;
       await deps.sendMessage(msg.chatId, "On it — this one's bigger, so I'll work on it and text you when it's done. Keep texting me anything else meanwhile.");
-      const bgHistory = deps.memoryGet(msg.chatId);
-      const startedAt = deps.now();
-      bgInFlight.set(msg.chatId, (bgInFlight.get(msg.chatId) ?? 0) + 1);
-      // Persist the pending errand (background-errand-persist) so a crash mid-run can replay it. Store
-      // the ORIGINAL message so a replay re-runs exactly what the user asked. Cleared when it settles.
-      const errandId = deps.bgErrandAdd?.(msg.chatId, msg.text);
-      // Detached: NOT awaited + NOT on chainByChat, so other messages interleave. Errors are caught +
-      // reported so a failed background run still tells the user (never a silent black hole).
-      void (async () => {
-        try {
-          const r = await runIt(errand, { llm: deps.llm, context: deps.profileContext?.(msg.chatId) || undefined, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, maxSteps: BACKGROUND_MAX_STEPS }, bgHistory);
-          const parts = formatReplyParts(r.reply);
-          const out = r.degraded ? `⚠️ Here's what I got (I couldn't fully finish):\n\n${parts.shown}` : `✅ Done with "${errand}":\n\n${parts.shown}`;
-          // Deliver unprompted like a proactive ping: write the PING sub-slot (preserving any inbound
-          // answer's paging), not the main slot — else a later "more" pages the wrong thing (the same
-          // clobber the proactive path was fixed for). Full text so "more"/"link" drill into the result.
-          const prev = lastResult.get(msg.chatId);
-          lastResult.set(msg.chatId, { full: prev?.full ?? "", sent: prev?.sent ?? 0, ping: { full: parts.full, sent: deliveredLen(parts.full, parts.shown) } });
-          if (!r.degraded) {
-            deps.logAnswer?.(msg.chatId, errand, parts.shown); // recall a background result later too
-            // Persist to conversation memory so a follow-up ("book the first one", "more on #2") has the
-            // errand + its result as context, like the synchronous path does.
-            deps.memorySet(msg.chatId, [...bgHistory, { role: "user", content: msg.text }, { role: "assistant", content: parts.shown }]);
-          }
-          await deps.sendMessage(msg.chatId, out);
-          deps.recordTurn({ steps: r.steps, tools: r.tools, elapsedMs: deps.now() - startedAt, ok: !r.degraded, degraded: r.degraded });
-        } catch (e) {
-          const friendly = friendlyError(e instanceof Error ? e.message : String(e));
-          deps.recordTurn({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: false });
-          await deps.sendMessage(msg.chatId, `That background errand ("${errand}") failed: ${friendly}`).catch(() => {});
-        } finally {
-          bgInFlight.set(msg.chatId, Math.max(0, (bgInFlight.get(msg.chatId) ?? 1) - 1));
-          if (errandId) deps.bgErrandDone?.(errandId); // settled (delivered or failed) -> stop tracking
-        }
-      })();
+      // Persist the pending errand (background-errand-persist) so a crash mid-run can replay it, then
+      // run it detached with its stable id (the SAME dispatcher startup-recovery uses, so a replay
+      // doesn't re-ACK or lose the record).
+      const errandId = deps.bgErrandAdd?.(msg.chatId, msg.text) ?? `bg-${msg.chatId}-${deps.now()}`;
+      dispatchBackground(msg.chatId, msg.text, errandId);
       return;
     }
 

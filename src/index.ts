@@ -461,16 +461,22 @@ async function main() {
   const poller = channel.start(handle);
 
   // Background-errand recovery (background-errand-persist): any errand still pending in the store was
-  // interrupted by the last stop/crash. Tell the user + re-run the fresh ones (stale ones just get an
-  // honest note). Drain first so a replay that itself crashes re-persists fresh entries. Best-effort.
-  const interrupted = backgroundStore.drain();
+  // interrupted by the last stop/crash. Per errand: replay the fresh ones under their EXISTING id via
+  // resumeErrand (no drain-gap data loss, no second ACK, and attempts accrue so a poison task that
+  // crashes every boot is dropped after MAX_ERRAND_ATTEMPTS), and just notify for stale/poison ones —
+  // removing those from the store so they don't linger. Best-effort.
+  const interrupted = backgroundStore.list();
   if (interrupted.length) {
     console.log(`[background] recovering ${interrupted.length} interrupted errand(s)`);
     for (const { errand, replay, notice } of planErrandReplay(interrupted, Date.now())) {
       void sendMessage(errand.chatId, notice).catch(() => {});
-      // Re-inject the ORIGINAL message so the normal handler path re-dispatches it (re-persisting a
-      // fresh pending record), exactly as if the user had just sent it again.
-      if (replay) void handle({ chatId: errand.chatId, from: "relay", text: errand.text } as InboundMessage);
+      if (replay) {
+        // Bump attempts + keep the same id (reinstate is a no-op-if-present safety); then re-dispatch.
+        backgroundStore.reinstate(errand, Date.now());
+        handle.resumeErrand(errand.chatId, errand.text, errand.id);
+      } else {
+        backgroundStore.remove(errand.id); // stale/poison -> stop tracking, notice already sent
+      }
     }
   }
   // Clean stop on docker stop / pm2 restart / Ctrl-C: halt polling, exit 0. Memory is

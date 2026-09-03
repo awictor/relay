@@ -1100,3 +1100,24 @@ describe("background errand persistence hooks (background-errand-persist)", () =
     expect(done).toEqual(["bgX"]);
   });
 });
+
+describe("resumeErrand (background-errand-persist startup recovery)", () => {
+  it("re-runs an errand under its existing id, no re-ACK, clears on settle", async () => {
+    const done: string[] = [];
+    let resolveRun: ((r: { reply: string; steps: number; tools: string[] }) => void) | null = null;
+    const h = harness({
+      enableBackgroundErrands: true,
+      bgErrandAdd: () => "should-not-be-called",
+      bgErrandDone: (id) => { done.push(id); },
+      runAgentFn: () => new Promise((res) => { resolveRun = res; }),
+    });
+    h.handle.resumeErrand(5, "find the cheapest flights and get back to me", "bg-recovered-1");
+    await new Promise((r) => setTimeout(r, 0));
+    // No ACK ("on it") on a resume — recovery already sent its own notice.
+    expect(h.sent.some((m) => /on it/i.test(m.text))).toBe(false);
+    resolveRun!({ reply: "found them", steps: 2, tools: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(h.sent.some((m) => /found them/.test(m.text))).toBe(true);
+    expect(done).toEqual(["bg-recovered-1"]); // settled under the SAME id
+  });
+});
