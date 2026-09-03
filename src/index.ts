@@ -157,7 +157,7 @@ const agentEnvFor = (chatId: number) => ({
   // (it just read the page), so no extra fetch — falls back to a host-label title inside SavedStore.
   savePage: (url: string, title?: string, summary?: string) => {
     const r = saved.add(chatId, { url, title, summary: summary ?? title ?? url }, Date.now());
-    return { title: r.page.title, saved: r.saved };
+    return { title: r.page.title, saved: r.saved, dup: r.dup }; // dup -> agent says "Updated" not "Saved"
   },
 });
 // Run a digest -> composed briefing text (member recipes -> one message). Shared by /run + schedule.

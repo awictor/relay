@@ -264,6 +264,19 @@ describe("runAgent dispatch", () => {
     expect(out.reply).toMatch(/saved/i);
   });
 
+  it("save_page tells the model 'Updated' (not 'Saved') when the page was already in the list (save-page-confirm-dedupe-feedback)", async () => {
+    const { b } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "save_page", args: { url: "https://ex.com/a", title: "A" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "Updated it." } } as ToolCall },
+    ]);
+    await runAgent("save that again", { llm, backend: b, savePage: () => ({ title: "A", saved: true, dup: true }) });
+    // The tool result fed back to the model on the 2nd call reflects the dup as "Updated", not "Saved".
+    const secondCallMsgs = JSON.stringify(llm.calls[1]);
+    expect(secondCallMsgs).toMatch(/Updated .*already in the reading list/);
+    expect(secondCallMsgs).not.toMatch(/Saved .*to the user's reading list/);
+  });
+
   it("save_page rejects a non-URL (never saves junk)", async () => {
     const { b } = recordingBackend();
     let called = false;

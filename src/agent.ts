@@ -791,7 +791,7 @@ export interface AgentDeps {
   // list, so "find X and save it" works in ONE turn instead of the user re-issuing a save command. Bound
   // to the chatId by the caller; returns the stored title + whether it persisted. Optional; absent -> the
   // save_page tool reports it's unavailable.
-  savePage?: (url: string, title?: string, summary?: string) => { title: string; saved: boolean } | null;
+  savePage?: (url: string, title?: string, summary?: string) => { title: string; saved: boolean; dup?: boolean } | null;
   // Background errands (async-background-errands): a raised per-run step budget for a long,
   // dispatch-and-ping task ("find the 5 cheapest flights and get back to me") that a normal ~8-step
   // synchronous run would truncate. Optional; absent/<=0 -> the RELAY_MAX_STEPS default. Clamped to a
@@ -1277,7 +1277,7 @@ export async function runAgent(
         const summary = call.args.summary ? String(call.args.summary).trim() : undefined;
         const r = deps.savePage(url, title, summary);
         if (!r) { push("save_page", "ERROR: couldn't save that page."); continue; }
-        push("save_page", `Saved "${r.title}" to the user's reading list.${r.saved ? "" : " (Warning: it may not have persisted to disk — tell the user to try again if it doesn't stick.)"} Confirm to the user they can recall it with "what did I save about …" or "my reading list".`);
+        push("save_page", `${r.dup ? "Updated" : "Saved"} "${r.title}" ${r.dup ? "(already in the reading list — refreshed it)" : "to the user's reading list"}.${r.saved ? "" : " (Warning: it may not have persisted to disk — tell the user to try again if it doesn't stick.)"} Confirm to the user they can recall it with "what did I save about …" or "my reading list".`);
         continue;
       }
 
