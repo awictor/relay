@@ -121,29 +121,43 @@ export function formatPlaces(places: Place[], what: string, units: "metric" | "i
   return `Nearby ${what}:\n${lines.join("\n")}`;
 }
 
+// Radius ladder (metres): a "nearest X" that finds nothing at 3km expands so a hospital/ER 5km away
+// isn't a dangerous false-negative (find-nearby-radius-expand). Stops once results appear or the ladder
+// ends. Overridden by an explicit opts.radiusM (single pass at that radius).
+const RADIUS_LADDER_M = [3000, 10000, 30000];
+
+export interface NearbyResult { places: Place[]; radiusKm: number }
+// A distinct outcome so the caller can tell "your area couldn't be found" from "nothing exists nearby".
+export type NearbyOutcome = NearbyResult | { error: "area_not_found" | "no_origin" };
+
 /**
  * Find nearby places. `fetchText` is injected (guarded GET/POST in prod, a fake in tests). When only a
- * place name is given (no coords), Nominatim geocodes it first. Returns [] on failure. Never throws.
- * `radiusM` default 3km. The Overpass query is sent as the POST body via fetchPost when provided,
- * else appended as ?data= (GET) — the caller wires the right transport.
+ * place name is given (no coords), Nominatim geocodes it (disambiguated toward opts.bias). Expands the
+ * search radius (3->10->30km) until it finds results, so "nearest X" doesn't false-negative just past
+ * 3km. Returns {places,radiusKm} (places may be [] if nothing exists even at the widest radius), or an
+ * {error} distinguishing a failed area lookup from a genuinely-empty result. Never throws.
  */
 export async function findNearby(
   opts: { what: string; lat?: number; lng?: number; near?: string; bias?: { lat: number; lng: number }; radiusM?: number; units?: "metric" | "imperial"; limit?: number },
   fetchText: (url: string, body?: string) => Promise<string>,
-): Promise<Place[]> {
+): Promise<NearbyOutcome> {
   try {
     let { lat, lng } = opts;
     if ((lat === undefined || lng === undefined) && opts.near) {
-      // Disambiguate a named area toward the user's coords when known (geo-tools-disambiguate-coords).
       const geo = pickNominatim(parseNominatimAll(await fetchText(nominatimUrl(opts.near))), opts.bias);
-      if (!geo) return [];
+      if (!geo) return { error: "area_not_found" }; // the named area itself couldn't be resolved
       lat = geo.lat; lng = geo.lng;
     }
-    if (lat === undefined || lng === undefined) return [];
+    if (lat === undefined || lng === undefined) return { error: "no_origin" };
     const { tags, label } = categoryFilters(opts.what);
-    const q = overpassQuery(lat, lng, tags, opts.radiusM ?? 3000);
-    const body = await fetchText(overpassUrl(), q);
     const nameFilter = tags[0] === "amenity" ? label : undefined; // broad search -> filter by name
-    return parsePlaces(body, lat, lng, label, opts.limit ?? 5, nameFilter);
-  } catch { return []; }
+    // Explicit radius = a single pass; otherwise climb the ladder until something's found.
+    const ladder = opts.radiusM ? [opts.radiusM] : RADIUS_LADDER_M;
+    for (const radiusM of ladder) {
+      const body = await fetchText(overpassUrl(), overpassQuery(lat, lng, tags, radiusM));
+      const places = parsePlaces(body, lat, lng, label, opts.limit ?? 5, nameFilter);
+      if (places.length) return { places, radiusKm: radiusM / 1000 };
+    }
+    return { places: [], radiusKm: ladder[ladder.length - 1]! / 1000 };
+  } catch { return { places: [], radiusKm: (opts.radiusM ?? RADIUS_LADDER_M[RADIUS_LADDER_M.length - 1]!) / 1000 }; }
 }

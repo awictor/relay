@@ -279,7 +279,7 @@ export interface BrowserBackend {
   getWeather?(opts: { place?: string; lat?: number; lng?: number; near?: { lat: number; lng: number } }): Promise<import("./lib/weather.js").WeatherResult | null>;
   // Optional: find nearby places (near-me-poi). Absent -> the find_nearby tool reports it's
   // unavailable. Returns [] on a bad area / fetch failure.
-  findNearby?(opts: { what: string; lat?: number; lng?: number; near?: string; bias?: { lat: number; lng: number }; units?: "metric" | "imperial" }): Promise<import("./lib/places.js").Place[]>;
+  findNearby?(opts: { what: string; lat?: number; lng?: number; near?: string; bias?: { lat: number; lng: number }; units?: "metric" | "imperial" }): Promise<import("./lib/places.js").NearbyOutcome>;
   // Optional: distance + travel time between two places (directions-eta). Absent -> the directions tool
   // reports it's unavailable. Returns null on a bad place / no route / fetch failure.
   getDirections?(opts: { to: string; from?: string; fromLat?: number; fromLng?: number; bias?: { lat: number; lng: number }; mode?: "driving" | "walking" | "cycling"; units?: "metric" | "imperial" }): Promise<import("./lib/directions.js").Route | null>;
@@ -669,8 +669,18 @@ export async function runAgent(
           const opts = near
             ? { what, near, units, ...(deps.weatherCoords ? { bias: deps.weatherCoords } : {}) }
             : { what, lat: deps.weatherCoords!.lat, lng: deps.weatherCoords!.lng, units };
-          const places = await backend.findNearby(opts);
-          push("find_nearby", `${formatPlaces(places, what, units)} Report this to the user.`);
+          const r = await backend.findNearby(opts);
+          if ("error" in r) {
+            push("find_nearby", r.error === "area_not_found"
+              ? `I couldn't find the area "${near}" — ask the user for a more specific place.`
+              : "No location to search around — ask the user where, or have them share their location.");
+          } else if (!r.places.length) {
+            push("find_nearby", `No ${what} found within ${Math.round(r.radiusKm)}km. Tell the user none turned up nearby.`);
+          } else {
+            // Note the radius when it widened past the default 3km so the user knows how far out these are.
+            const widened = r.radiusKm > 3 ? ` (nearest within ${Math.round(r.radiusKm)}km)` : "";
+            push("find_nearby", `${formatPlaces(r.places, what, units)}${widened} Report this to the user.`);
+          }
         } catch (e) {
           push("find_nearby", `ERROR finding places: ${e instanceof Error ? e.message : String(e)}`);
         }

@@ -320,7 +320,7 @@ describe("runAgent find_nearby (near-me-poi)", () => {
       { toolCall: { name: "reply", args: { text: "Nearest: Zen (0.3mi)." } } },
     ]);
     let seen: unknown = null;
-    const backend = nb({ findNearby: async (opts: unknown) => { seen = opts; return [{ name: "Zen", category: "cafe", distanceKm: 0.5 }]; } });
+    const backend = nb({ findNearby: async (opts: unknown) => { seen = opts; return { places: [{ name: "Zen", category: "cafe", distanceKm: 0.5 }], radiusKm: 3 }; } });
     await runAgent("coffee near me", { llm, backend, weatherCoords: { lat: 30, lng: -97 }, weatherUnits: "imperial" });
     expect(seen).toMatchObject({ what: "coffee", lat: 30, lng: -97 });
     expect(llm.calls[1]!.find((m) => m.role === "tool")!.content).toMatch(/Nearby coffee:\n• Zen/);

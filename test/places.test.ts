@@ -95,19 +95,40 @@ describe("findNearby (injected fetch)", () => {
       if (url.includes("nominatim")) return JSON.stringify([{ lat: "30.0", lon: "-97.0" }]);
       return JSON.stringify({ elements: [{ lat: 30.001, lon: -97.0, tags: { name: "Cafe X", amenity: "cafe" } }] });
     };
-    const p = await findNearby({ what: "coffee", near: "downtown Austin" }, fetchText);
-    expect(p[0]!.name).toBe("Cafe X");
+    const r = await findNearby({ what: "coffee", near: "downtown Austin" }, fetchText);
+    expect("places" in r && r.places[0]!.name).toBe("Cafe X");
     expect(calls[0]!.url).toContain("nominatim");
     expect(calls[1]!.body).toContain("around:"); // Overpass query POSTed
   });
-  it("uses coords directly (no geocode) + returns [] on failure", async () => {
+  it("uses coords directly (no geocode) + [] places on fetch failure", async () => {
     let geocoded = false;
-    const p = await findNearby({ what: "coffee", lat: 30, lng: -97 }, async (url, body) => {
+    const r = await findNearby({ what: "coffee", lat: 30, lng: -97 }, async (url) => {
       if (url.includes("nominatim")) { geocoded = true; return "[]"; }
       return JSON.stringify({ elements: [{ lat: 30.001, lon: -97, tags: { name: "C", amenity: "cafe" } }] });
     });
     expect(geocoded).toBe(false);
-    expect(p).toHaveLength(1);
-    expect(await findNearby({ what: "coffee", lat: 30, lng: -97 }, async () => { throw new Error("net"); })).toEqual([]);
+    expect("places" in r && r.places).toHaveLength(1);
+    const fail = await findNearby({ what: "coffee", lat: 30, lng: -97 }, async () => { throw new Error("net"); });
+    expect("places" in fail && fail.places).toEqual([]);
+  });
+  it("returns an area_not_found error when the named area can't be geocoded (find-nearby-radius-expand)", async () => {
+    const r = await findNearby({ what: "coffee", near: "Xyzzyville" }, async (url) => url.includes("nominatim") ? "[]" : "{}");
+    expect(r).toEqual({ error: "area_not_found" });
+  });
+  it("expands the radius until results appear (nearest-X not a false-negative)", async () => {
+    const radii: number[] = [];
+    const r = await findNearby({ what: "hospital", lat: 30, lng: -97 }, async (url, body) => {
+      if (body) {
+        const m = body.match(/around:(\d+)/); if (m) radii.push(Number(m[1]));
+        // Empty at 3km + 10km; a hit only at 30km.
+        return radii[radii.length - 1] === 30000
+          ? JSON.stringify({ elements: [{ lat: 30.2, lon: -97, tags: { name: "Mercy Hospital", amenity: "hospital" } }] })
+          : JSON.stringify({ elements: [] });
+      }
+      return "[]";
+    });
+    expect(radii).toEqual([3000, 10000, 30000]); // climbed the ladder
+    expect("places" in r && r.places[0]!.name).toBe("Mercy Hospital");
+    expect("radiusKm" in r && r.radiusKm).toBe(30);
   });
 });

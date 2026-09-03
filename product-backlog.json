@@ -1166,7 +1166,7 @@
       "title": "find_nearby fixed 3km radius + no-area-found reads as \"none nearby\"",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "\"nearest ER/hospital\" returns \"none nearby\" when one exists just past 3km (dangerous false-negative); a failed area geocode is reported identically to genuinely-empty.",
       "how": "Expand the radius on an empty result (3->10->30km); distinguish a null geocode (\"couldn t find that area\") from empty results (\"nothing within Nkm\")."
     },
@@ -1606,6 +1606,10 @@
     {
       "id": "geo-tools-disambiguate-coords",
       "note": "Propagated the weather region-disambiguation to find_nearby + directions: Nominatim now fetches 5 candidates (parseNominatimAll) and pickNominatim(bias) prefers the one within ~250km of a hint. directions biases the origin geocode to the user coords + the DESTINATION geocode to the origin, so \"directions to Springfield\" from Boston resolves to Springfield MA not IL. find_nearby biases a named area to the user coords. bias is a hint that never overrides an explicit from/coords. parseNominatim kept as a back-compat shim. 1052 tests green."
+    },
+    {
+      "id": "find-nearby-radius-expand",
+      "note": "find_nearby now expands its search radius 3->10->30km until results appear, so \"nearest ER/hospital\" is no longer a dangerous false-negative just past 3km; it also distinguishes a failed area geocode (area_not_found) from a genuinely-empty result, and surfaces the radius when it widened past 3km. findNearby returns a NearbyOutcome ({places,radiusKm} | {error}); agent dispatch handles each case. 1054 tests green."
     }
   ],
   "audits": [
