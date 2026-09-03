@@ -164,6 +164,12 @@ export interface HandlerDeps {
   logAdd?: (chatId: number, text: string, now: number) =>
     { ok: true; tag: string; value: number; unit?: string; count: number; saved?: boolean } | { ok: false; reason: "capped" } | null;
   logQuery?: (chatId: number, text: string, now: number) => Promise<{ tag: string; text: string; png?: Uint8Array } | null>;
+  // Contact follow-up nudge (contact-followup-nudge): "follow up with Sarah in 3 days" -> resolve the
+  // saved contact + schedule a reminder that, when it fires, names the person + carries their handle + a
+  // one-tap draft link. Returns the confirmation, { ok:false, reason } (unparsed time / cap), or null
+  // (not a follow-up command). Optional; reuses schedule + contacts + compose.
+  followUpAdd?: (chatId: number, text: string, now: number) =>
+    { ok: true; name: string; whenText?: string; hasContact: boolean; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" } | null;
   // Named lists (personal-notes-lists-store): a durable, editable collection the user reads back +
   // checks off ("add eggs to my grocery list", "what's on my list"). Distinct from remembered FACTS
   // (which get injected into every answer) — a list is data the user manages, not context. Returns a
@@ -1101,6 +1107,27 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           await deps.sendMessage(msg.chatId, `Resumed ${scope} — back on its normal schedule.`);
         }
         return;
+      }
+    }
+
+    // Contact follow-up nudge (contact-followup-nudge): "follow up with Sarah in 3 days" / "remind me to
+    // reply to my landlord tomorrow" -> a person-anchored reminder that fires with the contact's handle +
+    // a draft link. Gated on the follow-up/get-back-to/reply-to verb so a plain reminder isn't captured;
+    // checked before the generic schedule cue. null -> not a follow-up, fall through.
+    if (!isExplicitCommand && deps.followUpAdd
+        && /\b(follow\s+up\s+with|check\s+in\s+with|circle\s+back|get\s+back\s+to|reply\s+to)\b/i.test(msg.text)) {
+      const r = deps.followUpAdd(msg.chatId, msg.text, deps.now());
+      if (r) {
+        if (!r.ok) {
+          // Couldn't parse a time — fall through to the normal scheduler/agent rather than dead-ending.
+          if (r.reason !== "unparsed") { await deps.sendMessage(msg.chatId, `You've got a lot scheduled — I hit my reminder limit. Cancel one with /cancel first.`); return; }
+        } else {
+          const who = r.hasContact ? `${r.name} (I'll include their contact + a draft link)` : `${r.name}`;
+          const when = r.whenText ? ` ${r.whenText}` : "";
+          const warn = r.saved === false ? ` (⚠️ couldn't save to disk — may be lost on restart)` : "";
+          await deps.sendMessage(msg.chatId, `👋 Got it — I'll nudge you to follow up with ${who}${when}.${warn}`);
+          return;
+        }
       }
     }
 

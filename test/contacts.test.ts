@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { normalizeContactName, parseSaveContact, parseForgetContact, ContactStore } from "../src/lib/contacts.js";
+import { normalizeContactName, parseSaveContact, parseForgetContact, parseFollowUp, ContactStore } from "../src/lib/contacts.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -44,6 +44,21 @@ describe("parseForgetContact", () => {
   });
   it("returns null for a non-forget message", () => {
     expect(parseForgetContact("what's on my list")).toBeNull();
+  });
+});
+
+describe("parseFollowUp (contact-followup-nudge)", () => {
+  it("splits the contact name from the when clause", () => {
+    expect(parseFollowUp("follow up with Sarah in 3 days")).toEqual({ name: "sarah", when: "in 3 days" });
+    expect(parseFollowUp("follow up with my landlord tomorrow")).toEqual({ name: "landlord", when: "tomorrow" });
+    expect(parseFollowUp("remind me to reply to Sam on Friday")).toEqual({ name: "sam", when: "on Friday" });
+    expect(parseFollowUp("nudge me to get back to mom next week")).toEqual({ name: "mom", when: "next week" });
+    expect(parseFollowUp("check in with dave's next Monday")).toEqual({ name: "dave", when: "next Monday" });
+  });
+  it("null without the follow-up verb or without a time clause", () => {
+    expect(parseFollowUp("remind me to buy milk tomorrow")).toBeNull(); // not a follow-up verb
+    expect(parseFollowUp("follow up with Sarah")).toBeNull();           // no when
+    expect(parseFollowUp("what's the weather")).toBeNull();
   });
 });
 

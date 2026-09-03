@@ -65,7 +65,7 @@ const HELP = `Relay — what I can do:
 
 Draft correspondence: "write an email to my landlord that rent is late" or "text mom I'll be late" → I draft it and give you a copy block + a one-tap send link. You review and send — I never send for you.
 
-Save contacts so I know who "mom" is: "save mom's number is 555-123-4567", "my boss's email is boss@co.com" → then "text mom I'll be late" / "email my boss the update" drafts straight to them. /contacts lists them; "forget mom's contact" removes one.
+Save contacts so I know who "mom" is: "save mom's number is 555-123-4567", "my boss's email is boss@co.com" → then "text mom I'll be late" / "email my boss the update" drafts straight to them. /contacts lists them; "forget mom's contact" removes one. And "follow up with Sarah in 3 days" / "remind me to reply to my landlord tomorrow" → I'll nudge you when it's time, with their contact + a one-tap draft link.
 
 Add to your calendar: "add dentist Thursday 2pm to my calendar" → I give you a Google Calendar link + an .ics file to import. You tap to add.
 

@@ -59,6 +59,40 @@ describe("createHandler — memory-write hedge (memory-write-silent-fail)", () =
   });
 });
 
+describe("createHandler — contact follow-up nudge (contact-followup-nudge)", () => {
+  it("'follow up with Sarah in 3 days' schedules it + confirms, no agent", async () => {
+    let seen = "";
+    const { handle, sent, recorded } = harness({
+      followUpAdd: (_c, text) => { seen = text; return { ok: true, name: "Sarah", whenText: "in 3 days", hasContact: true }; },
+    });
+    await handle(msg("follow up with Sarah in 3 days", 5));
+    expect(seen).toBe("follow up with Sarah in 3 days");
+    expect(sent[0]!.text).toMatch(/nudge you to follow up with Sarah/);
+    expect(sent[0]!.text).toMatch(/contact \+ a draft link/);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it("an unparsed-time follow-up falls through to the agent (not a dead-end)", async () => {
+    const { handle, recorded } = harness({
+      followUpAdd: () => ({ ok: false, reason: "unparsed" }),
+      runAgentFn: async () => ({ reply: "ok", steps: 1, tools: [] }),
+    });
+    await handle(msg("follow up with Sarah whenever", 5));
+    expect(recorded).toHaveLength(1); // reached the agent
+  });
+
+  it("a non-follow-up message isn't captured", async () => {
+    let called = false;
+    const { handle, recorded } = harness({
+      followUpAdd: () => { called = true; return null; },
+      runAgentFn: async () => ({ reply: "ok", steps: 1, tools: [] }),
+    });
+    await handle(msg("what's the weather in Paris", 5));
+    expect(called).toBe(false); // cue-gated, never invoked
+    expect(recorded).toHaveLength(1);
+  });
+});
+
 describe("createHandler — quick-log tracker (quick-log-tracker)", () => {
   it("'log weight 182' stores it + confirms, no agent", async () => {
     let logged = "";

@@ -41,7 +41,8 @@ import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } f
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
 import { LogStore, parseLogCommand, parseLogQuery, sumSeries } from "./lib/logs.js";
 import { ListStore, parseListCommand, parseListExport, splitItems } from "./lib/lists.js";
-import { ContactStore, parseSaveContact, parseForgetContact } from "./lib/contacts.js";
+import { ContactStore, parseSaveContact, parseForgetContact, parseFollowUp } from "./lib/contacts.js";
+import { mailtoLink, smsLink } from "./lib/compose.js";
 import { isTextualDoc, decodeTextDoc, buildDocPrompt } from "./lib/docs.js";
 import { setCorruptHandler } from "./lib/safe-store.js";
 import { AnswerLog, recallKeywords } from "./lib/answer-log.js";
@@ -568,6 +569,27 @@ const handle = createHandler({
       if (rec) scheduled++;
     }
     return { ok: true, message: formatCountdown(c), milestones: scheduled, saved: schedules.lastSaveOk() };
+  },
+  // Contact follow-up nudge (contact-followup-nudge): "follow up with Sarah in 3 days" -> a reminder
+  // that, on fire, names the person + (if saved) carries their handle + a one-tap draft link. Resolves
+  // the contact NOW and bakes the handle into the reminder text, so the fire-time echo is self-contained
+  // (no lookup needed in the runner). reminderOnly so it echoes rather than running the agent.
+  followUpAdd: (chatId, text, now) => {
+    const p = parseFollowUp(text);
+    if (!p) return null;
+    const c = contacts.get(chatId, p.name);
+    const label = c?.name ?? p.name;
+    // Build the fire-time reminder text: "follow up with <name>" + their handle + a tap-to-draft link.
+    let task = `follow up with ${label}`;
+    if (c?.email) task += `\n✉️ ${c.email} — tap to draft: ${mailtoLink({ kind: "email", to: c.email, body: "" })}`;
+    else if (c?.phone) task += `\n💬 ${c.phone} — tap to text: ${smsLink({ kind: "message", to: c.phone, body: "" })}`;
+    // Reuse the schedule parser for the WHEN clause (relative "in 3 days" / "on Friday" / "next week").
+    const sp = parseScheduleFor(p.when, task, now, profiles.offsetMin(chatId));
+    if (!sp) return { ok: false, reason: "unparsed" };
+    const rec = schedules.add(chatId, { ...sp, reminderOnly: true }, now);
+    if (!rec) return { ok: false, reason: "capped" };
+    const whenText = formatWhen(rec.dueMs, profiles.offsetMin(chatId) ?? tzOffsetMin(), now);
+    return { ok: true, name: label, whenText, hasContact: !!c, saved: schedules.lastSaveOk() };
   },
   // First-reminder tz (first-reminder-tz-ask): would this message schedule a CLOCK-TIME task with no
   // saved tz? If so the handler asks the city first (city→tz) rather than scheduling wrong-at-UTC.

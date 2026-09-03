@@ -2768,7 +2768,7 @@
       "title": "reminders aren't person-anchored ('follow up with Sarah in 3 days')",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Reminders exist but aren't tied to a PERSON, and contacts.ts is a passive lookup. 'nudge me to reply to my landlord' / 'follow up with Sarah Fri' should fire AND pull that contact's details + offer a tap-to-draft (compose) in the same ping — a lightweight personal-CRM loop, the 'assistant that has your back' behavior.",
       "how": "Parse 'follow up with <contact> <when>' -> a reminder-once whose task references the contact; on fire, resolve the saved contact + append their email/phone + a compose deep-link. Reuse schedule + contacts + compose."
     }
@@ -3873,6 +3873,10 @@
     {
       "item": "quick-log-tracker",
       "note": "Personal quick-log tracker (quick-log-tracker) — the strongest daily-habit hook Relay lacked. 'log weight 182' / 'spent $14 on lunch' / 'log mood 7' append a tagged data point; 'show my weight this month' returns a summary + chart PNG, 'how much did I spend on food this week' returns a windowed total. New src/lib/logs.ts: LogStore (per-chat tag -> [{t,v}] + unit, atomic/corrupt-safe, caps 50 tags / 1000 pts oldest-drop, lastSaveOk), parseLogCommand ('log/track <tag> <value> [unit]' + money 'spent $X on <thing>' -> tag=thing unit=$), parseLogQuery (sum vs trend + today/week/month/year window; 'show my <tag>'/'how much did I spend on <tag>' — tightened so a bare 'what's the weather' isn't a log query), sumSeries. Wired logAdd + logQuery deps (index reuses summarizeSeries + renderChart via defaultFetchBytes) + state-paths RELAY_LOGS_FILE + .env parity + corrupt-store label. Handler routes log-ADD before the scheduler, log-QUERY gated on a show/how-much/trend cue + AFTER places/lists so 'show my grocery list' still lists. HELP line. 13 new tests (parse cmd/query, store append/per-chat/persist/unit, sumSeries windowed; handler log/sum/chart-photo/fallthrough). suite 1879 green, tsc clean. Offline; anvil-independent (quickchart render is the existing keyless path)."
+    },
+    {
+      "item": "contact-followup-nudge",
+      "note": "Person-anchored follow-up nudges (contact-followup-nudge). 'follow up with Sarah in 3 days' / 'remind me to reply to my landlord tomorrow' now schedule a reminder that, on fire, names the person AND (if saved) carries their email/phone + a one-tap mailto:/sms: draft link — a lightweight personal-CRM loop joining reminders + contacts + compose (all pre-existing; no new store/runner). New parseFollowUp in contacts.ts (splits contact name from the when clause; gated on a follow-up/get-back-to/reply-to verb). index.followUpAdd resolves the contact NOW + bakes handle+draft-link into a reminderOnly schedule via parseScheduleFor (reuses relative/on-Friday/next-week grammar). Handler routes on the follow-up verb before the generic schedule cue; an UNPARSED time falls through to the normal scheduler/agent (no dead-end). HELP line. 5 new tests (parseFollowUp split + reject; handler schedule/confirm, unparsed-fallthrough, non-followup-not-captured). suite 1884 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [

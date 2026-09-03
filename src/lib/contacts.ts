@@ -62,6 +62,27 @@ export function parseSaveContact(text: string): SaveContact | null {
   return null;
 }
 
+/** Parse a person-anchored follow-up nudge (contact-followup-nudge), or null. Splits the CONTACT name
+ * from the WHEN clause so the handler can resolve the saved contact + schedule a reminder that pings
+ * with their details + a draft link. Forms:
+ *   "follow up with Sarah in 3 days"    "follow up with my landlord tomorrow"
+ *   "nudge me to reply to Sam on Friday"  "remind me to get back to mom next week"
+ * Returns { name, when } — `when` is the raw time phrase (parsed downstream by the schedule parser). The
+ * "reply to / get back to / follow up with" verb is required so a plain reminder isn't hijacked. */
+export function parseFollowUp(text: string): { name: string; when: string } | null {
+  const t = text.trim();
+  // <lead> <contact> <when>. The when clause is a trailing time phrase (in N days / tomorrow / on Friday
+  // / next week / at 3pm). Capture the contact between the verb and the when.
+  const m = t.match(
+    /^\s*(?:(?:can\s+you\s+)?(?:remind|nudge)\s+me\s+to\s+(?:reply\s+to|get\s+back\s+to|follow\s+up\s+with|message|text|email|call|ping|check\s+in\s+with)|follow\s+up\s+with|check\s+in\s+with|circle\s+back\s+(?:with|to))\s+(.+?)\s+((?:in\s+.+|tomorrow.*|tonight.*|on\s+.+|next\s+.+|this\s+.+|at\s+.+|by\s+.+))$/i,
+  );
+  if (!m) return null;
+  const name = normalizeContactName(m[1]!.replace(/^(?:about|re:?)\s+/i, ""));
+  const when = m[2]!.trim();
+  if (!name || isValueWord(name) || !when) return null;
+  return { name, when };
+}
+
 // A name that's really just a value/keyword (not a person) — guard against saving "email"/"number" as a contact.
 function isValueWord(name: string): boolean {
   return /^(email|e-?mail|number|phone|cell|mobile|address|contact|a contact)$/i.test(name.trim());
