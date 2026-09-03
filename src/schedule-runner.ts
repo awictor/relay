@@ -7,14 +7,19 @@
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Schedule, ScheduleStore } from "./lib/schedule.js";
 import { hasSlots, isChain } from "./lib/recipes.js";
+import type { AgentEnv } from "./chain-runner.js";
 
 export interface ScheduleRunnerDeps {
   store: ScheduleStore;
   llm: LLMClient;
-  runAgent: (userText: string, deps: { llm: LLMClient; context?: string }, history: LLMMessage[]) => Promise<{ reply: string; steps?: number; tools?: string[]; degraded?: boolean }>;
+  runAgent: (userText: string, deps: { llm: LLMClient; context?: string } & AgentEnv, history: LLMMessage[]) => Promise<{ reply: string; steps?: number; tools?: string[]; degraded?: boolean }>;
   // Per-user profile context for proactive runs (product-loop): a scheduled "weather" must use the
   // user's saved location just like the inbound path does. Optional; absent = no context.
   contextFor?: (chatId: number) => string;
+  // Clock + units for the proactive run (proactive-runs-datetime-units-blind): so a scheduled "top news
+  // today"/daily weather reasons from the real date + the user's units, not the model's training date /
+  // a hardcoded °F. Optional; absent = the inbound-parity fields are simply omitted.
+  agentEnv?: (chatId: number) => AgentEnv;
   send: (chatId: number, text: string) => Promise<unknown>;
   formatReply: (text: string) => string;
   now: () => number;
@@ -193,7 +198,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         const chained = await deps.runChain(s.chatId, taskToRun);
         res = { reply: chained };
       } else {
-        res = await deps.runAgent(taskToRun, { llm: deps.llm, context: deps.contextFor?.(s.chatId) || undefined }, []);
+        res = await deps.runAgent(taskToRun, { llm: deps.llm, context: deps.contextFor?.(s.chatId) || undefined, ...deps.agentEnv?.(s.chatId) }, []);
       }
       const body = deps.formatReply(res.reply);
       // A degraded reply (agent ran out of steps / no answer, DEV-0176) is a soft failure, not a real

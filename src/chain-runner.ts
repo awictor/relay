@@ -7,11 +7,17 @@
 import type { LLMClient, LLMMessage } from "./llm.js";
 import { parseChainSteps, type ChainStep } from "./lib/recipes.js";
 
+// The per-chat agent environment threaded into a PROACTIVE run so a scheduled/chained task reasons from
+// the real clock + the user's units, not the model's training date / a hardcoded °F (proactive-runs-
+// datetime-units-blind). Mirrors the fields the inbound path passes into runAgent.
+export interface AgentEnv { nowMs?: number; tzOffsetMin?: number; weatherCoords?: { lat: number; lng: number }; weatherUnits?: "metric" | "imperial"; }
+
 export interface ChainRunnerDeps {
   llm: LLMClient;
-  runAgent: (userText: string, deps: { llm: LLMClient; context?: string }, history: LLMMessage[]) => Promise<{ reply: string; degraded?: boolean }>;
+  runAgent: (userText: string, deps: { llm: LLMClient; context?: string } & AgentEnv, history: LLMMessage[]) => Promise<{ reply: string; degraded?: boolean }>;
   formatReply: (text: string) => string;
   contextFor?: (chatId: number) => string; // per-user profile context (location/units/facts)
+  agentEnv?: (chatId: number) => AgentEnv;  // clock + units for the proactive run
 }
 
 // True if `hay` contains `needle` NOT preceded by a negation ("not"/"no"/"out of"/"n't"/"never"/
@@ -74,7 +80,7 @@ export async function runChain(chatId: number, task: string, deps: ChainRunnerDe
     const stepContext = [ctx, prev ? `Previous step result:\n${prev}` : ""].filter(Boolean).join("\n\n") || undefined;
     let output: string;
     try {
-      const res = await deps.runAgent(step.text, { llm: deps.llm, context: stepContext }, []);
+      const res = await deps.runAgent(step.text, { llm: deps.llm, context: stepContext, ...deps.agentEnv?.(chatId) }, []);
       output = res.degraded ? "" : deps.formatReply(res.reply).trim();
     } catch { output = ""; }
     trace.push({ task: step.text, output });

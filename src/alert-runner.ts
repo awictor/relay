@@ -7,6 +7,7 @@ import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Alert } from "./lib/alerts.js";
 import { changed, conditionHolds, extractValue, extractListItems, feedItemKey } from "./lib/alerts.js";
 import { mapPool } from "./lib/pool.js";
+import type { AgentEnv } from "./chain-runner.js";
 
 // Cap concurrent watchlist member checks so a multi-member watchlist can't stampede the shared anvil
 // browser pool (each member is a full agent run + browser session) — the same bound the digest runner
@@ -27,9 +28,12 @@ export interface AlertRunResult {
 
 export interface AlertRunnerDeps {
   llm: LLMClient;
-  runAgent: (userText: string, deps: { llm: LLMClient; context?: string }, history: LLMMessage[]) => Promise<{ reply: string; degraded?: boolean }>;
+  runAgent: (userText: string, deps: { llm: LLMClient; context?: string } & AgentEnv, history: LLMMessage[]) => Promise<{ reply: string; degraded?: boolean }>;
   formatReply: (text: string) => string;
   setLast: (chatId: number, name: string, value: string) => void;
+  // Clock + units for the proactive check (proactive-runs-datetime-units-blind): a watched "weather"/
+  // "today's top story" reasons from the real date + the user's units. Optional.
+  agentEnv?: (chatId: number) => AgentEnv;
   // Feed-watch (new-item-feed-watch): merge newly-reported item keys into the alert's seen-set. Called
   // by the caller's commit() only after a successful send (so a failed send re-reports next check).
   recordSeen?: (chatId: number, name: string, keys: string[]) => void;
@@ -73,7 +77,7 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     // try/catch keeps one failure from sinking the batch; order is preserved.
     const results = await mapPool(alert.members, WATCHLIST_CONCURRENCY, async (mem) => {
       try {
-        const res = await deps.runAgent(mem.task, { llm: deps.llm, context: ctx }, []);
+        const res = await deps.runAgent(mem.task, { llm: deps.llm, context: ctx, ...deps.agentEnv?.(alert.chatId) }, []);
         if (res.degraded) return { mem, value: null as string | null };
         return { mem, value: deps.formatReply(res.reply).trim() };
       } catch { return { mem, value: null as string | null }; }
@@ -116,7 +120,7 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   const advance = (v: string) => () => deps.setLast(alert.chatId, alert.name, v);
   let value: string;
   try {
-    const res = await deps.runAgent(alert.task, { llm: deps.llm, context: deps.contextFor?.(alert.chatId) || undefined }, []);
+    const res = await deps.runAgent(alert.task, { llm: deps.llm, context: deps.contextFor?.(alert.chatId) || undefined, ...deps.agentEnv?.(alert.chatId) }, []);
     // A degraded (soft-failure) reply is NOT a real value — comparing it to lastValue would read as a
     // change and spam the user with the failure text. Skip notify, keep lastValue (DEV-0176).
     if (res.degraded) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };

@@ -61,6 +61,20 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.list(7)).toHaveLength(0);         // once -> gone
   });
 
+  it("threads the chat's clock + units into the proactive runAgent (proactive-runs-datetime-units-blind)", async () => {
+    const clock = { t: NOW };
+    let seenDeps: { nowMs?: number; tzOffsetMin?: number; weatherUnits?: string } | null = null;
+    const { store, runner } = harness(clock, {
+      runAgent: async (_task: string, d: { nowMs?: number; tzOffsetMin?: number; weatherUnits?: string }) => { seenDeps = d; return { reply: "ok" }; },
+      agentEnv: (_c: number) => ({ nowMs: NOW, tzOffsetMin: -300, weatherUnits: "metric" as const }),
+    });
+    store.add(1, { kind: "once", task: "top news today", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(seenDeps!.nowMs).toBe(NOW);        // the agent knows the real date, not its training cutoff
+    expect(seenDeps!.tzOffsetMin).toBe(-300); // in the user's zone
+    expect(seenDeps!.weatherUnits).toBe("metric"); // + the user's units
+  });
+
   it("a paused schedule is skipped without firing or completing (snooze-automations)", async () => {
     const clock = { t: NOW };
     const { store, runner, sent, ran } = harness(clock);

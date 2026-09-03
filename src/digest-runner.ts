@@ -8,6 +8,7 @@ import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Digest } from "./lib/digests.js";
 import { mapPool } from "./lib/pool.js";
 import { hasSlots, isChain } from "./lib/recipes.js";
+import type { AgentEnv } from "./chain-runner.js";
 
 // Cap on how many member agents run at once (DEV-0140). Each member opens an anvil browser session;
 // the self-hosted anvil has a bounded Chrome pool, so an unbounded fan-out (DEV-0139's Promise.all)
@@ -18,7 +19,10 @@ export interface DigestRunnerDeps {
   llm: LLMClient;
   // Resolve a member recipe name -> its task (null if the recipe was deleted since define).
   resolveRecipe: (chatId: number, name: string) => { task: string } | null;
-  runAgent: (userText: string, deps: { llm: LLMClient; context?: string }, history: LLMMessage[]) => Promise<{ reply: string; degraded?: boolean }>;
+  runAgent: (userText: string, deps: { llm: LLMClient; context?: string } & AgentEnv, history: LLMMessage[]) => Promise<{ reply: string; degraded?: boolean }>;
+  // Clock + units for the proactive run (proactive-runs-datetime-units-blind): a digest member reasons
+  // from the real date + the user's units. Optional.
+  agentEnv?: (chatId: number) => AgentEnv;
   // A member recipe whose task is a ">>" chain must run as a sequential workflow, not as one literal
   // agent task (digest-chain-member-literal) — same as the inbound /run + scheduled-recipe paths. When
   // absent, a chain member falls back to runAgent (prior behavior). Returns the chain's final output.
@@ -65,7 +69,7 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
         const out = (await deps.runChain(digest.chatId, rec.task)).trim();
         return out ? { line: `• ${name}: ${out}`, real: true } : { line: `• ${name}: (couldn't fetch)`, real: false };
       }
-      const res = await deps.runAgent(rec.task, { llm: deps.llm, context: deps.contextFor?.(digest.chatId) || undefined }, []);
+      const res = await deps.runAgent(rec.task, { llm: deps.llm, context: deps.contextFor?.(digest.chatId) || undefined, ...deps.agentEnv?.(digest.chatId) }, []);
       // A degraded reply (agent ran out of steps / produced no answer, DEV-0176) is NOT briefing
       // content — showing its failure text as this member's section would read as real data. Treat
       // it exactly like a thrown error: the "(couldn't fetch)" fallback line (DEV-0177).

@@ -104,13 +104,22 @@ const profiles = new ProfileStore({ file: paths.profile });
 const notes = new NotesStore({ file: paths.notes });
 const answerLog = new AnswerLog({ file: paths.answers });
 const backgroundStore = new BackgroundStore({ file: paths.background });
+// Per-chat agent environment for PROACTIVE runs (proactive-runs-datetime-units-blind): the clock + tz +
+// coords + units the inbound path already threads into runAgent, so a scheduled/alert/digest/chain task
+// reasons from the real date and the user's units instead of the model's training date / a hardcoded °F.
+const agentEnvFor = (chatId: number) => ({
+  nowMs: Date.now(),
+  tzOffsetMin: profiles.offsetMin(chatId) ?? tzOffsetMin(),
+  weatherCoords: profiles.freshCoords(chatId, Date.now()),
+  weatherUnits: profiles.get(chatId)?.units,
+});
 // Run a digest -> composed briefing text (member recipes -> one message). Shared by /run + schedule.
 const digestRunText = (chatId: number, name: string): Promise<string | null> => {
   const d = digests.get(chatId, name);
   if (!d) return Promise.resolve(null);
-  return runDigest(d, { llm, resolveRecipe: (c, n) => { const r = recipes.get(c, n); return r ? { task: r.task } : null; }, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()),
+  return runDigest(d, { llm, resolveRecipe: (c, n) => { const r = recipes.get(c, n); return r ? { task: r.task } : null; }, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor,
     // A chained-recipe member runs as a sequential workflow, not a literal task (digest-chain-member-literal).
-    runChain: async (c, task) => (await runChain(c, task, { llm, runAgent, formatReply, contextFor: (cc) => profiles.contextLine(cc, Date.now()) })).final });
+    runChain: async (c, task) => (await runChain(c, task, { llm, runAgent, formatReply, contextFor: (cc) => profiles.contextLine(cc, Date.now()), agentEnv: agentEnvFor })).final });
 };
 // Check an alert -> { message (null = silent), commit }. The caller MUST call commit() AFTER a
 // successful send so a failed send leaves the baseline un-advanced + the crossing re-fires next
@@ -119,7 +128,7 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
   const a = alerts.get(chatId, name);
   if (!a) return { message: null, commit: () => {} };
   const r = await checkAlert(a, {
-    llm, runAgent, formatReply,
+    llm, runAgent, formatReply, agentEnv: agentEnvFor,
     setLast: (c, n, v) => alerts.setLast(c, n, v),
     recordSeen: (c, n, keys) => alerts.recordSeen(c, n, keys),
     recordPoint: (c, n, v, t) => alerts.recordPoint(c, n, v, t),
@@ -130,7 +139,7 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
     runThen: async (c, recipeName) => {
       const rec = recipes.get(c, recipeName);
       if (!rec) return null;
-      const out = await runAgent(rec.task, { llm, context: profiles.contextLine(c, Date.now()) || undefined }, []);
+      const out = await runAgent(rec.task, { llm, context: profiles.contextLine(c, Date.now()) || undefined, ...agentEnvFor(c) }, []);
       return out.degraded ? null : formatReply(out.reply);
     },
   });
@@ -146,7 +155,7 @@ const SCHED_TICK_MS = intEnv(process.env.RELAY_SCHED_TICK_MS, { fallback: 30_000
 // runner records proactive sends, so "more"/"send the link" works after an unprompted ping too.
 const lastResultStore = new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
 const scheduleRunner = makeScheduleRunner({
-  store: schedules, llm, runAgent, send: sendMessage, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()),
+  store: schedules, llm, runAgent, send: sendMessage, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor,
   now: () => Date.now(), periodMs: SCHED_TICK_MS,
   log: (m) => console.log(m),
   recordTurn, // proactive fires count in the same Metrics as inbound turns (m8)
@@ -154,7 +163,7 @@ const scheduleRunner = makeScheduleRunner({
   digestRun: (chatId, name) => digestRunText(chatId, name), // scheduled digests (m9)
   alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
   recipeResolveTask: (chatId, name) => { const r = recipes.get(chatId, name); return r ? r.task : null; }, // scheduled recipes: resolve current task at fire time
-  runChain: async (chatId, task) => (await runChain(chatId, task, { llm, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()) })).final, // scheduled chained recipe = sequential workflow
+  runChain: async (chatId, task) => (await runChain(chatId, task, { llm, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor })).final, // scheduled chained recipe = sequential workflow
   // Proactive ping -> its OWN slot (drilldown + follow-up context), preserving the inbound answer's
   // pageable state so a ping mid-conversation can't eat the answer's unshown tail (proactive-clobbers-
   // drilldown-cache). The ping is sent whole (untrimmed), so its paging offset starts at full length
@@ -397,7 +406,7 @@ const handle = createHandler({
   },
   // Run a chained recipe (">>"-separated steps) sequentially, feeding each step's output to the next.
   runChainRecipe: async (chatId, task) => {
-    const r = await runChain(chatId, task, { llm, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()) });
+    const r = await runChain(chatId, task, { llm, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor });
     // Surface stoppedEarly + step counts so the handler flags a partial answer (chain-progress-partial).
     return { final: r.final, stoppedEarly: r.stoppedEarly, stepsDone: r.steps.filter((s) => !s.skipped).length, stepsTotal: r.steps.length };
   },

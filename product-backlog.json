@@ -14,7 +14,7 @@
       "title": "scheduled/alert/digest agent runs ignore the clock + user units (date-blind, wrong-unit)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The inbound path threads nowMs/tzOffsetMin/weatherCoords/weatherUnits into runAgent, but every PROACTIVE caller (schedule-runner fireOne, alert-runner, digest-runner, chain-runner) calls runAgent(task,{llm,context},[]) with none — so a scheduled 'top news today'/'days until my trip' reasons from the model's training date, and a metric user's daily weather briefing comes back in °F. The proactive half (Relay's reason for being) runs dumber than the reactive half (audit B#1).",
       "how": "Thread the same datetime + weather deps the inbound runAgent gets into the proactive runAgent calls (per-chat: nowMs via a clock, tzOffsetMin/weatherUnits/weatherCoords from profile). Likely a shared buildRunDeps(chatId) helper reused by handler + all runners. Tests: a scheduled run passes the chat's units/now."
     },
@@ -1888,6 +1888,10 @@
     {
       "id": "capability-regex-opener-phrasings",
       "note": "Widened the greeting/capability onboarding match so a new user's ACTUAL first message gets the instant /start card instead of a 10-30s floundering browse. CAPABILITY_RE required what/who/how + can/do/are/is + you/this, missing 'what's this?', 'what does this do?', 'who are you', 'how do you work'. Rebuilt as anchored alternatives (what's/is this[ bot] / what does this do / what can/do you do / who are you / how do you work) with a small closing-filler tail + the existing <=6-word gate, so real tasks ('what does this error mean', 'how does this recipe work in the oven', 'who are you texting for the party') still fall through to the agent. 2 tests (7 opener phrasings greet / 3 real-task guards fall through). call-tested: false (pure regex + handleCommand). 1163 tests green."
+    },
+    {
+      "id": "proactive-runs-datetime-units-blind",
+      "note": "The proactive half of Relay ran dumber than the reactive half: the inbound path threads nowMs/tzOffsetMin/weatherCoords/weatherUnits into runAgent, but every proactive caller (schedule/alert/digest/chain runner) called runAgent(task,{llm,context},[]) with none — so a scheduled 'top news today'/'days until my trip' reasoned from the model's training date and a metric user's daily weather came back in °F. Added an AgentEnv type + an optional agentEnv(chatId) dep to all four runners (widening their runAgent dep to carry the fields), spread into every proactive runAgent call. index wires a shared agentEnvFor(chatId) = {nowMs: Date.now(), tzOffsetMin from profile, weatherCoords freshCoords, weatherUnits from profile} into the schedule runner, alertCheck, digestRunText (+ its runChain), the trigger-to-action runThen, scheduled runChain, and the inbound runChainRecipe. So proactive runs now get the same buildNowLine + unit-aware get_weather the inbound path does. 1 test (schedule tick threads nowMs/tz/units into runAgent). call-tested: false (offline unit proves the deps thread through). 1164 tests green."
     }
   ],
   "audits": [
