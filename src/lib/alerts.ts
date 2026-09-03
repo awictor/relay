@@ -409,8 +409,11 @@ export function extractValue(s: string, hint?: string): number | null {
   }
   // Collect every number, flagging those immediately followed by % (a rate/change, not the value)
   // and scaling a trailing k/bn/billion/million/thousand magnitude suffix (bare m/t excluded here).
+  // The suffix MUST be a true token end — a (?![a-z]) boundary (extractvalue-bare-kb-overscale): otherwise
+  // a bare "k"/"b" glued to a word scaled a plain count wildly ("4 boxes"->4e9, "3 km"->3000, "2 kg"->2000,
+  // "3 bedrooms"->3e9). A real magnitude ("$60k", "900k downloads", "1.3bn") isn't followed by a letter.
   const all: Array<{ v: number; at: number }> = [], nonPct: Array<{ v: number; at: number }> = [];
-  for (const m of t.matchAll(/(-?\d+(?:\.\d+)?)\s?(k|bn|b|thousand|million|billion|trillion)?(\s?%)?/gi)) {
+  for (const m of t.matchAll(/(-?\d+(?:\.\d+)?)\s?(?:(k|bn|b|thousand|million|billion|trillion)(?![a-z]))?(\s?%)?/gi)) {
     if (!m[1]) continue;
     const entry = { v: parseFloat(m[1]) * magMult(m[2], false), at: m.index ?? 0 };
     all.push(entry);

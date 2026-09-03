@@ -2426,7 +2426,7 @@
       "title": "extractValue over-scales any number before a bare k/b word (\"4 boxes\"->4e9)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The untagged magnitude scan /(d+)s?(k|bn|b|thousand|million|billion|trillion)?/ excludes bare m/t (to avoid '3m ago') but LEFT bare k and b. So a non-currency count reply '4 boxes left' matches the 'b'illion suffix -> 4,000,000,000; '3 bedrooms'->3e9; '5 kids'/'3 km'/'2 kg'->x1000. A 'below 10'/'above N' predicate then false-fires/misses + recordPoint logs phantom multi-billion spikes. My count-magnitude fix added the count-noun path but didn't tighten the GENERAL branch's bare k/b. Broad silent-wrong across count/inventory/rental watches.",
       "how": "In the untagged branch require the k/b/etc suffix be followed by a word boundary NOT a letter (mirror the m/t exclusion): a bare 'b'/'k' immediately followed by a letter ('boxes','km','kids','kg') must NOT scale. Only 'k'/'b' at a true token end (or the explicit bn/billion/thousand words) scale. Keep the count-noun path ('900k downloads') working. Offline test: '4 boxes left'->4, '3 km'->3, '2 kg'->2, '900k downloads'->900000, '$60k'->60000."
     },
@@ -3410,6 +3410,10 @@
     {
       "item": "watch-magnitude-suffix",
       "note": "Fixed a watch reading '1.2M subscribers' as 1.2 (off by 6 orders). extractValue's untagged branch excludes a bare m/t (to avoid '3m ago'/'5t'), and a NON-currency count has no $ tag, so '1.2M subscribers' collapsed to 1.2 -> a 'below 50000'/'above 2000000' predicate fired/never-fired + the series recorded garbage. Added a count-magnitude scan (before the general untagged branch): a k/m/b/t/mn/bn suffix IS scaled when immediately followed by a COUNT NOUN (subscribers/followers/views/downloads/users/stars/tokens/streams/members/... — never a time word), so '1.2M subscribers'->1200000, '5B views'->5e9, '5T tokens'->5e12, while '3m ago' stays 3. Hint-nearest applies for multi-number replies. 8 new assertions (count-magnitude scaling + 3m-ago regression + below/above predicate correctness), suite 1662 green, tsc clean. call-tested:false (pure extractValue)."
+    },
+    {
+      "item": "extractvalue-bare-kb-overscale",
+      "note": "Fixed extractValue over-scaling a plain count by 1000-1e9. The untagged magnitude scan had the suffix (k|bn|b|thousand|...) with NO trailing boundary, so a bare k/b glued to a WORD matched: 'only 4 boxes left'->4e9 (the 'b'), '3 km'->3000, '2 kg'->2000, '3 bedrooms'->3e9 — false-firing 'below/above' predicates + logging phantom multi-billion chart points across count/inventory/rental watches. (Bare m/t were already excluded; k/b were the leftover gap.) Added a (?![a-z]) boundary to the suffix group so a letter-glued k/b does NOT scale, while a true token-end magnitude ('$60k','1.3bn') + the count-noun path ('900k downloads') still do. 8 new assertions (boxes/km/kg/bedrooms not scaled; $60k/900k downloads/1.3bn still scaled; below-10 inventory predicate correct), suite 1663 green, tsc clean. call-tested:false (pure extractValue)."
     }
   ],
   "audits": [

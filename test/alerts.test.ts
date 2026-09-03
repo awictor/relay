@@ -107,6 +107,18 @@ describe("extractValue (salient value, not first number)", () => {
     expect(extractValue("posted 3m ago, score is 4200")).toBe(4200); // "3m" = 3 min, not 3 million
     expect(extractValue("the reading is 500 units")).toBe(500);
   });
+  it("does NOT scale a bare k/b glued to a word (extractvalue-bare-kb-overscale)", () => {
+    expect(extractValue("only 4 boxes left", "boxes")).toBe(4);   // not 4,000,000,000
+    expect(extractValue("3 km to go")).toBe(3);                   // not 3,000
+    expect(extractValue("2 kg of flour")).toBe(2);                // not 2,000
+    expect(extractValue("3 bedrooms")).toBe(3);                   // not 3e9
+    // Real magnitudes (a true token end, or a count noun) STILL scale.
+    expect(extractValue("$60k")).toBe(60_000);
+    expect(extractValue("900k downloads", "downloads")).toBe(900_000);
+    expect(extractValue("1.3bn market cap")).toBe(1.3e9);
+    // A "below 10" inventory watch reads the real count, not a false billion.
+    expect(conditionHolds({ op: "below", operand: 10 }, "only 4 boxes left", "boxes")).toBe(true);
+  });
   it("scales a k/m/b/t magnitude on a NON-currency count noun (watch-magnitude-suffix)", () => {
     expect(extractValue("1.2M subscribers", "subs")).toBe(1_200_000);
     expect(extractValue("5B views", "views")).toBe(5e9);
