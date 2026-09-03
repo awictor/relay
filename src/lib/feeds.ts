@@ -31,6 +31,16 @@ export function resolveFeedSource(target: string): FeedSource | null {
     return { kind: "rss", url: `https://www.reddit.com/r/${sub}/new/.rss?limit=15`, label: `r/${sub}` };
   }
 
+  // Hacker News homepage URL a user might paste ("follow news.ycombinator.com"): its HTML page has no
+  // usable feed, so the bare-URL branch below would RSS-parse the homepage + silently never see a new
+  // item (feed-hn-url-dead). Map it to the same keyless Algolia front-page feed as the "HN" keyword.
+  // Match the HN host specifically (news.ycombinator.com, or a bare "ycombinator.com" the user means as
+  // HN) — NOT another subdomain like blog.ycombinator.com (a real RSS feed) and NOT a permalink
+  // (/item, /user), which stay as-is for the bare-URL branch.
+  if (/^(?:https?:\/\/)?(?:news\.ycombinator\.com|ycombinator\.com)(?:\/?$|\/(?!item|user))/i.test(t)) {
+    return { kind: "hn", url: `https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=15`, label: "Hacker News" };
+  }
+
   // Hacker News topic: "HN AI", "hacker news about rust", "hn: startups"
   const hn = t.match(/^(?:hn|hacker\s*news)\b[\s:]*(.*)$/i);
   if (hn) {

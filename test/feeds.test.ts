@@ -27,6 +27,16 @@ describe("resolveFeedSource", () => {
     expect(s.kind).toBe("rss");
     expect(s.label).toBe("blog.example.com");
   });
+  it("maps the HN homepage URL to the Algolia feed, not a dead RSS-parse of its HTML (feed-hn-url-dead)", () => {
+    for (const t of ["news.ycombinator.com", "https://news.ycombinator.com", "https://news.ycombinator.com/", "ycombinator.com", "news.ycombinator.com/newest"]) {
+      const s = resolveFeedSource(t)!;
+      expect(s.kind, t).toBe("hn");
+      expect(s.url).toContain("hn.algolia.com");
+    }
+    // a permalink or a different subdomain with a real feed is NOT clobbered — stays an rss fetch.
+    expect(resolveFeedSource("https://news.ycombinator.com/item?id=123")!.kind).toBe("rss");
+    expect(resolveFeedSource("https://blog.ycombinator.com/feed.xml")!.kind).toBe("rss");
+  });
   it("returns null for an unresolvable target", () => {
     expect(resolveFeedSource("my favorite thing")).toBeNull();
     expect(resolveFeedSource("")).toBeNull();

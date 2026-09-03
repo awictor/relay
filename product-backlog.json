@@ -3059,6 +3059,24 @@
       "status": "todo",
       "why": "parseChainSteps slices at 6 steps with no signal, so a 'a >> b >> ... >> h' recipe silently drops steps 7+; a power user building a long workflow loses the tail without knowing (same class as the digest/watchlist/list caps just fixed, lower frequency).",
       "how": "Surface the dropped step count when a chain definition exceeds MAX_CHAIN_STEPS (on save/define), e.g. 'kept the first 6 steps, dropped 2' — reusing the cap-report pattern."
+    },
+    {
+      "id": "feed-hn-url-dead",
+      "title": "'follow news.ycombinator.com' silently never fired (HN URL parsed as dead RSS)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "resolveFeedSource fell the HN homepage URL through to the bare-URL RSS branch, which fetched + RSS-parsed HN's HTML homepage (no feed there) — so a 'follow news.ycombinator.com' watch saw zero items forever, a silently-dead subscription.",
+      "how": "Map the HN host (news.ycombinator.com / bare ycombinator.com, not other subdomains or /item,/user permalinks) to the keyless Algolia front-page feed before the bare-URL branch — same feed as the 'HN' keyword."
+    },
+    {
+      "id": "feed-source-audit-more",
+      "title": "Sweep resolveFeedSource for other paste-a-URL feeds that dead-parse",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "HN's homepage URL dead-parsed; other common paste targets (a subreddit URL variant, a bare twitter/x handle, a YouTube @handle URL which needs a channel-id lookup) may also fall to the bare-URL RSS branch + silently never fire.",
+      "how": "Probe resolveFeedSource with the URLs users actually paste; for ones with no keyless feed (YT @handle needs a lookup), return null so the caller falls back to the agent feed-watch instead of a dead RSS parse."
     }
   ],
   "history": [
@@ -4277,6 +4295,10 @@
     {
       "id": "digest-recipe-cap-silent-drop",
       "note": "Swept the automation-builder member caps for the silent-drop class (after the lists fix). Digest members over maxMembers + watchlist sub-watches over MAX_WATCHLIST_MEMBERS (8) were both sliced silently — a user defining a big digest/watchlist lost the tail with no notice. DigestStore.add now records the dropped members (lastDroppedForCap(), like lastSaveOk); parseAlertCommand sets droppedMembers on ParsedAlert. Both handlers name what didn't fit ('kept the first N, left out X'). Chain-step cap (6) has the same silent slice but is lower-frequency -> seeded as a follow-on. +2 tests, 2000 green."
+    },
+    {
+      "id": "feed-hn-url-dead",
+      "note": "Self-audit (agent cap 200/200): verified scheduler recurrence math (nextWeekly/Monthly/Yearly roll-forward, month-end clamp, leap, multi-day ordering, DST-offset) all CORRECT. Probed feed-source resolution: 'follow news.ycombinator.com' fell to the bare-URL RSS branch + dead-parsed HN's HTML homepage -> a silently-dead follow. Mapped the HN host to the Algolia front-page feed (tightened so blog.ycombinator.com/feed.xml + /item permalinks stay real RSS). +1 test, 2001 green."
     }
   ],
   "audits": [
@@ -4567,6 +4589,9 @@
     },
     {
       "note": "Self-audit inline (agent cap 200/200): swept digest/watchlist/chain member caps. Digest + watchlist silently sliced past the cap (fixed: surface dropped members in both). Chain-step cap same class, lower freq -> seeded chain-step-cap-silent-drop. Cap-drop trust class now covered across lists/digests/watchlists."
+    },
+    {
+      "note": "Self-audit inline (agent cap 200/200): recurrence math clean; feed resolution had a silently-dead HN-URL follow (fixed). Seeded feed-source-audit-more (sweep other paste-a-URL feeds) + carried chain-step-cap."
     }
   ]
 }
