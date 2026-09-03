@@ -64,6 +64,22 @@ describe("checkAlert", () => {
     expect(lastSet).toEqual([]); // baseline only advances when we notify (alert-baseline-ratchet)
   });
 
+  it("appends a good-deal verdict to a change-watch ping when there's enough history (good-deal-price-verdict)", async () => {
+    // History all >= 60000; the new value 55000 is a new low -> a buy-signal verdict is appended.
+    const hist = [61000, 62000, 60000, 63000, 61500].map((v, i) => ({ t: i * 86_400_000, v }));
+    const { d } = deps("$55,000", { seriesOf: () => hist });
+    const r = await checkAlert(alert({ lastValue: "$60,000" }), d); // changed (no threshold)
+    expect(r.notify).toBe(true);
+    expect(r.message).toMatch(/Lowest|good time/i); // verdict line appended
+  });
+
+  it("appends NO verdict when history is too thin", async () => {
+    const { d } = deps("$55,000", { seriesOf: () => [{ t: 0, v: 60000 }, { t: 1, v: 61000 }] });
+    const r = await checkAlert(alert({ lastValue: "$60,000" }), d);
+    expect(r.notify).toBe(true);
+    expect(r.message).not.toMatch(/Lowest|Highest|Middle|good time|pricey/i);
+  });
+
   it("threshold: cumulative sub-threshold drift eventually fires (baseline is last-NOTIFIED, not last-observed)", async () => {
     // 65000 -> 65600 -> 66200, threshold 1000. Each step < 1000, but the baseline must stay 65000
     // (last notified) so the cumulative +1200 move fires. The old bug re-seeded lastValue each check,

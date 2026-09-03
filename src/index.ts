@@ -162,6 +162,7 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
     setLast: (c, n, v) => alerts.setLast(c, n, v),
     recordSeen: (c, n, keys) => alerts.recordSeen(c, n, keys),
     recordPoint: (c, n, v, t) => alerts.recordPoint(c, n, v, t),
+    seriesOf: (c, n) => alerts.seriesOf(c, n), // good-deal-price-verdict: read history for the ping verdict
     setMemberLasts: (c, n, updates) => alerts.setMemberLasts(c, n, updates),
     fetchFeed: (src) => fetchFeedItems(src, defaultFetchText), // follow-feed-subscriptions: keyless direct fetch
     fetchPage: (url) => defaultFetchText(url), // watch-any-page-diff: SSRF-guarded direct page fetch

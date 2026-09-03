@@ -551,6 +551,35 @@ export function summarizeSeries(points: Array<{ t: number; v: number }>, now: nu
   return `${fmt(first.v)} → ${fmt(last.v)} ${arrow}${fmt(Math.abs(d))}${pct} over ${pts.length} checks (~${spanDays}d). Low ${fmt(min)}, high ${fmt(max)}.`;
 }
 
+/**
+ * A "good deal?" verdict for a current numeric value vs its recorded history (good-deal-price-verdict):
+ * where does `current` sit in the range of past points? Turns a bare price answer/ping into a judgment
+ * the user acts on ("lowest in 30d — good time to buy"). Returns null when there isn't enough history
+ * to judge (< minPoints) so a fresh watch doesn't over-claim. `current` need not be in `points` yet.
+ * Direction-agnostic on purpose: a LOW is framed as a buy signal, a HIGH as a sell/watch signal — the
+ * user decides; we just place it in the range. Exported + pure.
+ */
+export function priceVerdict(
+  points: Array<{ t: number; v: number }>,
+  current: number,
+  minPoints = 5,
+): string | null {
+  const vals = points.map((p) => p.v).filter((v) => Number.isFinite(v));
+  if (vals.length < minPoints) return null;
+  const min = Math.min(...vals), max = Math.max(...vals);
+  if (max === min) return null; // flat history — no meaningful range to place it in
+  const spanDays = Math.max(1, Math.round((points[points.length - 1]!.t - points[0]!.t) / 86_400_000));
+  const win = `${vals.length} checks (~${spanDays}d)`;
+  // Position of current in [min,max]: 0 = at/below the recorded low, 1 = at/above the high.
+  const pos = (current - min) / (max - min);
+  if (current <= min) return `📉 Lowest in ${win} — a good time if you're buying.`;
+  if (current >= max) return `📈 Highest in ${win} — pricey right now.`;
+  if (pos <= 0.15) return `📉 Near its ${win} low — a good time if you're buying.`;
+  if (pos >= 0.85) return `📈 Near its ${win} high — pricey right now.`;
+  return `≈ Middle of its ${win} range (low ${fmtNum(min)}, high ${fmtNum(max)}).`;
+}
+function fmtNum(n: number): string { return Number.isInteger(n) ? String(n) : n.toFixed(2); }
+
 export interface AlertStoreOptions { file: string; maxPerChat?: number; }
 
 export class AlertStore {

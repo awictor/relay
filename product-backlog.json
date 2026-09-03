@@ -2696,9 +2696,18 @@
       "title": "price checks give a bare number, not a 'good deal?' verdict from history",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "chart.ts already draws a series + alerts store lastValue, but a price check/watch answers with just the number — no 'lowest in 60 days, buy' verdict, the stickiest recurring reason to re-check.",
       "how": "Persist a per-item price history + compute a verdict string (lowest/highest/median over N days) appended to a price answer + watch ping. Reuse the alert series machinery."
+    },
+    {
+      "id": "nutrition-lookup",
+      "title": "calorie/macro lookup ('calories in a banana') has no tool -> guessed",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "'how many calories in 2 eggs' / 'carbs in a Big Mac' falls to a slow web_search with conflicting numbers or the model silently invents figures — photo-intent.ts even matches calories|carbs|nutrition but nothing backs it. A daily health errand answered unreliably.",
+      "how": "A get_nutrition tool: keyless Open Food Facts (branded items by name/barcode) + a small static table or USDA FoodData DEMO_KEY for whole foods; parse kcal/protein/carbs/fat, format, cite. Mirror meals.ts' food-data pattern. Say 'I'm not sure' on a miss rather than inventing."
     }
   ],
   "history": [
@@ -3769,6 +3778,10 @@
     {
       "item": "watchlist-member-dead-no-receipt",
       "note": "A permanently-dead watchlist member now earns a receipt (watchlist-member-dead-no-receipt). A member whose source errors EVERY tick (bad ticker, dead link, login wall) was dropped via looksLikeErrorReply->continue before seeding, so it never alerted; the basket-level softFail can't fire because other readable members keep anyReadable true — the user believed all N items were tracked. alert-runner watchlist branch now collects the unreadable member LABELS (null/degraded/error) into a new deadMembers[] on AlertRunResult (returned on both the silent + notify exits; absent when all read fine). Threaded through index alertCheck -> runner, which streaks per-member in memberFailStreak keyed '<schedId>::<label>' and fires a one-time deadMemberNotice at FAIL_STREAK_NOTIFY (naming the dead member + how to fix/drop it), resetting a member's streak on any clean read. index wires deadMemberNotice. 5 new tests (checkAlert reports deadMembers / absent-when-healthy; runner: member dead 3 checks -> receipt, recovers -> resets no-repeat). suite 1825 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "good-deal-price-verdict",
+      "note": "Good-deal price verdict on watch pings (good-deal-price-verdict). A change-watch ping showed just the new number; now once the watch has >=5 recorded points it appends where the value sits in its range — 'Lowest in ~30d — a good time if you're buying' / 'Highest — pricey right now' / near-low / near-high / middle(low..high) — turning a one-shot number into a judgment (the recurring 'what does Relay say' hook). New pure priceVerdict(points,current,minPoints=5) in alerts.ts (null under minPoints or on a flat range; direction-agnostic — a low frames as buy, a high as pricey, user decides). alert-runner change-watch notify appends it for a numeric watch via a new seriesOf dep (index wires alerts.seriesOf); prose/first-run/thin-history watches append nothing. 8 new tests (priceVerdict low/high/near-low/mid/flat/thin; checkAlert appends-verdict + none-when-thin). HELP updated. suite 1833 green, tsc clean. Offline; anvil-independent (reuses the recorded series)."
     }
   ],
   "audits": [
@@ -3990,6 +4003,9 @@
     },
     {
       "note": "Backlog dry (low/M+owner-gated) -> 3-agent audit. A(new-user): nutrition/calorie lookup, reservation deep-link bridge, movie rating+where-to-stream, local events, gas prices. B(reliability): sticky-cap-drop-burns-budget [SEEDED+BUILT], unthrottled plain change-watch [SEEDED], dangerous-action false-refuse [SEEDED], watchlist-member-dead-no-receipt [SEEDED]. C(power): good-deal price-history verdict [SEEDED], multi-source cheapest-price watch, availability/slot-open watcher, proactive look-ahead, per-alert cadence/snooze. Seeded: sticky-cap-drop(built), dangerous-action-false-refuse, unthrottled-change-watch, watchlist-member-dead-no-receipt, good-deal-price-verdict."
+    },
+    {
+      "note": "No audit this run — built from the prior audit's seeded queue (good-deal-price-verdict). Refilled by promoting a parked Agent-A finding: nutrition-lookup (medium/M, keyless Open Food Facts). Remaining: nutrition-lookup, callback-edit-in-place(low), confirm-to-act(owner-gated)."
     }
   ]
 }

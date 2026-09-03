@@ -5,7 +5,7 @@
 
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Alert } from "./lib/alerts.js";
-import { changed, conditionHolds, extractValue, extractListItems, feedItemKey, looksLikeErrorReply } from "./lib/alerts.js";
+import { changed, conditionHolds, extractValue, extractListItems, feedItemKey, looksLikeErrorReply, priceVerdict } from "./lib/alerts.js";
 import { pageKey, pageText, diffPages, formatPageDiff } from "./lib/pagediff.js";
 import { evalWeatherCondition } from "./lib/weather-alert.js";
 import { mapPool } from "./lib/pool.js";
@@ -61,6 +61,10 @@ export interface AlertRunnerDeps {
   // yields an extractable value, so "how has X moved this week" can be answered from stored data.
   // Optional; absent -> no series accumulated.
   recordPoint?: (chatId: number, name: string, v: number, t: number) => void;
+  // Good-deal verdict (good-deal-price-verdict): the alert's recorded numeric series, read at notify time
+  // so a change-watch ping can append "lowest in 30d — good time to buy" (a judgment, not just a number).
+  // Optional; absent -> no verdict appended. Returns the points BEFORE the current tick was recorded.
+  seriesOf?: (chatId: number, name: string) => Array<{ t: number; v: number }>;
   // Per-user profile context (product-loop) so a watched "weather near me" uses the saved location.
   contextFor?: (chatId: number) => string;
   // Trigger-to-action (trigger-to-action-alerts): when an alert with a `then` recipe fires, run that
@@ -416,8 +420,20 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
       delta = `\n(was ${prevValue.trim()} → now ${value.trim()}; ${arrow}${num})`;
     }
   }
+  // Good-deal verdict (good-deal-price-verdict): if this is a numeric watch with enough recorded history,
+  // append where the new value sits in its range ("lowest in 30d — good time to buy") so the ping is a
+  // judgment, not just a number. Only when the new value is numeric + the series has enough points; a
+  // prose/first-run watch appends nothing. Best-effort — a null verdict just omits the line.
+  let verdict = "";
+  if (!firstRun && deps.seriesOf) {
+    const nv = extractValue(value, alert.task);
+    if (nv !== null) {
+      const v = priceVerdict(deps.seriesOf(alert.chatId, alert.name), nv);
+      if (v) verdict = `\n${v}`;
+    }
+  }
   // Notify: DEFER the baseline advance to the caller's post-send commit (a failed send leaves the old
   // baseline so the change re-fires next check). First-run baseline seeds the same way — if that very
   // first notify fails to send, we re-seed + notify next check rather than silently starting watched.
-  return { notify: true, message: await withThen(`${header}:\n${value}${delta}`), value, commit: advance(value) };
+  return { notify: true, message: await withThen(`${header}:\n${value}${delta}${verdict}`), value, commit: advance(value) };
 }

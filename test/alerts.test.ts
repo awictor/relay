@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseAlertCommand, parseAlertEdit, changed, normalizeForCompare, firstNumber, extractValue, conditionHolds, extractListItems, feedItemKey, parseTrendRequest, summarizeSeries, looksLikeErrorReply, isQuietDeferrable, AlertStore } from "../src/lib/alerts.js";
+import { parseAlertCommand, parseAlertEdit, changed, normalizeForCompare, firstNumber, extractValue, conditionHolds, extractListItems, feedItemKey, parseTrendRequest, summarizeSeries, priceVerdict, looksLikeErrorReply, isQuietDeferrable, AlertStore } from "../src/lib/alerts.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -32,6 +32,32 @@ describe("parseAlertCommand", () => {
   });
   it("parses a 'back in stock' predicate", () => {
     expect(parseAlertCommand("watch ps5: the PS5 on bestbuy back in stock")).toEqual({ name: "ps5", task: "the PS5 on bestbuy", condition: { op: "in_stock" } });
+  });
+});
+
+describe("priceVerdict (good-deal-price-verdict)", () => {
+  const series = (vals: number[]) => vals.map((v, i) => ({ t: i * 86_400_000, v }));
+  it("null when there isn't enough history to judge", () => {
+    expect(priceVerdict(series([100, 110]), 90)).toBeNull(); // < 5 points
+  });
+  it("null on a flat history (no range)", () => {
+    expect(priceVerdict(series([50, 50, 50, 50, 50]), 50)).toBeNull();
+  });
+  it("flags a new low as a buy signal", () => {
+    expect(priceVerdict(series([100, 110, 105, 120, 108]), 95)).toMatch(/Lowest|good time/i);
+  });
+  it("flags a new high as pricey", () => {
+    expect(priceVerdict(series([100, 110, 105, 120, 108]), 130)).toMatch(/Highest|pricey/i);
+  });
+  it("near-low (within 15% of range) reads as a good time to buy", () => {
+    // range 100..200; 110 -> pos 0.1 -> near low
+    expect(priceVerdict(series([100, 200, 150, 180, 120]), 110)).toMatch(/low|good time/i);
+  });
+  it("mid-range is placed with low/high, no buy/sell push", () => {
+    const v = priceVerdict(series([100, 200, 150, 180, 120]), 150)!;
+    expect(v).toMatch(/[Mm]iddle/);
+    expect(v).toMatch(/low 100/);
+    expect(v).toMatch(/high 200/);
   });
 });
 
