@@ -1004,7 +1004,7 @@
       "title": "once reminder can be starved indefinitely behind the hourly cap",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "An over-cap \"once\" reminder is deferred with no age/attempt limit while recurring tasks eat the slots — an explicit promise (meds at 3pm) can slip indefinitely.",
       "how": "Age-out: once a deferred once-reminder is overdue by > N, fire it regardless of cap (or notify it could not be delivered on time)."
     },
@@ -1359,6 +1359,10 @@
     {
       "id": "watchlists",
       "note": "Track N items as ONE watch: \"watch markets: btc price; eth price; gold price\" (semicolon-separated) creates a watchlist whose members each carry their own last value; a check runs them all and sends ONE grouped ping of only the members that CHANGED. First run seeds silently; per-member advances deferred to the post-send commit. Alert.members + memberLabel + setMemberLasts store method; checkAlert watchlist branch (parallel member runs, changed-only lines); /alerts + confirm surface it. 946 tests green."
+    },
+    {
+      "id": "once-reminder-cap-starvation",
+      "note": "An over-cap \"once\" reminder was deferred with no age limit, so a chat with many recurring watches (always over the hourly proactive cap) could starve an explicit promise (\"meds at 3pm\") past its time forever. Now once it is overdue by more than a grace window (RELAY_ONCE_CAP_GRACE_MS, default 15min) it is delivered ANYWAY — an explicit single promise outweighs anti-spam. Under the window it still defers for a free slot. 947 tests green."
     }
   ],
   "audits": [

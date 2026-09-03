@@ -385,6 +385,28 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
     expect(store.list(1)).toHaveLength(0); // and completed
   });
 
+  it("an over-cap once-reminder is delivered anyway once overdue past the grace window (once-reminder-cap-starvation)", async () => {
+    const clock = { t: NOW };
+    const sent: string[] = [];
+    const { store, runner } = harness(clock, {
+      maxPerChatPerHour: 1,
+      runAgent: async (task) => ({ reply: `did:${task}` }),
+      send: async (_c, text) => { sent.push(text); },
+    });
+    // Two once-tasks due now; cap 1 -> first fires, second deferred (within grace).
+    store.add(1, { kind: "once", task: "meds", dueMs: NOW - 1 }, NOW);
+    store.add(1, { kind: "once", task: "filler", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(sent).toHaveLength(1);            // cap 1 hit; one deferred
+    expect(store.list(1)).toHaveLength(1);   // the deferred one is kept
+    // Advance PAST the grace window but stay within the same rolling hour (cap still full from the
+    // first send) — the deferred reminder must be forced out rather than starved indefinitely.
+    clock.t = NOW + 16 * 60_000;             // 16 min > 15 min grace, < 1h rolling window
+    await runner.tick();
+    expect(sent).toHaveLength(2);            // forced despite the cap
+    expect(store.list(1)).toHaveLength(0);   // completed
+  });
+
   it("an over-cap DAILY occurrence is still dropped (advances), not deferred — it must not storm", async () => {
     const clock = { t: NOW };
     const sent: unknown[] = [];

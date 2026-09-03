@@ -81,6 +81,10 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   // A recurring schedule that fails to fire this many consecutive times gets ONE failed-watch receipt
   // (then the streak resets, so it re-notifies only after another N failures — no spam).
   const FAIL_STREAK_NOTIFY = Math.max(2, Number(process.env.RELAY_FAIL_STREAK_NOTIFY) || 3);
+  // How long a "once" reminder held back by the hourly cap will keep deferring for a free slot before
+  // it's delivered ANYWAY (once-reminder-cap-starvation). An explicit promise slipping this far past
+  // its time is worse than one extra send over the anti-spam cap. Default 15 min.
+  const ONCE_CAP_GRACE_MS = Math.max(0, Number(process.env.RELAY_ONCE_CAP_GRACE_MS) || 15 * 60_000);
   const cap = deps.maxPerChatPerHour ?? 0;
   const sendTimes = new Map<number, number[]>(); // chatId -> recent send epochs (rolling hour)
 
@@ -222,12 +226,22 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         // due (don't complete) so a later tick, once the rolling-hour cap frees a slot, delivers it.
         if (overCap(s.chatId, deps.now())) {
           if (s.kind === "once") {
-            log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, deferred: "rate_cap" })}`);
-            continue; // keep it in the store; retried next tick
+            // A "once" reminder is an explicit single promise; defer past the cap rather than drop it.
+            // BUT a chat with many recurring watches can stay over-cap indefinitely, starving the
+            // reminder past its time forever (once-reminder-cap-starvation). So once it's overdue by
+            // more than the grace window, deliver it ANYWAY — an explicit promise ("meds at 3pm")
+            // outweighs anti-spam. Under the grace window, keep deferring for a free slot.
+            if (deps.now() - s.dueMs <= ONCE_CAP_GRACE_MS) {
+              log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, deferred: "rate_cap" })}`);
+              continue; // keep it in the store; retried next tick
+            }
+            log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: true, over_cap_forced: Math.round((deps.now() - s.dueMs) / 60000) })}`);
+            // fall through to fire it despite the cap
+          } else {
+            log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, skipped: "rate_cap" })}`);
+            safeComplete(s); // daily: drop this occurrence, it advances to the next
+            continue;
           }
-          log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, skipped: "rate_cap" })}`);
-          safeComplete(s); // daily: drop this occurrence, it advances to the next
-          continue;
         }
         // Quiet hours: a proactive send landing in the chat's quiet window is deferred to the window's
         // end (bump this schedule's dueMs there) rather than waking the user. Skips the deferral for a
