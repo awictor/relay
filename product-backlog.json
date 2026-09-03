@@ -2012,7 +2012,7 @@
       "title": "Sunrise/sunset/daylight times",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "profile.ts already treats \"sunset today\"/\"is it dark by 7\" as location errands but no tool returns them -> degrades to weather/web_search.",
       "how": "Open-Meteo daily sunrise/sunset (already the weather provider) -> a suntimes tool or a get_weather field; format for the resolved place + day."
     }
@@ -2801,6 +2801,10 @@
     {
       "item": "meal-ideas-tool",
       "note": "Added meal_ideas tool: new src/lib/meals.ts over keyless TheMealDB (filter-by-ingredient, search-by-name for a full recipe, random). parseMealRequest routes 'what can I make with chicken and rice' (first ingredient), 'recipe for X'/'how do I make X' (full recipe), and 'dinner ideas'/'random meal' (random full recipe); returns idea lists or a full recipe (ingredients+measures+steps+source). Wired agent.ts (TOOLS, backend.getMeals + defaultBackend, dispatch, prompt), pinned tool list, HELP — with explicit FOOD-not-automation-recipe disambiguation (the word 'recipe' collided with /recipes). 17 new tests, suite 1486 green, tsc clean. call-tested:true (TheMealDB filter/lookup/random all live 200 via ctx_execute)."
+    },
+    {
+      "item": "sunrise-sunset-tool",
+      "note": "Added get_suntimes: new src/lib/suntimes.ts over Open-Meteo daily sunrise/sunset/daylight (tz=auto, local ISO), reusing weather's geocode+pickCandidate. isSunRequest/sunDayIndex/sunPlace/parseSunTimes/formatSunTimes/getSunTimes. Wired agent.ts (TOOLS, backend.getSunTimes + defaultBackend, dispatch threading weatherCoords like get_weather — named place geocodes, no-place uses saved coords), pinned tool list, HELP. 'what time is sunset today'/'sunrise tomorrow in Denver'/'how much daylight' now exact instead of degrading to weather/web_search. 18 new tests, suite 1498 green, tsc clean. call-tested:true (Open-Meteo daily sun endpoint live 200 via ctx_execute)."
     }
   ],
   "audits": [
@@ -2965,6 +2969,9 @@
     },
     {
       "note": "AUDIT (backlog dry, only owner-gated). A/new-user: cooking meal-ideas (recipe-word collision), real unit conversion (temp/weight/volume), transit directions, flight status, sunrise/sunset. B/reliability: profile save silently swallowed (S,fixed), follow bare-URL confirms a never-firing feed (M), scores UNKNOWN team still dumps slate (S), feed long-headline bulletless silently never fires (M). C/power: clarify-once-ambiguous, weekly value recap, semantic-condition alerts, refine-last-result, auto-locale replies. Seeded: profile-save-silent-failure(built), unit-convert-tool, meal-ideas-tool, clarify-once-ambiguous, sunrise-sunset-tool."
+    },
+    {
+      "note": "No 3-agent audit this run (sunrise-sunset-tool was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
     }
   ]
 }

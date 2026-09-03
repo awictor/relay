@@ -24,6 +24,7 @@ import { calc, formatResult } from "./lib/calc.js";
 import { parseTranslateRequest, translate } from "./lib/translate.js";
 import { runConvert } from "./lib/units-convert.js";
 import { parseMealRequest, getMeals, formatMealIdeas, formatFullMeal } from "./lib/meals.js";
+import { getSunTimes as sunFetch, formatSunTimes } from "./lib/suntimes.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -249,6 +250,15 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "get_suntimes",
+    description: "Sunrise, sunset, and daylight length for a place + day (keyless, instant). Use this — NOT web_search — for \"what time is sunset\", \"when's sunrise tomorrow\", \"is it dark by 7\", \"how much daylight today\". Pass the user's request verbatim; omit place to use their saved location. Add \"tomorrow\" for the next day.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The sun/daylight question verbatim, e.g. \"what time is sunset in Denver\" or \"sunrise tomorrow\"." } },
+      required: ["request"],
+    },
+  },
+  {
     name: "search",
     description: "Open a search or listing page and get back candidate result links (deduped, same-site preferred, capped). Use when the user names WHAT they want but not the exact URLs — then extract/compare across the returned links. Provide a search-results URL (build the site's query URL, e.g. https://news.ycombinator.com/newest or a site search).",
     parameters: {
@@ -380,6 +390,7 @@ Tools:
 - "get_crypto" (coin): current crypto price + 24h change. Use this — NOT get_quote/web_search — for "price of bitcoin"/"what's ETH at"/"BTC price"/"how's doge doing". Pass the ticker or name (btc, eth, sol, doge).
 - "get_quote" (symbol): latest stock/equity price. Use this — NOT web_search/scrape — for any "what's Tesla at"/"AAPL price"/"how's NVDA doing" question; it's instant. Pass the ticker (AAPL, TSLA); non-US add a market suffix (VOD.UK).
 - "get_weather" (place?, when?): current weather, today's high/low, + up to a 7-day forecast. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location. For a future day, pass "when" with the user's words ("tomorrow", "this weekend", "Saturday") so the RIGHT day is reported, not today.
+- "get_suntimes" (request): sunrise/sunset/daylight for a place + day. Use this — NOT web_search — for "what time is sunset"/"when's sunrise tomorrow"/"is it dark by 7"/"how much daylight". Omit place to use the saved location; add "tomorrow" for the next day.
 - "find_nearby" (what, near?): find places near the user (coffee, pharmacy, ATM, gas...). Use this — NOT web_search — for "X near me"/"nearest Y". Omit near to use the user's location.
 - "directions" (to, from?, mode?): distance + travel time between places. Use this — NOT web_search — for "how far is X"/"directions to Y"/"how long to drive to Z". Omit from to start from the user's location.
 - "calendar_event" (title, startMs|startDate, ...): turn an event/deadline into an add-to-calendar link + .ics for the user to import ("add this to my calendar"). You never add it — pass the artifact verbatim.
@@ -449,6 +460,9 @@ export interface BrowserBackend {
   // Optional: current weather for a place or coords (geo-tool-cluster). Absent -> the get_weather tool
   // reports it's unavailable. Returns null on a bad place / fetch failure.
   getWeather?(opts: { place?: string; lat?: number; lng?: number; near?: { lat: number; lng: number } }): Promise<import("./lib/weather.js").WeatherResult | null>;
+  // Optional: sunrise/sunset/daylight for a place+day (sunrise-sunset-tool). Absent -> the get_suntimes
+  // tool reports it's unavailable. Returns null on no place/coords, unknown place, or fetch failure.
+  getSunTimes?(opts: { text: string; lat?: number; lng?: number; near?: { lat: number; lng: number } }): Promise<import("./lib/suntimes.js").SunTimes | null>;
   // Optional: find nearby places (near-me-poi). Absent -> the find_nearby tool reports it's
   // unavailable. Returns [] on a bad area / fetch failure.
   findNearby?(opts: { what: string; lat?: number; lng?: number; near?: string; bias?: { lat: number; lng: number }; units?: "metric" | "imperial" }): Promise<import("./lib/places.js").NearbyOutcome>;
@@ -566,6 +580,7 @@ const defaultBackend: BrowserBackend = {
   getNews: (topic) => newsFetch(topic, defaultFetchText),
   getMeals: (request) => { const req = parseMealRequest(request); return req ? getMeals(req, defaultFetchText) : Promise.resolve(null); },
   getWeather: (opts) => fetchWeather(opts, defaultFetchText),
+  getSunTimes: (opts) => sunFetch(opts, defaultFetchText),
   findNearby: (opts) => fetchNearby(opts, defaultFetchTextPost),
   getDirections: (opts) => fetchDirections(opts, defaultFetchText),
   createSession: () => anvil.createSession().then((s) => ({ id: s.id })),
@@ -1026,6 +1041,25 @@ export async function runAgent(
           push("get_weather", `${forecast ?? formatWeather(w, units)} Report this to the user.`);
         } catch (e) {
           push("get_weather", `ERROR getting weather: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "get_suntimes") {
+        if (!backend.getSunTimes) { push("get_suntimes", "ERROR: sunrise/sunset isn't available."); continue; }
+        const request = String(call.args.request ?? "").trim();
+        // Thread coords like get_weather: a named place ("in Denver") resolves via geocode (coords only
+        // passed as `near` to disambiguate); NO named place + saved coords uses the coords directly.
+        const hasPlace = /\bin\s+[A-Za-z]/.test(request);
+        const opts = deps.weatherCoords
+          ? (hasPlace ? { text: request, near: deps.weatherCoords } : { text: request, lat: deps.weatherCoords.lat, lng: deps.weatherCoords.lng })
+          : { text: request };
+        try {
+          const s = await backend.getSunTimes(opts);
+          if (!s) { push("get_suntimes", `Couldn't get sun times${/\bin\s+\w/.test(request) ? "" : " (no place given + no saved location — ask the user which city)"}. Try naming a city.`); continue; }
+          push("get_suntimes", `${formatSunTimes(s)} Report this to the user.`);
+        } catch (e) {
+          push("get_suntimes", `ERROR getting sun times: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

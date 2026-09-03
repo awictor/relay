@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "define", "directions", "get_news", "get_scores", "get_time", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "define", "directions", "get_news", "get_scores", "get_suntimes", "get_time", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "web_search"].sort()
     );
   });
 
@@ -140,6 +140,18 @@ describe("runAgent dispatch", () => {
     const toolMsg = llm.calls[1]!.find((m) => m.role === "tool")!.content;
     expect(toolMsg).toMatch(/= 51\b/);
     expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
+  });
+
+  it("get_suntimes -> backend.getSunTimes with the user's coords, reaches reply", async () => {
+    const { b, hits } = recordingBackend();
+    b.getSunTimes = async (opts) => { hits.push(`sun:${opts.lat ?? "geo"}`); return { place: "your location", day: "today" as const, date: "2026-09-03", sunrise: "6:30 AM", sunset: "7:28 PM", daylight: "12h 58m" }; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_suntimes", args: { request: "what time is sunset" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "Sunset is 7:28 PM." } } as ToolCall },
+    ]);
+    const out = await runAgent("what time is sunset", { llm, backend: b, weatherCoords: { lat: 39.74, lng: -104.99 } });
+    expect(hits).toContain("sun:39.74"); // no place named -> coords used directly
+    expect(out.reply).toMatch(/7:28 PM/);
   });
 
   it("meal_ideas -> backend.getMeals, reaches reply, no browser", async () => {
