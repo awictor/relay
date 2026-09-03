@@ -32,6 +32,7 @@ import { runDigest } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summarizeSeries } from "./lib/alerts.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
+import { ListStore, parseListCommand, splitItems } from "./lib/lists.js";
 import { AnswerLog, recallKeywords } from "./lib/answer-log.js";
 import { BackgroundStore, planErrandReplay } from "./lib/background-store.js";
 import { checkAlert } from "./alert-runner.js";
@@ -102,6 +103,7 @@ const digests = new DigestStore({ file: paths.digests });
 const alerts = new AlertStore({ file: paths.alerts });
 const profiles = new ProfileStore({ file: paths.profile });
 const notes = new NotesStore({ file: paths.notes });
+const lists = new ListStore({ file: paths.lists });
 const answerLog = new AnswerLog({ file: paths.answers });
 const backgroundStore = new BackgroundStore({ file: paths.background });
 // Per-chat agent environment for PROACTIVE runs (proactive-runs-datetime-units-blind): the clock + tz +
@@ -246,6 +248,39 @@ const handle = createHandler({
     return { removed: forgotten.length, all: false, forgotten };
   },
   notesList: (chatId) => notes.list(chatId).map((n) => n.text),
+  // Named lists (personal-notes-lists-store): parse a list op + render the reply. Null falls through
+  // to the scheduler/agent when it isn't a list command. Reads back the full list on every mutation so
+  // the user sees the current state (a grocery list is only useful if you can see what's on it).
+  listCommand: (chatId, text) => {
+    const cmd = parseListCommand(text);
+    if (!cmd) return null;
+    const label = cmd.list === "list" ? "list" : `${cmd.list} list`;
+    const render = (items: string[]) =>
+      items.length ? items.map((i) => `• ${i}`).join("\n") : "(empty)";
+    if (cmd.op === "add") {
+      const items = splitItems(cmd.item);
+      if (!items.length) return null;
+      const r = lists.add(chatId, cmd.list, items);
+      if (!r) return `You've hit my limit of saved lists — clear one first with "clear my <name> list".`;
+      if (!r.added.length) return `Already on your ${label}. It has:\n${render(r.list)}`;
+      const what = r.added.length === 1 ? `"${r.added[0]}"` : `${r.added.length} items`;
+      return `Added ${what} to your ${label}. Now:\n${render(r.list)}`;
+    }
+    if (cmd.op === "remove") {
+      const removed = lists.remove(chatId, cmd.list, cmd.item);
+      if (!removed.length) return `I couldn't find "${cmd.item}" on your ${label}. It has:\n${render(lists.show(chatId, cmd.list))}`;
+      return `Removed ${removed.map((i) => `"${i}"`).join(", ")} from your ${label}. Now:\n${render(lists.show(chatId, cmd.list))}`;
+    }
+    if (cmd.op === "clear") {
+      const n = lists.clear(chatId, cmd.list);
+      return n ? `Cleared your ${label} (${n} item${n === 1 ? "" : "s"}).` : `Your ${label} was already empty.`;
+    }
+    // show
+    const items = lists.show(chatId, cmd.list);
+    return items.length
+      ? `Your ${label}:\n${render(items)}`
+      : `Your ${label} is empty. Add to it with "add <item> to my ${label}".`;
+  },
   // Answer history (answer-history-recall): search past answers by keyword; log a fresh clean answer.
   recallAnswers: (chatId, text) => answerLog.search(chatId, recallKeywords(text), 3),
   logAnswer: (chatId, task, reply) => answerLog.record(chatId, task, reply, Date.now()),

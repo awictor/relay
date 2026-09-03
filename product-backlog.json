@@ -14,7 +14,7 @@
       "title": "no personal notes/lists store — 'remember I parked in C' / 'add eggs to my list' fails on recall",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "recall only searches Relay's OWN past answers (the prompt says 'NOT for facts the user told me about themselves'), there's no list store, so 'remember I parked in lot C' -> 'where did I park?' and 'add eggs to my grocery list' -> 'what's on my list' both fail. Remembering user-supplied facts/lists is table-stakes for a personal assistant (audit 29 A#3).",
       "how": "Check whether the notes-store (src/lib/notes.ts — 'remember I'm vegetarian' facts) already covers arbitrary facts; if so, widen the parse to plain 'remember X' + a named-list variant ('add X to my <list> list', 'what's on my <list>'). New list store keyed by chat+list name, or reuse notes with a list tag. Handler branches + tests."
     },
@@ -350,8 +350,7 @@
       "status": "done",
       "why": "snooze-automations' matchByRef('all') + an indefinite pause matches once reminders too, so 'remind me at 3pm' set before a trip never fires until a manual resume — a discrete promise silently killed by a pause meant for recurring noise (audit B#6, a regression in the just-shipped snooze).",
       "how": "In pause(), when which==='all' (or an indefinite pause), skip kind==='once' schedules (or cap their pause so they still fire) — pausing is for recurring automations; a one-shot promise shouldn't be frozen indefinitely. Test that 'snooze all' leaves a once reminder live."
-    }
-  ,
+    },
     {
       "id": "web-search",
       "title": "Add web_search tool (no URL needed)",
@@ -2204,6 +2203,10 @@
     {
       "id": "pasted-text-process",
       "note": "A pasted email/paragraph + 'make this shorter'/'proofread'/'tl;dr'/'rewrite this'/'translate this' was nudged by the tool-oriented SYSTEM_PROMPT toward web_search/scrape — a zero-latency errand turned slow/confused. Added a prompt carve-out to the ANSWER-DIRECTLY section: when the message CONTAINS the text to work on, process it with NO tool; never web_search/scrape for in-message text. Prompt-only (the live LLM chooses the behavior). Guarded via a SYSTEM_PROMPT-content test (pasted-text phrasing + 'never web_search or scrape for text' present) alongside the existing prompt-sync suite. 1 test. call-tested: false (prompt-only). 1241 tests green."
+    },
+    {
+      "item": "personal-notes-lists-store",
+      "note": "Named lists shipped: new src/lib/lists.ts (parseListCommand add/remove/show/clear + ListStore, atomic per-chat+name, caps 20 lists/100 items, case-insensitive dedupe + substring remove). Wired handler.listCommand branch before scheduler/agent, index.ts store + rendered replies (reads full list back on every mutation), RELAY_LISTS_FILE state path, .env.example + HELP text. Facts (remember X) confirmed already covered by notes.ts — this fills the NAMED-LIST gap. 22 new tests, full suite 1259 green, tsc clean."
     }
   ],
   "audits": [

@@ -4,6 +4,7 @@ import type { InboundMessage } from "../src/telegram.js";
 import type { LLMMessage } from "../src/llm.js";
 import { formatReply } from "../src/lib/format-reply.js";
 import { NotesStore, parseRemember, parseForgetFact } from "../src/lib/notes.js";
+import { ListStore, parseListCommand, splitItems } from "../src/lib/lists.js";
 import { parseCityReply } from "../src/lib/profile.js";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
@@ -831,6 +832,39 @@ describe("long-term memory (remember-facts-store)", () => {
     // "remember to call mom" is a to-do, not a fact — parseRemember returns null so it reaches the agent.
     await handle(msg("remember to call mom", 5));
     expect(notes.list(5)).toHaveLength(0); // not stored as a fact
+  });
+});
+
+describe("named lists routing (personal-notes-lists-store)", () => {
+  function listHarness() {
+    const store = new ListStore({ file: join(mkdtempSync(join(tmpdir(), "relay-h-lists-")), "l.json") });
+    const h = harness({
+      listCommand: (chatId: number, text: string) => {
+        const cmd = parseListCommand(text);
+        if (!cmd) return null;
+        if (cmd.op === "add") { const r = store.add(chatId, cmd.list, splitItems(cmd.item)); return r ? `Added. Now:\n${r.list.map((i: string) => `• ${i}`).join("\n")}` : "full"; }
+        if (cmd.op === "remove") { const rm = store.remove(chatId, cmd.list, cmd.item); return rm.length ? `Removed.` : `not found`; }
+        if (cmd.op === "clear") return `Cleared (${store.clear(chatId, cmd.list)}).`;
+        const items = store.show(chatId, cmd.list); return items.length ? items.map((i: string) => `• ${i}`).join("\n") : "empty";
+      },
+    });
+    return { ...h, store };
+  }
+
+  it("'add X to my list' stores it, no agent run; 'what's on my list' reads it back", async () => {
+    const { handle, sent, recorded, store } = listHarness();
+    await handle(msg("add eggs to my grocery list", 7));
+    expect(sent[0]!.text).toMatch(/• eggs/);
+    expect(store.show(7, "grocery")).toEqual(["eggs"]);
+    await handle(msg("what's on my grocery list", 7));
+    expect(sent[1]!.text).toMatch(/• eggs/);
+    expect(recorded).toHaveLength(0); // never hit the agent
+  });
+
+  it("a non-list message falls through to the agent", async () => {
+    const { handle, recorded } = listHarness();
+    await handle(msg("what's the weather in Paris", 7));
+    expect(recorded).toHaveLength(1); // reached the agent
   });
 });
 

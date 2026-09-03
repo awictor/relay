@@ -1,0 +1,111 @@
+import { describe, it, expect, afterEach } from "vitest";
+import { parseListCommand, normalizeListName, splitItems, ListStore } from "../src/lib/lists.js";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+
+const dirs: string[] = [];
+function tmp() { const d = mkdtempSync(join(tmpdir(), "relay-lists-")); dirs.push(d); return join(d, "lists.json"); }
+afterEach(() => { for (const d of dirs.splice(0)) rmSync(d.replace(/\/lists\.json$/, ""), { recursive: true, force: true }); });
+
+describe("normalizeListName", () => {
+  it("strips leading my/the + trailing 'list' and lowercases", () => {
+    expect(normalizeListName("my grocery list")).toBe("grocery");
+    expect(normalizeListName("the groceries")).toBe("groceries");
+    expect(normalizeListName("Grocery")).toBe("grocery");
+    expect(normalizeListName("shopping list")).toBe("shopping");
+  });
+  it("defaults an empty/bare name to 'list'", () => {
+    expect(normalizeListName("list")).toBe("list");
+    expect(normalizeListName("my list")).toBe("list");
+    expect(normalizeListName("")).toBe("list");
+  });
+});
+
+describe("parseListCommand", () => {
+  it("parses add to a named list", () => {
+    expect(parseListCommand("add eggs to my grocery list")).toEqual({ op: "add", list: "grocery", item: "eggs" });
+    expect(parseListCommand("put oat milk on my shopping list")).toEqual({ op: "add", list: "shopping", item: "oat milk" });
+    expect(parseListCommand("add milk and bread to my grocery list")).toEqual({ op: "add", list: "grocery", item: "milk and bread" });
+  });
+  it("requires the word 'list' for add (so 'add a comment to the PR' falls through)", () => {
+    expect(parseListCommand("add a comment to the PR")).toBeNull();
+    expect(parseListCommand("add this to the readme")).toBeNull();
+  });
+  it("parses remove / cross off / check off", () => {
+    expect(parseListCommand("remove milk from my grocery list")).toEqual({ op: "remove", list: "grocery", item: "milk" });
+    expect(parseListCommand("cross off eggs from my list")).toEqual({ op: "remove", list: "list", item: "eggs" });
+    expect(parseListCommand("take milk off my grocery list")).toEqual({ op: "remove", list: "grocery", item: "milk" });
+  });
+  it("parses show variants", () => {
+    expect(parseListCommand("what's on my grocery list")).toEqual({ op: "show", list: "grocery" });
+    expect(parseListCommand("whats in my list")).toEqual({ op: "show", list: "list" });
+    expect(parseListCommand("show me my grocery list")).toEqual({ op: "show", list: "grocery" });
+    expect(parseListCommand("my grocery list")).toEqual({ op: "show", list: "grocery" });
+    expect(parseListCommand("my grocery list?")).toEqual({ op: "show", list: "grocery" });
+  });
+  it("parses clear / empty", () => {
+    expect(parseListCommand("clear my grocery list")).toEqual({ op: "clear", list: "grocery" });
+    expect(parseListCommand("empty my list")).toEqual({ op: "clear", list: "list" });
+  });
+  it("returns null for non-list chatter", () => {
+    expect(parseListCommand("what's the weather")).toBeNull();
+    expect(parseListCommand("remind me to buy eggs")).toBeNull();
+    expect(parseListCommand("my favorite color")).toBeNull(); // no 'list'
+  });
+});
+
+describe("splitItems", () => {
+  it("splits on 'and' and commas, trims trailing punctuation", () => {
+    expect(splitItems("milk and bread")).toEqual(["milk", "bread"]);
+    expect(splitItems("eggs, milk, bread")).toEqual(["eggs", "milk", "bread"]);
+    expect(splitItems("eggs.")).toEqual(["eggs"]);
+  });
+  it("keeps a single item intact", () => {
+    expect(splitItems("oat milk")).toEqual(["oat milk"]);
+  });
+});
+
+describe("ListStore", () => {
+  it("adds, dedupes case-insensitively, and shows", () => {
+    const s = new ListStore({ file: tmp() });
+    expect(s.add(1, "grocery", ["eggs", "milk"])!.added).toEqual(["eggs", "milk"]);
+    const r = s.add(1, "grocery", ["EGGS", "bread"]);
+    expect(r!.added).toEqual(["bread"]); // eggs deduped
+    expect(s.show(1, "grocery")).toEqual(["eggs", "milk", "bread"]);
+  });
+  it("removes by exact or substring match", () => {
+    const s = new ListStore({ file: tmp() });
+    s.add(1, "grocery", ["oat milk", "eggs"]);
+    expect(s.remove(1, "grocery", "milk")).toEqual(["oat milk"]); // substring
+    expect(s.show(1, "grocery")).toEqual(["eggs"]);
+    expect(s.remove(1, "grocery", "nope")).toEqual([]);
+  });
+  it("clears a list and reports the count", () => {
+    const s = new ListStore({ file: tmp() });
+    s.add(1, "grocery", ["a", "b", "c"]);
+    expect(s.clear(1, "grocery")).toBe(3);
+    expect(s.show(1, "grocery")).toEqual([]);
+    expect(s.clear(1, "grocery")).toBe(0); // already empty
+  });
+  it("keeps lists separate per chat and per name", () => {
+    const s = new ListStore({ file: tmp() });
+    s.add(1, "grocery", ["eggs"]);
+    s.add(1, "packing", ["socks"]);
+    s.add(2, "grocery", ["milk"]);
+    expect(s.show(1, "grocery")).toEqual(["eggs"]);
+    expect(s.show(1, "packing")).toEqual(["socks"]);
+    expect(s.show(2, "grocery")).toEqual(["milk"]);
+    expect(s.names(1).sort()).toEqual(["grocery", "packing"]);
+  });
+  it("persists across instances (atomic store)", () => {
+    const f = tmp();
+    new ListStore({ file: f }).add(1, "grocery", ["eggs"]);
+    expect(new ListStore({ file: f }).show(1, "grocery")).toEqual(["eggs"]);
+  });
+  it("returns null when the per-chat list cap is exceeded on a new list", () => {
+    const s = new ListStore({ file: tmp() });
+    for (let i = 0; i < 20; i++) expect(s.add(1, `l${i}`, ["x"])).not.toBeNull();
+    expect(s.add(1, "l20", ["x"])).toBeNull(); // 21st list rejected
+  });
+});

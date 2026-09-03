@@ -18,6 +18,7 @@ export interface StatePaths {
   metrics: string;
   profile: string;
   notes: string;
+  lists: string;
   answers: string;
   background: string;
 }
@@ -33,6 +34,7 @@ export function statePaths(env: NodeJS.ProcessEnv = process.env): StatePaths {
     metrics: env.RELAY_METRICS_FILE ?? "data/relay-metrics.json",
     profile: env.RELAY_PROFILE_FILE ?? "data/relay-profile.json",
     notes: env.RELAY_NOTES_FILE ?? "data/relay-notes.json",
+    lists: env.RELAY_LISTS_FILE ?? "data/relay-lists.json",
     answers: env.RELAY_ANSWERS_FILE ?? "data/relay-answers.json",
     background: env.RELAY_BACKGROUND_FILE ?? "data/relay-background.json",
   };

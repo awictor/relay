@@ -88,6 +88,12 @@ export interface HandlerDeps {
   rememberFact?: (chatId: number, text: string) => { fact: string; evicted: string[] } | null;
   forgetFact?: (chatId: number, text: string) => { removed: number; all: boolean; forgotten: string[] } | null;
   notesList?: (chatId: number) => string[];
+  // Named lists (personal-notes-lists-store): a durable, editable collection the user reads back +
+  // checks off ("add eggs to my grocery list", "what's on my list"). Distinct from remembered FACTS
+  // (which get injected into every answer) — a list is data the user manages, not context. Returns a
+  // rendered reply string (op-specific: added/removed/shown/cleared), or null if the message isn't a
+  // list command (so it falls through to the scheduler + agent). Optional so older wiring is unaffected.
+  listCommand?: (chatId: number, text: string) => string | null;
   // Auto-suggest saving a repeated ask as a recipe (product-loop). When true, a reply to a task that
   // closely matches an earlier one this chat asked gets a one-line "want me to save this?" nudge.
   suggestSaves?: boolean;
@@ -567,6 +573,15 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         await deps.sendMessage(msg.chatId, `Got it — I'll remember that ${r.fact}.${dropped}`);
         return;
       }
+    }
+
+    // Named lists (personal-notes-lists-store). "add eggs to my grocery list" / "what's on my list" /
+    // "remove milk from my list" / "clear my list" — a durable collection the user manages. Detected
+    // before the scheduler + agent so a list op isn't run as a web task. Returns null (falls through)
+    // when the message isn't a list command, so "add a comment to the PR" still reaches the agent.
+    if (deps.listCommand) {
+      const r = deps.listCommand(msg.chatId, msg.text);
+      if (r) { await deps.sendMessage(msg.chatId, r); return; }
     }
 
     // /dashboard: one rollup of every automation (schedules/alerts/digests/recipes). Pure read, no agent.
