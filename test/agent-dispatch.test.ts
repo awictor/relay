@@ -154,6 +154,18 @@ describe("runAgent dispatch", () => {
     expect(out.reply).toMatch(/7:28 PM/);
   });
 
+  it("get_suntimes uses saved coords for an 'in the evening' phrasing, not treated as a place (suntimes-located-user-refused)", async () => {
+    const { b, hits } = recordingBackend();
+    b.getSunTimes = async (opts) => { hits.push(`sun:${opts.lat !== undefined ? "coords" : opts.near ? "near" : "none"}`); return opts.lat !== undefined ? { place: "your location", day: "today" as const, date: "d", sunrise: "6:30 AM", sunset: "7:28 PM", daylight: "12h" } : null; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_suntimes", args: { request: "is it dark by 7 in the evening" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "Sunset 7:28 PM." } } as ToolCall },
+    ]);
+    const out = await runAgent("is it dark in the evening", { llm, backend: b, weatherCoords: { lat: 39.74, lng: -104.99 } });
+    expect(hits).toContain("sun:coords"); // "in the evening" is NOT a place -> coords passed directly
+    expect(out.reply).toMatch(/7:28 PM/);
+  });
+
   it("meal_ideas -> backend.getMeals, reaches reply, no browser", async () => {
     const { b, hits } = recordingBackend();
     b.getMeals = async (req) => { hits.push(`getMeals:${req}`); return { ideas: [{ name: "Brown Stew Chicken", area: "Jamaican" }], ingredient: "chicken" }; };

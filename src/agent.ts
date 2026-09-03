@@ -24,7 +24,7 @@ import { calc, formatResult } from "./lib/calc.js";
 import { parseTranslateRequest, translate } from "./lib/translate.js";
 import { runConvert } from "./lib/units-convert.js";
 import { parseMealRequest, getMeals, formatMealIdeas, formatFullMeal } from "./lib/meals.js";
-import { getSunTimes as sunFetch, formatSunTimes } from "./lib/suntimes.js";
+import { getSunTimes as sunFetch, formatSunTimes, sunPlace } from "./lib/suntimes.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -1048,15 +1048,18 @@ export async function runAgent(
       if (call.name === "get_suntimes") {
         if (!backend.getSunTimes) { push("get_suntimes", "ERROR: sunrise/sunset isn't available."); continue; }
         const request = String(call.args.request ?? "").trim();
-        // Thread coords like get_weather: a named place ("in Denver") resolves via geocode (coords only
-        // passed as `near` to disambiguate); NO named place + saved coords uses the coords directly.
-        const hasPlace = /\bin\s+[A-Za-z]/.test(request);
+        // Thread coords like get_weather. Use sunPlace (the SAME extractor getSunTimes uses) — NOT a
+        // broad /\bin\s+/ — to decide "named place": otherwise "is it dark in the evening" / "in winter"
+        // matched, dropped the saved coords, then sunPlace rejected the tail -> no place + no coords ->
+        // a located user was wrongly told "which city?" (suntimes-located-user-refused). A real place
+        // ("in Denver") passes coords as `near` to disambiguate; no real place uses coords directly.
+        const hasPlace = sunPlace(request) !== null;
         const opts = deps.weatherCoords
           ? (hasPlace ? { text: request, near: deps.weatherCoords } : { text: request, lat: deps.weatherCoords.lat, lng: deps.weatherCoords.lng })
           : { text: request };
         try {
           const s = await backend.getSunTimes(opts);
-          if (!s) { push("get_suntimes", `Couldn't get sun times${/\bin\s+\w/.test(request) ? "" : " (no place given + no saved location — ask the user which city)"}. Try naming a city.`); continue; }
+          if (!s) { push("get_suntimes", `Couldn't get sun times${hasPlace ? "" : " (no place given + no saved location — ask the user which city)"}. Try naming a city.`); continue; }
           push("get_suntimes", `${formatSunTimes(s)} Report this to the user.`);
         } catch (e) {
           push("get_suntimes", `ERROR getting sun times: ${e instanceof Error ? e.message : String(e)}`);

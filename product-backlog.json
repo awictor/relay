@@ -2030,7 +2030,7 @@
       "title": "Sunrise/sunset refuses a located user for evening/winter phrasings",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Dispatch hasPlace=/\bins+[A-Za-z]/ fires on \"in the evening\"/\"in winter\", so it passes only near + drops lat/lng; sunPlace then rejects those tails -> no place, no coords -> \"ask which city\" even though coords are saved.",
       "how": "Make the dispatch use the SAME place-detection as sunPlace (call sunPlace on the request): only treat as named-place when sunPlace returns non-null; else pass coords directly."
     },
@@ -2854,6 +2854,10 @@
     {
       "item": "translate-wrong-target-language",
       "note": "Fixed translate grabbing the first in/to as the target. Was: /\b(to|in|into)s+(lang)/ matched the FIRST preposition + lazily ran to EOS, so 'I want to go to the beach to Spanish' -> target 'go to the beach to Spanish', a bogus language surfaced as an authoritative translation. Now the target is the FINAL 'to/into/in <lang>' clause anchored to end-of-string (1-2 letter-only words), and only that matched clause is stripped from the body. URL captured before the target scan so 'translate <url> to French' still works. 2 new regression tests. Suite 1499 green, tsc clean."
+    },
+    {
+      "item": "suntimes-located-user-refused",
+      "note": "Fixed get_suntimes wrongly refusing a located user. The dispatch used a broad /\bins+[A-Za-z]/ to decide 'named place', which fired on 'in the evening'/'in winter' -> it dropped the saved coords (passed only near) but sunPlace then rejected those tails -> no place + no coords -> 'which city?' for a user whose location IS stored. Now decides via sunPlace(request) (the same extractor getSunTimes uses): a real place passes coords as near, no place uses coords directly. 1 new regression test. Suite 1500 green, tsc clean."
     }
   ],
   "audits": [
