@@ -424,7 +424,7 @@ const handle = createHandler({
     // Flag a CLOCK-TIME schedule (daily/weekly, or a once "at <time>") created with NO saved timezone:
     // it resolves against UTC, so a new user's "remind me at 8am" fires in the middle of their night.
     // A relative "in N min/hours" reminder has no wall-clock dependency, so it's never flagged.
-    const isClockTime = rec.kind === "daily" || rec.kind === "weekly" || /\bat\s+\d/i.test(text) || /\b(morning|evening|night|noon|midnight)\b/i.test(text);
+    const isClockTime = rec.kind === "daily" || rec.kind === "weekly" || rec.kind === "monthly" || rec.kind === "yearly" || /\bat\s+\d/i.test(text) || /\b(morning|evening|night|noon|midnight)\b/i.test(text);
     const noTz = isClockTime && profiles.offsetMin(chatId) === undefined && tzOffsetMin() === 0;
     return { ok: true, kind: rec.kind, task: rec.task, whenMs: rec.dueMs, whenText, noTz, saved: schedules.lastSaveOk(), ...(rec.sticky ? { sticky: true } : {}) };
   },
@@ -434,7 +434,7 @@ const handle = createHandler({
     if (profiles.offsetMin(chatId) !== undefined || tzOffsetMin() !== 0) return false; // tz already known
     const p = parseSchedule(text, now, profiles.offsetMin(chatId));
     if (!p) return false;
-    const isClockTime = p.kind === "daily" || p.kind === "weekly" || /\bat\s+\d/i.test(text) || /\b(morning|evening|night|noon|midnight)\b/i.test(text);
+    const isClockTime = p.kind === "daily" || p.kind === "weekly" || p.kind === "monthly" || p.kind === "yearly" || /\bat\s+\d/i.test(text) || /\b(morning|evening|night|noon|midnight)\b/i.test(text);
     return isClockTime;
   },
   scheduleList: (chatId) => schedules.list(chatId).map((s) => ({ id: s.id, kind: s.kind, task: s.task, dueMs: s.dueMs })),

@@ -2201,7 +2201,7 @@
       "title": "no monthly/yearly recurring reminders (\"pay rent on the 1st\", \"mom’s birthday every year\")",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The schedule parser supports only once/daily/weekly/interval, so the two most universal recurring errands — monthly bills + annual birthdays — silently fall back to a one-time or misparsed reminder. Reminders are the core retention hook.",
       "how": "Add 'monthly'/'yearly' ScheduleKinds + parse ('every month on the 1st', 'every year on <date>', 'monthly', 'annually') + a complete()/nextMonthlyMs/nextYearlyMs roll-forward reusing the absolute-date month roll + short-month clamp already in schedule.ts. Offline-testable with a fixed clock. New kind must thread the cue set + tz-restamp + dashboard."
     }
@@ -3066,6 +3066,10 @@
     {
       "item": "digest-error-as-content",
       "note": "Digest no longer shows a soft-error reply as real briefing content. digest-runner only demoted a member to '(couldn't fetch)' on a thrown error or the degraded flag; a non-degraded reply whose TEXT is a fetch failure ('btc: the page returned a 404') became a 'real' section verbatim + miscounted toward real content so the honest all-failed notice never fired. Now the agent body AND the chain output are gated with looksLikeErrorReply (same guard the alert path uses) -> demoted to '(couldn't fetch)' + status 'failed'. So an error member shows the fallback line, and an all-error digest emits the 'couldn't build it this time' note instead of a briefing of error strings. 2 new tests (one error member demoted; all-error -> all-failed note), suite 1586 green, tsc clean. call-tested:false (offline runner tests)."
+    },
+    {
+      "item": "monthly-yearly-reminders",
+      "note": "Added monthly + yearly recurring reminders — the two universal recurring errands the once/daily/weekly/interval set couldn't express (bills, birthdays). New ScheduleKind 'monthly'/'yearly' + dayOfMonth/month fields. Parse: 'pay rent on the 1st of every month' / 'every month on the 15th' -> monthly; 'mom's birthday every year on June 3' / 'every year on 12/25' / month-day / D-of-Month / M/D forms -> yearly. Detected BEFORE interval (whose regex needs 'every N unit'). Reuses the existing keyless date helpers: domAtMs (next future day-of-month, skips short months) for monthly, dateAtMs (this-year-or-next month+day) for yearly. complete() reschedules both; restampTz re-stamps both on a later /setlocation; add() persists the fields; isClockTime (tz-warn + first-reminder-tz-ask) + the schedule cue + the confirm verb + HELP all cover the new kinds. A plain 'on the 1st' with no monthly cue still stays a one-shot. 7 new tests (5 parse + 2 complete-reschedule), suite 1593 green, tsc clean. call-tested:false (offline parse/store tests, fixed clock)."
     }
   ],
   "audits": [

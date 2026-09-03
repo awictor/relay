@@ -63,7 +63,7 @@ Add to your calendar: "add dentist Thursday 2pm to my calendar" → I give you a
 
 Limits: I won't log in as you, pay, buy, or do anything destructive. If a task needs that, I'll say so.
 
-Schedule me: "remind me to X in 10 min", "every morning tell me Y", "every Monday at 9am ...", "every weekday at 8 ...", or "every 2 hours ..." — I'll text you when it's time. /schedules lists them, /cancel <id> (or /cancel all) removes them.
+Schedule me: "remind me to X in 10 min", "every morning tell me Y", "every Monday at 9am ...", "every weekday at 8 ...", "every 2 hours ...", "pay rent on the 1st of every month", or "mom's birthday every year on June 3" — I'll text you when it's time. /schedules lists them, /cancel <id> (or /cancel all) removes them.
 
 Nagging reminders: "keep reminding me to take my meds every 15 min until I say done" (or "nag me to stretch every 20 min") → I re-ping until you reply "done" or "stop". Great for meds, water, standup.
 

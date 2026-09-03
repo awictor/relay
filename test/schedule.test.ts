@@ -389,6 +389,37 @@ describe("parseSchedule — absolute", () => {
   });
 });
 
+describe("parseSchedule — monthly / yearly (monthly-yearly-reminders)", () => {
+  it("'pay rent on the 1st of every month' -> a monthly reminder on day 1", () => {
+    const s = parseSchedule("remind me to pay rent on the 1st of every month", NOW)!;
+    expect(s.kind).toBe("monthly");
+    expect(s.dayOfMonth).toBe(1);
+    expect(s.task).toBe("pay rent");
+    expect(s.reminderOnly).toBe(true);
+  });
+  it("'every month on the 15th' -> monthly on day 15", () => {
+    const s = parseSchedule("every month on the 15th check the mortgage", NOW)!;
+    expect(s.kind).toBe("monthly");
+    expect(s.dayOfMonth).toBe(15);
+  });
+  it("'mom's birthday every year on June 3' -> a yearly reminder on 6/3", () => {
+    const s = parseSchedule("remind me of mom's birthday every year on June 3", NOW)!;
+    expect(s.kind).toBe("yearly");
+    expect(s.month).toBe(5); // June = month index 5
+    expect(s.dayOfMonth).toBe(3);
+  });
+  it("'every year on 12/25' -> yearly on Dec 25", () => {
+    const s = parseSchedule("wish everyone merry christmas every year on 12/25", NOW)!;
+    expect(s.kind).toBe("yearly");
+    expect(s.month).toBe(11);
+    expect(s.dayOfMonth).toBe(25);
+  });
+  it("a plain 'on the 1st' with NO monthly cue stays a one-shot, not monthly", () => {
+    const s = parseSchedule("remind me to call the bank on the 1st", NOW)!;
+    expect(s.kind).toBe("once"); // absolute-date one-shot, not recurring
+  });
+});
+
 describe("parseSchedule — sticky / acknowledged reminders (sticky-acknowledged-reminders)", () => {
   it("'keep reminding me ... every N min' becomes a sticky reminderOnly interval", () => {
     const s = parseSchedule("keep reminding me to take my meds every 15 minutes", NOW)!;
@@ -461,6 +492,25 @@ describe("ScheduleStore.complete persist (once-complete-ignores-persist)", () =>
     expect(s.complete(daily.id, NOW)).toBe(true);
     expect(s.list(1)).toHaveLength(1);
     expect(s.list(1)[0]!.dueMs).toBeGreaterThan(NOW);
+  });
+  it("a monthly reminder reschedules to a FUTURE day-of-month + stays in the store (monthly-yearly-reminders)", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const m = s.add(1, { kind: "monthly", task: "pay rent", dueMs: NOW - 1, hourMin: "09:00", offsetMin: 0, dayOfMonth: 1 }, NOW)!;
+    expect(s.complete(m.id, NOW)).toBe(true);
+    const after = s.list(1)[0]!;
+    expect(after.kind).toBe("monthly");
+    expect(after.dueMs).toBeGreaterThan(NOW);        // rolled to the next 1st
+    expect(new Date(after.dueMs).getUTCDate()).toBe(1);
+  });
+  it("a yearly reminder reschedules to next year's month+day", () => {
+    const s = new ScheduleStore({ file: tmpFile() });
+    const y = s.add(1, { kind: "yearly", task: "birthday", dueMs: NOW - 1, hourMin: "09:00", offsetMin: 0, month: 5, dayOfMonth: 3 }, NOW)!;
+    expect(s.complete(y.id, NOW)).toBe(true);
+    const after = s.list(1)[0]!;
+    expect(after.kind).toBe("yearly");
+    expect(after.dueMs).toBeGreaterThan(NOW);
+    expect(new Date(after.dueMs).getUTCMonth()).toBe(5); // June
+    expect(new Date(after.dueMs).getUTCDate()).toBe(3);
   });
 });
 

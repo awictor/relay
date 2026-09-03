@@ -777,7 +777,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       }
     }
 
-    const scheduleCue = /\b(remind me|keep reminding|nag me|every day|every morning|every evening|every night|daily|weekdays?|weekends?|tomorrow)\b|\bevery\s+(mon|tue|wed|thu|fri|sat|sun)|\bevery\s+(\d+|other)\s*(min|hour|hr|day|week|wk)|\bin \d+\s*(min|hour|day|week|wk)|\bin\s+(an?|half\s+an?|a\s+couple|a\s+few|several|one|two|three)\s+(min|hour|hr|day|week|wk)|\b(set\s+(?:an?\s+)?alarm|wake\s+me)\b|\bnext\s+(sunday|sun|monday|mon|tuesday|tues|tue|wednesday|weds|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat)\b|\b(?:on\s+)?(january|february|march|april|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\.|\b)\s+\d{1,2}\b|\bon\s+may\s+\d{1,2}\b|\bon\s+the\s+\d{1,2}(st|nd|rd|th)\b|\bat\s+\d{1,2}\s*(am|pm)\b|\bat\s+([01]?\d|2[0-3]):[0-5]\d\b/i;
+    const scheduleCue = /\b(remind me|keep reminding|nag me|every day|every morning|every evening|every night|daily|weekdays?|weekends?|tomorrow|monthly|yearly|annually)\b|\bevery\s+(month|year)\b|\bevery\s+(mon|tue|wed|thu|fri|sat|sun)|\bevery\s+(\d+|other)\s*(min|hour|hr|day|week|wk)|\bin \d+\s*(min|hour|day|week|wk)|\bin\s+(an?|half\s+an?|a\s+couple|a\s+few|several|one|two|three)\s+(min|hour|hr|day|week|wk)|\b(set\s+(?:an?\s+)?alarm|wake\s+me)\b|\bnext\s+(sunday|sun|monday|mon|tuesday|tues|tue|wednesday|weds|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat)\b|\b(?:on\s+)?(january|february|march|april|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\.|\b)\s+\d{1,2}\b|\bon\s+may\s+\d{1,2}\b|\bon\s+the\s+\d{1,2}(st|nd|rd|th)\b|\bat\s+\d{1,2}\s*(am|pm)\b|\bat\s+([01]?\d|2[0-3]):[0-5]\d\b/i;
     if (!isExplicitCommand && deps.scheduleAdd && scheduleCue.test(msg.text)) {
       // First-reminder tz (first-reminder-tz-ask): a clock-time schedule with no saved tz would fire
       // against UTC (a new user's "remind me at 7am" lands at 3am). Ask the city ONCE first (city→tz
@@ -791,7 +791,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       }
       const r = deps.scheduleAdd(msg.chatId, msg.text, deps.now());
       if (r.ok) {
-        const verb = r.sticky ? "keep reminding you (until you reply \"done\")" : r.kind === "once" ? "remind you" : r.kind === "daily" ? "do this daily" : r.kind === "weekly" ? "do this on the days you said" : "do this on that schedule";
+        const verb = r.sticky ? "keep reminding you (until you reply \"done\")" : r.kind === "once" ? "remind you" : r.kind === "daily" ? "do this daily" : r.kind === "weekly" ? "do this on the days you said" : r.kind === "monthly" ? "do this every month" : r.kind === "yearly" ? "do this every year" : "do this on that schedule";
         // Echo the resolved next-fire time so a wrong/absent timezone is caught before it fires late.
         const when = r.whenText ? ` Next: ${r.whenText}.` : "";
         // No timezone set + a clock-time schedule -> it fires against UTC (likely the user's night).

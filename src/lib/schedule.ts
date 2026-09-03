@@ -8,7 +8,10 @@ import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
 
 // once = fire + drop; daily = re-fire every day at hourMin; weekly = re-fire on the given weekdays at
 // hourMin ("every monday", "weekdays at 8"); interval = re-fire every intervalMs ("every 2 hours").
-export type ScheduleKind = "once" | "daily" | "weekly" | "interval";
+// monthly = re-fire on a day-of-month at hourMin ("pay rent on the 1st every month"); yearly = re-fire on
+// a month+day at hourMin ("mom's birthday every year on June 3"). Both are the universal recurring errands
+// (bills, birthdays) the once/daily/weekly/interval set couldn't express (monthly-yearly-reminders).
+export type ScheduleKind = "once" | "daily" | "weekly" | "interval" | "monthly" | "yearly";
 
 export interface Schedule {
   id: string;
@@ -19,6 +22,8 @@ export interface Schedule {
   hourMin?: string;    // "HH:MM" local, for daily/weekly reschedule
   offsetMin?: number;  // tz offset (min east of UTC) the hourMin is measured in, for daily/weekly reschedule
   weekdays?: number[]; // for weekly: days-of-week to fire on (0=Sun..6=Sat), in the user's zone
+  dayOfMonth?: number; // for monthly/yearly: day-of-month to fire on (1-31), in the user's zone
+  month?: number;      // for yearly: month to fire in (0-11, JS convention), in the user's zone
   intervalMs?: number; // for interval: gap between fires
   attempts?: number;   // failed fire attempts (once-reminder transient-retry); dropped after a cap
   reminderOnly?: boolean; // a pure personal to-do ("take meds"): echo the note at fire time, don't run the agent
@@ -52,6 +57,8 @@ export interface ParsedSchedule {
   hourMin?: string;
   offsetMin?: number;  // tz offset used to compute dueMs, carried so reschedule stays in the user's zone
   weekdays?: number[];
+  dayOfMonth?: number; // monthly/yearly day-of-month (1-31)
+  month?: number;      // yearly month (0-11)
   intervalMs?: number;
   reminderOnly?: boolean; // pure personal to-do: echo at fire time, don't run the agent
   sticky?: boolean;       // re-ping until acknowledged (sticky-acknowledged-reminders)
@@ -250,6 +257,52 @@ export function parseSchedule(text: string, now: number, offsetMin: number = tzO
       task = task.replace(/^\s*(?:keep\s+reminding\s+me\s+(?:to\s+)?|nag\s+me\s+(?:to\s+)?|remind\s+me\s+(?:again\s+)?(?:to\s+)?)/i, "").trim();
       task = task.replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, "").trim();
       if (task) return { kind: "interval", task, dueMs: now + ms, intervalMs: ms, reminderOnly: true, sticky: true, stickyMax: DEFAULT_STICKY_MAX };
+    }
+  }
+
+  // --- monthly / yearly (monthly-yearly-reminders): the two universal recurring errands — monthly bills
+  // ("pay rent on the 1st of every month", "every month on the 15th") and annual dates ("mom's birthday
+  // every year on June 3", "every year on 12/25", "annually on the 1st"). Detected BEFORE interval (whose
+  // regex needs "every <N> <unit>", which these don't match) so "every month/year" isn't misread. A
+  // detached "at <time>" sets the hour, else 9am. ---
+  const MON: Record<string, number> = { jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7, sep: 8, sept: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11 };
+  if (/\bevery\s+(month|year)\b|\bmonthly\b|\byearly\b|\bannually\b|\bevery\s+single\s+(month|year)\b/.test(lower)) {
+    const loose = extractLooseAtTime(lower);
+    const hh = loose ? loose.hh : 9, mm = loose ? loose.mm : 0;
+    const stripTime = (s: string) => (loose ? cleanTask(s, loose.clause) : s);
+    const isYearly = /\bevery\s+year\b|\byearly\b|\bannually\b|\bevery\s+single\s+year\b/.test(lower);
+    if (isYearly) {
+      // Need a month+day: "on June 3" / "June 3rd" / "on 12/25" / "on the 6th of May".
+      const md = lower.match(/\b(?:on\s+)?(january|february|march|april|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\.|\b)\s+([0-9]{1,2})(?:st|nd|rd|th)?\b/)
+        ?? lower.match(/\bon\s+(may)\s+([0-9]{1,2})(?:st|nd|rd|th)?\b/)
+        ?? lower.match(/\b([0-9]{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b/)
+        ?? lower.match(/\bon\s+([0-9]{1,2})[/-]([0-9]{1,2})\b/); // on M/D
+      if (md) {
+        let mon: number | undefined, day: number;
+        if (/^\d/.test(md[1]!) && /^\d/.test(md[2]!)) { mon = parseInt(md[1]!, 10) - 1; day = parseInt(md[2]!, 10); } // M/D
+        else if (/^\d/.test(md[1]!)) { day = parseInt(md[1]!, 10); mon = MON[md[2]!]; } // "3rd of May"
+        else { mon = MON[md[1]!]; day = parseInt(md[2]!, 10); } // "May 3"
+        if (mon !== undefined && mon >= 0 && mon <= 11 && day >= 1 && day <= 31) {
+          const dueMs = dateAtMs(now, mon, day, hh, mm, offsetMin);
+          const hourMin = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+          let task = stripTime(cleanTask(raw, md[0]!));
+          task = task.replace(/\bevery\s+(?:single\s+)?year\b|\byearly\b|\bannually\b/gi, "").replace(/\s+/g, " ").replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, "").trim();
+          if (task) return { kind: "yearly", task, dueMs, hourMin, offsetMin, dayOfMonth: day, month: mon, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+        }
+      }
+    } else {
+      // Monthly: need a day-of-month. "on the 1st" / "on the 15th" / bare "the 1st" with a monthly cue.
+      const dom = lower.match(/\b(?:on\s+)?the\s+([0-9]{1,2})(?:st|nd|rd|th)\b/) ?? lower.match(/\bon\s+the\s+([0-9]{1,2})\b/);
+      if (dom) {
+        const day = parseInt(dom[1]!, 10);
+        if (day >= 1 && day <= 31) {
+          const dueMs = domAtMs(now, day, hh, mm, offsetMin);
+          const hourMin = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+          let task = stripTime(cleanTask(raw, dom[0]!));
+          task = task.replace(/\bevery\s+(?:single\s+)?month\b|\bmonthly\b/gi, "").replace(/\bof\b\s*$/i, "").replace(/\s+/g, " ").replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, "").trim();
+          if (task) return { kind: "monthly", task, dueMs, hourMin, offsetMin, dayOfMonth: day, ...(isReminderOnly(raw, task) ? { reminderOnly: true } : {}) };
+        }
+      }
     }
   }
 
@@ -586,7 +639,7 @@ export class ScheduleStore {
   /** Add a schedule for a chat. Returns the stored record, or null if the chat is at its cap. */
   add(chatId: number, p: ParsedSchedule, now: number): Schedule | null {
     if (this.items.filter((s) => s.chatId === chatId).length >= this.maxPerChat) return null;
-    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, weekdays: p.weekdays, intervalMs: p.intervalMs, ...(p.reminderOnly ? { reminderOnly: true } : {}), ...(p.sticky ? { sticky: true, stickyMax: p.stickyMax ?? DEFAULT_STICKY_MAX, stickyFired: 0 } : {}), ...(p.clockTime ? { clockTime: true } : {}), created: now };
+    const s: Schedule = { id: `s${++this.seq}`, chatId, kind: p.kind, task: p.task, dueMs: p.dueMs, hourMin: p.hourMin, offsetMin: p.offsetMin, weekdays: p.weekdays, ...(p.dayOfMonth !== undefined ? { dayOfMonth: p.dayOfMonth } : {}), ...(p.month !== undefined ? { month: p.month } : {}), intervalMs: p.intervalMs, ...(p.reminderOnly ? { reminderOnly: true } : {}), ...(p.sticky ? { sticky: true, stickyMax: p.stickyMax ?? DEFAULT_STICKY_MAX, stickyFired: 0 } : {}), ...(p.clockTime ? { clockTime: true } : {}), created: now };
     this.items.push(s);
     this.persist();
     return s;
@@ -773,6 +826,16 @@ export class ScheduleStore {
         s.offsetMin = offsetMin;
         s.dueMs = nextWeeklyMs(now, hh!, mm!, s.weekdays, offsetMin);
         moved++;
+      } else if (s.kind === "monthly" && s.hourMin && s.dayOfMonth !== undefined) {
+        const [hh, mm] = s.hourMin.split(":").map((n) => parseInt(n, 10));
+        s.offsetMin = offsetMin;
+        s.dueMs = domAtMs(now, s.dayOfMonth, hh!, mm!, offsetMin);
+        moved++;
+      } else if (s.kind === "yearly" && s.hourMin && s.dayOfMonth !== undefined && s.month !== undefined) {
+        const [hh, mm] = s.hourMin.split(":").map((n) => parseInt(n, 10));
+        s.offsetMin = offsetMin;
+        s.dueMs = dateAtMs(now, s.month, s.dayOfMonth, hh!, mm!, offsetMin);
+        moved++;
       } else if (s.kind === "once" && s.clockTime && s.dueMs > now) {
         // A FUTURE clock-time once (once-reminder-tz-restamp): "remind me tomorrow at 8am" set before the
         // user fixed their tz would fire at 8am in the OLD zone (e.g. 8am UTC = 3am local). Shift its UTC
@@ -804,6 +867,14 @@ export class ScheduleStore {
       return this.persist();
     } else if (s.kind === "weekly" && s.hourMin && s.weekdays?.length) {
       s.dueMs = nextWeeklyMs(now, hh!, mm!, s.weekdays, off);
+      return this.persist();
+    } else if (s.kind === "monthly" && s.dayOfMonth !== undefined) {
+      // Next occurrence of the day-of-month after now (domAtMs skips short months lacking the day).
+      s.dueMs = domAtMs(now, s.dayOfMonth, hh!, mm!, off);
+      return this.persist();
+    } else if (s.kind === "yearly" && s.dayOfMonth !== undefined && s.month !== undefined) {
+      // Next occurrence of month+day after now (dateAtMs rolls to next year since this year's just fired).
+      s.dueMs = dateAtMs(now, s.month, s.dayOfMonth, hh!, mm!, off);
       return this.persist();
     } else if (s.kind === "interval" && s.intervalMs) {
       // A sticky reminder (sticky-acknowledged-reminders) counts its fires and gives up on its own once it
