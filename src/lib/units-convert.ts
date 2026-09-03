@@ -67,8 +67,17 @@ export function convertUnit(amount: number, from: string, to: string): { value: 
     const lbl = (u: string) => u === "f" ? "°F" : u === "k" ? "K" : "°C";
     return { value, fromLabel: lbl(f), toLabel: lbl(t) };
   }
-  const uf = UNITS[f], ut = UNITS[t];
-  if (!uf || !ut || uf.dim !== ut.dim) return null; // unknown, or cross-dimension
+  let uf = UNITS[f], ut = UNITS[t];
+  // Cooking "oz" is ambiguous: bare "oz"/"ounce" maps to MASS, but "1 cup to oz" / "8 oz to cups" means
+  // FLUID ounces (units-cup-to-oz-crosstype — the canonical kitchen conversion the tool exists for). When
+  // exactly one side is volume and the other is a bare oz (mass), reinterpret that oz as fluid ounce.
+  const FL_OZ = UNITS["fl oz"]!;
+  const isBareOz = (u: string) => u === "oz" || u === "ounce";
+  if (uf && ut) {
+    if (uf.dim === "volume" && ut.dim === "mass" && isBareOz(t)) ut = FL_OZ;
+    else if (ut.dim === "volume" && uf.dim === "mass" && isBareOz(f)) uf = FL_OZ;
+  }
+  if (!uf || !ut || uf.dim !== ut.dim) return null; // unknown, or a genuine cross-dimension (kg->miles)
   return { value: (amount * uf.toBase) / ut.toBase, fromLabel: uf.label, toLabel: ut.label };
 }
 

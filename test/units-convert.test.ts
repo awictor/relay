@@ -26,8 +26,16 @@ describe("convertUnit — length/mass/volume (factor)", () => {
     expect(convertUnit(3, "tsp", "tbsp")!.value).toBeCloseTo(1, 2);
     expect(convertUnit(1, "l", "ml")!.value).toBeCloseTo(1000, 3);
   });
-  it("returns null for unknown units or cross-dimension conversion", () => {
+  it("treats bare oz as FLUID ounce when converting against a volume unit (units-cup-to-oz-crosstype)", () => {
+    // 1 cup = 8 fl oz (US) — the canonical kitchen conversion, not a cross-type reject.
+    expect(convertUnit(1, "cup", "oz")!.value).toBeCloseTo(8, 1);
+    expect(convertUnit(8, "oz", "cups")!.value).toBeCloseTo(1, 1);
+    // oz stays MASS when both sides are mass.
+    expect(convertUnit(16, "oz", "lb")!.value).toBeCloseTo(1, 3);
+  });
+  it("returns null for unknown units or a genuine cross-dimension conversion", () => {
     expect(convertUnit(1, "kg", "miles")).toBeNull(); // mass -> length
+    expect(convertUnit(1, "cup", "kg")).toBeNull();   // volume -> mass (not oz) still can't
     expect(convertUnit(1, "florbs", "km")).toBeNull(); // unknown
   });
 });

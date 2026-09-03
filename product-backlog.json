@@ -2039,7 +2039,7 @@
       "title": "Cooking \"1 cup to oz\" fails as cross-type",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Bare \"oz\" maps only to mass; \"cup\" is volume -> the canonical kitchen conversion hits the dim-mismatch reject. The tool cant do the thing its header cites as motivation.",
       "how": "When one side is a volume unit + the other is bare \"oz\"/\"ounce\", treat oz as fluid ounce (volume). Or detect a volume context (cup/tbsp/tsp/ml/l/pint) and map oz->fl oz."
     },
@@ -2858,6 +2858,10 @@
     {
       "item": "suntimes-located-user-refused",
       "note": "Fixed get_suntimes wrongly refusing a located user. The dispatch used a broad /\bins+[A-Za-z]/ to decide 'named place', which fired on 'in the evening'/'in winter' -> it dropped the saved coords (passed only near) but sunPlace then rejected those tails -> no place + no coords -> 'which city?' for a user whose location IS stored. Now decides via sunPlace(request) (the same extractor getSunTimes uses): a real place passes coords as near, no place uses coords directly. 1 new regression test. Suite 1500 green, tsc clean."
+    },
+    {
+      "item": "units-cup-to-oz-crosstype",
+      "note": "Fixed 'cup to oz' failing as cross-type. Bare 'oz'/'ounce' maps to MASS, so the canonical kitchen conversion (1 cup = 8 fl oz) hit the dim-mismatch reject. convertUnit now reinterprets a bare oz as FLUID ounce when exactly the other side is a volume unit; oz stays mass when both sides are mass (16 oz = 1 lb), and a genuine cross-dim (cup->kg, kg->miles) still returns null. 2 new/updated tests. Suite 1501 green, tsc clean."
     }
   ],
   "audits": [
