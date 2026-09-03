@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calendar_event", "click", "compare", "compose", "convert_currency", "define", "directions", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "type", "web_search"].sort()
+      ["browse", "calendar_event", "click", "compare", "compose", "convert_currency", "define", "directions", "get_time", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "type", "web_search"].sort()
     );
   });
 
@@ -102,6 +102,18 @@ describe("runAgent dispatch", () => {
     ]);
     await runAgent("define escrow", { llm, backend: b });
     expect(hits).toContain("defineWord:escrow");
+  });
+
+  it("get_time answers from nowMs without any backend call, reaches reply", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_time", args: { request: "what time is it in Tokyo" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "ok" } } as ToolCall },
+    ]);
+    const out = await runAgent("time in tokyo", { llm, backend: b, nowMs: 1_700_000_000_000 });
+    expect(out.reply).toBe("ok");
+    // no browser/network method invoked — it's pure offset math
+    expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
   });
 
   it("define with no backend.defineWord reports unavailable, still reaches reply", async () => {

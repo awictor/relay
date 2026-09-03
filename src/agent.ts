@@ -17,6 +17,7 @@ import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
 import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
+import { parseWorldClock, runWorldClock } from "./lib/worldclock.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -142,6 +143,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { word: { type: "string", description: "The single English word to define, e.g. \"obsequious\" or \"escrow\"." } },
       required: ["word"],
+    },
+  },
+  {
+    name: "get_time",
+    description: "Get the current time in another city/timezone, or convert a time between zones (no key, instant). Use this — NOT web_search — for \"what time is it in Tokyo\", \"time in London\", \"what's 9am PT in London\", \"convert 3pm EST to Tokyo time\". Pass the user's request verbatim. (Standard-time offsets; may be an hour off during daylight-saving.)",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The user's time question verbatim, e.g. \"what time is it in Tokyo\" or \"9am PT in London\"." } },
+      required: ["request"],
     },
   },
   {
@@ -295,6 +305,7 @@ Tools:
 - "pdf" (url): render a page to a PDF and send it as a document. Use when the user wants to SAVE or KEEP a page ("save as PDF", "send me a PDF of X"). Then call reply with a short caption.
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
+- "get_time" (request): current time in another city/timezone, or convert a time between zones. Use this — NOT web_search — for "what time is it in Tokyo"/"time in London"/"9am PT in London"/"convert 3pm EST to Tokyo". Pass the request verbatim. Standard-time offsets (may be an hour off during daylight saving).
 - "define" (word): a word's definition, pronunciation, and synonyms. Use this — NOT web_search/scrape — for "what does X mean"/"define X"/"synonyms for X"/"how do you spell X". English words only; pass the single word.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
@@ -771,6 +782,16 @@ export async function runAgent(
         } catch (e) {
           push("define", `ERROR looking up definition: ${e instanceof Error ? e.message : String(e)}`);
         }
+        continue;
+      }
+
+      if (call.name === "get_time") {
+        const request = String(call.args.request ?? "").trim();
+        const parsed = parseWorldClock(request);
+        const nowForTz = deps.nowMs ?? Date.now();
+        const answer = parsed ? runWorldClock(parsed, nowForTz) : null;
+        if (!answer) { push("get_time", `Couldn't resolve a timezone in "${request}" (unknown city/abbreviation). Report that you couldn't place that zone + ask which city/UTC offset, or try web_search for an unusual place.`); continue; }
+        push("get_time", `${answer}\n\nReport this to the user (include the daylight-saving caveat only if it's relevant / they're near a DST change).`);
         continue;
       }
 

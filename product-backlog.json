@@ -1625,7 +1625,7 @@
       "title": "Time-in-city / timezone conversion",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "\"what time is it in Tokyo\"/\"9am PT in London\" before a call; agent guesses (often wrong) since datetime injection only covers the user own zone.",
       "how": "Deterministic IANA-offset math in a new lib (reuse profile CITY_TZ + DST-aware if feasible); a get_time/convert_time tool or handler branch; format both zones."
     },
@@ -2260,6 +2260,10 @@
     {
       "item": "dictionary-tool",
       "note": "Added define tool: new src/lib/dictionary.ts (defineUrl/parseDefinition/formatDefinition/lookupWord) hitting keyless dictionaryapi.dev, mirroring get_crypto. Wired agent.ts (TOOLS entry, backend.defineWord + defaultBackend, dispatch block, prompt line), agent-dispatch pinned tool list, HELP text. \"what does obsequious mean\"/\"define X\"/\"synonyms for X\" now instant + sourced instead of model-memory or slow scrape. 10 new tests, suite 1271 green, tsc clean. call-tested:false (dictionaryapi.dev origin returning 522 at build time — parser returns null on the HTML body -> graceful web_search fallback, verified offline against real response shape)."
+    },
+    {
+      "item": "world-clock-tz",
+      "note": "Added get_time tool: new src/lib/worldclock.ts (resolveZone via profile CITY_TZ + a tz-abbrev map PST/EST/JST/etc + UTC±offset parsing, parseClockTime, parseWorldClock now/convert, runWorldClock from injected nowMs). Wired agent.ts (TOOLS, dispatch using deps.nowMs, prompt), pinned tool list, HELP. \"what time is it in Tokyo\"/\"9am PT in London\"/\"convert 3pm EST to Tokyo\" now deterministic + instant instead of LLM guessing (datetime injection only covered the user own zone). Day-shift + standard-time (non-DST) caveat surfaced honestly. 15 new tests, suite 1286 green, tsc clean. call-tested:false (pure offset math, no network)."
     }
   ],
   "audits": [
