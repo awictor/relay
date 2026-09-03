@@ -228,6 +228,40 @@ describe("makeScheduleRunner.tick", () => {
     }
   });
 
+  it("a once whose SEND stalls past the timeout is delivered ONCE — a later tick doesn't re-fire it (post-send-timeout-double-ping)", async () => {
+    const prev = process.env.RELAY_FIRE_TIMEOUT_MS;
+    process.env.RELAY_FIRE_TIMEOUT_MS = "20";
+    try {
+      const clock = { t: NOW };
+      const sent: string[] = [];
+      const store = new ScheduleStore({ file: tmpFile() });
+      let releaseSend!: () => void;
+      let sendCalls = 0;
+      const runner = makeScheduleRunner({
+        store, llm: {} as never,
+        runAgent: async (task) => ({ reply: `did:${task}` }), // agent resolves fast; the SEND is what stalls
+        send: async (_c, text) => { sendCalls++; if (sendCalls === 1) { await new Promise<void>((r) => { releaseSend = r; }); } sent.push(text); },
+        formatReply: (t) => t, now: () => clock.t, periodMs: 0,
+      });
+      store.add(1, { kind: "once", task: "ping me", dueMs: NOW - 1 }, NOW);
+      await runner.tick();                    // agent done, send stalls -> fire times out at 20ms; once left due for retry
+      // A SECOND tick runs while the first fire's send is still in flight — the double-ping window. The
+      // in-flight guard must skip it (the still-running fireOne owns the delivery).
+      await runner.tick();
+      expect(sendCalls).toBe(1);              // the 2nd tick did NOT start a second send
+      releaseSend();                          // the stalled first send now lands late
+      await new Promise((r) => setTimeout(r, 0));
+      expect(sent).toHaveLength(1);           // exactly one delivery — no double ping
+      // The late finish marked the once delivered, so a further tick can't re-fire it either.
+      await runner.tick();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(sent).toHaveLength(1);
+      expect(store.dueNow(clock.t).some((s) => s.id === store.list(1)[0]?.id)).toBe(false); // not due anymore
+    } finally {
+      if (prev === undefined) delete process.env.RELAY_FIRE_TIMEOUT_MS; else process.env.RELAY_FIRE_TIMEOUT_MS = prev;
+    }
+  });
+
   it("a slow task that finishes AFTER its timeout does not double-send or double-complete (slow-task-starves-due-reminders)", async () => {
     const prev = process.env.RELAY_FIRE_TIMEOUT_MS;
     process.env.RELAY_FIRE_TIMEOUT_MS = "20";

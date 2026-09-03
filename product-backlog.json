@@ -2849,7 +2849,7 @@
       "title": "Slow send past the fire timeout double-pings a reminder",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "fireOne guards every side-effect with isCancelled() EXCEPT after await deps.send(...); a send that outlasts the 90s per-fire timeout is delivered once, then the timeout's catch retries the once -> 'take your meds' twice.",
       "how": "Re-check isCancelled() immediately after the send resolves; if the fire already timed out, skip complete()/recordSend so the late-landing send isn't also retried. Mirror the existing pre-send isCancelled guards."
     },
@@ -3999,6 +3999,10 @@
     {
       "id": "corrupt-notice-lost-if-send-fails",
       "note": "Corrupt-store notice no longer lost if its send fails. corruptNotice() now PEEKS (no drain); handler gates a new corruptNoticeAck on delivery (send !== false), so a failed/thrown send re-surfaces the silent-wipe heads-up next inbound instead of swallowing the only signal that saved reminders/alerts/recipes were reset. index drains corruptedStores only in the ack. +1 test (failed-send re-surfaces), 1902 green."
+    },
+    {
+      "id": "post-send-timeout-double-ping",
+      "note": "A scheduled fire whose SEND outlives the 90s ceiling (long multi-chunk send) no longer double-pings. Added an in-flight `firing` guard (cleared on true settle via .finally on the raw fireOne promise) so an overlapping tick can't re-fire a once whose send is still landing, + a post-send isCancelled() re-check: on a delivered-after-timeout send, mark a once complete (delivered) so the catch's retry can't re-send, commit the alert baseline (crossing landed), and skip the double recordSend/complete. +1 test (send stalls past timeout, 2nd tick skips, one delivery). 1903 green."
     }
   ],
   "audits": [

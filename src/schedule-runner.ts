@@ -185,6 +185,12 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   // basket-level softFail can't trip (other members read fine), so it looks tracked forever. Streak it +
   // fire a one-time receipt at FAIL_STREAK_NOTIFY, then reset. A member that reads fine clears its streak.
   const memberFailStreak = new Map<string, number>();
+  // Schedule ids whose fireOne is STILL RUNNING (post-send-timeout-double-ping). A fire that outlives its
+  // wall-clock ceiling (a slow multi-chunk send) rejects into the tick's catch, which leaves a once DUE
+  // for retry — but the original fireOne is still in flight and its send may yet land. Without this guard
+  // an overlapping next tick re-fires the same once and the user gets the reminder TWICE. Cleared when
+  // fireOne actually settles (via .finally at the call site), independent of the timeout race.
+  const firing = new Set<string>();
 
   // Send the one-time "your <name> briefing/recipe has no content left" notice for a RECURRING schedule
   // whose digest/recipe resolved empty, then remember we did. A once (fires + drops on its own) gets no
@@ -449,6 +455,19 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     // advances-and-retries next cadence — restoring the "a failed send re-fires next check" guarantee.
     const delivered = await deps.send(s.chatId, sendText!, keyboard); // non-null here (alert-silent path returned early)
     if (delivered === false) throw new Error("send failed (not delivered) — deferring commit/complete so it re-fires");
+    // The send SUCCEEDED — but it may have outlived the fire ceiling (a long multi-chunk send is the most
+    // likely thing to be slow), in which case the tick's catch has ALREADY advanced/failed this schedule
+    // (post-send-timeout-double-ping). This is the one side-effect with no post-await cancel re-check: the
+    // pre-send guards can't see a timeout that fires DURING the send. If we timed out, the message did land
+    // once, so DON'T re-record/re-complete (double-advance) and DON'T let a once stay due for the catch's
+    // retry (double-send): mark it delivered so dueNow() excludes it. The alert baseline still commits —
+    // the crossing message reached the user, so swallowing it would lose the edge.
+    if (isCancelled()) {
+      alertCommit?.();
+      if (s.kind === "once") deps.store.complete(s.id, deps.now()); // mark delivered so the catch's retry can't re-send
+      log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: true, warn: "delivered_after_timeout" })}`);
+      return;
+    }
     alertCommit?.(); // send succeeded -> NOW advance the alert baseline (a throw above skips this)
     // Cache the UNTRIMMED text + how much was actually sent, so "more"/"send the link" can page a long
     // digest's dropped tail (digest-drilldown-trims-tail). fullText is set where a send may be trimmed.
@@ -626,9 +645,18 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
             continue;
           }
         }
+        // Don't re-fire a schedule whose PREVIOUS fire is still in flight (post-send-timeout-double-ping):
+        // a fire that outran its ceiling rejected into the catch (leaving a once due for retry) but is
+        // still running — its send may yet land. Firing it again here is the double-ping. `firing` clears
+        // only when fireOne actually settles (the .finally below), so an overlapping tick skips it until
+        // then; by the time it clears, the late settle's post-send guard has marked a delivered once done.
+        if (firing.has(s.id)) { log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, skipped: "already_firing" })}`); continue; }
         // Bound each fire so one hung task can't starve the rest of the due batch (slow-task-starves-
         // due-reminders). A timeout rejects into the catch below — a once retries, a recurring advances.
-        try { await withFireTimeout((isCancelled) => fireOne(s, isCancelled)); fired++; deps.store.resetFailures(s.id); } // success clears any failure streak
+        // firing.delete is attached to the RAW fireOne promise (not withFireTimeout's) so it stays set
+        // through a late finish, not just until the timeout rejects.
+        firing.add(s.id);
+        try { await withFireTimeout((isCancelled) => fireOne(s, isCancelled).finally(() => firing.delete(s.id))); fired++; deps.store.resetFailures(s.id); } // success clears any failure streak
         catch (e) {
           deps.onError?.(e);
           const raw = e instanceof Error ? e.message : String(e);
