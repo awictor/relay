@@ -1628,6 +1628,13 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           replyKeyboard = actButtons(answerIsWatchable(msg.text, reply));
         }
       }
+      // Track whether the reply actually reached the user (inbound-send-fail-swallowed): sendMessage
+      // returns false when a chunk failed to send (it's best-effort, doesn't throw). The proactive runner
+      // already gates on this; the inbound path ignored it, so a 429/network/blocked send left the user
+      // with nothing AND still wrote the assistant turn to memory as delivered — the NEXT turn's context
+      // then claimed an answer the user never saw. Gate the memory write on delivery. `=== false` only:
+      // a channel returning void/undefined (console) counts as delivered, so older wiring is unaffected.
+      let delivered = true;
       if (photo && deps.sendPhoto) {
         await deps.sendPhoto(msg.chatId, photo, out.slice(0, 1024));
         if (out.length > 1024) await deps.sendMessage(msg.chatId, out);
@@ -1635,7 +1642,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         await deps.sendDocument(msg.chatId, doc, docName ?? "page.pdf", out.slice(0, 1024));
         if (out.length > 1024) await deps.sendMessage(msg.chatId, out);
       } else {
-        await deps.sendMessage(msg.chatId, out, replyKeyboard);
+        delivered = (await deps.sendMessage(msg.chatId, out, replyKeyboard)) !== false;
       }
 
       // Append this turn to the CURRENT memory, not the pre-run `history` snapshot taken minutes ago
@@ -1643,6 +1650,14 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       // can write its result to memory WHILE this agent run is in flight (the ack invites "keep texting
       // meanwhile"); writing [...history, ...] here would erase that errand turn. Re-reading is race-free
       // (no await between get + set), mirroring the errand-completion path's own re-read fix.
+      // Skip the write on a FAILED send (inbound-send-fail-swallowed): if the user never saw the answer,
+      // don't poison the next turn's context with an assistant reply that was never delivered — leave the
+      // user turn out too so a re-ask starts clean. Log the miss so a dropped reply is visible to the op.
+      if (!delivered) {
+        log(formatTurnLog({ chatId: msg.chatId, steps, tools, elapsedMs: deps.now() - startedAt, replyChars: 0, ok: false, error: "send_failed_not_delivered" }));
+        deps.recordTurn({ steps, tools, elapsedMs: deps.now() - startedAt, ok: false });
+        return;
+      }
       const cur = deps.memoryGet(msg.chatId);
       const next: LLMMessage[] = [...cur, { role: "user", content: msg.text }, { role: "assistant", content: out }];
       deps.memorySet(msg.chatId, next);

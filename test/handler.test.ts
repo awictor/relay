@@ -59,6 +59,47 @@ describe("createHandler — memory-write hedge (memory-write-silent-fail)", () =
   });
 });
 
+describe("createHandler — inbound send-failure (inbound-send-fail-swallowed)", () => {
+  it("a FAILED reply send does NOT write the turn to memory (so the next turn isn't poisoned)", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    const recorded: Array<{ ok: boolean }> = [];
+    const { handle } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      sendMessage: async () => false, // delivery fails
+      recordTurn: (t) => { recorded.push({ ok: t.ok }); },
+      runAgentFn: async () => ({ reply: "the answer", steps: 1, tools: [] }),
+    });
+    await handle(msg("what's the weather", 7));
+    expect(mem.get(7)).toBeUndefined();          // turn NOT persisted — user never saw it
+    expect(recorded[recorded.length - 1]!.ok).toBe(false); // logged as a failed turn
+  });
+
+  it("a successful reply send writes the turn to memory as before", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    const { handle } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      sendMessage: async () => true,
+      runAgentFn: async () => ({ reply: "the answer", steps: 1, tools: [] }),
+    });
+    await handle(msg("what's the weather", 7));
+    expect(mem.get(7)).toHaveLength(2); // user + assistant turn persisted
+  });
+
+  it("a channel returning void (console) counts as delivered — memory still written", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    const { handle } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      sendMessage: async () => { /* void */ },
+      runAgentFn: async () => ({ reply: "the answer", steps: 1, tools: [] }),
+    });
+    await handle(msg("hi there friend", 7));
+    expect(mem.get(7)).toHaveLength(2);
+  });
+});
+
 describe("createHandler", () => {
   it("a slash command short-circuits: replies canned, no agent/memory/metrics", async () => {
     let agentCalled = false;

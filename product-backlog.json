@@ -2732,7 +2732,7 @@
       "title": "a failed inbound reply is invisible + memory records it as delivered",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "sendMessage returns a delivered-boolean the PROACTIVE runner gates on, but the inbound handler ignores it — a 429/network/one-chunk failure means the user gets nothing/truncated with no notice, and the assistant turn is still written to memory as answered (next turn's context claims an answer never seen).",
       "how": "Check sendMessage's return on the inbound path; on false, don't write the assistant turn to memory as delivered (or note the miss) + optionally retry once — mirror the proactive commit-gating already built."
     },
@@ -3839,6 +3839,10 @@
     {
       "item": "threshold-suffix-drop",
       "note": "Fixed the flagship 'watch below X' silently degrading on the commonest phrasing (threshold-suffix-drop). The below/above/by operand regexes accepted only $?(digits with commas) anchored s*$ — so 'below 50k', 'above 1.2M', 'below 50,000 usd' matched NOTHING, leaving condition/threshold undefined and the alert falling through to a plain change-watch (fires on every wiggle, never the crossing; also the non-edge, non-quiet-deferrable kind that buzzes all day) — and the confirmation never revealed the threshold was dropped. extractValue already scaled k/m/bn on the VALUE side, so the parser was asymmetric. Extended the below/above/by grammar (parseAlertCommand AND parseAlertEdit) with an optional magnitude suffix (k/m/mm/mn/bn/b/t/thousand/…) + a trailing currency word (usd/eur/dollars/…), via a shared parseOperand(numStr,suffix) that strips commas + scales (magMult, allowBareMT since an explicit clause is unambiguous). 7 new assertions across parseAlertCommand + parseAlertEdit (50k/1.2m/50,000 usd/1.5bn/by 10k; edit 45k/1.2m). suite 1850 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "inbound-send-fail-swallowed",
+      "note": "Closed the inbound half of the failed-send gap (inbound-send-fail-swallowed). sendMessage returns a delivered-boolean the PROACTIVE runner gates on, but the inbound handler ignored it — a 429/network/blocked (or a failed chunk of a long) reply left the user with nothing/truncated AND still wrote the assistant turn to memory as delivered, so the next turn's context claimed an answer the user never saw. The text-reply path now captures the delivered result (=== false only, so a console channel returning void still counts delivered); on a failed send it skips the memory write entirely (leaves the user turn out too so a re-ask starts clean) + logs a send_failed_not_delivered miss + records a not-ok turn. Photo/doc paths unchanged. 3 new tests (failed send -> no memory + ok:false; success -> 2-msg memory; void channel -> delivered). suite 1853 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
