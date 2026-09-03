@@ -6,7 +6,7 @@
 //   2. `load()` previously did `catch { this.items = [] }` — one corrupt byte silently discarded
 //      EVERY saved reminder/recipe/alert. We instead back the bad file up to <file>.corrupt so the
 //      data is recoverable + the failure is visible, then return null so the caller starts fresh.
-import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync, unlinkSync } from "fs";
+import { readFileSync, renameSync, mkdirSync, existsSync, unlinkSync, openSync, writeSync, fsyncSync, closeSync } from "fs";
 import { dirname } from "path";
 
 // A persist-failure sink (lists-remove-atomic-write-failure): atomicWriteJson used to swallow write
@@ -50,7 +50,18 @@ export function atomicWriteJson(file: string, obj: unknown): boolean {
   const tmp = `${file}.tmp`;
   try {
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(tmp, JSON.stringify(obj), "utf8");
+    // fsync the temp file's CONTENTS to disk BEFORE renaming (safe-store-no-fsync). renameSync only
+    // orders the directory metadata — without flushing the data first, a hard crash/power-loss can
+    // persist the rename while the temp's bytes are still in the OS page cache, producing exactly the
+    // torn/empty file this module exists to prevent (which then trips the corrupt path + wipes a store).
+    // openSync/writeSync/fsyncSync/closeSync guarantees the bytes are durable before the rename.
+    const fd = openSync(tmp, "w");
+    try {
+      writeSync(fd, JSON.stringify(obj), null, "utf8");
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
     renameSync(tmp, file); // atomic on same fs — reader sees old-or-new, never a torn write
     return true;
   } catch (err) {

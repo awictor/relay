@@ -24,6 +24,18 @@ describe("atomicWriteJson", () => {
     atomicWriteJson(f, { ok: true });
     expect(existsSync(`${f}.tmp`)).toBe(false);
   });
+  it("fsyncs the contents before rename (durable overwrite; safe-store-no-fsync)", () => {
+    // Not directly observable without a crash, but the openSync/writeSync/fsyncSync/rename path must
+    // still produce a correct, complete file + overwrite an existing one atomically (no torn state).
+    const f = join(tmp(), "s.json");
+    expect(atomicWriteJson(f, { n: 1, big: "x".repeat(5000) })).toBe(true);
+    expect(readJsonSafe<{ n: number; big: string }>(f)!.n).toBe(1);
+    expect(atomicWriteJson(f, { n: 2 })).toBe(true);        // overwrite
+    const got = readJsonSafe<{ n: number; big?: string }>(f)!;
+    expect(got.n).toBe(2);
+    expect(got.big).toBeUndefined();                        // fully replaced, not appended/torn
+    expect(existsSync(`${f}.tmp`)).toBe(false);
+  });
   it("never throws on an unwritable path", () => {
     // a path whose parent is a FILE (not a dir) can't be written; must swallow, not throw
     const d = tmp();

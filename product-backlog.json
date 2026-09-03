@@ -1814,7 +1814,7 @@
       "title": "atomicWriteJson never fsyncs (torn file on power loss)",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Header claims temp+fsync+rename but there is no fsync — a hard crash/power-loss can persist the rename while the tmp contents are unflushed, producing the empty/torn file the module exists to prevent, which then trips the corrupt path + wipes a store.",
       "how": "openSync the tmp, writeSync, fsyncSync, close, then rename; optionally fsync the dir. Keep never-throws + return bool."
     },
@@ -2554,6 +2554,10 @@
     {
       "item": "inferTz-region-tail-wrong",
       "note": "Fixed inferTzFromLocation: a 'City, Region' whose region tail is a spelled-out place we don't know + isn't US no longer falls back to the leftmost US-city token. 'San Jose, Costa Rica' returned California (-480) -> reminders 2h off, silently; now returns null (caller asks). A US country marker (USA/United States) or a 2-letter US-state-shaped tail (incl. the collision-omitted OR/IN/etc) still falls through to the city, so 'Austin, USA'/'Portland, OR' resolve. Known foreign tails (Paris, France; Cordoba, Argentina) unchanged. 2 new test cases (foreign-unknown->null, US-tail->city). Suite 1403 green, tsc clean."
+    },
+    {
+      "item": "safe-store-no-fsync",
+      "note": "atomicWriteJson now fsyncs the temp file's contents before the rename (openSync/writeSync/fsyncSync/closeSync -> renameSync), so a hard crash/power-loss can't persist the rename while the bytes are still in the page cache (which produced the torn/empty file that trips the corrupt path + wipes a store). The module header claimed 'temp + fsync + rename' but there was no fsync — now true. Still never-throws + returns the success bool. 1 new test (durable overwrite, no torn state). Suite 1404 green, tsc clean."
     }
   ],
   "audits": [
@@ -2694,6 +2698,9 @@
     },
     {
       "note": "AUDIT (backlog dry, only owner-gated). A/new-user: on-demand news (promised+unbuilt), transit-mode directions, actually-send compose, flight status, local showtimes. B/reliability: fire-timeout late-finish double-send (regression in last run's timeout), atomicWriteJson no fsync, contact fuzzy-match wrong-person draft, inferTz region-tail wrong guess, extractValue largest-magnitude false no-fire. C/power: photo/voice->structured capture, compound multi-intent fan-out, bg progress pings, NL query over own data, geofenced reminders. Seeded: fire-timeout-late-finish-dup(built), safe-store-no-fsync, contact-wrong-person-draft, get-news-tool, inferTz-region-tail-wrong."
+    },
+    {
+      "note": "No 3-agent audit this run (safe-store-no-fsync was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
     }
   ]
 }
