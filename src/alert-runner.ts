@@ -154,12 +154,15 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
       return { notify: false, message: null, value: items[0] ?? "", commit: noop };
     }
     if (freshByKey.size === 0) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
-    const fresh = [...freshByKey.values()];
-    const shown = fresh.slice(0, 10);
-    const more = fresh.length > shown.length ? `\n…and ${fresh.length - shown.length} more` : "";
-    const header = fresh.length === 1 ? `🔔 ${alert.name}: 1 new` : `🔔 ${alert.name}: ${fresh.length} new`;
-    const message = await withThen(`${header}\n${shown.map((s) => `• ${s}`).join("\n")}${more}`);
-    return { notify: true, message, value: fresh[0] ?? "", commit: () => deps.recordSeen?.(alert.chatId, alert.name, [...freshByKey.keys()]) };
+    const freshEntries = [...freshByKey.entries()]; // [key, displayText], insertion order
+    const shownEntries = freshEntries.slice(0, 10);
+    const more = freshEntries.length > shownEntries.length ? `\n…and ${freshEntries.length - shownEntries.length} more` : "";
+    const header = freshEntries.length === 1 ? `🔔 ${alert.name}: 1 new` : `🔔 ${alert.name}: ${freshEntries.length} new`;
+    const message = await withThen(`${header}\n${shownEntries.map(([, s]) => `• ${s}`).join("\n")}${more}`);
+    // Record ONLY the items we actually SHOWED as seen (feed-seen-swallows-overflow): recording all
+    // fresh keys when we only displayed the first 10 meant items 11+ were marked seen but never shown —
+    // silently lost. The un-shown items stay unseen so they surface (and get shown) on the next check.
+    return { notify: true, message, value: shownEntries[0]?.[1] ?? "", commit: () => deps.recordSeen?.(alert.chatId, alert.name, shownEntries.map(([k]) => k)) };
   }
 
   // The baseline advance for this value, run only by the caller (after a successful send on notify).
@@ -213,13 +216,15 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
       // Nothing new — stay silent, but still record (no-op) so the store reflects the check.
       return { notify: false, message: null, value, commit: noop };
     }
-    const fresh = [...freshByKey.values()];
-    const shown = fresh.slice(0, 10);
-    const more = fresh.length > shown.length ? `\n…and ${fresh.length - shown.length} more` : "";
-    const header = fresh.length === 1 ? `🔔 ${alert.name}: 1 new` : `🔔 ${alert.name}: ${fresh.length} new`;
-    const message = await withThen(`${header}\n${shown.map((s) => `• ${s}`).join("\n")}${more}`);
-    // Defer the seen-set advance to the caller's post-send commit (failed send -> re-report next check).
-    return { notify: true, message, value, commit: () => deps.recordSeen?.(alert.chatId, alert.name, [...freshByKey.keys()]) };
+    const freshEntries = [...freshByKey.entries()]; // [key, displayText], insertion order
+    const shownEntries = freshEntries.slice(0, 10);
+    const more = freshEntries.length > shownEntries.length ? `\n…and ${freshEntries.length - shownEntries.length} more` : "";
+    const header = freshEntries.length === 1 ? `🔔 ${alert.name}: 1 new` : `🔔 ${alert.name}: ${freshEntries.length} new`;
+    const message = await withThen(`${header}\n${shownEntries.map(([, s]) => `• ${s}`).join("\n")}${more}`);
+    // Record ONLY the SHOWN items as seen (feed-seen-swallows-overflow): recording all fresh keys while
+    // displaying just the first 10 marked items 11+ seen without ever showing them — silently lost. The
+    // un-shown items stay unseen so they surface + get shown on the next check.
+    return { notify: true, message, value, commit: () => deps.recordSeen?.(alert.chatId, alert.name, shownEntries.map(([k]) => k)) };
   }
 
   // Predicate alert (below/above/in_stock): edge-triggered — notify when the condition FIRST becomes

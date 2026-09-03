@@ -1700,6 +1700,51 @@
       "status": "done",
       "why": "dispatchBackground snapshots memory at dispatch, runs detached minutes, then memorySet([...staleSnapshot]) on completion — dropping every turn exchanged while waiting (which the bot explicitly invites).",
       "how": "On completion, re-read current memory + append the errand result instead of overwriting from the stale snapshot; or merge by message identity."
+    },
+    {
+      "id": "feed-seen-swallows-overflow",
+      "title": "Feed watch marks >10 new items seen but shows only 10",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "Both feed paths showed the first 10 fresh items + \"…and N more\" but recordSeen committed ALL fresh keys, so items 11+ were marked seen and never surfaced — silently lost content on a busy feed (bug in the follow-feed code just shipped).",
+      "how": "Record only the SHOWN items as seen; un-shown ones stay unseen and appear next check."
+    },
+    {
+      "id": "feed-dedup-title-only",
+      "title": "Feed dedup keys on title only",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "feedItemKey = normalized title (no url/id/date), so a recurring \"Daily Discussion\" thread or any repeated-headline post hashes to an already-seen key and is dropped forever; long titles sharing first 120 chars collide.",
+      "how": "Include a URL/id/guid in the feed item + key on (title+link). parseFeed/parseXmlTitles must return {title,link}; feedItemKey uses the link when present."
+    },
+    {
+      "id": "digest-all-fail-silent-noshow",
+      "title": "Digest with all members transiently failing sends nothing",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "digest-runner returns null when no member is real; fireOne treats null as empty/deleted and stays silent — a bad-network morning makes a relied-upon briefing silently no-show, indistinguishable from deletion.",
+      "how": "Distinguish transient all-fail from empty: send a brief \"couldn't build your digest this morning (temporary)\" note, or retry, instead of silent skip."
+    },
+    {
+      "id": "once-reminder-tz-restamp",
+      "title": "\"once\" clock reminders not tz-restamped on setlocation",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "restampTz recomputes daily/weekly only; a \"remind me tomorrow at 8am\" set before tz is fixed then corrected to UTC-5 fires at 3am local, once, silently.",
+      "how": "Restamp future clock-time once reminders (dueMs derived from hourMin) to the new offset, like daily/weekly; skip pure relative/interval ones."
+    },
+    {
+      "id": "onboarding-copy-life-assistant",
+      "title": "START copy sells a scraper, not a life assistant",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "START leads with HN/extract/screenshot/PDF, so a first-timer thinks it is a dev tool + never tries weather/remind/tip/near-me/scores; never told they can ask open questions or that sharing location unlocks weather/near-me.",
+      "how": "Rewrite START to lead with everyday errands + \"just ask\" + the location unlock; keep power examples lower. Pure commands.ts copy."
     }
   ],
   "history": [
@@ -2350,6 +2395,10 @@
     {
       "item": "follow-feed-subscriptions",
       "note": "Shipped keyless feed subscriptions: \"follow r/x / a blog / HN topic / a YouTube channel\" pings only on NEW items. New src/lib/feeds.ts (resolveFeedSource + parseFeed RSS/Atom/Reddit/HN + fetchFeedItems + parseFollowCommand). Added Alert.feedSource; checkAlert fetches the source DIRECTLY (no flaky agent) and reuses the whole seen-set/new-item path; alert-runner fetchFeed dep wired to defaultFetchText (exported from agent.ts, SSRF-guarded). Handler 'follow' branch + index followFeed (auto-schedules on ALERT_CADENCE like watches) + HELP. Reddit uses .rss (json 403s from datacenter IPs). Live-verified HN/YouTube/Reddit-rss/RSS all 200. 23 new tests, suite 1334 green, tsc clean. call-tested:true (feed sources fetched live via ctx_execute)."
+    },
+    {
+      "item": "feed-seen-swallows-overflow",
+      "note": "Fixed both feed-watch paths (direct feedSource + agent-driven): recordSeen now commits only the SHOWN (first-10) item keys, not all fresh keys, so a burst of >10 new items no longer marks 11+ seen-without-showing. Un-shown items surface + display on the next check. New regression test (15 new items -> 10 seen, Post 15 stays unseen). Suite 1335 green, tsc clean."
     }
   ],
   "audits": [
@@ -2475,6 +2524,9 @@
     },
     {
       "note": "No 3-agent audit this run (backlog had actionable todos). first-reminder-tz-prompt marked done-noop prior run (already built). Built follow-feed-subscriptions from the standing queue."
+    },
+    {
+      "note": "AUDIT (backlog dry, only owner-gated). A/new-user: onboarding sells a scraper, compose draft-only surprises, no sports scores, no flight status, no transit directions. B/reliability: feed shows-10-but-marks-all-seen (bug in just-shipped feed code), feed dedup title-only drops recurring posts, digest all-transient-fail silent no-show, once-reminder not tz-restamped, once-reminder persist() ignores bool. C/power: shareable recipe codes, usage->automation nudge, accumulating datasets+CSV export, outbound voice-note TTS, deep-research mode. Seeded: feed-seen-swallows-overflow(built), feed-dedup-title-only, digest-all-fail-silent-noshow, once-reminder-tz-restamp, onboarding-copy-life-assistant."
     }
   ]
 }

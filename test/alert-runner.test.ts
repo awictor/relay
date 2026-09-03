@@ -452,4 +452,19 @@ describe("checkAlert — follow-feed subscriptions (direct fetch, no agent)", ()
     expect(r.notify).toBe(false);
     expect(r.message).toBeNull();
   });
+
+  it("records only the SHOWN items as seen when >10 are new, so the rest surface next check (feed-seen-swallows-overflow)", async () => {
+    const items = Array.from({ length: 15 }, (_, i) => `Post ${i + 1}`); // 15 new
+    const { d, seenWrites } = feedDeps(items);
+    const r = await checkAlert(feedAlert({ seen: [] }), d); // seen defined (not first run) but empty
+    expect(r.notify).toBe(true);
+    expect(r.message).toMatch(/15 new/);
+    expect(r.message).toMatch(/…and 5 more/);
+    // Only the 10 shown items are committed as seen — items 11-15 stay unseen for the next check.
+    r.commit();
+    expect(seenWrites[0]!).toHaveLength(10);
+    // The un-shown ones (Post 11..15) must NOT be in the seen set.
+    expect(seenWrites[0]!.some((k) => k === normKey("Post 15"))).toBe(false);
+    expect(seenWrites[0]!.some((k) => k === normKey("Post 1"))).toBe(true);
+  });
 });
