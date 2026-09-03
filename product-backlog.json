@@ -2003,7 +2003,7 @@
       "title": "Cooking recipes / meal ideas by ingredient",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "\"dinner ideas with eggs, spinach, feta\" / \"what can I make with chicken\" is a top everyday ask; falls to a slow blog-link web_search AND the word \"recipe\" collides with the automation-recipe system.",
       "how": "Keyless TheMealDB (filter.php?i=ingredient, random.php, lookup.php) -> a meal-ideas tool; parse ingredients; format name + a few + a link. Distinct verb from automation recipes."
     },
@@ -2797,6 +2797,10 @@
     {
       "item": "unit-convert-tool",
       "note": "Added convert_units: new src/lib/units-convert.ts — a DETERMINISTIC converter over fixed factor tables (temperature affine; length/mass/volume+cooking by factor) with parseUnitConvert (incl. no-space temp '180C to F', compound '5 ft 11 in' summed, 'of <thing>' ignored), convertUnit (null on unknown/cross-dimension), formatConvert, runConvert. Wired agent.ts (TOOLS, dispatch, prompt), pinned tool list, HELP; amended the ANSWER-DIRECTLY carve-out to steer ALL unit conversions to the tool (was 'oz in a cup = 8' inline mental math — a correctness risk the prompt itself flagged). No network/backend. 16 new tests. Suite 1473 green, tsc clean. call-tested:false (pure offline)."
+    },
+    {
+      "item": "meal-ideas-tool",
+      "note": "Added meal_ideas tool: new src/lib/meals.ts over keyless TheMealDB (filter-by-ingredient, search-by-name for a full recipe, random). parseMealRequest routes 'what can I make with chicken and rice' (first ingredient), 'recipe for X'/'how do I make X' (full recipe), and 'dinner ideas'/'random meal' (random full recipe); returns idea lists or a full recipe (ingredients+measures+steps+source). Wired agent.ts (TOOLS, backend.getMeals + defaultBackend, dispatch, prompt), pinned tool list, HELP — with explicit FOOD-not-automation-recipe disambiguation (the word 'recipe' collided with /recipes). 17 new tests, suite 1486 green, tsc clean. call-tested:true (TheMealDB filter/lookup/random all live 200 via ctx_execute)."
     }
   ],
   "audits": [

@@ -23,6 +23,7 @@ import { getNews as newsFetch, formatNews } from "./lib/news.js";
 import { calc, formatResult } from "./lib/calc.js";
 import { parseTranslateRequest, translate } from "./lib/translate.js";
 import { runConvert } from "./lib/units-convert.js";
+import { parseMealRequest, getMeals, formatMealIdeas, formatFullMeal } from "./lib/meals.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -148,6 +149,15 @@ export const TOOLS: ToolSpec[] = [
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The user's translate request verbatim, e.g. \"translate 'where is the pharmacy' to Portuguese\" or \"translate this page to English: <url>\"." } },
+      required: ["request"],
+    },
+  },
+  {
+    name: "meal_ideas",
+    description: "Get cooking meal ideas or a recipe (no key, instant). Use this — NOT web_search — for \"what can I make with chicken\", \"dinner ideas\", \"random meal\", \"recipe for carbonara\", \"how do I make lasagna\". Returns dish ideas by ingredient, or a full recipe (ingredients + steps) for a named dish or a random pick. NOTE: this is FOOD — not Relay's saved automation 'recipes' (/recipes). Pass the request verbatim.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The food request verbatim, e.g. \"what can I make with chicken and rice\" or \"recipe for pad thai\"." } },
       required: ["request"],
     },
   },
@@ -357,6 +367,7 @@ Tools:
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "get_time" (request): current time in another city/timezone, or convert a time between zones. Use this — NOT web_search — for "what time is it in Tokyo"/"time in London"/"9am PT in London"/"convert 3pm EST to Tokyo". Pass the request verbatim. Standard-time offsets (may be an hour off during daylight saving).
+- "meal_ideas" (request): cooking meal ideas or a recipe. Use this — NOT web_search — for "what can I make with chicken"/"dinner ideas"/"random meal"/"recipe for X". FOOD, not Relay's saved automation recipes.
 - "convert_units" (request): convert units of measure EXACTLY (temperature/length/weight/volume/cooking). Use for "180C to F"/"5 foot 11 in cm"/"2 cups in grams"/"10 miles in km". NOT currency (use convert_currency).
 - "translate" (request): translate text or a whole page into another language. Use for "translate X to Spanish"/"how do you say X in Japanese"/"read me this page in English: <url>". Pass the request verbatim.
 - "calculate" (expression): compute arithmetic/financial math EXACTLY. Use for chained math, bill-splits, tips, percentages, loan payments — anything past a trivial one-step sum (don't do it in your head, that's silently wrong). loanpayment(principal, annualRatePct, years) for a monthly payment.
@@ -432,6 +443,9 @@ export interface BrowserBackend {
   // Optional: today's top news headlines, or about a topic (get-news-tool). Absent -> the get_news tool
   // reports it's unavailable. Returns null on a fetch failure / empty parse.
   getNews?(topic?: string): Promise<{ topic?: string; headlines: string[] } | null>;
+  // Optional: cooking meal ideas / a recipe (meal-ideas-tool). Absent -> the meal_ideas tool reports
+  // it's unavailable. Returns ideas-by-ingredient, a full recipe, or null on a miss.
+  getMeals?(request: string): Promise<{ ideas: import("./lib/meals.js").MealIdea[]; ingredient?: string } | { meal: import("./lib/meals.js").FullMeal } | null>;
   // Optional: current weather for a place or coords (geo-tool-cluster). Absent -> the get_weather tool
   // reports it's unavailable. Returns null on a bad place / fetch failure.
   getWeather?(opts: { place?: string; lat?: number; lng?: number; near?: { lat: number; lng: number } }): Promise<import("./lib/weather.js").WeatherResult | null>;
@@ -550,6 +564,7 @@ const defaultBackend: BrowserBackend = {
   defineWord: (word) => dictFetch(word, defaultFetchText),
   getScores: (query) => scoresFetch(query, defaultFetchText),
   getNews: (topic) => newsFetch(topic, defaultFetchText),
+  getMeals: (request) => { const req = parseMealRequest(request); return req ? getMeals(req, defaultFetchText) : Promise.resolve(null); },
   getWeather: (opts) => fetchWeather(opts, defaultFetchText),
   findNearby: (opts) => fetchNearby(opts, defaultFetchTextPost),
   getDirections: (opts) => fetchDirections(opts, defaultFetchText),
@@ -888,6 +903,20 @@ export async function runAgent(
           push("translate", `${out}\n\nReport this translation to the user verbatim (into ${parsed.target}).`);
         } catch (e) {
           push("translate", `ERROR translating: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "meal_ideas") {
+        if (!backend.getMeals) { push("meal_ideas", "ERROR: meal ideas aren't available."); continue; }
+        const request = String(call.args.request ?? "").trim();
+        try {
+          const r = await backend.getMeals(request);
+          if (!r) { push("meal_ideas", `Couldn't find a meal for "${request}". Try a single main ingredient ("with chicken") or a dish name ("recipe for lasagna").`); continue; }
+          const text = "meal" in r ? formatFullMeal(r.meal) : formatMealIdeas(r.ideas, r.ingredient);
+          push("meal_ideas", `${text}\n\nReport this to the user.`);
+        } catch (e) {
+          push("meal_ideas", `ERROR getting meal ideas: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

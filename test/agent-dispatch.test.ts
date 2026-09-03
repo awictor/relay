@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "define", "directions", "get_news", "get_scores", "get_time", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "define", "directions", "get_news", "get_scores", "get_time", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "web_search"].sort()
     );
   });
 
@@ -140,6 +140,18 @@ describe("runAgent dispatch", () => {
     const toolMsg = llm.calls[1]!.find((m) => m.role === "tool")!.content;
     expect(toolMsg).toMatch(/= 51\b/);
     expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
+  });
+
+  it("meal_ideas -> backend.getMeals, reaches reply, no browser", async () => {
+    const { b, hits } = recordingBackend();
+    b.getMeals = async (req) => { hits.push(`getMeals:${req}`); return { ideas: [{ name: "Brown Stew Chicken", area: "Jamaican" }], ingredient: "chicken" }; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "meal_ideas", args: { request: "what can I make with chicken" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "Try Brown Stew Chicken." } } as ToolCall },
+    ]);
+    const out = await runAgent("what can I make with chicken", { llm, backend: b });
+    expect(hits.some((h) => h.startsWith("getMeals:"))).toBe(true);
+    expect(out.reply).toMatch(/Brown Stew Chicken/);
   });
 
   it("get_news -> backend.getNews, reaches reply, no browser", async () => {
