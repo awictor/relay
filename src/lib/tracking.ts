@@ -25,9 +25,12 @@ export function detectCarrier(raw: string): Carrier | null {
   // USPS: a 13-char SNN NNNN NNNN US form (e.g. LЗ123456789US) or a 20-22 digit IMpb starting 91/92/93/94/95.
   if (/^[A-Z]{2}\d{9}US$/.test(s)) return "usps";
   if (/^9[0-5]\d{18,20}$/.test(s)) return "usps";
-  // DHL Express: 10 digits (also "JJD" + digits for some). Keep before the generic FedEx digit lengths.
+  // DHL Express: "JJD" + digits. A BARE 10-digit number is NOT auto-DHL (detect-carrier-bare-10-digit):
+  // it's the least-specific pattern and collides with merchant order refs / 10-digit phone numbers, so
+  // treating it as DHL turned "track my order 1234567890" into a false "no DHL match". A lone 10-digit
+  // returns null here (track_package then asks which carrier); it's only accepted as DHL when the user
+  // NAMES dhl (parseTrackingRequest's explicit-carrier branch).
   if (/^JJD\d{10,}$/.test(s)) return "dhl";
-  if (/^\d{10}$/.test(s)) return "dhl";
   // FedEx: 12, 15, or 20 digits.
   if (/^(\d{12}|\d{15}|\d{20})$/.test(s)) return "fedex";
   return null;

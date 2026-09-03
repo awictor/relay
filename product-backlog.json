@@ -23,7 +23,7 @@
       "title": "any bare 10-digit number is treated as a DHL tracking number",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "detectCarrier maps /^\\d{10}$/ -> 'dhl', so 'track my order 1234567890' (a merchant ref, a 10-digit phone) drives the agent to a DHL page + reports 'no DHL match / couldn't read it' — implying the shipment doesn't exist rather than that it wasn't a carrier number. Contradicts the module's stated 'conservative, non-match returns null so we ask' (audit 27 B#3).",
       "how": "Drop the bare-10-digit -> DHL rule (keep JJD-prefixed DHL); a lone 10-digit number is too ambiguous — return null so track_package asks which carrier, OR only accept it under an explicitly-named DHL. Update the DHL detect test."
     },
@@ -2100,6 +2100,10 @@
     {
       "id": "recall-answer-log-tool",
       "note": "The persistent answer-log (100 timestamped task+reply pairs/chat) had a search() but was write-only to the agent — only a whole-message isAnswerRecall regex in the handler could surface it, so a recall reference buried mid-request ('book me a table at that sushi place you found') never reached the log. Added a first-class recall(query) agent tool: a `recall` dep on AgentDeps (bound to the chatId by the handler via the existing recallAnswers/recallKeywords path), a tool def + dispatch that returns the top past answers with a relativeAge ('1h ago') so a stale price/story reads as past, and a graceful no-match ('offer to look it up fresh'). Wired into both the inbound + background runIt calls; the handler's whole-message recall fast-path stays. 4 tests (recall pulls past answer + shows age / no-match graceful + tool-surface pin). call-tested: false (offline unit; the LLM chooses to call it live). 1199 tests green."
+    },
+    {
+      "id": "detect-carrier-bare-10-digit",
+      "note": "detectCarrier mapped any bare 10-digit number to DHL (/^\\d{10}$/), so 'track my order 1234567890' (a merchant ref / 10-digit phone) drove the agent to a DHL page + reported 'no DHL match' — implying the shipment didn't exist rather than that it wasn't a carrier number, contradicting the module's stated conservative-null contract. Dropped the bare-10-digit rule (kept JJD-prefixed DHL); a lone 10-digit now returns null so track_package asks which carrier, and it's still accepted as DHL when the user NAMES dhl (parseTrackingRequest's explicit-carrier branch, /^[0-9A-Z]{8,}$/). 3 tests (bare 10 -> null / JJD still DHL / named-dhl+10 tracks, bare order falls through). call-tested: false (pure parse). 1200 tests green."
     }
   ],
   "audits": [

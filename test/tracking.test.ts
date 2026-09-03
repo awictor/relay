@@ -14,9 +14,9 @@ describe("detectCarrier (package-tracking-watcher)", () => {
     expect(detectCarrier("123456789012")).toBe("fedex");
     expect(detectCarrier("123456789012345")).toBe("fedex");
   });
-  it("detects DHL (10 digits / JJD)", () => {
-    expect(detectCarrier("1234567890")).toBe("dhl");
+  it("detects DHL only by JJD prefix; a bare 10-digit is NOT auto-DHL (detect-carrier-bare-10-digit)", () => {
     expect(detectCarrier("JJD0123456789")).toBe("dhl");
+    expect(detectCarrier("1234567890")).toBeNull(); // merchant ref / phone -> ask, don't assume DHL
   });
   it("returns null for a non-tracking string", () => {
     expect(detectCarrier("hello there")).toBeNull();
@@ -51,6 +51,10 @@ describe("parseTrackingRequest", () => {
   it("an explicitly named carrier overrides shape detection", () => {
     // 12 digits would shape-detect FedEx, but the user said USPS.
     expect(parseTrackingRequest("track my usps package 123456789012")).toEqual({ carrier: "usps", number: "123456789012" });
+  });
+  it("a bare 10-digit number only tracks when DHL is named, else falls through (detect-carrier-bare-10-digit)", () => {
+    expect(parseTrackingRequest("track my dhl package 1234567890")).toEqual({ carrier: "dhl", number: "1234567890" });
+    expect(parseTrackingRequest("track my order 1234567890")).toBeNull(); // no carrier -> ask, don't assume
   });
   it("resolves a number pasted with spaces/dashes the way carriers print it (parse-tracking-spaced-number)", () => {
     expect(parseTrackingRequest("track 9400 1118 9922 3817 6123 45")).toEqual({ carrier: "usps", number: "9400111899223817612345" });
