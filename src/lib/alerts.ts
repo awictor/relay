@@ -421,13 +421,39 @@ function hintPositions(hay: string, hint: string): number[] {
  * entity words appear in the reply, pick the candidate NEAREST an entity mention rather than the largest.
  * With no hint (or no entity match), behavior is unchanged (largest-magnitude fallback).
  */
+// A number sitting next to a "past value" marker is the OLD figure being compared against, not the
+// current value (change-watch-tracks-historical-value): "$150 previously, now $120", "5 left, was 8",
+// "up from 30 to 42". Tracking it means a price/stock watch compares the wrong number, so a "below 130"
+// alert on "now $120, was $150" silently never fires. `start`/`end` are the candidate's char span in `t`.
+function isHistoricalValue(t: string, start: number, end: number): boolean {
+  const low = t.toLowerCase();
+  const before = low.slice(Math.max(0, start - 14), start);
+  // Unambiguous comparison markers BEFORE the number ("down from 30", "previously 150", "prior 8") —
+  // "from" also covers "down from"/"up from". Allow a currency symbol/space between.
+  if (/\b(?:from|previously|prior|earlier|before)\s*[$€£]?\s*$/.test(before)) return true;
+  // "was"/"were" is AMBIGUOUS: "the rate was 1.085" is the CURRENT value in past tense, but "now $5, was
+  // $8" is a comparison. Only treat "was N" as the old figure when the reply ALSO carries a current-value
+  // cue (now/currently/today/left/remaining/in stock/at present) — otherwise it's just past-tense phrasing.
+  if (/\b(?:was|were)\s*[$€£]?\s*$/.test(before) && /\b(?:now|currently|today|at present|left|remaining|in stock)\b/.test(low)) return true;
+  // Marker immediately AFTER the number ("$150 previously", "8 last week", "10 a month ago").
+  const after = low.slice(end, end + 16);
+  if (/^\s*(?:previously|prior|earlier|before|last\s+(?:week|month|year)|a\s+(?:week|month|day|year)\s+ago|yesterday|ago)\b/.test(after)) return true;
+  return false;
+}
+
 export function extractValue(s: string, hint?: string): number | null {
   const t = s.replace(/,/g, "");
   const hints = hint ? hintPositions(t, hint) : [];
+  // Prefer CURRENT-value candidates: drop any adjacent to a past-value marker, unless that empties the
+  // pool (then they're all we have). Keeps a watch tracking "now $120", not the "was $150" it beats.
+  const dropHistorical = (cands: Array<{ v: number; at: number; end: number }>) => {
+    const live = cands.filter((c) => !isHistoricalValue(t, c.at, c.end));
+    return live.length ? live : cands;
+  };
   // Numbers that appear IN the entity name ("S&P 500", "Nasdaq 100") are labels, not the value — a reply
   // "S&P 500 is at 5,900" must not track 500. Collect the hint's numeric tokens to exclude such matches.
   const hintNums = hint ? new Set((hint.match(/\d+(?:\.\d+)?/g) ?? []).map((n) => parseFloat(n))) : new Set<number>();
-  const nearestByHint = (cands: Array<{ v: number; at: number }>): number => {
+  const nearestByHint = (cands: Array<{ v: number; at: number; end?: number }>): number => {
     // Drop candidates that are just the entity's label number (e.g. the "500" in "S&P 500"), unless that
     // leaves nothing. Only when a hint is present.
     const usable = hints.length ? (cands.filter((c) => !hintNums.has(c.v)).length ? cands.filter((c) => !hintNums.has(c.v)) : cands) : cands;
@@ -453,7 +479,10 @@ export function extractValue(s: string, hint?: string): number | null {
   const cur = [...t.matchAll(/(?:[$€£]\s?)(-?\d+(?:\.\d+)?)\s?(k|mm|mn|bn|b|m|t|thousand|million|billion|trillion)?\b|(-?\d+(?:\.\d+)?)\s?(k|mm|mn|bn|b|m|t|thousand|million|billion|trillion)?\s?(?:usd|eur|gbp|dollars?|euros?)/gi)];
   if (cur.length) {
     // Multiple currency amounts + a hint -> the one nearest the entity, else the first (prior behavior).
-    const cands = cur.map((c) => ({ v: parseFloat((c[1] ?? c[3]!)) * magMult(c[1] !== undefined ? c[2] : c[4], true), at: c.index ?? 0 }));
+    const raw = cur.map((c) => ({ v: parseFloat((c[1] ?? c[3]!)) * magMult(c[1] !== undefined ? c[2] : c[4], true), at: c.index ?? 0, end: (c.index ?? 0) + c[0].length }));
+    // Drop the "was $X"/"from $X"/"$X previously" comparison figure so the watch tracks the CURRENT price
+    // (change-watch-tracks-historical-value), not the old one it's being compared against.
+    const cands = dropHistorical(raw);
     if (hints.length && cands.length > 1) return nearestByHint(cands);
     return cands[0]!.v;
   }
@@ -465,7 +494,7 @@ export function extractValue(s: string, hint?: string): number | null {
   const COUNT_NOUN = "(?:subscribers?|subs?|followers?|views?|downloads?|installs?|users?|stars?|tokens?|streams?|members?|likes?|reads?|plays?|watchers?|forks?|commits?|listeners?|readers?|viewers?|units?|copies|copy|sales?|orders?)";
   const countMag = [...t.matchAll(new RegExp(`(-?\\d+(?:\\.\\d+)?)\\s?(k|mn|mm|bn|m|b|t|thousand|million|billion|trillion)\\s+${COUNT_NOUN}\\b`, "gi"))];
   if (countMag.length) {
-    const cands = countMag.map((c) => ({ v: parseFloat(c[1]!) * magMult(c[2], true), at: c.index ?? 0 }));
+    const cands = dropHistorical(countMag.map((c) => ({ v: parseFloat(c[1]!) * magMult(c[2], true), at: c.index ?? 0, end: (c.index ?? 0) + c[0].length })));
     if (hints.length && cands.length > 1) return nearestByHint(cands);
     return cands[0]!.v;
   }
@@ -474,16 +503,17 @@ export function extractValue(s: string, hint?: string): number | null {
   // The suffix MUST be a true token end — a (?![a-z]) boundary (extractvalue-bare-kb-overscale): otherwise
   // a bare "k"/"b" glued to a word scaled a plain count wildly ("4 boxes"->4e9, "3 km"->3000, "2 kg"->2000,
   // "3 bedrooms"->3e9). A real magnitude ("$60k", "900k downloads", "1.3bn") isn't followed by a letter.
-  const all: Array<{ v: number; at: number }> = [], nonPct: Array<{ v: number; at: number }> = [];
+  const all: Array<{ v: number; at: number; end: number }> = [], nonPct: Array<{ v: number; at: number; end: number }> = [];
   for (const m of t.matchAll(/(-?\d+(?:\.\d+)?)\s?(?:(k|bn|b|thousand|million|billion|trillion)(?![a-z]))?(\s?%)?/gi)) {
     if (!m[1]) continue;
-    const entry = { v: parseFloat(m[1]) * magMult(m[2], false), at: m.index ?? 0 };
+    const entry = { v: parseFloat(m[1]) * magMult(m[2], false), at: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
     all.push(entry);
     if (!m[3]) nonPct.push(entry);
   }
   if (!all.length) return null;
-  // Prefer real (non-percent) numbers; fall back to percents only if that's all there is.
-  const pool = nonPct.length ? nonPct : all;
+  // Prefer real (non-percent) numbers; fall back to percents only if that's all there is. Then drop any
+  // "was X"/"X last week" comparison figure so a change-watch tracks the CURRENT number, not the old one.
+  const pool = dropHistorical(nonPct.length ? nonPct : all);
   // A decimal is usually the price/rate — but with MULTIPLE decimals + a hint, pick the nearest entity.
   const decs = pool.filter((n) => !Number.isInteger(n.v));
   if (decs.length) return decs.length > 1 && hints.length ? nearestByHint(decs) : decs[0]!.v;

@@ -151,6 +151,18 @@ describe("extractValue (salient value, not first number)", () => {
   it("still uses a percent when it's the only number", () => {
     expect(extractValue("interest rate is 4.5%")).toBe(4.5);
   });
+  it("tracks the CURRENT value, not a 'was'/'from'/'previously' comparison figure (change-watch-tracks-historical-value)", () => {
+    // currency branch: the "was $8"/"from $8"/"$150 previously" figure is the old value, not what we track.
+    expect(extractValue("$5.00 now, was $8.00", "widget price")).toBe(5);
+    expect(extractValue("Now $5, down from $8", "widget price")).toBe(5);
+    expect(extractValue("$150 previously, now $120", "price")).toBe(120);
+    expect(extractValue("Price dropped to $120 from $150", "price")).toBe(120);
+    // integer branch: "5 left, was 8" / "3 now (was 10 last week)" — the old count must not win by magnitude.
+    expect(extractValue("5 left in stock, was 8", "widget stock")).toBe(5);
+    expect(extractValue("It's 3 now (was 10 last week)", "openings")).toBe(3);
+    // A "below 130" watch on "now $120, was $150" must FIRE (tracks 120), not read 150 and stay silent.
+    expect(conditionHolds({ op: "below", operand: 130 }, "now $120, was $150")).toBe(true);
+  });
   it("scales magnitude suffixes on currency values (extractvalue-magnitude-suffix)", () => {
     expect(extractValue("BTC is trading at $60k right now")).toBe(60_000);
     expect(extractValue("Bitcoin sits around $1.2M")).toBe(1_200_000);
