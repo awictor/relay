@@ -2264,7 +2264,7 @@
       "title": "no generic \"tell me when THIS page changes\" watcher",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "alerts watch numeric thresholds + feeds watch new items, but there's no 'notify on ANY change to this URL' — restocks, price drops with no fixed number, status/policy/appointment pages. A killer generic capability that turns Relay from a reader into a stakeout.",
       "how": "Store a content-hash + a text snapshot from the existing anvil scrape; on the alert-runner cadence, re-scrape, compare (pure hash + text-diff), notify only on a real diff (show what changed). Keyless, offline-testable (hash+diff are pure)."
     },
@@ -3166,6 +3166,10 @@
     {
       "item": "reminder-no-time-ask",
       "note": "A reminder with no time no longer loses the task. 'remind me to call mom' failed parseSchedule (no time clause); the handler already ASKED 'when?' but discarded the task, so the reply 'at 3pm' had no 'call mom' and either mis-scheduled or dropped. Added a pendingReminder stash (mirrors pendingLocation): the ask-branch strips 'remind me to' + a dangling vague-time word and stashes the bare to-do; the next message, if it looks like a time (at/in/tomorrow/tonight/HH[:MM][am/pm]), recombines 'remind me to <task> <time>' + re-runs scheduleAdd; a non-time reply abandons the pending state + routes normally (never trapped); an unparseable time re-asks once. 4 new tests (resume schedules stashed task; non-time reply drops+routes to agent; + the existing ask tests still green), suite 1607 green, tsc clean. call-tested:false (offline handler)."
+    },
+    {
+      "item": "watch-any-page-diff",
+      "note": "Added watch-any-page: 'watch terms: https://site/terms' pings when THAT page's content changes — restocks, price drops with no fixed number, policy/status/appointment pages the numeric/feed watches can't cover. New src/lib/pagediff.ts: pageText (strip tags/scripts/styles + collapse to comparable lines), pageKey (case/whitespace-insensitive), diffPages (order-independent added/removed line sets), formatPageDiff (a 'what changed' summary), pageWatchUrl (a bare-URL task). Alert gains pageUrl; parseAlertCommand detects a bare-URL task (before feed/threshold); alert-runner has a page branch: fetch DIRECTLY (new fetchPage dep = SSRF-guarded defaultFetchText), seed silently on first check, notify with the diff on a real change, stay silent on unchanged / whitespace-drift / a failed fetch (never a false change), baseline advance deferred to post-send commit. Auto-scheduled on the alert cadence like any watch; handler confirms 'watching that page... I'll message you with what changed'. 16 new tests (pagediff lib + parse + runner seed/change/unchanged/fetch-fail); live-probed example.com through pageText (200, clean extract) so call-tested:true for the fetch+extract, agent-free runner offline-tested. suite 1619 green, tsc clean."
     }
   ],
   "audits": [

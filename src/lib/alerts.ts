@@ -4,6 +4,7 @@
 // RecipeStore). The runner (alert-2) compares new vs stored lastValue and sends only on change.
 
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
+import { pageWatchUrl } from "./pagediff.js";
 
 export interface Alert {
   chatId: number;
@@ -18,6 +19,10 @@ export interface Alert {
   // whole list). A feed alert has neither threshold nor condition.
   feed?: boolean;
   seen?: string[];
+  // Watch-any-page (watch-any-page-diff): a bare-URL watch pings when the PAGE's visible text changes
+  // (restocks, policy/status/appointment pages) — the page is fetched directly (no agent) and diffed
+  // against the last snapshot. `pageUrl` marks it; `lastValue` holds the last page text for the diff.
+  pageUrl?: string;
   // Follow-feed subscriptions (follow-feed-subscriptions): a KEYLESS feed source (RSS/Reddit/HN/YouTube)
   // fetched DIRECTLY on each check instead of running the flaky agent. When set, the alert is a feed
   // watch whose items come from feedSource.url via lib/feeds.ts — reuses the whole seen-set/new-item
@@ -64,6 +69,7 @@ export interface ParsedAlert {
   threshold?: number;
   condition?: AlertCondition;
   feed?: boolean; // notify on a NEW list item, not on a value change
+  pageUrl?: string; // watch-any-page-diff: a bare-URL watch that pings on any page-content change
   feedSource?: { kind: "rss" | "reddit" | "hn" | "youtube"; url: string; label: string }; // follow-feed-subscriptions
   then?: string;  // run this saved recipe when the alert fires (trigger-to-action-alerts)
   members?: Array<{ label: string; task: string }>; // watchlist: N sub-watches, one grouped ping
@@ -206,6 +212,16 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
     // Carry a `then` recipe through the watchlist branch (watchlist-then-dropped) — the thenClause was
     // stripped above, so 'watch mk: btc; eth then run summary' should still run the recipe on a change.
     return then ? { name, task, members, then } : { name, task, members };
+  }
+
+  // Watch-any-page (watch-any-page-diff): a task that is essentially a bare URL means "ping when THIS
+  // page changes" — fetched + diffed directly, no agent. Checked before feed/threshold (a URL has none
+  // of those clauses). Carries a `then` recipe through like the others.
+  const pageUrl = pageWatchUrl(task);
+  if (pageUrl) {
+    if (!name) return null;
+    const base = { name, task: pageUrl, pageUrl };
+    return then ? { ...base, then } : base;
   }
 
   // Feed-watch: a trailing "for new items/listings/jobs/posts" or a leading "new " in the task
@@ -514,7 +530,7 @@ export class AlertStore {
       }
       this.persist(); return existing;
     }
-    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, feed: a.feed, ...(a.feedSource ? { feedSource: a.feedSource } : {}), then: a.then, members: a.members?.map((m) => ({ label: m.label, task: m.task })), created: now };
+    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, feed: a.feed, ...(a.pageUrl ? { pageUrl: a.pageUrl } : {}), ...(a.feedSource ? { feedSource: a.feedSource } : {}), then: a.then, members: a.members?.map((m) => ({ label: m.label, task: m.task })), created: now };
     this.items.push(rec);
     this.persist();
     return rec;

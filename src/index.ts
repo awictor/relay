@@ -158,6 +158,7 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
     recordPoint: (c, n, v, t) => alerts.recordPoint(c, n, v, t),
     setMemberLasts: (c, n, updates) => alerts.setMemberLasts(c, n, updates),
     fetchFeed: (src) => fetchFeedItems(src, defaultFetchText), // follow-feed-subscriptions: keyless direct fetch
+    fetchPage: (url) => defaultFetchText(url), // watch-any-page-diff: SSRF-guarded direct page fetch
     now: () => Date.now(),
     contextFor: (c) => profiles.contextLine(c, Date.now()),
     // Trigger-to-action (trigger-to-action-alerts): run the named recipe's CURRENT task on fire.
@@ -617,7 +618,7 @@ const handle = createHandler({
     // saved = both the alert row AND its cadence schedule reached disk (either failing means the watch
     // won't survive a restart / won't actually fire) — persist-bool-all-stores.
     const saved = alertSaved && (!sp || schedules.lastSaveOk());
-    return { ok: true, name: rec.name, feed: rec.feed, then: rec.then, members: rec.members?.length, saved };
+    return { ok: true, name: rec.name, feed: rec.feed, then: rec.then, members: rec.members?.length, ...(rec.pageUrl ? { pageUrl: rec.pageUrl } : {}), saved };
   },
   // Follow-feed subscriptions (follow-feed-subscriptions): "follow r/x / a blog / HN topic / a YT
   // channel" -> a feed watch backed by a KEYLESS direct fetch (feedSource), auto-scheduled on the same

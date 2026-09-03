@@ -245,6 +245,12 @@ describe("feed-watch (new-item-feed-watch)", () => {
     expect(parseAlertCommand("watch jobs: remote react roles for new listings")).toEqual({ name: "jobs", task: "remote react roles", feed: true });
     expect(parseAlertCommand("watch ps5: new PS5 restocks")).toEqual({ name: "ps5", task: "new PS5 restocks", feed: true });
   });
+  it("parses a bare-URL watch as a page-diff watch (watch-any-page-diff)", () => {
+    expect(parseAlertCommand("watch terms: https://site.com/terms")).toEqual({ name: "terms", task: "https://site.com/terms", pageUrl: "https://site.com/terms" });
+    expect(parseAlertCommand("watch job: this page: https://site.com/careers")).toEqual({ name: "job", task: "https://site.com/careers", pageUrl: "https://site.com/careers" });
+    // A non-URL task is NOT a page watch (stays a normal value/prose watch).
+    expect(parseAlertCommand("watch hn: the top HN story")).toEqual({ name: "hn", task: "the top HN story" });
+  });
   it("a price/stock trigger wins over the feed cue (no false feed)", () => {
     expect(parseAlertCommand("watch btc: new bitcoin price below 50000")).toEqual({ name: "btc", task: "new bitcoin price", condition: { op: "below", operand: 50000 } });
     expect(parseAlertCommand("watch ps5: the PS5 back in stock")).toEqual({ name: "ps5", task: "the PS5", condition: { op: "in_stock" } });

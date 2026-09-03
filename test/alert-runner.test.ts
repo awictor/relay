@@ -103,6 +103,33 @@ describe("checkAlert", () => {
     expect(lastSet).toEqual([{ name: "btc", value: "Trading paused pending listing" }]);
   });
 
+  it("a page-diff watch seeds silently on first check, then pings with what changed (watch-any-page-diff)", async () => {
+    let page = "<p>Out of stock</p>";
+    const { d, lastSet } = deps("unused", { fetchPage: async () => page });
+    // First check: no lastValue -> seed the snapshot silently, no notify.
+    const first = await checkAlert(alert({ pageUrl: "https://x.com/p" }), d);
+    expect(first.notify).toBe(false);
+    expect(lastSet[0]!.value).toMatch(/out of stock/i); // snapshot seeded
+    // Page changes -> notify with the diff; baseline advance deferred to commit.
+    page = "<p>In stock</p><p>Add to cart</p>";
+    const seeded = alert({ pageUrl: "https://x.com/p", lastValue: "Out of stock" });
+    const second = await checkAlert(seeded, deps("unused", { fetchPage: async () => page }).d);
+    expect(second.notify).toBe(true);
+    expect(second.message).toMatch(/changed/i);
+    expect(second.message).toMatch(/in stock/i);
+  });
+  it("a page-diff watch stays silent when the page is unchanged (only whitespace drift)", async () => {
+    const r = await checkAlert(alert({ pageUrl: "https://x.com/p", lastValue: "In stock" }),
+      deps("unused", { fetchPage: async () => "<p>in   stock</p>" }).d);
+    expect(r.notify).toBe(false);
+  });
+  it("a page-diff watch whose fetch fails stays silent + keeps the snapshot (no false change)", async () => {
+    const r = await checkAlert(alert({ pageUrl: "https://x.com/p", lastValue: "In stock" }),
+      deps("unused", { fetchPage: async () => { throw new Error("net"); } }).d);
+    expect(r.notify).toBe(false);
+    expect(r.value).toBe("In stock"); // last snapshot kept
+  });
+
   it("an error-shaped reply holds the baseline + stays silent, never a false fire (error-reply-false-fires-alerts)", async () => {
     // "below 50000" predicate: a soft error whose text contains a stray number must NOT fire the edge.
     const { d, lastSet } = deps("the page returned a 404 error");

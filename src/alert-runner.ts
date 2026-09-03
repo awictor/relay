@@ -6,6 +6,7 @@
 import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Alert } from "./lib/alerts.js";
 import { changed, conditionHolds, extractValue, extractListItems, feedItemKey, looksLikeErrorReply } from "./lib/alerts.js";
+import { pageKey, pageText, diffPages, formatPageDiff } from "./lib/pagediff.js";
 import { mapPool } from "./lib/pool.js";
 import type { AgentEnv } from "./chain-runner.js";
 
@@ -57,6 +58,10 @@ export interface AlertRunnerDeps {
   // DIRECTLY (RSS/Reddit/HN/YouTube) instead of running the agent. Returns [] on any failure (the feed
   // path then stays silent, never a false "new item"). Absent -> a feedSource alert falls back to agent.
   fetchFeed?: (src: NonNullable<Alert["feedSource"]>) => Promise<Array<{ title: string; id?: string }>>;
+  // Watch-any-page (watch-any-page-diff): fetch a URL's raw text/HTML DIRECTLY (no agent) for a page-diff
+  // watch. Returns null/empty on any failure (the page path then stays silent, never a false change).
+  // Absent -> a pageUrl alert falls back to the agent value path.
+  fetchPage?: (url: string) => Promise<string>;
 }
 
 /**
@@ -69,6 +74,8 @@ export interface AlertRunnerDeps {
  */
 export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<AlertRunResult> {
   const noop = () => {};
+  // Advance a page-diff snapshot (deferred to the caller's post-send commit, like the value path's advance).
+  const advancePage = (snapshot: string) => () => deps.setLast(alert.chatId, alert.name, snapshot);
 
   // Trigger-to-action (trigger-to-action-alerts): append the `then` recipe's output to a fired ping.
   // Hoisted above the watchlist branch so a WATCHLIST with a `then` runs it too (watchlist-then-dropped).
@@ -79,6 +86,31 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
       return out ? `${message}\n\n▶ ${alert.then}:\n${out}` : message;
     } catch { return message; }
   };
+
+  // Watch-any-page (watch-any-page-diff): a bare-URL watch fetches the page DIRECTLY and pings when its
+  // visible text changes, showing the added/removed lines. First run seeds the snapshot silently. A fetch
+  // that fails / comes back empty leaves the snapshot untouched + stays silent (never a false change on a
+  // transient outage). Falls back to the agent value path if fetchPage isn't wired.
+  if (alert.pageUrl && deps.fetchPage) {
+    let raw = "";
+    try { raw = (await deps.fetchPage(alert.pageUrl)).trim(); } catch { raw = ""; }
+    if (!raw || !pageText(raw)) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop };
+    const snapshot = pageText(raw);
+    if (alert.lastValue === undefined) {
+      // First check: seed the snapshot silently (don't dump the whole page as "changed").
+      deps.setLast(alert.chatId, alert.name, snapshot);
+      return { notify: false, message: null, value: snapshot, commit: noop };
+    }
+    if (pageKey(alert.lastValue) === pageKey(snapshot)) {
+      return { notify: false, message: null, value: snapshot, commit: noop }; // unchanged, stay silent
+    }
+    const d = diffPages(alert.lastValue, snapshot);
+    if (!d.changed) return { notify: false, message: null, value: snapshot, commit: noop }; // only whitespace/case drift
+    // Notify with the what-changed diff; DEFER the snapshot advance to the caller's post-send commit so a
+    // failed send re-fires the same diff next check instead of silently swallowing the change.
+    const message = await withThen(formatPageDiff(alert.name, d));
+    return { notify: true, message, value: snapshot, commit: advancePage(snapshot) };
+  }
 
   // Watchlist (watchlists): run each member sub-task, compare to its own last value, and send ONE
   // grouped ping of only the members that CHANGED. First run seeds every member silently (no dump).
