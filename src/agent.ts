@@ -14,6 +14,7 @@ import { isDangerousAction } from "./safety.js";
 import { fetchYouTubeTranscript } from "./lib/youtube.js";
 import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
+import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getWeather as fetchWeather, formatWeather } from "./lib/weather.js";
 import { formatDraft, type Draft } from "./lib/compose.js";
 import { findNearby as fetchNearby, formatPlaces } from "./lib/places.js";
@@ -100,6 +101,15 @@ export const TOOLS: ToolSpec[] = [
         to: { type: "string", description: "3-letter target currency code, e.g. EUR" },
       },
       required: ["from", "to"],
+    },
+  },
+  {
+    name: "get_quote",
+    description: "Get the latest stock/equity price for a ticker symbol (no key, instant). Use this — NOT web_search/scrape — for any \"what's Tesla at\", \"AAPL price\", \"how's NVDA doing\", \"price of Apple stock\" question. Pass the ticker symbol (AAPL, TSLA, NVDA, MSFT); for a non-US listing add a market suffix (VOD.UK, CBA.AU).",
+    parameters: {
+      type: "object",
+      properties: { symbol: { type: "string", description: "Ticker symbol, e.g. \"AAPL\" or \"TSLA\". Non-US: add a market suffix like \"VOD.UK\"." } },
+      required: ["symbol"],
     },
   },
   {
@@ -229,6 +239,7 @@ Tools:
 - "pdf" (url): render a page to a PDF and send it as a document. Use when the user wants to SAVE or KEEP a page ("save as PDF", "send me a PDF of X"). Then call reply with a short caption.
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
+- "get_quote" (symbol): latest stock/equity price. Use this — NOT web_search/scrape — for any "what's Tesla at"/"AAPL price"/"how's NVDA doing" question; it's instant. Pass the ticker (AAPL, TSLA); non-US add a market suffix (VOD.UK).
 - "get_weather" (place?): current weather + today's high/low. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location.
 - "find_nearby" (what, near?): find places near the user (coffee, pharmacy, ATM, gas...). Use this — NOT web_search — for "X near me"/"nearest Y". Omit near to use the user's location.
 - "directions" (to, from?, mode?): distance + travel time between places. Use this — NOT web_search — for "how far is X"/"directions to Y"/"how long to drive to Z". Omit from to start from the user's location.
@@ -274,6 +285,9 @@ export interface BrowserBackend {
   // Optional: convert an amount between currencies at the live rate (fx-conversion-tool). Absent ->
   // the convert_currency tool reports it's unavailable. Returns null on a bad code / fetch failure.
   convertCurrency?(amount: number, from: string, to: string): Promise<import("./lib/fx.js").Conversion | null>;
+  // Optional: latest stock/equity quote for a ticker (stock-quote-tool). Absent -> the get_quote tool
+  // reports it's unavailable. Returns null on a bad symbol / fetch failure.
+  getQuote?(symbol: string): Promise<import("./lib/quote.js").Quote | null>;
   // Optional: current weather for a place or coords (geo-tool-cluster). Absent -> the get_weather tool
   // reports it's unavailable. Returns null on a bad place / fetch failure.
   getWeather?(opts: { place?: string; lat?: number; lng?: number; near?: { lat: number; lng: number } }): Promise<import("./lib/weather.js").WeatherResult | null>;
@@ -375,6 +389,7 @@ const defaultBackend: BrowserBackend = {
   scrape: (url) => anvil.scrape(url, { format: "text" }),
   videoTranscript: (url) => fetchYouTubeTranscript(url, defaultFetchText),
   convertCurrency: (amount, from, to) => fxConvert(amount, from, to, defaultFetchText),
+  getQuote: (symbol) => quoteFetch(symbol, defaultFetchText),
   getWeather: (opts) => fetchWeather(opts, defaultFetchText),
   findNearby: (opts) => fetchNearby(opts, defaultFetchTextPost),
   getDirections: (opts) => fetchDirections(opts, defaultFetchText),
@@ -633,6 +648,19 @@ export async function runAgent(
           push("convert_currency", `${formatConversion(c)}. Report this to the user, including the "as of" date if shown (the rate refreshes about daily, not to the second).`);
         } catch (e) {
           push("convert_currency", `ERROR converting: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "get_quote") {
+        if (!backend.getQuote) { push("get_quote", "ERROR: stock quotes aren't available."); continue; }
+        const symbol = String(call.args.symbol ?? "");
+        try {
+          const q = await backend.getQuote(symbol);
+          if (!q) { push("get_quote", `Couldn't get a quote for "${symbol}" (unknown ticker or fetch failed). Check the symbol, or try web_search for an index/crypto/unusual listing.`); continue; }
+          push("get_quote", `${formatQuote(q)}. Report this to the user, including the "as of" time if shown (it's the last close/trade, not a to-the-second live tick).`);
+        } catch (e) {
+          push("get_quote", `ERROR getting quote: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

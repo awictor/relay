@@ -230,6 +230,53 @@ describe("runAgent convert_currency (fx-conversion-tool)", () => {
   });
 });
 
+describe("runAgent get_quote (stock-quote-tool)", () => {
+  it("uses the get_quote tool + reports the price, no browser", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "get_quote", args: { symbol: "AAPL" } } },
+      { toolCall: { name: "reply", args: { text: "AAPL is at $195.89." } } },
+    ]);
+    let seen = "";
+    const backend = {
+      scrape: async (url: string) => ({ title: "", content: "", url }),
+      createSession: async () => ({ id: "s" }),
+      navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {},
+      readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {},
+      discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+      getQuote: async (symbol: string) => { seen = symbol; return { symbol: "AAPL", price: 195.89, currency: "USD", changePct: 0.42, asOf: "2024-06-01 20:00" }; },
+    };
+    const { reply } = await runAgent("what's Apple stock at", { llm, backend });
+    expect(seen).toBe("AAPL");
+    expect(reply).toMatch(/195\.89/);
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/AAPL: \$195\.89/);
+  });
+  it("reports gracefully when the ticker is unknown", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "get_quote", args: { symbol: "ZZZZ" } } },
+      { toolCall: { name: "reply", args: { text: "I couldn't find that ticker." } } },
+    ]);
+    const backend = {
+      scrape: async (url: string) => ({ title: "", content: "", url }),
+      createSession: async () => ({ id: "s" }),
+      navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {},
+      readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {},
+      discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+      getQuote: async () => null,
+    };
+    const { reply } = await runAgent("price of ZZZZ", { llm, backend });
+    expect(reply).toMatch(/couldn't find/i);
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/Couldn't get a quote/i);
+  });
+});
+
 describe("runAgent get_weather (geo-tool-cluster)", () => {
   const wx = { place: "Austin", current: { tempC: 30, tempF: 86, code: 0, desc: "clear", windKph: 5 }, today: { hiC: 35, loC: 25, hiF: 95, loF: 77, precipPct: 0 } };
   function wxBackend(over: Record<string, unknown> = {}) {

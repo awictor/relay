@@ -1220,7 +1220,7 @@
       "title": "no live stock/equity quote tool",
       "impact": "med",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "\"whats Tesla at?\"/\"AAPL price\" degrades to a slow flaky web_search+scrape; currency has a fast dedicated tool, stocks do not.",
       "how": "A get_quote tool over a keyless quote API (e.g. Stooq CSV or Yahoo quote JSON) via fetch_json; instant symbol->price."
     },
@@ -1688,6 +1688,10 @@
     {
       "id": "chain-progress-partial",
       "note": "Fixed 2 chain defects. (1) A stopped-early chain (if-gate failed or a step degraded) returned an INTERMEDIATE step's output as if it were the complete answer — runChainRecipe now returns {final, stoppedEarly, stepsDone, stepsTotal} and the handler prefixes a '⚠️ Couldn't finish all the steps (N of M)' note instead of passing the partial off as done; legacy bare-string return still accepted. (2) A long chain held the per-chat lock with no 'still working' ping (read as a hang) — armed the same one-shot progress timer the agent path uses on the chain branch. 3 handler tests (partial flagged / full sends clean / progress armed). 1081 tests green."
+    },
+    {
+      "id": "stock-quote-tool",
+      "note": "Added a get_quote agent tool so 'what's Tesla at?' / 'AAPL price' answers instantly instead of degrading to a slow, flaky web_search+scrape (currency already had a fast tool; stocks didn't). New src/lib/quote.ts hits the keyless Yahoo Finance chart JSON (no signup) via the injected safeFetch-backed fetchText; returns price + currency ($/£/etc) + a ▲/▼ day-change% + as-of UTC time. Handles bare US tickers, dotted foreign listings (VOD.L, SHOP.TO), and indices (^GSPC); unknown symbol -> null -> the tool tells the agent to fall back to web_search. Wired into the BrowserBackend interface + defaultBackend + SYSTEM_PROMPT + tool surface. Chose Yahoo over the planned Stooq CSV after a live probe: Stooq 404s datacenter IPs, Yahoo returns clean JSON (+currency +prevClose for free). 17 tests (quote unit + 2 agent dispatch). LIVE call-tested: AAPL/TSLA/VOD.L/^GSPC real prices, ZZZZZ->null. 1098 tests green."
     }
   ],
   "audits": [
