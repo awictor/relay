@@ -2615,7 +2615,7 @@
       "title": "saved named places (home/work/gym) — one location only today",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'directions to work', 'weather at the gym', 'coffee near home' re-ask the city each time; profile stores exactly ONE location.",
       "how": "A per-chat place-alias store (name -> coords/label); resolve an alias in directions/find_nearby/weather before geocoding. Sharpens every location errand + is the prerequisite for geofencing."
     }
@@ -3652,6 +3652,10 @@
     {
       "item": "instock-cross-sell-never-fires",
       "note": "Fixed an in-stock watch never firing on a normal product page (instock-cross-sell-never-fires). conditionHolds in_stock returned null (hold) whenever a buy CTA AND cross-sell framing ('you may also like') both appeared — which is almost every product page — so an edge-triggered 'alert me when back in stock' was never satisfied and the restock was missed. Now positional: a CTA BEFORE the first cross-sell marker is the watched item's primary above-the-fold buy button -> in stock; a CTA appearing SOLELY inside the recommendations block stays ambiguous (null). Out-of-stock negation + explicit in-stock phrase + no-cross-sell CTA paths unchanged. 1 new test (primary-CTA-before-recs -> true; cross-sell-only CTA -> null); existing cta-scoping/no-framing tests still green. suite 1763 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "saved-named-places",
+      "note": "Saved named places (saved-named-places): the profile stored only ONE location, so 'coffee near work'/'weather at the gym'/'directions to mom's' re-asked the city each time. New src/lib/places-store.ts: PlacesStore (per-chat alias->address, atomic+corrupt-safe, cap 20, re-save updates in place, lastSaveOk hedge) + parseSavePlace ('my work is <addr>', 'save gym: <addr>', 'set home to <addr>', '<name> is at <addr>' — alias <=3 words + place-shaped address so 'my day is great' isn't captured) + parseForgetPlace + isListPlacesRequest. Wired: state-paths (RELAY_PLACES_FILE) + .env.example parity, index constructs it + injects places.contextLine into profileContext (so the LLM substitutes the alias for its address when calling weather/find_nearby/directions) + corrupt-store label + save/forget/list handler deps. Handler routes place-save BEFORE rememberFact (else 'remember my office is X' stored as a raw fact) + before scheduler/agent. HELP line. 11 new tests (parser save/forget/list incl no-false-capture; store save/resolve/overwrite/forget/persist/contextLine/per-chat; handler save+list+forget+precedence-over-remember+fallthrough). suite 1774 green, tsc clean. Offline; anvil-independent (aliases resolve via the agent, no new fetch)."
     }
   ],
   "audits": [

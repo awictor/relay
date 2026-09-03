@@ -144,6 +144,14 @@ export interface HandlerDeps {
   rememberFact?: (chatId: number, text: string) => { fact: string; evicted: string[]; saved?: boolean } | null;
   forgetFact?: (chatId: number, text: string) => { removed: number; all: boolean; forgotten: string[]; saved?: boolean } | null;
   notesList?: (chatId: number) => string[];
+  // Saved named places (saved-named-places): savePlace parses + stores "my work is <addr>" / "save gym:
+  // <addr>" (null if not one); forgetPlace deletes by alias; placeList lists them; isListPlacesRequest
+  // is a whole-message "what places do you have". Aliases are injected into the agent via profileContext,
+  // so a saved place resolves without re-asking the city. All optional so older wiring is unaffected.
+  savePlace?: (chatId: number, text: string) => { name: string; address: string; saved: boolean } | null;
+  forgetPlace?: (chatId: number, text: string) => { name: string; saved?: boolean; notFound?: boolean } | null;
+  isListPlacesRequest?: (text: string) => boolean;
+  placeList?: (chatId: number) => Array<{ name: string; address: string }>;
   // Named lists (personal-notes-lists-store): a durable, editable collection the user reads back +
   // checks off ("add eggs to my grocery list", "what's on my list"). Distinct from remembered FACTS
   // (which get injected into every answer) — a list is data the user manages, not context. Returns a
@@ -860,6 +868,38 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // "forget that X" / "forget everything you know" -> delete; "remember X" -> store a durable fact.
     // All detected before the scheduler + agent so a fact isn't run as a web task. "remember TO X" and
     // a "remember X at 5pm" fall through (parseRemember returns null) to the reminder/scheduler path.
+    // Saved named places (saved-named-places): "my work is <addr>" / "save gym: <addr>" / "forget my work
+    // address" / "what places do you have". Detected BEFORE rememberFact (a "remember my office is ..."
+    // would otherwise be stored as a raw fact) + before the scheduler/agent. Aliases resolve in later
+    // location errands via the injected profileContext.
+    if (deps.isListPlacesRequest && deps.placeList && deps.isListPlacesRequest(msg.text)) {
+      const list = deps.placeList(msg.chatId);
+      await deps.sendMessage(msg.chatId, list.length
+        ? `Your saved places:\n${list.map((p) => `• ${p.name} — ${p.address}`).join("\n")}\n\nForget one with "forget my <name> place".`
+        : "No saved places yet. Save one with \"my work is 500 5th Ave\" or \"save gym: Gold's on Main\", then ask \"weather at the gym\" / \"coffee near work\".");
+      return;
+    }
+    if (deps.forgetPlace) {
+      const r = deps.forgetPlace(msg.chatId, msg.text);
+      if (r) {
+        const hedge = r.saved === false ? `\n\n⚠️ But I couldn't save that change to disk — it may come back if I restart.` : "";
+        await deps.sendMessage(msg.chatId, r.notFound
+          ? `I don't have a place called "${r.name}" saved.`
+          : `Forgot your "${r.name}" place.${hedge}`);
+        return;
+      }
+    }
+    if (deps.savePlace) {
+      const r = deps.savePlace(msg.chatId, msg.text);
+      if (r) {
+        if (r.saved === false) {
+          await deps.sendMessage(msg.chatId, `I've got "${r.name}" as ${r.address} for now, but couldn't save it to disk — it may be lost if I restart. Try again in a moment.`);
+          return;
+        }
+        await deps.sendMessage(msg.chatId, `Saved — "${r.name}" is ${r.address}. Now you can say "weather at ${r.name}", "coffee near ${r.name}", or "directions to ${r.name}".`);
+        return;
+      }
+    }
     if (deps.notesList && isRecallRequest(msg.text)) {
       const facts = deps.notesList(msg.chatId);
       await deps.sendMessage(msg.chatId, facts.length

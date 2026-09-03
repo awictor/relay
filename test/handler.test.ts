@@ -5,6 +5,7 @@ import type { LLMMessage } from "../src/llm.js";
 import { formatReply } from "../src/lib/format-reply.js";
 import { NotesStore, parseRemember, parseForgetFact } from "../src/lib/notes.js";
 import { ListStore, parseListCommand, splitItems } from "../src/lib/lists.js";
+import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "../src/lib/places-store.js";
 import { parseCityReply } from "../src/lib/profile.js";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
@@ -1066,6 +1067,57 @@ describe("named lists routing (personal-notes-lists-store)", () => {
     const { handle, recorded } = listHarness();
     await handle(msg("what's the weather in Paris", 7));
     expect(recorded).toHaveLength(1); // reached the agent
+  });
+});
+
+describe("saved named places routing (saved-named-places)", () => {
+  function placeHarness() {
+    const store = new PlacesStore({ file: join(mkdtempSync(join(tmpdir(), "relay-h-places-")), "p.json") });
+    const h = harness({
+      savePlace: (chatId, text) => { const p = parseSavePlace(text); if (!p) return null; const r = store.save(chatId, p.name, p.address, 0); return { name: r.place.name, address: r.place.address, saved: r.saved }; },
+      forgetPlace: (chatId, text) => { const n = parseForgetPlace(text); if (!n) return null; return store.forget(chatId, n) ? { name: n, saved: true } : { name: n, saved: true, notFound: true }; },
+      isListPlacesRequest: (text) => isListPlacesRequest(text),
+      placeList: (chatId) => store.list(chatId).map((p) => ({ name: p.name, address: p.address })),
+    });
+    return { ...h, store };
+  }
+
+  it("'my work is <addr>' saves the alias, no agent run", async () => {
+    const { handle, sent, recorded, store } = placeHarness();
+    await handle(msg("my work is 500 5th Ave, NYC", 7));
+    expect(sent[0]!.text).toMatch(/Saved — "work" is 500 5th Ave/);
+    expect(store.resolve(7, "work")).toBe("500 5th Ave, NYC");
+    expect(recorded).toHaveLength(0);
+  });
+
+  it("'what places do you have' lists them; 'forget my work address' removes one", async () => {
+    const { handle, sent, store } = placeHarness();
+    store.save(7, "work", "500 5th Ave", 0);
+    await handle(msg("what places do you have", 7));
+    expect(sent[0]!.text).toMatch(/• work — 500 5th Ave/);
+    await handle(msg("forget my work address", 7));
+    expect(sent[1]!.text).toMatch(/Forgot your "work" place/);
+    expect(store.resolve(7, "work")).toBeNull();
+  });
+
+  it("a place-save is detected BEFORE rememberFact (not stored as a raw fact)", async () => {
+    let remembered = "";
+    const { handle, sent, store } = placeHarness();
+    // add a rememberFact dep that would capture it if routing let it through
+    const h2 = harness({
+      savePlace: (chatId, text) => { const p = parseSavePlace(text); if (!p) return null; const r = store.save(chatId, p.name, p.address, 0); return { name: r.place.name, address: r.place.address, saved: r.saved }; },
+      rememberFact: (_c, text) => { remembered = text; return { fact: text, evicted: [], saved: true }; },
+    });
+    await h2.handle(msg("my office is 1 Loop, Cupertino", 7));
+    expect(remembered).toBe("");                              // NOT captured as a fact
+    expect(store.resolve(7, "office")).toBe("1 Loop, Cupertino");
+    void sent;
+  });
+
+  it("a non-place message falls through to the agent", async () => {
+    const { handle, recorded } = placeHarness();
+    await handle(msg("what's the weather in Paris", 7));
+    expect(recorded).toHaveLength(1);
   });
 });
 

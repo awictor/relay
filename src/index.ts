@@ -37,6 +37,7 @@ import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summa
 import { parseChartRequest, renderChart } from "./lib/chart.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
+import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
 import { ListStore, parseListCommand, splitItems } from "./lib/lists.js";
 import { ContactStore, parseSaveContact, parseForgetContact } from "./lib/contacts.js";
 import { isTextualDoc, decodeTextDoc, buildDocPrompt } from "./lib/docs.js";
@@ -105,7 +106,7 @@ const metricsHeartbeat = makeMetricsHeartbeat({
 const CORRUPT_LABELS: Record<string, string> = {
   [paths.schedules]: "reminders", [paths.recipes]: "saved recipes", [paths.digests]: "digests",
   [paths.alerts]: "watches/alerts", [paths.profile]: "your saved location/profile", [paths.notes]: "remembered facts",
-  [paths.lists]: "your lists", [paths.contacts]: "contacts",
+  [paths.lists]: "your lists", [paths.contacts]: "contacts", [paths.places]: "your saved places",
 };
 const corruptedStores: string[] = [];
 setCorruptHandler((file) => { const label = CORRUPT_LABELS[file] ?? file; if (!corruptedStores.includes(label)) corruptedStores.push(label); });
@@ -124,6 +125,7 @@ const digests = new DigestStore({ file: paths.digests });
 const alerts = new AlertStore({ file: paths.alerts });
 const profiles = new ProfileStore({ file: paths.profile });
 const notes = new NotesStore({ file: paths.notes });
+const places = new PlacesStore({ file: paths.places });
 const lists = new ListStore({ file: paths.lists });
 const contacts = new ContactStore({ file: paths.contacts });
 const answerLog = new AnswerLog({ file: paths.answers });
@@ -293,7 +295,7 @@ const handle = createHandler({
   },
   // Agent context = profile (location/units/tz) + remembered facts (remember-facts-store), so every
   // answer is filtered through both without the user re-stating them.
-  profileContext: (chatId) => [profiles.contextLine(chatId, Date.now()), notes.contextLine(chatId)].filter(Boolean).join("; "),
+  profileContext: (chatId) => [profiles.contextLine(chatId, Date.now()), notes.contextLine(chatId), places.contextLine(chatId)].filter(Boolean).join("; "),
   chatTzOffsetMin: (chatId) => profiles.offsetMin(chatId) ?? tzOffsetMin(), // for the agent's current-datetime line
 
   // /profile view + clear (product-loop): echo the stored profile so a wrong city/tz is visible.
@@ -314,6 +316,24 @@ const handle = createHandler({
     return { removed: forgotten.length, all: false, forgotten, saved: forgotten.length === 0 || notes.lastSaveOk() };
   },
   notesList: (chatId) => notes.list(chatId).map((n) => n.text),
+  // Saved named places (saved-named-places): "my work is 500 5th Ave" / "save gym: ..." stores an alias
+  // -> address; it's injected into the agent context so "weather at the gym"/"coffee near work" resolve
+  // without re-asking the city. forget/list manage them. All null when the message isn't a place command.
+  savePlace: (chatId, text) => {
+    const p = parseSavePlace(text);
+    if (!p) return null;
+    const r = places.save(chatId, p.name, p.address, Date.now());
+    return { name: r.place.name, address: r.place.address, saved: r.saved };
+  },
+  forgetPlace: (chatId, text) => {
+    const name = parseForgetPlace(text);
+    if (!name) return null;
+    // saved reflects whether the removal persisted (delete-persist-hedge) — a failed write brings the
+    // alias back on restart, so the handler hedges instead of a clean "forgot it".
+    return places.forget(chatId, name) ? { name, saved: places.lastSaveOk() } : { name, saved: true, notFound: true };
+  },
+  isListPlacesRequest: (text) => isListPlacesRequest(text),
+  placeList: (chatId) => places.list(chatId).map((p) => ({ name: p.name, address: p.address })),
   // Contacts book (contacts-book-compose): save/resolve/forget/list a name -> email/phone.
   saveContact: (chatId, text) => {
     const p = parseSaveContact(text);
