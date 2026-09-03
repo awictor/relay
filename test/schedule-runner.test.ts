@@ -69,6 +69,35 @@ describe("makeScheduleRunner.tick", () => {
     }
   });
 
+  it("a slow task that finishes AFTER its timeout does not double-send or double-complete (slow-task-starves-due-reminders)", async () => {
+    const prev = process.env.RELAY_FIRE_TIMEOUT_MS;
+    process.env.RELAY_FIRE_TIMEOUT_MS = "20";
+    try {
+      const clock = { t: NOW };
+      const sent: Array<{ chatId: number; text: string }> = [];
+      const store = new ScheduleStore({ file: tmpFile() });
+      let release!: (r: { reply: string }) => void;
+      const runner = makeScheduleRunner({
+        store, llm: {} as never,
+        runAgent: () => new Promise<{ reply: string }>((res) => { release = res; }), // resolves only when we say
+        send: async (chatId, text) => { sent.push({ chatId, text }); },
+        formatReply: (t) => t, now: () => clock.t, periodMs: 0,
+      });
+      store.add(1, { kind: "daily", task: "brief", dueMs: NOW - 1, hourMin: "09:00", offsetMin: 0 }, NOW);
+      const dueBefore = store.list(1)[0]!.dueMs;
+      await runner.tick();                       // times out at 20ms -> catch advances the daily
+      const dueAfterTimeout = store.list(1)[0]!.dueMs;
+      expect(dueAfterTimeout).toBeGreaterThan(dueBefore); // schedule advanced by the timeout path
+      // Now the abandoned run finishes LATE — it must be dropped, not sent.
+      release({ reply: "late briefing" });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(sent).toHaveLength(0);              // no duplicate ping from the late finish
+      expect(store.list(1)[0]!.dueMs).toBe(dueAfterTimeout); // not advanced a second time
+    } finally {
+      if (prev === undefined) delete process.env.RELAY_FIRE_TIMEOUT_MS; else process.env.RELAY_FIRE_TIMEOUT_MS = prev;
+    }
+  });
+
   it("fires a due once-task, texts the chat unprompted, and removes it", async () => {
     const clock = { t: NOW };
     const { store, runner, sent, ran } = harness(clock);

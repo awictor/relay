@@ -127,7 +127,11 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     sendTimes.set(chatId, times);
   }
 
-  async function fireOne(s: Schedule): Promise<void> {
+  // isCancelled: set true by withFireTimeout when this fire exceeded its wall-clock ceiling. The agent
+  // run isn't actually abortable, so it may still resolve LATE — but by then the timeout's catch has
+  // already advanced/failed the schedule, so a late finish must NOT also send + complete (that was the
+  // duplicate-ping + false-fail-receipt bug). We check it right before every user-visible side effect.
+  async function fireOne(s: Schedule, isCancelled: () => boolean = () => false): Promise<void> {
     // A scheduled task is a fresh, contextless agent run (no chat history) whose reply is
     // pushed to the user. Prefix so an unprompted message is understood as a reminder.
     const startedAt = deps.now();
@@ -149,6 +153,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       alertCommit = checked.commit;
       res = { reply: sendText ?? "" };
       if (sendText === null) {
+        if (isCancelled()) return; // timed out late: the tick's catch already handled this schedule
         checked.commit(); // silent path: baseline already advanced inside checkAlert; noop here
         deps.store.complete(s.id, deps.now());
         log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, alert: alertMatch[1], ok: true, sent: false })}`);
@@ -161,6 +166,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       // silent + advance/drop the schedule rather than pinging a contentless "(empty or was removed)"
       // briefing on cadence — mirrors the deleted-recipe path above.
       if (composed === null) {
+        if (isCancelled()) return; // timed out late: the tick's catch already handled this schedule
         deps.store.complete(s.id, deps.now());
         log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, digest: digestMatch[1], ok: true, sent: false, empty: true })}`);
         deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
@@ -226,6 +232,9 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       const shown = recipeMatch ? taskToRun : s.task;
       sendText = `${label}: ${shown}\n\n${prefix}${body}`;
     }
+    // If this fire already timed out, the tick's catch has advanced/failed the schedule — a late finish
+    // must NOT also send + complete (duplicate ping + double-advance). Drop the result silently.
+    if (isCancelled()) { log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, dropped: "timed_out_late_finish" })}`); return; }
     await deps.send(s.chatId, sendText!); // non-null here (alert-silent path returned early)
     alertCommit?.(); // send succeeded -> NOW advance the alert baseline (a throw above skips this)
     deps.recordSend?.(s.chatId, sendText!); // cache for a "more"/"send the link" reply to this ping
@@ -263,12 +272,17 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   // fireOne isn't cancelled (it'll settle + be ignored), but the batch moves on. No-op when disabled.
   // A test/host may inject setTimer/clearTimer; otherwise real timers, unref'd so a pending one can't
   // keep the process alive.
-  function withFireTimeout<T>(p: Promise<T>): Promise<T> {
+  // Runs `make(isCancelled)` (the fire) with a wall-clock ceiling. On timeout: flip the cancel flag
+  // (so the still-running fire's later side-effects are dropped, not duplicated) and reject so the
+  // tick's catch advances/fails the schedule. No-op when disabled.
+  function withFireTimeout(make: (isCancelled: () => boolean) => Promise<void>): Promise<void> {
+    let cancelled = false;
+    const p = make(() => cancelled);
     if (!FIRE_TIMEOUT_MS) return p;
     const set = deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
     const clr = deps.clearTimer ?? ((h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>));
-    return new Promise<T>((resolve, reject) => {
-      const h = set(() => reject(new Error(`fire timed out after ${FIRE_TIMEOUT_MS}ms`)), FIRE_TIMEOUT_MS);
+    return new Promise<void>((resolve, reject) => {
+      const h = set(() => { cancelled = true; reject(new Error(`fire timed out after ${FIRE_TIMEOUT_MS}ms`)); }, FIRE_TIMEOUT_MS);
       if (typeof (h as { unref?: () => void })?.unref === "function") (h as { unref: () => void }).unref();
       p.then(
         (v) => { clr(h); resolve(v); },
@@ -345,7 +359,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         }
         // Bound each fire so one hung task can't starve the rest of the due batch (slow-task-starves-
         // due-reminders). A timeout rejects into the catch below — a once retries, a recurring advances.
-        try { await withFireTimeout(fireOne(s)); fired++; deps.store.resetFailures(s.id); } // success clears any failure streak
+        try { await withFireTimeout((isCancelled) => fireOne(s, isCancelled)); fired++; deps.store.resetFailures(s.id); } // success clears any failure streak
         catch (e) {
           deps.onError?.(e);
           const raw = e instanceof Error ? e.message : String(e);

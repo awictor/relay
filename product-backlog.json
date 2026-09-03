@@ -1799,6 +1799,51 @@
       "status": "done",
       "why": "compose only works if the user re-types a raw email/number every time; \"text mom\" dead-ends asking for the address. Its highest-intent use silently fails.",
       "how": "A small name->handle store (like notes/lists); compose resolves a saved contact by name; \"save mom’s number as ...\" to add. Feeds the deferred confirm-to-send."
+    },
+    {
+      "id": "fire-timeout-late-finish-dup",
+      "title": "Timed-out fire still sends when it finishes late (double ping)",
+      "impact": "high",
+      "effort": "M",
+      "status": "done",
+      "why": "withFireTimeout (shipped last run) abandoned but did not cancel a slow fire: the timeout advanced/failed the schedule, then the original run finished and ALSO sent + completed -> duplicate/late ping + a false \"your watch is failing\" receipt after 3 slow fires.",
+      "how": "Thread an isCancelled flag into fireOne; the timeout flips it; guard send + every complete() so a late finish is dropped."
+    },
+    {
+      "id": "safe-store-no-fsync",
+      "title": "atomicWriteJson never fsyncs (torn file on power loss)",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "Header claims temp+fsync+rename but there is no fsync — a hard crash/power-loss can persist the rename while the tmp contents are unflushed, producing the empty/torn file the module exists to prevent, which then trips the corrupt path + wipes a store.",
+      "how": "openSync the tmp, writeSync, fsyncSync, close, then rename; optionally fsync the dir. Keep never-throws + return bool."
+    },
+    {
+      "id": "contact-wrong-person-draft",
+      "title": "Contact fuzzy match can draft to the wrong person confidently",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "ContactStore.get word-overlap fallback (longest-name-wins) resolves \"text mom\" to \"mom's doctor\" when there is no exact \"mom\"; formatDraft shows a confident To: line -> one tap from texting the wrong person.",
+      "how": "Only fuzzy-match when unambiguous (single hit) OR the query token equals a whole word of exactly one contact; else return null (ask which). Mirror the recipe slotsAmbiguous guard."
+    },
+    {
+      "id": "get-news-tool",
+      "title": "On-demand news headlines (promised, unbacked)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "START advertises \"every morning: weather + top news\" but there is no news source; \"what's the news\" runs a slow scrape. feeds.ts (RSS/Reddit/HN) infra already exists to reuse.",
+      "how": "New get_news tool over a keyless headline feed (Reuters/AP/BBC RSS or HN front page); parse top N titles; tool + dispatch + prompt + help. Reuse parseXmlItems."
+    },
+    {
+      "id": "inferTz-region-tail-wrong",
+      "title": "City,Region tz guess wrong when region unknown (San Jose, Costa Rica -> PT)",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "inferTzFromLocation falls back to the leftmost known city token when the region tail is not in the table, so \"San Jose, Costa Rica\" resolves to California (UTC-8) and reminders fire 2h off — the fn contract promised \"never guesses wrong\".",
+      "how": "When a comma region tail is present but unknown, do NOT fall back to a bare city token that is a US-city collision; leave tz unset (ask) instead."
     }
   ],
   "history": [
@@ -2493,6 +2538,10 @@
     {
       "item": "corrupt-store-silent-wipe",
       "note": "A corrupt store file that loads empty (data backed up to .corrupt) no longer wipes a user's reminders/alerts/recipes silently. Added a corruption sink to safe-store (setCorruptHandler, mirrors the persist-error sink); readJsonSafe reports each corruption + backup path. index installs the handler BEFORE constructing stores, collects human labels (reminders/watches/recipes/...), and exposes a corruptNotice() dep that drains once. Handler sends a one-time heads-up before handling the first inbound message. 4 new tests (sink fires on corrupt, not on missing/valid; handler notice once-only + silent-when-clean). Suite 1385 green, tsc clean."
+    },
+    {
+      "item": "fire-timeout-late-finish-dup",
+      "note": "Fixed the per-fire timeout (shipped last run) to CANCEL, not just abandon. withFireTimeout now threads an isCancelled flag into fireOne + flips it on timeout; fireOne checks it before the main send and before each early complete() (alert-silent, digest-null), so a slow run that finishes AFTER its ceiling is dropped instead of sending a duplicate/late ping + double-advancing the schedule (which also produced false 'watch failing' receipts). 1 new test (slow task finishing post-timeout sends nothing + doesn't re-advance). Suite 1386 green, tsc clean."
     }
   ],
   "audits": [
@@ -2630,6 +2679,9 @@
     },
     {
       "note": "No 3-agent audit this run (corrupt-store-silent-wipe was queued). Backlog now only owner-gated confirm-to-act -> next run triggers AUDIT refill."
+    },
+    {
+      "note": "AUDIT (backlog dry, only owner-gated). A/new-user: on-demand news (promised+unbuilt), transit-mode directions, actually-send compose, flight status, local showtimes. B/reliability: fire-timeout late-finish double-send (regression in last run's timeout), atomicWriteJson no fsync, contact fuzzy-match wrong-person draft, inferTz region-tail wrong guess, extractValue largest-magnitude false no-fire. C/power: photo/voice->structured capture, compound multi-intent fan-out, bg progress pings, NL query over own data, geofenced reminders. Seeded: fire-timeout-late-finish-dup(built), safe-store-no-fsync, contact-wrong-person-draft, get-news-tool, inferTz-region-tail-wrong."
     }
   ]
 }
