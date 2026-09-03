@@ -195,7 +195,7 @@ export interface HandlerDeps {
   // Conversationally retune an existing alert's trigger (product-loop): "change btc to below 45000".
   // Returns {ok:true,name,summary} on success, or a reason. Optional; absent -> edit falls through.
   alertEdit?: (chatId: number, text: string) =>
-    { ok: true; name: string; summary: string } | { ok: false; reason: "unparsed" | "unknown" };
+    { ok: true; name: string; summary: string; saved?: boolean } | { ok: false; reason: "unparsed" | "unknown" };
   alertList?: (chatId: number) => Array<{ name: string; task: string; lastValue?: string; threshold?: number; feed?: boolean; then?: string; members?: number }>;
   alertForget?: (chatId: number, name: string) => boolean;
   checkRateLimit: (chatId: number) => { allowed: boolean; retryAfterSec?: number };
@@ -880,7 +880,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     if (deps.alertEdit && /^\s*(?:change|update|edit|set|make)\s+.+\s(?:below|under|above|over|hits?|reaches?|in\s+stock|by)\b/i.test(msg.text)) {
       const r = deps.alertEdit(msg.chatId, msg.text);
       if (r.ok) {
-        await deps.sendMessage(msg.chatId, `Updated "${r.name}" — ${r.summary}.`);
+        // A failed persist silently reverts the trigger to the old threshold on restart — hedge like every
+        // other write path (alert-edit-persist-hedge) so the user knows to retry.
+        const hedge = r.saved === false ? ` ⚠️ But I couldn't save that to disk — it may revert if I restart; try again in a moment.` : "";
+        await deps.sendMessage(msg.chatId, `Updated "${r.name}" — ${r.summary}.${hedge}`);
         // Run one check now, like the define path: editing into an already-true predicate ("change
         // btc to below 55000" when it's already below) produces no future edge, so without this the
         // user would hear nothing until it crosses again — maybe never. alertRunNow re-baselines +

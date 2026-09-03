@@ -649,7 +649,9 @@ const handle = createHandler({
     const summary = rec.condition
       ? rec.condition.op === "in_stock" ? "back in stock" : `${rec.condition.op} ${rec.condition.operand}`
       : `on any change of ${rec.threshold}`;
-    return { ok: true, name: rec.name, summary: `now alerts ${summary}` };
+    // saved reflects whether the trigger change reached disk (alert-edit-persist-hedge): a failed write
+    // silently reverts to the old threshold on restart, so the handler hedges like every other write path.
+    return { ok: true, name: rec.name, summary: `now alerts ${summary}`, saved: alerts.lastSaveOk() };
   },
   alertList: (chatId) => alerts.list(chatId).map((a) => ({ name: a.name, task: a.task, lastValue: a.lastValue, threshold: a.threshold, feed: a.feed, then: a.then, members: a.members?.length })),
   alertForget: (chatId, name) => {

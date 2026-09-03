@@ -134,6 +134,15 @@ describe("handler — alert routing", () => {
     expect(sent[0]).toMatch(/Updated "btc"/);
   });
 
+  it("an edit whose disk write failed hedges instead of a clean 'Updated' (alert-edit-persist-hedge)", async () => {
+    const { handle, sent } = harness({
+      alertEdit: () => ({ ok: true, name: "btc", summary: "now alerts below 45000", saved: false }),
+    });
+    await handle(msg("change btc to below 45000"));
+    expect(sent[0]).toMatch(/Updated "btc"/);
+    expect(sent[0]).toMatch(/couldn't save|revert|try again/i); // the hedge
+  });
+
   it("editing an unknown alert says so, no agent", async () => {
     const { handle, sent, calls } = harness({ alertEdit: () => ({ ok: false, reason: "unknown" }) });
     await handle(msg("make ferrari fire under 200"));
