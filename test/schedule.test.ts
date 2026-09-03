@@ -93,8 +93,19 @@ describe("parseSchedule — relative", () => {
       "remind me to show my badge at the door in 2 hours",
       "remind me to call the dentist at 9am",
       "remind me to tell mom about dinner at 6pm",
+      // "check on <person>" / "check the <household thing>" are caretaking to-dos, NOT info-fetches
+      // (checkon-todo-browses): they must echo, not run a browse.
+      "remind me to check on mom at 8pm",
+      "remind me to check on the baby in 2 hours",
+      "remind me to check the oven in 20 min",
+      "remind me to check the mail at 5pm",
     ]) {
       expect(parseSchedule(t, NOW)!.reminderOnly, t).toBe(true);
+    }
+  });
+  it("'check the weather/price/news' STILL routes to the agent (a real lookup, not reminder-only)", () => {
+    for (const t of ["remind me to check the weather at 8am", "remind me to check the price of bitcoin in 1 hour", "remind me to check the news at 9pm"]) {
+      expect(parseSchedule(t, NOW)!.reminderOnly, t).toBeUndefined();
     }
   });
 });

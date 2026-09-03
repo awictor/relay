@@ -2408,7 +2408,7 @@
       "title": "\"remind me to check on mom\" runs a browser errand instead of echoing",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "FETCH_CUE_RE still includes 'check on' + 'check the', which dominate personal caretaking to-dos ('check on mom at 8pm', 'check on the baby every hour') — so the reminder is NOT reminder-only + at fire time runs a confused 20-40s browser agent/refusal instead of echoing the note. The block comment says the list was narrowed for exactly this (reminder-only-common-verb) but these two remain.",
       "how": "Drop 'check on' from FETCH_CUE_RE; keep 'check the <data-noun>' only when followed by a real lookup noun (weather/price/score/news/status), not a person. Offline test: 'check on mom' + 'check on the baby' -> reminderOnly true; 'check the weather' stays agent-path."
     },
@@ -3358,6 +3358,10 @@
     {
       "item": "unit-price-compare",
       "note": "Added a keyless unit_price tool: 'which is cheaper, 500g for $4 or 1.2kg for $9' / '$3.99 for 12oz vs $5.49 for 20oz' / '12 for $6 or 30 for $13' now compare price-per-unit + name the winner, instead of the agent hand-normalizing mixed units (the silently-wrong mental math the prompt forbids). New src/lib/unitprice.ts: parseUnitPrice (splits on or/vs/comma; handles '<qty><unit> for $<price>', '$<price> for/per/<qty><unit>', '$<price>/unit'), compareUnitPrice (reuses new units-convert.toBaseAmount to normalize weight/volume/length + a dimensionless 'count' dim; rejects mixed dimensions), formatUnitPrice (per-100g/100ml/m/each + a % cheaper). Wired like convert_units (pure, no backend): TOOLS[] + dispatch + prompt + sorted tool-list test + HELP. 9 new tests, suite 1657 green, tsc clean. call-tested:false (pure lib + dispatch)."
+    },
+    {
+      "item": "checkon-todo-browses",
+      "note": "'remind me to check on mom at 8pm' now echoes, not browses. FETCH_CUE_RE (which flags a reminder as needing the agent at fire time) still listed 'check on'/'check the', so caretaking to-dos ('check on mom', 'check on the baby', 'check the oven/mail') were routed to a confused 20-40s browser run/refusal instead of a plain reminder echo. Removed both cues — the real lookup targets (weather/the price/the score/the news/the status/standings/look up/search/summar...) are listed explicitly, so 'check the weather'/'check the price of bitcoin'/'check the news' STILL match via the data noun + stay on the agent path. 8 new assertions (check-on/check-the household to-dos are reminderOnly; check-the-weather/price/news still agent). suite 1658 green, tsc clean. call-tested:false (offline parse)."
     }
   ],
   "audits": [

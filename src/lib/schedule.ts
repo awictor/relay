@@ -93,7 +93,12 @@ function stripReminderPrefix(s: string): string {
 // show) were removed — they dominate PERSONAL to-dos ("call mom when I get home", "find my keys", "top
 // up my card", "tell dad happy birthday") and wrongly routed them to a confused browse
 // (reminder-only-common-verb). Kept: explicit lookup/data words + "what's/how's the ..." question forms.
-const FETCH_CUE_RE = /\b(check on|check the|look\s?up|search (?:for |the |online)|google|weather|forecast|temperature|the news|headlines?|the price|the cost|the score|scores|the status|standings|stock price|exchange rate|summar\w+|any new|what'?s (?:the|my|happening)|how'?s the)\b/i;
+// NOTE: "check on"/"check the" were REMOVED (checkon-todo-browses): they dominate personal caretaking
+// to-dos ("check on mom", "check on the baby", "check the mail/oven/laundry") and wrongly routed them to
+// a confused 20-40s browse. The real lookup targets ("weather", "the price", "the score", "the news",
+// "the status"...) are listed explicitly below, so "check the weather"/"check the price of X" still match
+// via the data noun — but "check on mom" now correctly stays a reminder-only echo.
+const FETCH_CUE_RE = /\b(look\s?up|search (?:for |the |online)|google|weather|forecast|temperature|the news|headlines?|the price|the cost|the score|scores|the status|standings|stock price|exchange rate|summar\w+|any new|what'?s (?:the|my|happening)|how'?s the)\b/i;
 
 // A reminder is "reminder-only" (echo the stored text, don't run the agent) when it CAME from a reminder
 // phrase AND its task has no info-fetch cue. Keeps "remind me to check BTC" on the agent path while
