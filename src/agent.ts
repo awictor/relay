@@ -279,10 +279,10 @@ export interface BrowserBackend {
   getWeather?(opts: { place?: string; lat?: number; lng?: number; near?: { lat: number; lng: number } }): Promise<import("./lib/weather.js").WeatherResult | null>;
   // Optional: find nearby places (near-me-poi). Absent -> the find_nearby tool reports it's
   // unavailable. Returns [] on a bad area / fetch failure.
-  findNearby?(opts: { what: string; lat?: number; lng?: number; near?: string; units?: "metric" | "imperial" }): Promise<import("./lib/places.js").Place[]>;
+  findNearby?(opts: { what: string; lat?: number; lng?: number; near?: string; bias?: { lat: number; lng: number }; units?: "metric" | "imperial" }): Promise<import("./lib/places.js").Place[]>;
   // Optional: distance + travel time between two places (directions-eta). Absent -> the directions tool
   // reports it's unavailable. Returns null on a bad place / no route / fetch failure.
-  getDirections?(opts: { to: string; from?: string; fromLat?: number; fromLng?: number; mode?: "driving" | "walking" | "cycling"; units?: "metric" | "imperial" }): Promise<import("./lib/directions.js").Route | null>;
+  getDirections?(opts: { to: string; from?: string; fromLat?: number; fromLng?: number; bias?: { lat: number; lng: number }; mode?: "driving" | "walking" | "cycling"; units?: "metric" | "imperial" }): Promise<import("./lib/directions.js").Route | null>;
 }
 
 const FETCH_JSON_MAX_BYTES = 200_000;
@@ -667,7 +667,7 @@ export async function runAgent(
         try {
           const units = deps.weatherUnits ?? "imperial";
           const opts = near
-            ? { what, near, units }
+            ? { what, near, units, ...(deps.weatherCoords ? { bias: deps.weatherCoords } : {}) }
             : { what, lat: deps.weatherCoords!.lat, lng: deps.weatherCoords!.lng, units };
           const places = await backend.findNearby(opts);
           push("find_nearby", `${formatPlaces(places, what, units)} Report this to the user.`);
@@ -686,8 +686,11 @@ export async function runAgent(
         const units = deps.weatherUnits ?? "imperial";
         const mode = (["driving", "walking", "cycling"].includes(String(call.args.mode)) ? String(call.args.mode) : routeMode(userText)) as "driving" | "walking" | "cycling";
         try {
+          // A named `from` + known user coords: pass coords as `bias` (a hint) so the origin+destination
+          // geocode toward the user's region (geo-tools-disambiguate-coords) without overriding `from`.
+          // No `from`: start AT the user's coords.
           const opts = from
-            ? { to, from, mode, units }
+            ? { to, from, mode, units, ...(deps.weatherCoords ? { bias: deps.weatherCoords } : {}) }
             : { to, fromLat: deps.weatherCoords!.lat, fromLng: deps.weatherCoords!.lng, mode, units };
           const r = await backend.getDirections(opts);
           if (!r) { push("directions", `Couldn't route to "${to}" (unknown place or no route). Try a more specific address.`); continue; }

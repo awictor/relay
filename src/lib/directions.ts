@@ -3,7 +3,7 @@
 // the agent scraped a JS map shell and returned nothing. This resolves both endpoints via Nominatim
 // (reused from places.ts) and routes them via the keyless OSRM public server for distance + duration.
 // Pure parse/format helpers exported + unit-tested; the network fetch is injected so it runs offline.
-import { nominatimUrl, parseNominatim } from "./places.js";
+import { nominatimUrl, parseNominatimAll, pickNominatim } from "./places.js";
 
 export interface Route { fromLabel: string; toLabel: string; distanceKm: number; durationMin: number; mode: "driving" | "walking" | "cycling" }
 
@@ -46,21 +46,23 @@ export function formatRoute(r: Route, units: "metric" | "imperial" = "imperial")
  * geocoded via Nominatim. Returns null on a bad place / no route / fetch failure. Never throws.
  */
 export async function getDirections(
-  opts: { to: string; from?: string; fromLat?: number; fromLng?: number; mode?: Route["mode"]; units?: "metric" | "imperial" },
+  opts: { to: string; from?: string; fromLat?: number; fromLng?: number; bias?: { lat: number; lng: number }; mode?: Route["mode"]; units?: "metric" | "imperial" },
   fetchText: (url: string) => Promise<string>,
 ): Promise<Route | null> {
   try {
     const mode = opts.mode ?? "driving";
-    // Resolve origin: explicit coords, else geocode `from`, else fail (caller asks for a start).
+    // Resolve origin: explicit coords, else geocode `from`, else fail (caller asks for a start). `bias`
+    // is a disambiguation HINT (the user's region) — it never overrides an explicit `from`.
     let fromLat = opts.fromLat, fromLng = opts.fromLng, fromLabel = "your location";
     if ((fromLat === undefined || fromLng === undefined) && opts.from) {
-      const g = parseNominatim(await fetchText(nominatimUrl(opts.from)));
+      const g = pickNominatim(parseNominatimAll(await fetchText(nominatimUrl(opts.from))), opts.bias);
       if (!g) return null;
       fromLat = g.lat; fromLng = g.lng; fromLabel = opts.from;
     }
     if (fromLat === undefined || fromLng === undefined) return null;
-    // Resolve destination.
-    const dg = parseNominatim(await fetchText(nominatimUrl(opts.to)));
+    // Resolve destination, biased toward the ORIGIN so an ambiguous "Springfield"/"Washington" resolves
+    // to the nearest one to where they're starting, not a random same-name city.
+    const dg = pickNominatim(parseNominatimAll(await fetchText(nominatimUrl(opts.to))), { lat: fromLat, lng: fromLng });
     if (!dg) return null;
     const route = parseOsrm(await fetchText(osrmUrl(fromLat, fromLng, dg.lat, dg.lng, mode)));
     if (!route) return null;

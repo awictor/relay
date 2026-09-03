@@ -53,18 +53,35 @@ export function overpassQuery(lat: number, lng: number, tags: string[], radiusM:
 }
 export function overpassUrl(): string { return "https://overpass-api.de/api/interpreter"; }
 export function nominatimUrl(place: string): string {
-  return `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(place)}`;
+  // Ask for several candidates (not limit=1) so an ambiguous name ("Springfield", "Washington") can be
+  // disambiguated toward the user's region (geo-tools-disambiguate-coords) instead of the top global hit.
+  return `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(place)}`;
 }
 
-/** Parse a Nominatim response -> {lat,lng} or null. */
-export function parseNominatim(body: string): { lat: number; lng: number } | null {
+/** Parse a Nominatim response into ALL candidates {lat,lng}, in the API's relevance order. */
+export function parseNominatimAll(body: string): Array<{ lat: number; lng: number }> {
   try {
     const arr = JSON.parse(body) as Array<{ lat: string; lon: string }>;
-    const r = arr?.[0];
-    if (!r) return null;
-    const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
-    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
-  } catch { return null; }
+    return (arr ?? [])
+      .map((r) => ({ lat: parseFloat(r.lat), lng: parseFloat(r.lon) }))
+      .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+  } catch { return []; }
+}
+
+/** Pick the best geocode candidate: when the user's coords are known, prefer the nearest within
+ * ~250km (a same-name place in their region), else the top (relevance) result. Exported for tests. */
+export function pickNominatim(cands: Array<{ lat: number; lng: number }>, near?: { lat: number; lng: number }): { lat: number; lng: number } | null {
+  if (!cands.length) return null;
+  if (near) {
+    const sorted = cands.map((c) => ({ c, d: haversineKm(near.lat, near.lng, c.lat, c.lng) })).sort((a, b) => a.d - b.d);
+    if (sorted[0]!.d <= 250) return sorted[0]!.c;
+  }
+  return cands[0]!;
+}
+
+/** Back-compat: the single top candidate. */
+export function parseNominatim(body: string): { lat: number; lng: number } | null {
+  return parseNominatimAll(body)[0] ?? null;
 }
 
 /** Parse an Overpass response into Place[] sorted by distance from the origin, capped to `limit`. A
@@ -111,13 +128,14 @@ export function formatPlaces(places: Place[], what: string, units: "metric" | "i
  * else appended as ?data= (GET) — the caller wires the right transport.
  */
 export async function findNearby(
-  opts: { what: string; lat?: number; lng?: number; near?: string; radiusM?: number; units?: "metric" | "imperial"; limit?: number },
+  opts: { what: string; lat?: number; lng?: number; near?: string; bias?: { lat: number; lng: number }; radiusM?: number; units?: "metric" | "imperial"; limit?: number },
   fetchText: (url: string, body?: string) => Promise<string>,
 ): Promise<Place[]> {
   try {
     let { lat, lng } = opts;
     if ((lat === undefined || lng === undefined) && opts.near) {
-      const geo = parseNominatim(await fetchText(nominatimUrl(opts.near)));
+      // Disambiguate a named area toward the user's coords when known (geo-tools-disambiguate-coords).
+      const geo = pickNominatim(parseNominatimAll(await fetchText(nominatimUrl(opts.near))), opts.bias);
       if (!geo) return [];
       lat = geo.lat; lng = geo.lng;
     }

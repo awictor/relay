@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { categoryFilters, haversineKm, overpassQuery, parseNominatim, parsePlaces, formatPlaces, findNearby } from "../src/lib/places.js";
+import { categoryFilters, haversineKm, overpassQuery, parseNominatim, parseNominatimAll, pickNominatim, parsePlaces, formatPlaces, findNearby } from "../src/lib/places.js";
 
 describe("categoryFilters (near-me-poi)", () => {
   it("maps common words to OSM tags, stripping filler", () => {
@@ -39,6 +39,25 @@ describe("parseNominatim", () => {
   it("null on empty / bad", () => {
     expect(parseNominatim("[]")).toBeNull();
     expect(parseNominatim("nope")).toBeNull();
+  });
+});
+
+describe("pickNominatim (geo-tools-disambiguate-coords)", () => {
+  // Two "Springfield"s: IL (top) and MA.
+  const cands = [{ lat: 39.80, lng: -89.64 }, { lat: 42.10, lng: -72.59 }];
+  it("no bias -> top (relevance) result", () => {
+    expect(pickNominatim(cands)).toEqual({ lat: 39.80, lng: -89.64 });
+  });
+  it("biases to the candidate near the user's coords (within 250km)", () => {
+    // Near Boston -> Springfield MA (~130km) beats Springfield IL (top).
+    expect(pickNominatim(cands, { lat: 42.36, lng: -71.06 })).toEqual({ lat: 42.10, lng: -72.59 });
+  });
+  it("falls back to top when nothing is near the bias", () => {
+    expect(pickNominatim(cands, { lat: 51.5, lng: -0.1 })).toEqual({ lat: 39.80, lng: -89.64 });
+  });
+  it("parseNominatimAll returns all candidates; empty -> null pick", () => {
+    expect(parseNominatimAll(JSON.stringify([{ lat: "1", lon: "2" }, { lat: "3", lon: "4" }]))).toHaveLength(2);
+    expect(pickNominatim([])).toBeNull();
   });
 });
 

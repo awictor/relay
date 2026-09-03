@@ -1157,7 +1157,7 @@
       "title": "find_nearby / directions ignore the user coords when geocoding place names",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "\"directions to Springfield\" / \"coffee near Washington\" take Nominatim limit=1 (top global match) -> wrong city, no hint. The multi-candidate + near-bias fix applied to weather was never propagated; weatherCoords IS available in both handlers.",
       "how": "Bump nominatim to a few candidates + a pickNearest(coords) like weather.pickCandidate; pass deps.weatherCoords as the bias in the find_nearby + directions handlers."
     },
@@ -1602,6 +1602,10 @@
     {
       "id": "calendar-bad-date-crash",
       "note": "Fixed a crash the refill audit found in the just-shipped calendar_event: it was the only tool handler with no try/catch, and gcalLink threw RangeError on a non-ISO startDate -> escaped runAgent + killed the whole turn (an unpadded date also produced a silently-broken .ics). normalizeIsoDate (strict + round-trip) now gates buildIcs/gcalLink so a bad date is dropped, and the dispatch is wrapped. 1047 tests green."
+    },
+    {
+      "id": "geo-tools-disambiguate-coords",
+      "note": "Propagated the weather region-disambiguation to find_nearby + directions: Nominatim now fetches 5 candidates (parseNominatimAll) and pickNominatim(bias) prefers the one within ~250km of a hint. directions biases the origin geocode to the user coords + the DESTINATION geocode to the origin, so \"directions to Springfield\" from Boston resolves to Springfield MA not IL. find_nearby biases a named area to the user coords. bias is a hint that never overrides an explicit from/coords. parseNominatim kept as a back-compat shim. 1052 tests green."
     }
   ],
   "audits": [

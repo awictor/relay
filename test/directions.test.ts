@@ -69,4 +69,21 @@ describe("getDirections (injected fetch)", () => {
     expect(await getDirections({ to: "Nowhere", fromLat: 1, fromLng: 2 }, async () => "[]")).toBeNull();
     expect(await getDirections({ to: "X", fromLat: 1, fromLng: 2 }, async () => { throw new Error("net"); })).toBeNull();
   });
+  it("disambiguates an ambiguous destination toward the origin (geo-tools-disambiguate-coords)", async () => {
+    let osrmFrom = "", osrmTo = "";
+    const fetchText = async (url: string) => {
+      if (url.includes("nominatim")) return JSON.stringify([
+        { lat: "39.80", lon: "-89.64" }, // Springfield IL (top)
+        { lat: "42.10", lon: "-72.59" }, // Springfield MA
+      ]);
+      // OSRM url: /car/<fromLng>,<fromLat>;<toLng>,<toLat>
+      const m = url.match(/car\/([^;]+);([^?]+)/)!;
+      osrmFrom = m[1]!; osrmTo = m[2]!;
+      return JSON.stringify({ code: "Ok", routes: [{ distance: 130000, duration: 6000 }] });
+    };
+    // Origin is Boston coords -> destination "Springfield" should resolve to MA (near origin), not IL.
+    const r = await getDirections({ to: "Springfield", fromLat: 42.36, fromLng: -71.06 }, fetchText);
+    expect(r).not.toBeNull();
+    expect(osrmTo).toBe("-72.59,42.1"); // Springfield MA, not IL (-89.64,39.8)
+  });
 });
