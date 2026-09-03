@@ -53,38 +53,49 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
   // Each section carries a `real` flag: true only when a member produced actual content. A section that
   // is a "(no such recipe anymore)" placeholder is NOT real — if EVERY member is gone, the whole digest
   // is dead and should stay silent (empty-digest-fires-noise), not fire a briefing of removal notices.
-  const built = await mapPool(members, DIGEST_CONCURRENCY, async (name): Promise<{ line: string; real: boolean }> => {
+  // Each section's status: "real" (produced content) | "gone" (recipe deleted / slotted-skip — a
+  // STRUCTURAL, permanent dead end) | "failed" (transient — couldn't fetch this time / degraded). The
+  // gone-vs-failed split is what lets an ALL-fail digest tell a transient outage ("couldn't build it
+  // this time") apart from a truly-dead one (stay silent) — digest-all-fail-silent-noshow.
+  const built = await mapPool(members, DIGEST_CONCURRENCY, async (name): Promise<{ line: string; status: "real" | "gone" | "failed" }> => {
     const rec = deps.resolveRecipe(digest.chatId, name);
-    if (!rec) return { line: `• ${name}: (no such recipe anymore)`, real: false };
+    if (!rec) return { line: `• ${name}: (no such recipe anymore)`, status: "gone" };
     // A slotted recipe ("track price of {item}") has no per-fire value inside a digest, so running
     // it would hand the literal "{item}" to the agent and silently poison the briefing with an
     // off-topic/garbage section (the /run + schedule paths already refuse this). Skip it with a clear
     // note instead so the composed briefing stays trustworthy.
-    if (hasSlots(rec.task)) return { line: `• ${name}: (skipped — needs a value; can't run in a digest)`, real: false };
+    if (hasSlots(rec.task)) return { line: `• ${name}: (skipped — needs a value; can't run in a digest)`, status: "gone" };
     try {
       // A chained recipe ("a >> b") is a sequential workflow, not one task — run it via runChain so the
       // briefing shows the chain's final output, not a confused literal-"a >> b" agent run
       // (digest-chain-member-literal). Falls back to runAgent when runChain isn't wired.
       if (isChain(rec.task) && deps.runChain) {
         const out = (await deps.runChain(digest.chatId, rec.task)).trim();
-        return out ? { line: `• ${name}: ${out}`, real: true } : { line: `• ${name}: (couldn't fetch)`, real: false };
+        return out ? { line: `• ${name}: ${out}`, status: "real" } : { line: `• ${name}: (couldn't fetch)`, status: "failed" };
       }
       const res = await deps.runAgent(rec.task, { llm: deps.llm, context: deps.contextFor?.(digest.chatId) || undefined, ...deps.agentEnv?.(digest.chatId) }, []);
       // A degraded reply (agent ran out of steps / produced no answer, DEV-0176) is NOT briefing
       // content — showing its failure text as this member's section would read as real data. Treat
       // it exactly like a thrown error: the "(couldn't fetch)" fallback line (DEV-0177).
-      if (res.degraded) return { line: `• ${name}: (couldn't fetch)`, real: false };
+      if (res.degraded) return { line: `• ${name}: (couldn't fetch)`, status: "failed" };
       const body = deps.formatReply(res.reply).trim();
-      return { line: `• ${name}: ${body}`, real: true };
+      return { line: `• ${name}: ${body}`, status: "real" };
     } catch {
-      return { line: `• ${name}: (couldn't fetch)`, real: false };
+      return { line: `• ${name}: (couldn't fetch)`, status: "failed" };
     }
   });
-  // If NO member produced real content — every recipe was deleted (all "(no such recipe anymore)") —
-  // the digest is dead; return null so a scheduled fire stays silent + /run says "empty or gone" instead
-  // of sending a briefing that's nothing but removal notices (empty-digest-fires-noise). A digest with at
-  // least one real section (others transiently "(couldn't fetch)") still sends — that's a real briefing.
-  if (!built.some((b) => b.real)) return null;
+  if (!built.some((b) => b.status === "real")) {
+    // No real content. Two very different reasons:
+    //  - at least one member FAILED transiently -> the user's relied-upon briefing would otherwise
+    //    silently no-show, indistinguishable from "no news" or a deleted digest. Send a short honest
+    //    note so they know it's a temporary blip, not a dead automation (digest-all-fail-silent-noshow).
+    //  - every member is GONE (deleted / slotted-skip) -> the digest is structurally dead; return null
+    //    so a scheduled fire stays silent + /run says "empty or gone" (empty-digest-fires-noise).
+    if (built.some((b) => b.status === "failed")) {
+      return `📋 ${digest.name}\nI couldn't put your briefing together this time — every source failed to load (likely a temporary network blip). I'll try again on the next run.`;
+    }
+    return null;
+  }
   const title = `📋 ${digest.name}`;
   return `${title}\n${built.map((b) => b.line).join("\n")}`;
 }

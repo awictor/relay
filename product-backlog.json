@@ -1724,7 +1724,7 @@
       "title": "Digest with all members transiently failing sends nothing",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "digest-runner returns null when no member is real; fireOne treats null as empty/deleted and stays silent — a bad-network morning makes a relied-upon briefing silently no-show, indistinguishable from deletion.",
       "how": "Distinguish transient all-fail from empty: send a brief \"couldn't build your digest this morning (temporary)\" note, or retry, instead of silent skip."
     },
@@ -2407,6 +2407,10 @@
     {
       "item": "once-reminder-tz-restamp",
       "note": "Clock-time 'once' reminders now tz-restamp on /setlocation. Added a clockTime flag set on every wall-clock once branch (at HH:MM, am/pm, alarm, next-weekday, on Month-day, on the Nth) + carried through Store.add. restampTz now shifts a FUTURE clock-time once's dueMs by the offset delta (UTC moves -Δ so wall-clock hour + calendar day hold) and updates its offsetMin; relative onces (no flag) and past-due onces are left alone. Was: 'remind me tomorrow at 8am' set before tz fixed fired at 8am UTC = 3am local, silently. 5 new tests. Suite 1339 green, tsc clean."
+    },
+    {
+      "item": "digest-all-fail-silent-noshow",
+      "note": "runDigest now distinguishes a transient all-fail from a structurally-dead digest. Replaced the boolean `real` per-section flag with a 3-way status: real | gone (deleted/slotted-skip, permanent) | failed (couldn't-fetch/degraded, transient). When no member is real: if any member FAILED -> return a '📋 name: couldn't put your briefing together this time (temporary blip), will try again' note so a relied-upon briefing never silently no-shows; only when ALL members are GONE -> return null (stay silent / 'empty or gone'), preserving empty-digest-fires-noise. 3 new tests (all-fail, all-degraded, mixed gone+failed). Suite 1342 green, tsc clean."
     }
   ],
   "audits": [
