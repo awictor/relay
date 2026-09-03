@@ -1823,7 +1823,7 @@
       "title": "Contact fuzzy match can draft to the wrong person confidently",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "ContactStore.get word-overlap fallback (longest-name-wins) resolves \"text mom\" to \"mom's doctor\" when there is no exact \"mom\"; formatDraft shows a confident To: line -> one tap from texting the wrong person.",
       "how": "Only fuzzy-match when unambiguous (single hit) OR the query token equals a whole word of exactly one contact; else return null (ask which). Mirror the recipe slotsAmbiguous guard."
     },
@@ -2542,6 +2542,10 @@
     {
       "item": "fire-timeout-late-finish-dup",
       "note": "Fixed the per-fire timeout (shipped last run) to CANCEL, not just abandon. withFireTimeout now threads an isCancelled flag into fireOne + flips it on timeout; fireOne checks it before the main send and before each early complete() (alert-silent, digest-null), so a slow run that finishes AFTER its ceiling is dropped instead of sending a duplicate/late ping + double-advancing the schedule (which also produced false 'watch failing' receipts). 1 new test (slow task finishing post-timeout sends nothing + doesn't re-advance). Suite 1386 green, tsc clean."
+    },
+    {
+      "item": "contact-wrong-person-draft",
+      "note": "Hardened ContactStore.get so a fuzzy match can't draft to the wrong person. Was: any single shared word + longest-name-wins, so 'text mom' with only 'mom's doctor' saved resolved to the doctor + formatDraft showed a confident To: line (one tap from texting the wrong person). Now a contact matches ONLY when EVERY word of its name is present in the query, and only a UNIQUE match returns (most-specific by word-count when several are all-present; a genuine tie -> null so the caller asks which). 'text mom' no longer selects 'mom doctor'; 'email the big boss' still uniquely picks 'big boss'. 3 new tests. Suite 1389 green, tsc clean."
     }
   ],
   "audits": [

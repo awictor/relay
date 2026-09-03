@@ -122,12 +122,23 @@ export class ContactStore {
     if (!n) return null;
     const exact = c.contacts.find((x) => x.name === n);
     if (exact) return exact;
-    // Word-overlap: the query contains the contact's name as a whole word (or vice-versa) — "email my
-    // boss the update" -> "boss". Pick the longest-name match to prefer "big boss" over "boss".
+    // Fuzzy: a contact matches only when EVERY word of its name appears in the query ("email the big
+    // boss" -> "big boss"; "text mom" -> "mom"), so a SHORTER query can't drag in a longer contact —
+    // "text mom" must NOT resolve to "mom's doctor" (contact-wrong-person-draft: a confident draft to the
+    // wrong person is one tap from sending). And we only return on a UNIQUE match: if 2+ contacts match
+    // (or none), return null so the caller asks which instead of guessing. A partial-word contact name
+    // ("mom doctor") requires ALL its words present, so a bare "mom" query never selects it.
     const words = new Set(n.split(" "));
-    const hits = c.contacts.filter((x) => x.name.split(" ").some((w) => words.has(w)));
+    const hits = c.contacts.filter((x) => x.name.split(" ").every((w) => words.has(w)));
     if (!hits.length) return null;
-    return hits.sort((a, b) => b.name.length - a.name.length)[0]!;
+    if (hits.length === 1) return hits[0]!;
+    // Multiple contacts' names are all-present in the query (e.g. query "email the big boss" matches both
+    // "boss" and "big boss"). Prefer the MOST-specific — the one with the most name-words — but only when
+    // that maximum is UNIQUE; a genuine tie (two equally-specific contacts) returns null so the caller
+    // asks which rather than guessing (contact-wrong-person-draft).
+    const maxWords = Math.max(...hits.map((x) => x.name.split(" ").length));
+    const top = hits.filter((x) => x.name.split(" ").length === maxWords);
+    return top.length === 1 ? top[0]! : null;
   }
 
   /** All contacts for a chat (for a "/contacts" list). */

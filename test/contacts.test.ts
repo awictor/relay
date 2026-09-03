@@ -81,10 +81,28 @@ describe("ContactStore", () => {
     expect(s.lastSaveOk()).toBe(true);
     expect(new ContactStore({ file: f }).get(1, "boss")!.email).toBe("b@co.com");
   });
-  it("prefers the longest-name match on fuzzy overlap", () => {
+  it("prefers the most-specific unique match when several names are all-present", () => {
     const s = new ContactStore({ file: tmp() });
     s.save(1, { name: "boss", email: "boss@x.com" }, 0);
     s.save(1, { name: "big boss", email: "bigboss@x.com" }, 0);
     expect(s.get(1, "email the big boss")!.name).toBe("big boss");
+  });
+  it("does NOT draft to the wrong person: 'text mom' never resolves to 'mom's doctor' (contact-wrong-person-draft)", () => {
+    const s = new ContactStore({ file: tmp() });
+    s.save(1, { name: "mom doctor", phone: "111" }, 0); // only a longer, related contact exists
+    // "text mom" -> "mom doctor" requires BOTH words present; a bare "mom" query lacks "doctor" -> no match.
+    expect(s.get(1, "text mom I'm late")).toBeNull();
+  });
+  it("returns null on a genuine tie (two equally-specific matches) so the caller asks which", () => {
+    const s = new ContactStore({ file: tmp() });
+    s.save(1, { name: "john smith", phone: "111" }, 0);
+    s.save(1, { name: "john doe", phone: "222" }, 0);
+    // "email john" -> neither is all-present ("smith"/"doe" missing); bare-word can't pick one.
+    expect(s.get(1, "email john the update")).toBeNull();
+  });
+  it("still resolves an exact single-word contact from a longer query", () => {
+    const s = new ContactStore({ file: tmp() });
+    s.save(1, { name: "mom", phone: "111" }, 0);
+    expect(s.get(1, "text mom I'm running late")!.name).toBe("mom");
   });
 });
