@@ -44,6 +44,7 @@ const HELP = `Relay — what I can do:
 • Translate: "how do you say 'where's the pharmacy' in Spanish", "translate this page to English: <link>" → the translation (with pronunciation for non-Latin scripts).
 • Define a word: "what does obsequious mean", "synonyms for happy" → definition, pronunciation, and synonyms, instantly.
 • World clock: "what time is it in Tokyo", "what's 9am PT in London" → the time there or a zone conversion, instantly.
+• Dates: "how many days until Christmas", "what day is July 4 2026", "how old if born 1990-05-06", "days between two dates" → exact calendar math, instantly.
 • Sports scores: "did the Lakers win?", "Man City score", "NBA scores tonight" → today's scores + status, instantly (NBA/NFL/MLB/NHL/NCAA + major soccer).
 • News: "what's the news?", "top headlines", "news about AI" → today's top headlines, instantly.
 • Meal ideas: "what can I make with chicken and rice", "dinner ideas", "recipe for carbonara" → dishes to cook + full recipes.

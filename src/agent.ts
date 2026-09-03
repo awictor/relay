@@ -18,6 +18,7 @@ import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
 import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
 import { parseWorldClock, runWorldClock } from "./lib/worldclock.js";
+import { runDateCalc, type Ymd } from "./lib/datecalc.js";
 import { getScores as scoresFetch, formatScores } from "./lib/scores.js";
 import { getNews as newsFetch, formatNews } from "./lib/news.js";
 import { calc, formatResult } from "./lib/calc.js";
@@ -217,6 +218,15 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "date_math",
+    description: "Compute dates and calendar math EXACTLY (no key, instant). Use this — do NOT count in your head or web_search — for \"how many days until Christmas / my birthday / July 4\", \"what day of the week is/was <date>\", \"how old is someone born <date>\", \"how many days between <date> and <date>\", \"what's the date in 10 days\". Knows common US holidays by name (Christmas, Thanksgiving, Halloween, July 4th, New Year's, Valentine's...). Pass the user's question verbatim; I use the user's local date as \"today\".",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The user's date/calendar question verbatim, e.g. \"how many days until Christmas\" or \"what day is July 4 2026\"." } },
+      required: ["request"],
+    },
+  },
+  {
     name: "recall",
     description: "Search what I've PREVIOUSLY told this user (my own past answers) — use for \"what was that restaurant you found\", \"the flight price you got me last week\", \"resend the article\", or any reference to something I said earlier that isn't in the current conversation. Returns past answers with how long ago. NOT for facts the user told me about themselves.",
     parameters: {
@@ -377,6 +387,7 @@ Tools:
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "get_time" (request): current time in another city/timezone, or convert a time between zones. Use this — NOT web_search — for "what time is it in Tokyo"/"time in London"/"9am PT in London"/"convert 3pm EST to Tokyo". Pass the request verbatim. Standard-time offsets (may be an hour off during daylight saving).
+- "date_math" (request): date/calendar math EXACTLY. Use this — NOT mental counting or web_search — for "how many days until Christmas/my birthday/July 4", "what day of the week is/was <date>", "how old if born <date>", "days between two dates", "date in 10 days". Knows common US holidays by name. Reckons from the user's local today.
 - "meal_ideas" (request): cooking meal ideas or a recipe. Use this — NOT web_search — for "what can I make with chicken"/"dinner ideas"/"random meal"/"recipe for X". FOOD, not Relay's saved automation recipes.
 - "convert_units" (request): convert units of measure EXACTLY (temperature/length/weight/volume/cooking). Use for "180C to F"/"5 foot 11 in cm"/"2 cups in grams"/"10 miles in km". NOT currency (use convert_currency).
 - "translate" (request): translate text or a whole page into another language. Use for "translate X to Spanish"/"how do you say X in Japanese"/"read me this page in English: <url>". Pass the request verbatim.
@@ -905,6 +916,18 @@ export async function runAgent(
         const answer = parsed ? runWorldClock(parsed, nowForTz) : null;
         if (!answer) { push("get_time", `Couldn't resolve a timezone in "${request}" (unknown city/abbreviation). Report that you couldn't place that zone + ask which city/UTC offset, or try web_search for an unusual place.`); continue; }
         push("get_time", `${answer}\n\nReport this to the user (include the daylight-saving caveat only if it's relevant / they're near a DST change).`);
+        continue;
+      }
+
+      if (call.name === "date_math") {
+        const request = String(call.args.request ?? "").trim();
+        // "today" in the user's LOCAL calendar (nowMs + their tz offset), so "days until Christmas"
+        // and "what day is it" reckon from the user's date, not the server's UTC day.
+        const local = new Date((deps.nowMs ?? Date.now()) + (deps.tzOffsetMin ?? 0) * 60_000);
+        const today: Ymd = { y: local.getUTCFullYear(), m: local.getUTCMonth() + 1, d: local.getUTCDate() };
+        const answer = runDateCalc(request, today);
+        if (!answer) { push("date_math", `Couldn't parse a date question from "${request}". If it's a date I can't compute (a moving holiday like Easter, or a fuzzy phrase), say so + try web_search; otherwise ask the user for an explicit date.`); continue; }
+        push("date_math", `${answer} Report this exact result to the user.`);
         continue;
       }
 

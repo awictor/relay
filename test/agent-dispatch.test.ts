@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "define", "directions", "get_news", "get_scores", "get_suntimes", "get_time", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_news", "get_scores", "get_suntimes", "get_time", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "web_search"].sort()
     );
   });
 
@@ -211,6 +211,18 @@ describe("runAgent dispatch", () => {
     const out = await runAgent("time in tokyo", { llm, backend: b, nowMs: 1_700_000_000_000 });
     expect(out.reply).toBe("ok");
     // no browser/network method invoked — it's pure offset math
+    expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
+  });
+
+  it("date_math answers from nowMs + tzOffsetMin without any backend call, reaches reply", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "date_math", args: { request: "what day of the week is 2026-07-04" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "Saturday" } } as ToolCall },
+    ]);
+    const out = await runAgent("what day is july 4", { llm, backend: b, nowMs: 1_756_800_000_000, tzOffsetMin: 0 });
+    expect(out.reply).toBe("Saturday");
+    // pure calendar math — no browser/network method touched
     expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
   });
 

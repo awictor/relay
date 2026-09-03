@@ -2084,7 +2084,7 @@
       "title": "no date/calendar math (days-until, day-of-week, age, date diff)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'how many days until Christmas', 'what day is July 4th', 'how old if born 1990', 'days between two dates' have no home — calc is arithmetic-only, so these fall to a slow browse or a hallucinated guess. Very high everyday frequency.",
       "how": "Add a keyless deterministic date tool (parse common date phrases + relative like 'next friday'; compute diff/day-of-week/age) beside get_time/calculate. Pure, offline-testable. New TOOLS[] entry + dispatch + prompt line + HELP + sorted tool-list test."
     },
@@ -2914,6 +2914,10 @@
     {
       "item": "quiet-hours-once-alarm",
       "note": "Quiet hours no longer defers an explicit wall-clock alarm past its time. The runner deferred EVERY non-alert schedule that landed in the quiet window to the window end — including a 'once' with clockTime ('wake me at 6am', 'remind me tomorrow 7:00'), so a 6am alarm inside a midnight-8am quiet window fired at 8am, defeating it. Now clock-time onces (kind==='once' && clockTime===true) are exempt from the quiet defer, mirroring the alert-check exemption; a RELATIVE once ('in 20 min', no clockTime flag) still defers since its instant is incidental, not chosen. 2 new runner tests (clock-once fires on time in quiet hours; relative once still defers), suite 1517 green, tsc clean. call-tested:false (offline runner test, injected clock + quietUntil)."
+    },
+    {
+      "item": "date-calendar-math",
+      "note": "Added a keyless date_math tool. New src/lib/datecalc.ts: a pure deterministic calendar evaluator (today injected, no Date.now inside, UTC-midnight day math so no DST drift). Handles 'how many days until <date/holiday>' (rolls a past bare date to next year), 'what day of the week is/was <date>', 'how old if born <date>' (years + months), 'days between X and Y', and 'date in N days/weeks'. Parses ISO / US-numeric / month-name / today-tomorrow-yesterday, plus common US holidays by name (Christmas, Thanksgiving computed as 4th-Thu-Nov, Halloween, July 4th, New Year's, Valentine's...). Wired: TOOLS[] entry + dispatch (computes user's LOCAL today from nowMs+tzOffsetMin) + prompt menu line + HELP + sorted tool-list test + a dispatch routing test. 17 new tests, suite 1533 green, tsc clean. call-tested:false (pure offline eval + dispatch test). Previously these fell to a slow browse or a hallucinated guess since calc is arithmetic-only."
     }
   ],
   "audits": [
