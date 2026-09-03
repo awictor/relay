@@ -61,7 +61,13 @@ export interface ScheduleRunnerDeps {
   // counts consecutive soft-fails per watch and sends the failed-watch receipt after a threshold, so a
   // watch whose source keeps failing doesn't silently die looking armed. A read (notify or clean hold)
   // resets the count.
-  alertCheck?: (chatId: number, name: string) => Promise<{ message: string | null; commit: () => void; softFail?: boolean }>;
+  alertCheck?: (chatId: number, name: string) => Promise<{ message: string | null; commit: () => void; softFail?: boolean; deadMembers?: string[] }>;
+  // Watchlist dead-member receipt (watchlist-member-dead-no-receipt): the message to send when a
+  // specific watchlist member has been UNREADABLE for FAIL_STREAK_NOTIFY consecutive checks (a bad
+  // ticker / dead link in a basket whose other members keep the watch looking healthy). `alertName` is
+  // the watchlist, `member` the dead member's label. Return the message, or null to stay silent. index
+  // wires it; absent -> no per-member receipt (basket-level softFail still covers an all-dead basket).
+  deadMemberNotice?: (chatId: number, alertName: string, member: string) => string | null;
   // Recipes: a scheduled recipe stores "recipe:<name>"; on fire, resolve the recipe's CURRENT task by
   // name (null if it was deleted) and run it as the agent task — so editing the recipe changes what
   // fires + forgetting it stops it (a stable marker, unlike storing the raw task). Optional.
@@ -170,6 +176,11 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   // streak stays 0 and it silently looks armed for weeks. Count soft-fails here + fire the failed-watch
   // receipt after the same FAIL_STREAK_NOTIFY threshold, then reset (re-notify only after another N).
   const softFailStreak = new Map<string, number>();
+  // Consecutive unreadable-check counts per watchlist member (watchlist-member-dead-no-receipt), keyed
+  // "<scheduleId>::<memberLabel>": a member dead every tick (bad ticker / dead link) never alerts + the
+  // basket-level softFail can't trip (other members read fine), so it looks tracked forever. Streak it +
+  // fire a one-time receipt at FAIL_STREAK_NOTIFY, then reset. A member that reads fine clears its streak.
+  const memberFailStreak = new Map<string, number>();
 
   // Send the one-time "your <name> briefing/recipe has no content left" notice for a RECURRING schedule
   // whose digest/recipe resolved empty, then remember we did. A once (fires + drops on its own) gets no
@@ -180,6 +191,32 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     if (!msg) return;
     goneNotified.add(s.id);
     try { await deps.send(s.chatId, msg); noteSend(s.chatId, deps.now()); } catch (e) { deps.onError?.(e); }
+  }
+
+  // Track per-member unreadable streaks for a watchlist check + fire a one-time receipt for any member
+  // dead FAIL_STREAK_NOTIFY consecutive checks (watchlist-member-dead-no-receipt). `dead` is the labels
+  // unreadable THIS tick (from alertCheck); every OTHER member that read fine has its streak cleared.
+  async function handleDeadMembers(s: Schedule, alertName: string, dead: string[] | undefined): Promise<void> {
+    if (!deps.deadMemberNotice) return;
+    const deadSet = new Set(dead ?? []);
+    // Only members we've been tracking OR that are dead now matter; a clean member clears its streak.
+    // We don't know the full member roster here, so clear on the ones NOT dead by scanning our keys.
+    const prefix = `${s.id}::`;
+    for (const key of [...memberFailStreak.keys()]) {
+      if (!key.startsWith(prefix)) continue;
+      const label = key.slice(prefix.length);
+      if (!deadSet.has(label)) memberFailStreak.delete(key); // read fine this tick -> healthy, reset
+    }
+    for (const label of deadSet) {
+      const key = `${prefix}${label}`;
+      const streak = (memberFailStreak.get(key) ?? 0) + 1;
+      memberFailStreak.set(key, streak);
+      if (streak >= FAIL_STREAK_NOTIFY && !overCap(s.chatId, deps.now())) {
+        const notice = deps.deadMemberNotice(s.chatId, alertName, label);
+        if (notice) { try { await deps.send(s.chatId, notice); noteSend(s.chatId, deps.now()); } catch (e) { deps.onError?.(e); } }
+        memberFailStreak.set(key, 0); // re-notify only after another N consecutive fails
+      }
+    }
   }
 
   // True if this chat is at/over the hourly proactive-send cap (prunes old timestamps).
@@ -244,12 +281,19 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         } else {
           softFailStreak.delete(s.id); // a clean read (healthy silent hold) clears the streak
         }
+        // Watchlist per-member health (watchlist-member-dead-no-receipt): warn about a member dead for N
+        // straight checks even though the basket as a whole read fine (so no basket-level softFail fired).
+        await handleDeadMembers(s, alertMatch[1]!.trim(), checked.deadMembers);
         deps.store.complete(s.id, deps.now());
         log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, alert: alertMatch[1], ok: true, sent: false })}`);
         deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
         return;
       }
       softFailStreak.delete(s.id); // a notify is a real read — clear any soft-fail streak
+      // Even on a notifying watchlist check, a member may be dead — streak + warn it (watchlist-member-
+      // dead-no-receipt). Fire-and-forget after the check; the actual send happens later but the notice
+      // is independent (a separate message about a broken member).
+      await handleDeadMembers(s, alertMatch[1]!.trim(), checked.deadMembers);
     } else if (digestMatch && deps.digestRun) {
       const composed = await deps.digestRun(s.chatId, digestMatch[1]!.trim());
       // null = the digest is gone or every member recipe was deleted (empty-digest-fires-noise). Stay

@@ -37,6 +37,13 @@ export interface AlertRunResult {
   // watch whose source keeps failing doesn't silently die looking armed. A real read (notify OR a clean
   // silent hold) resets the streak.
   softFail?: boolean;
+  // Watchlist member health (watchlist-member-dead-no-receipt): the member LABELS that couldn't be read
+  // this tick (agent threw/degraded, or an error-shaped reply). The runner tracks a per-member
+  // consecutive-fail streak and, after a threshold, names the persistently-dead member in a receipt —
+  // otherwise a single bad ticker in a basket alerts nothing + warns nothing while the other members
+  // keep the watchlist looking healthy (anyReadable stays true, so the basket-level softFail never
+  // trips). Undefined/absent on non-watchlist alerts. A member NOT in this list read fine this tick.
+  deadMembers?: string[];
 }
 
 export interface AlertRunnerDeps {
@@ -187,13 +194,16 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     // runner earns a failed-watch receipt instead of the basket looking armed forever. A single readable
     // member is enough to count the check healthy.
     let anyReadable = false;
+    // Members unreadable this tick (watchlist-member-dead-no-receipt): null (agent threw/degraded) or an
+    // error-shaped reply. The runner streaks these per label to warn about a permanently-dead member.
+    const deadMembers: string[] = [];
     for (const { mem, value } of results) {
-      if (value === null) continue; // couldn't read this member this tick — leave its baseline
+      if (value === null) { deadMembers.push(mem.label); continue; } // couldn't read this member this tick
       // An error-shaped member reply ("404", "couldn't load") is a soft failure — hold its baseline +
       // stay silent for it, mirroring the single-value guard (error-reply-false-fires-alerts). Otherwise a
       // stray number in the error text could flag it changed + overwrite the last good value. It also does
       // NOT count toward watchlist health (silent-watch-death) — an all-error basket is a dead watch.
-      if (looksLikeErrorReply(value)) continue;
+      if (looksLikeErrorReply(value)) { deadMembers.push(mem.label); continue; }
       anyReadable = true; // a real, non-error member value this tick -> the watchlist is alive
       // Numberless-reply guard (alert-numberless-flap): if this member's prior value tracked a NUMBER but
       // the new reply has none ("N/A", "price unavailable" — real, not degraded), don't flag it changed
@@ -219,13 +229,13 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
       // If NO member was readable this tick (every one null/error), the whole basket is dead — flag
       // softFail so a persistently-broken watchlist earns a receipt instead of looking armed forever
       // (silent-watch-death). A single readable member (even if unchanged) = a healthy check.
-      return { notify: false, message: null, value: "", commit: noop, ...(anyReadable ? {} : { softFail: true }) };
+      return { notify: false, message: null, value: "", commit: noop, ...(anyReadable ? {} : { softFail: true }), ...(deadMembers.length ? { deadMembers } : {}) };
     }
     const shown = changedLines.slice(0, 10);
     const more = changedLines.length > shown.length ? `\n…and ${changedLines.length - shown.length} more` : "";
     const base = `🔔 ${alert.name} — ${changedLines.length} update${changedLines.length === 1 ? "" : "s"}:\n${shown.join("\n")}${more}`;
     const message = await withThen(base); // run the `then` recipe on a watchlist change too (watchlist-then-dropped)
-    return { notify: true, message, value: "", commit };
+    return { notify: true, message, value: "", commit, ...(deadMembers.length ? { deadMembers } : {}) };
   }
 
   // Follow-feed subscriptions (follow-feed-subscriptions): a keyless feed source is fetched DIRECTLY

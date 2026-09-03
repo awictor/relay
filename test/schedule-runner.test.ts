@@ -1030,6 +1030,26 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
     expect(notices).toEqual([]); // fail,fail,CLEAN,fail -> streak never hit 3 consecutively
   });
 
+  it("a watchlist member dead N straight checks earns a per-member receipt; a clean read resets (watchlist-member-dead-no-receipt)", async () => {
+    const clock = { t: NOW };
+    const notices: Array<{ member: string }> = [];
+    let deadEth = true;
+    const { store, runner } = harness(clock, {
+      send: async () => {},
+      // btc always reads; eth is dead until deadEth flips.
+      alertCheck: async () => ({ message: null, commit: () => {}, deadMembers: deadEth ? ["eth"] : [] }),
+      deadMemberNotice: (_c, _alert, member) => { notices.push({ member }); return `⚠️ "${member}" keeps failing`; },
+    });
+    store.add(1, { kind: "daily", task: "alert:markets", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    // 3 straight dead checks (FAIL_STREAK_NOTIFY default 3) -> the 3rd fires the receipt for eth.
+    for (let i = 0; i < 3; i++) { const s = store.list(1)[0]!; store.deferTo(s.id, clock.t - 1); await runner.tick(); clock.t += 25 * 3_600_000; }
+    expect(notices).toEqual([{ member: "eth" }]);
+    // eth recovers -> streak resets; further dead-free checks don't re-notify.
+    deadEth = false;
+    for (let i = 0; i < 4; i++) { const s = store.list(1)[0]!; store.deferTo(s.id, clock.t - 1); await runner.tick(); clock.t += 25 * 3_600_000; }
+    expect(notices).toHaveLength(1); // no repeat — eth read fine after recovery
+  });
+
   it("a chatty alert burning the hourly budget no longer starves the user's daily briefing (chatty-watch-starves-daily)", async () => {
     const clock = { t: NOW };
     const sent: string[] = [];

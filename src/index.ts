@@ -154,7 +154,7 @@ const digestRunText = (chatId: number, name: string): Promise<string | null> => 
 // Check an alert -> { message (null = silent), commit }. The caller MUST call commit() AFTER a
 // successful send so a failed send leaves the baseline un-advanced + the crossing re-fires next
 // check (alert-notify-send-fail). Silent path already committed inside checkAlert (commit is a noop).
-const alertCheck = async (chatId: number, name: string): Promise<{ message: string | null; commit: () => void; softFail?: boolean }> => {
+const alertCheck = async (chatId: number, name: string): Promise<{ message: string | null; commit: () => void; softFail?: boolean; deadMembers?: string[] }> => {
   const a = alerts.get(chatId, name);
   if (!a) return { message: null, commit: () => {} };
   const r = await checkAlert(a, {
@@ -192,7 +192,7 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
       return out.degraded ? null : formatReply(out.reply);
     },
   });
-  return { message: r.notify ? r.message : null, commit: r.commit, softFail: r.softFail };
+  return { message: r.notify ? r.message : null, commit: r.commit, softFail: r.softFail, deadMembers: r.deadMembers };
 };
 const ALERT_CADENCE = process.env.RELAY_ALERT_CADENCE ?? "every day at 09:00"; // default alert check cadence
 // How long after a sticky reminder last pinged a bare "ok"/"done" still counts as dismissing IT
@@ -255,6 +255,11 @@ const scheduleRunner = makeScheduleRunner({
     const label = s.task.replace(/^(?:digest|alert|recipe):/, "");
     return `⚠️ Heads up — "${label}" has failed ${streak} checks in a row. The site may have changed or a login expired; check it or /cancel + re-add it.`;
   },
+  // Watchlist dead-member receipt (watchlist-member-dead-no-receipt): one specific item in a basket keeps
+  // failing to read while the others are fine, so the basket looks healthy — name the dead member so the
+  // user can fix/drop it rather than believing all N are tracked.
+  deadMemberNotice: (_chatId, alertName, member) =>
+    `⚠️ Heads up — in your "${alertName}" watchlist, "${member}" keeps failing to load (bad link, renamed, or a login expired). I'm still tracking the others. Fix or remove that one with "change ${alertName}: ..." or /forget-alert ${alertName}.`,
   // Empty-content notice (digest-silent-on-member-delete): a scheduled digest/recipe whose content was
   // deleted no-shows silently forever — tell the user once why + how to fix, and stop it firing.
   goneNotice: (s, what, name) => {

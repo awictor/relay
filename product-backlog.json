@@ -2687,7 +2687,7 @@
       "title": "a permanently-erroring watchlist member never alerts + never warns",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A watchlist member whose source errors EVERY tick (bad ticker, login wall) is dropped via looksLikeErrorReply->continue before it's seeded, so its last stays undefined + it's excluded from changedLines forever; other readable members keep anyReadable true, so no per-member failed-watch receipt ever fires — the user believes all N items are tracked.",
       "how": "Track per-member consecutive-fail streaks in the watchlist branch + surface a receipt naming the persistently-dead member (the soft-fail streak currently only covers an ALL-dead basket)."
     },
@@ -3765,6 +3765,10 @@
     {
       "item": "unthrottled-change-watch",
       "note": "Stopped a plain change-watch spamming overnight (unthrottled-change-watch). A no-threshold 'watch btc: price of bitcoin' is level-triggered (changed() true on any delta) and value alerts were EXEMPT from the quiet-hours defer (the classifier only marked feed/page persistent), so it pinged every cadence check all night. Reworked the quiet-deferrable classifier: extracted a pure isQuietDeferrable(alert) in alerts.ts — only a PREDICATE (below/above/in_stock) or WEATHER alert is edge-triggered (a crossing can revert overnight, must run on cadence -> not deferrable); everything else (plain/threshold change-watch, watchlist, feed, page-diff) has a PERSISTENT signal still there in the morning -> deferrable, so it batches to quiet-end instead of buzzing at 3am. index's alertQuietDeferrable now delegates to the pure helper (unknown -> not deferrable). The anti-spam hourly cap still exempts alert CHECKS (edge crossings mustn't be dropped) — this is only the quiet-hours SEND defer. 2 new tests (predicate/weather not deferrable; plain/threshold/watchlist/feed/page deferrable); existing runner persistent-defers + edge-exempt tests unchanged. suite 1822 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "watchlist-member-dead-no-receipt",
+      "note": "A permanently-dead watchlist member now earns a receipt (watchlist-member-dead-no-receipt). A member whose source errors EVERY tick (bad ticker, dead link, login wall) was dropped via looksLikeErrorReply->continue before seeding, so it never alerted; the basket-level softFail can't fire because other readable members keep anyReadable true — the user believed all N items were tracked. alert-runner watchlist branch now collects the unreadable member LABELS (null/degraded/error) into a new deadMembers[] on AlertRunResult (returned on both the silent + notify exits; absent when all read fine). Threaded through index alertCheck -> runner, which streaks per-member in memberFailStreak keyed '<schedId>::<label>' and fires a one-time deadMemberNotice at FAIL_STREAK_NOTIFY (naming the dead member + how to fix/drop it), resetting a member's streak on any clean read. index wires deadMemberNotice. 5 new tests (checkAlert reports deadMembers / absent-when-healthy; runner: member dead 3 checks -> receipt, recovers -> resets no-repeat). suite 1825 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [

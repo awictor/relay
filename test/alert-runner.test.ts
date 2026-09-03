@@ -514,6 +514,18 @@ describe("checkAlert — watchlists", () => {
     const r = await checkAlert(wl([{ label: "btc", task: "btc price", last: "$60k" }, { label: "eth", task: "eth price", last: "$3k" }]), d);
     expect(r.softFail).toBeFalsy(); // one good read = the check is alive
   });
+
+  it("reports the unreadable member LABELS in deadMembers so the runner can warn about a dead one (watchlist-member-dead-no-receipt)", async () => {
+    const { d } = wlDeps({ "btc price": "$60k", "eth price": "the page returned a 404" }); // eth dead
+    const r = await checkAlert(wl([{ label: "btc", task: "btc price", last: "$60k" }, { label: "eth", task: "eth price", last: "$3k" }]), d);
+    expect(r.deadMembers).toEqual(["eth"]);   // btc read fine, eth errored
+  });
+
+  it("deadMembers is absent when every member reads fine", async () => {
+    const { d } = wlDeps({ "btc price": "$61k", "eth price": "$3.1k" });
+    const r = await checkAlert(wl([{ label: "btc", task: "btc price", last: "$60k" }, { label: "eth", task: "eth price", last: "$3k" }]), d);
+    expect(r.deadMembers).toBeUndefined();
+  });
 });
 
 describe("checkAlert — follow-feed subscriptions (direct fetch, no agent)", () => {
