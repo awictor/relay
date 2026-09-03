@@ -10,7 +10,15 @@ export interface Profile {
   tzOffsetMin?: number;           // minutes EAST of UTC (from a "UTC-5"-style clause), for schedules
   lat?: number;                   // precise coords from a shared location pin (telegram-location-pin)
   lng?: number;
+  coordsAt?: number;              // epoch ms the coords were shared — coords expire after COORDS_TTL_MS
+                                  // (coords-privacy-ttl) so a one-time pin isn't sent to the LLM forever
+                                  // and "near me" doesn't resolve against a spot the user has left.
 }
+
+// A shared location pin is a point-in-time fix, not a durable home. After this long it's dropped from
+// the agent context (privacy: stop leaking ~1m coords to the LLM on every later message; correctness:
+// "near me" shouldn't use a stale spot). The free-text home location stays durable. Default 6h.
+export const COORDS_TTL_MS = Math.max(60_000, Number(process.env.RELAY_COORDS_TTL_MS) || 6 * 3_600_000);
 
 /** Render a minutes-east-of-UTC offset as "UTC-5" / "UTC+5:30" / "UTC+0". Preserves the half/quarter-
  * hour minutes that Math.round(offset/60) dropped (India UTC+5:30 wrongly showed "UTC+6"). Handles
@@ -183,8 +191,18 @@ export class ProfileStore {
     if (patch.tzOffsetMin !== undefined) p.tzOffsetMin = patch.tzOffsetMin;
     if (patch.lat !== undefined) p.lat = patch.lat;
     if (patch.lng !== undefined) p.lng = patch.lng;
+    if (patch.coordsAt !== undefined) p.coordsAt = patch.coordsAt;
     this.persist();
     return p;
+  }
+
+  /** Fresh (non-expired) coords for a chat, or undefined once past COORDS_TTL_MS (coords-privacy-ttl).
+   * `now` injected so it's deterministic. Callers use this instead of reading lat/lng directly. */
+  freshCoords(chatId: number, now: number): { lat: number; lng: number } | undefined {
+    const p = this.get(chatId);
+    if (!p || typeof p.lat !== "number" || typeof p.lng !== "number") return undefined;
+    if (typeof p.coordsAt === "number" && now - p.coordsAt > COORDS_TTL_MS) return undefined;
+    return { lat: p.lat, lng: p.lng };
   }
 
   /** The chat's tz offset (min east of UTC) if set, else undefined so callers fall back to global. */
@@ -199,13 +217,17 @@ export class ProfileStore {
     return cleared;
   }
 
-  /** A one-line context string for the agent, or "" if nothing set. */
-  contextLine(chatId: number): string {
+  /** A one-line context string for the agent, or "" if nothing set. `now` (epoch ms) gates whether the
+   * shared coords are still fresh (coords-privacy-ttl): once expired they're omitted so ~1m coords
+   * aren't leaked to the LLM forever. Omit `now` to always include coords (back-compat / tests). */
+  contextLine(chatId: number, now?: number): string {
     const p = this.get(chatId);
     if (!p) return "";
     const bits: string[] = [];
     if (p.location) bits.push(`home location is ${p.location}`);
-    if (typeof p.lat === "number" && typeof p.lng === "number") bits.push(`current coordinates are ${p.lat.toFixed(5)},${p.lng.toFixed(5)} (use for "near me"/directions)`);
+    const coordsFresh = typeof p.lat === "number" && typeof p.lng === "number"
+      && (now === undefined || typeof p.coordsAt !== "number" || now - p.coordsAt <= COORDS_TTL_MS);
+    if (coordsFresh) bits.push(`current coordinates are ${p.lat!.toFixed(5)},${p.lng!.toFixed(5)} (use for "near me"/directions)`);
     if (p.units) bits.push(`prefers ${p.units} units`);
     if (typeof p.tzOffsetMin === "number") bits.push(`timezone is ${formatUtcOffset(p.tzOffsetMin)}`);
     return bits.join("; ");

@@ -1049,7 +1049,7 @@
       "title": "shared coords leak to the LLM forever with no TTL",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A location pin shared once keeps sending ~1m coords to the external LLM on EVERY later message (incl unrelated ones) + \"near me\" resolves against a stale spot; static pins are stored permanently.",
       "how": "Expire pin coords after a TTL (e.g. a few hours) so they inform near-term near-me but do not persist as \"current\"; drop them from contextLine once stale; keep the free-text home location durable."
     },
@@ -1437,6 +1437,10 @@
     {
       "id": "geo-tool-cluster",
       "note": "Added a get_weather tool (the #1 first errand had no backend — the agent guessed a forecast URL or scraped a JS shell). Keyless Open-Meteo: geocode city->coords then current+today forecast. New src/lib/weather.ts (weatherDesc/parseGeocode/parseForecast/formatWeather/getWeather with injected fetch) + backend.getWeather + agent tool/dispatch/prompt; honors the chat saved coords (near-me weather with no place) + unit preference. Live-verified the APIs (Austin geocode + real forecast). Directions/near-me-POI still seeded for later. 982 tests green."
+    },
+    {
+      "id": "coords-privacy-ttl",
+      "note": "A shared location pin used to send ~1m coords to the LLM on EVERY later message forever + near-me resolved against a stale spot. Coords now carry coordsAt + expire after COORDS_TTL_MS (RELAY_COORDS_TTL_MS, default 6h): profiles.freshCoords + contextLine(now) omit expired coords, so a one-time pin informs only near-term near-me/weather then stops leaking. Home location stays durable. All coord-reading sites (profileContext, weatherCoords, hasLocation, proactive contextFor) now freshness-gated. 983 tests green."
     }
   ],
   "audits": [

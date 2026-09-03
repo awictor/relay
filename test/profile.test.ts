@@ -112,6 +112,21 @@ describe("ProfileStore", () => {
     expect(s.get(1)!.lat).toBe(30.2711);
     expect(s.contextLine(1)).toMatch(/current coordinates are 30\.27110,-97\.74370/);
   });
+  it("expires shared coords after the TTL (coords-privacy-ttl)", async () => {
+    const { COORDS_TTL_MS } = await import("../src/lib/profile.js");
+    const s = new ProfileStore({ file: tmp() });
+    const t0 = 1_700_000_000_000;
+    s.set(1, { lat: 30.2711, lng: -97.7437, coordsAt: t0 });
+    // Fresh: within TTL -> present in freshCoords + contextLine.
+    expect(s.freshCoords(1, t0 + 60_000)).toEqual({ lat: 30.2711, lng: -97.7437 });
+    expect(s.contextLine(1, t0 + 60_000)).toMatch(/current coordinates/);
+    // Expired: past TTL -> gone from both (privacy: not leaked to the LLM forever).
+    expect(s.freshCoords(1, t0 + COORDS_TTL_MS + 1)).toBeUndefined();
+    expect(s.contextLine(1, t0 + COORDS_TTL_MS + 1)).not.toMatch(/coordinates/);
+    // The home location (durable) still shows after coords expire.
+    s.set(1, { location: "Austin" });
+    expect(s.contextLine(1, t0 + COORDS_TTL_MS + 1)).toMatch(/home location is Austin/);
+  });
   it("clear() forgets a chat's profile + reports whether there was one (profile-view-reset)", () => {
     const f = tmp();
     const s = new ProfileStore({ file: f });

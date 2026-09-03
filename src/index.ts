@@ -106,7 +106,7 @@ const backgroundStore = new BackgroundStore({ file: paths.background });
 const digestRunText = (chatId: number, name: string): Promise<string | null> => {
   const d = digests.get(chatId, name);
   if (!d) return Promise.resolve(null);
-  return runDigest(d, { llm, resolveRecipe: (c, n) => { const r = recipes.get(c, n); return r ? { task: r.task } : null; }, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c) });
+  return runDigest(d, { llm, resolveRecipe: (c, n) => { const r = recipes.get(c, n); return r ? { task: r.task } : null; }, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()) });
 };
 // Check an alert -> { message (null = silent), commit }. The caller MUST call commit() AFTER a
 // successful send so a failed send leaves the baseline un-advanced + the crossing re-fires next
@@ -121,12 +121,12 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
     recordPoint: (c, n, v, t) => alerts.recordPoint(c, n, v, t),
     setMemberLasts: (c, n, updates) => alerts.setMemberLasts(c, n, updates),
     now: () => Date.now(),
-    contextFor: (c) => profiles.contextLine(c),
+    contextFor: (c) => profiles.contextLine(c, Date.now()),
     // Trigger-to-action (trigger-to-action-alerts): run the named recipe's CURRENT task on fire.
     runThen: async (c, recipeName) => {
       const rec = recipes.get(c, recipeName);
       if (!rec) return null;
-      const out = await runAgent(rec.task, { llm, context: profiles.contextLine(c) || undefined }, []);
+      const out = await runAgent(rec.task, { llm, context: profiles.contextLine(c, Date.now()) || undefined }, []);
       return out.degraded ? null : formatReply(out.reply);
     },
   });
@@ -142,7 +142,7 @@ const SCHED_TICK_MS = intEnv(process.env.RELAY_SCHED_TICK_MS, { fallback: 30_000
 // runner records proactive sends, so "more"/"send the link" works after an unprompted ping too.
 const lastResultStore = new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
 const scheduleRunner = makeScheduleRunner({
-  store: schedules, llm, runAgent, send: sendMessage, formatReply, contextFor: (c) => profiles.contextLine(c),
+  store: schedules, llm, runAgent, send: sendMessage, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()),
   now: () => Date.now(), periodMs: SCHED_TICK_MS,
   log: (m) => console.log(m),
   recordTurn, // proactive fires count in the same Metrics as inbound turns (m8)
@@ -203,7 +203,7 @@ const handle = createHandler({
   },
   // Agent context = profile (location/units/tz) + remembered facts (remember-facts-store), so every
   // answer is filtered through both without the user re-stating them.
-  profileContext: (chatId) => [profiles.contextLine(chatId), notes.contextLine(chatId)].filter(Boolean).join("; "),
+  profileContext: (chatId) => [profiles.contextLine(chatId, Date.now()), notes.contextLine(chatId)].filter(Boolean).join("; "),
   chatTzOffsetMin: (chatId) => profiles.offsetMin(chatId) ?? tzOffsetMin(), // for the agent's current-datetime line
 
   // /profile view + clear (product-loop): echo the stored profile so a wrong city/tz is visible.
@@ -233,9 +233,9 @@ const handle = createHandler({
   },
   // First-run location capture (first-location-capture): does this chat have a home location yet, and
   // save a bare "which city?" reply (+re-stamp recurring reminders if a tz came with it).
-  hasLocation: (chatId) => { const p = profiles.get(chatId); return !!(p?.location || (typeof p?.lat === "number" && typeof p?.lng === "number")); },
-  saveCoords: (chatId, lat, lng) => { profiles.set(chatId, { lat, lng }); },
-  weatherCoords: (chatId) => { const p = profiles.get(chatId); return (typeof p?.lat === "number" && typeof p?.lng === "number") ? { lat: p.lat, lng: p.lng } : undefined; },
+  hasLocation: (chatId) => { const p = profiles.get(chatId); return !!(p?.location || profiles.freshCoords(chatId, Date.now())); },
+  saveCoords: (chatId, lat, lng) => { profiles.set(chatId, { lat, lng, coordsAt: Date.now() }); },
+  weatherCoords: (chatId) => profiles.freshCoords(chatId, Date.now()),
   weatherUnits: (chatId) => profiles.get(chatId)?.units,
   captureLocation: (chatId, text) => {
     const c = parseCityReply(text);
