@@ -19,6 +19,17 @@ function icsStamp(ms: number): string {
   const p = (n: number, w = 2) => String(n).padStart(w, "0");
   return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`;
 }
+/** A strict YYYY-MM-DD date, or null. Rejects unpadded ("2026-6-3") / non-ISO ("June 3") input so a
+ * malformed all-day date can't produce a broken .ics or throw in gcalLink. Exported for tests. */
+export function normalizeIsoDate(s: string | undefined): string | null {
+  if (!s) return null;
+  const m = s.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  const dt = new Date(`${y}-${mo}-${d}T00:00:00Z`);
+  // Round-trip guard: rejects impossible dates (2026-02-31 -> normalizes to Mar 3, not equal).
+  return Number.isNaN(dt.getTime()) || dt.toISOString().slice(0, 10) !== `${y}-${mo}-${d}` ? null : `${y}-${mo}-${d}`;
+}
 /** "YYYY-MM-DD" -> "YYYYMMDD" for an all-day VALUE=DATE field. */
 function icsDate(date: string): string { return date.replace(/-/g, ""); }
 /** Escape an iCalendar text value (RFC-5545: backslash, comma, semicolon, newline). */
@@ -30,8 +41,9 @@ function icsText(s: string): string {
  * deterministic). All-day (startDate) uses VALUE=DATE; a timed event uses a UTC DTSTART/DTEND. */
 export function buildIcs(ev: CalEvent, nowMs: number): string {
   const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Relay//EN", "BEGIN:VEVENT", `DTSTAMP:${icsStamp(nowMs)}`, `UID:relay-${nowMs}@relay`];
-  if (ev.startDate) {
-    lines.push(`DTSTART;VALUE=DATE:${icsDate(ev.startDate)}`);
+  const isoDate = normalizeIsoDate(ev.startDate);
+  if (isoDate) {
+    lines.push(`DTSTART;VALUE=DATE:${icsDate(isoDate)}`);
   } else if (ev.startMs !== undefined) {
     lines.push(`DTSTART:${icsStamp(ev.startMs)}`);
     lines.push(`DTEND:${icsStamp(ev.startMs + (ev.durationMin ?? 60) * 60_000)}`);
@@ -47,10 +59,11 @@ export function buildIcs(ev: CalEvent, nowMs: number): string {
  * GCal format (all-day: YYYYMMDD/YYYYMMDD; timed: the UTC stamps). */
 export function gcalLink(ev: CalEvent): string {
   const p = new URLSearchParams({ action: "TEMPLATE", text: ev.title });
-  if (ev.startDate) {
-    const d = icsDate(ev.startDate);
+  const isoDate = normalizeIsoDate(ev.startDate);
+  if (isoDate) {
+    const d = icsDate(isoDate);
     // GCal all-day end is exclusive (next day); keep it same-day single by +1.
-    const end = icsDate(new Date(new Date(ev.startDate + "T00:00:00Z").getTime() + 86_400_000).toISOString().slice(0, 10));
+    const end = icsDate(new Date(new Date(isoDate + "T00:00:00Z").getTime() + 86_400_000).toISOString().slice(0, 10));
     p.set("dates", `${d}/${end}`);
   } else if (ev.startMs !== undefined) {
     p.set("dates", `${icsStamp(ev.startMs)}/${icsStamp(ev.startMs + (ev.durationMin ?? 60) * 60_000)}`);

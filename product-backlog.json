@@ -1142,6 +1142,60 @@
       "status": "done",
       "why": "A malformed to shows \"To: john at x.com\" in the copy block yet the mailto/sms link has an empty address — tapping opens a blank draft; user thinks it is addressed.",
       "how": "When to fails EMAIL_RE/PHONE_RE, omit the To: line + note the address could not be parsed, or keep it out of both."
+    },
+    {
+      "id": "calendar-bad-date-crash",
+      "title": "calendar_event crashes the turn / emits broken .ics on a non-ISO date",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "calendar_event was the ONLY tool handler with no try/catch; gcalLink did new Date(startDate+T00:00:00Z).toISOString() which throws RangeError on a non-ISO date (\"June 3\") -> escaped runAgent + killed the whole turn. An unpadded \"2026-6-3\" produced a malformed DTSTART the calendar app silently dropped.",
+      "how": "normalizeIsoDate (strict YYYY-MM-DD + round-trip validity) gates buildIcs/gcalLink so a bad date is dropped not thrown; dispatch wrapped in try/catch."
+    },
+    {
+      "id": "geo-tools-disambiguate-coords",
+      "title": "find_nearby / directions ignore the user coords when geocoding place names",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "\"directions to Springfield\" / \"coffee near Washington\" take Nominatim limit=1 (top global match) -> wrong city, no hint. The multi-candidate + near-bias fix applied to weather was never propagated; weatherCoords IS available in both handlers.",
+      "how": "Bump nominatim to a few candidates + a pickNearest(coords) like weather.pickCandidate; pass deps.weatherCoords as the bias in the find_nearby + directions handlers."
+    },
+    {
+      "id": "find-nearby-radius-expand",
+      "title": "find_nearby fixed 3km radius + no-area-found reads as \"none nearby\"",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "\"nearest ER/hospital\" returns \"none nearby\" when one exists just past 3km (dangerous false-negative); a failed area geocode is reported identically to genuinely-empty.",
+      "how": "Expand the radius on an empty result (3->10->30km); distinguish a null geocode (\"couldn t find that area\") from empty results (\"nothing within Nkm\")."
+    },
+    {
+      "id": "geo-ssrf-redirect",
+      "title": "geo fetch helpers follow redirects without SSRF re-validation",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "defaultFetchText/Post use raw fetch redirect:follow, unlike scrape/fetch_json which re-check each hop via safeFetch. Hosts are hardcoded so low risk, but inconsistent with the SSRF discipline.",
+      "how": "Route the geo GET/POST through safeFetch (redirect:manual + isUrlSafe per hop), or at least block non-https + private-IP redirects."
+    },
+    {
+      "id": "recipe-chaining",
+      "title": "conditional multi-step recipe chaining",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "Recipes are one-shot; the biggest power multiplier (Instinct core) is chained steps where N feeds N+1 (\"find cheapest flight to {city}, then weather+news there, then summarize\") with an optional if/stop gate.",
+      "how": "A chain recipe = ordered steps; run each, inject the prior output into the next task, optional contains/threshold gate to stop early. Mock-LLM testable."
+    },
+    {
+      "id": "starter-template-library",
+      "title": "starter recipe/template library (/templates)",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "The proactive retention flywheel (recipes/digests/alerts) never starts for a cold user — auto-suggest only fires on a REPEAT. A curated one-tap template pack seeds the first saved automation.",
+      "how": "Static catalog (morning briefing, price watch, job-feed watch...) installed by name into the existing RecipeStore/DigestStore. Offline-testable."
     }
   ],
   "history": [
@@ -1544,6 +1598,10 @@
     {
       "id": "compose-invalid-recipient",
       "note": "compose no longer echoes a malformed recipient as \"To: john at x.com\" while the deep link is blank-addressed (misleads the user into thinking it is addressed). formatDraft now shows the To: line only when the recipient is VALID for the kind (email/phone), else a \"Couldn t parse ... add the recipient yourself\" note. 1044 tests green."
+    },
+    {
+      "id": "calendar-bad-date-crash",
+      "note": "Fixed a crash the refill audit found in the just-shipped calendar_event: it was the only tool handler with no try/catch, and gcalLink threw RangeError on a non-ISO startDate -> escaped runAgent + killed the whole turn (an unpadded date also produced a silently-broken .ics). normalizeIsoDate (strict + round-trip) now gates buildIcs/gcalLink so a bad date is dropped, and the dispatch is wrapped. 1047 tests green."
     }
   ],
   "audits": [
@@ -1624,6 +1682,9 @@
     },
     {
       "note": "Backlog dry after draft-to-send-composer -> 3-agent audit. A(new-user): near-me POI + directions/ETA (Nominatim/Overpass/OSRM) still advertised-but-unbuilt, package tracking via real anvil browser, is-it-open-now. B(reliability): CSV guard corrupts negative numbers (BUILT fix), get_weather ambiguous-city, compose invalid-recipient blank link, convert_currency NaN->1 silent, weather F-default for metric user. C(power): conditional recipe chaining, .ics export, multi-slot recipes, starter library, shareable recipes. Built the CSV-negative fix (broken just-shipped path); seeded the rest."
+    },
+    {
+      "note": "Backlog dry after compose-invalid-recipient -> 3-agent audit. A(new-user): everything is draft-or-refuse (acting gap, owner-gated), package tracking, wrong-hour first reminder (mostly fixed), no per-user login (owner-gated), imperial default for metric users. B(reliability): calendar_event bad-date CRASH (BUILT fix), geo tools ignore user coords for disambiguation, find_nearby fixed-radius false-negative, geo SSRF redirect inconsistency. C(power): conditional recipe chaining, template library, shareable recipes, generalized change-only, unified /dashboard. Built the calendar crash fix (broken just-shipped path); seeded the rest."
     }
   ]
 }

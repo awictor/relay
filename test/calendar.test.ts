@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildIcs, gcalLink, formatCalendar } from "../src/lib/calendar.js";
+import { buildIcs, gcalLink, formatCalendar, normalizeIsoDate } from "../src/lib/calendar.js";
 
 const NOW = Date.UTC(2024, 5, 1, 12, 0, 0); // 2024-06-01T12:00:00Z
 const START = Date.UTC(2024, 5, 2, 13, 0, 0); // 2024-06-02T13:00:00Z
@@ -46,5 +46,28 @@ describe("formatCalendar", () => {
     expect(out).toMatch(/Where: Clinic/);
     expect(out).toMatch(/Add to Google Calendar: https:\/\/calendar\.google\.com/);
     expect(out).toMatch(/Or import \(\.ics\): data:text\/calendar/);
+  });
+});
+
+describe("normalizeIsoDate (calendar bad-date guard)", () => {
+  it("accepts a strict YYYY-MM-DD", () => {
+    expect(normalizeIsoDate("2026-07-04")).toBe("2026-07-04");
+  });
+  it("rejects unpadded / non-ISO / impossible dates", () => {
+    expect(normalizeIsoDate("2026-6-3")).toBeNull();
+    expect(normalizeIsoDate("July 4")).toBeNull();
+    expect(normalizeIsoDate("2026-02-31")).toBeNull();
+    expect(normalizeIsoDate(undefined)).toBeNull();
+  });
+});
+
+describe("calendar handles a bad startDate without crashing (reliability)", () => {
+  it("buildIcs + gcalLink don't throw on a non-ISO startDate; drop the date instead", () => {
+    const ev = { title: "X", startDate: "June 3" };
+    expect(() => buildIcs(ev, NOW)).not.toThrow();
+    expect(() => gcalLink(ev)).not.toThrow();
+    // The malformed date is dropped (no DTSTART / no dates= param), not emitted broken.
+    expect(buildIcs(ev, NOW)).not.toContain("DTSTART");
+    expect(gcalLink(ev)).not.toContain("dates=");
   });
 });

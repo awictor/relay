@@ -708,7 +708,11 @@ export async function runAgent(
           ...(call.args.location ? { location: String(call.args.location) } : {}),
           ...(call.args.description ? { description: String(call.args.description) } : {}),
         };
-        push("calendar_event", `${formatCalendar(ev, deps.nowMs ?? Date.now())}\n\n(Give this to the user verbatim — the title/when line + both links. You are NOT adding it to their calendar; they tap to add.)`);
+        try {
+          push("calendar_event", `${formatCalendar(ev, deps.nowMs ?? Date.now())}\n\n(Give this to the user verbatim — the title/when line + both links. You are NOT adding it to their calendar; they tap to add.)`);
+        } catch (e) {
+          push("calendar_event", `ERROR building the calendar event: ${e instanceof Error ? e.message : String(e)}. Ask the user to restate the date/time.`);
+        }
         continue;
       }
 
