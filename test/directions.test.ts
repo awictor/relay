@@ -33,11 +33,15 @@ describe("parseOsrm", () => {
 describe("formatRoute", () => {
   it("imperial by default (mi + verb)", () => {
     expect(formatRoute({ fromLabel: "your location", toLabel: "SFO", distanceKm: 16.0934, durationMin: 25, mode: "driving" }))
-      .toBe("your location → SFO: 10.0 mi, ~25 min drive.");
+      .toBe("your location → SFO: 10.0 mi, ~25 min drive.\nhttps://www.google.com/maps/dir/?api=1&origin=your%20location&destination=SFO&travelmode=driving");
   });
   it("metric + hours for a long route + walk verb", () => {
     expect(formatRoute({ fromLabel: "A", toLabel: "B", distanceKm: 8, durationMin: 95, mode: "walking" }, "metric"))
-      .toBe("A → B: 8.0 km, ~1h 35m walk.");
+      .toBe("A → B: 8.0 km, ~1h 35m walk.\nhttps://www.google.com/maps/dir/?api=1&origin=A&destination=B&travelmode=walking");
+  });
+  it("uses coords in the maps link when the route has them, driving travelmode", () => {
+    const out = formatRoute({ fromLabel: "your location", toLabel: "SFO", distanceKm: 16, durationMin: 25, mode: "driving", fromLat: 37.77, fromLng: -122.42, toLat: 37.62, toLng: -122.38 });
+    expect(out).toContain("origin=37.77%2C-122.42&destination=37.62%2C-122.38&travelmode=driving");
   });
 });
 

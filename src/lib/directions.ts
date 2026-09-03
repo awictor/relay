@@ -5,7 +5,7 @@
 // Pure parse/format helpers exported + unit-tested; the network fetch is injected so it runs offline.
 import { nominatimUrl, parseNominatimAll, pickNominatim } from "./places.js";
 
-export interface Route { fromLabel: string; toLabel: string; distanceKm: number; durationMin: number; mode: "driving" | "walking" | "cycling" }
+export interface Route { fromLabel: string; toLabel: string; distanceKm: number; durationMin: number; mode: "driving" | "walking" | "cycling"; fromLat?: number; fromLng?: number; toLat?: number; toLng?: number }
 
 // OSRM public server. profile: driving/walking/cycling. Coords are lng,lat (OSRM order!).
 export function osrmUrl(fromLat: number, fromLng: number, toLat: number, toLng: number, mode: Route["mode"]): string {
@@ -31,13 +31,22 @@ export function parseOsrm(body: string): { distanceKm: number; durationMin: numb
   } catch { return null; }
 }
 
-/** Render a route into a short human line honoring the unit preference (mi vs km). */
+/** A tappable Google Maps directions link for a route (maps-link-on-nearby-directions). Uses coords for
+ * both ends when present (exact), else the labels; the mode maps to Google's travelmode. Exported. */
+export function directionsLink(r: Route): string {
+  const orig = typeof r.fromLat === "number" && typeof r.fromLng === "number" ? `${r.fromLat}%2C${r.fromLng}` : encodeURIComponent(r.fromLabel);
+  const dest = typeof r.toLat === "number" && typeof r.toLng === "number" ? `${r.toLat}%2C${r.toLng}` : encodeURIComponent(r.toLabel);
+  const tm = r.mode === "walking" ? "walking" : r.mode === "cycling" ? "bicycling" : "driving";
+  return `https://www.google.com/maps/dir/?api=1&origin=${orig}&destination=${dest}&travelmode=${tm}`;
+}
+
+/** Render a route into a short human line honoring the unit preference (mi vs km) + a tappable maps link. */
 export function formatRoute(r: Route, units: "metric" | "imperial" = "imperial"): string {
   const dist = units === "metric" ? `${r.distanceKm.toFixed(1)} km` : `${(r.distanceKm * 0.621371).toFixed(1)} mi`;
   const h = Math.floor(r.durationMin / 60), m = Math.round(r.durationMin % 60);
   const time = h > 0 ? `${h}h ${m}m` : `${m} min`;
   const verb = r.mode === "walking" ? "walk" : r.mode === "cycling" ? "bike" : "drive";
-  return `${r.fromLabel} → ${r.toLabel}: ${dist}, ~${time} ${verb}.`;
+  return `${r.fromLabel} → ${r.toLabel}: ${dist}, ~${time} ${verb}.\n${directionsLink(r)}`;
 }
 
 /**
@@ -66,6 +75,6 @@ export async function getDirections(
     if (!dg) return null;
     const route = parseOsrm(await fetchText(osrmUrl(fromLat, fromLng, dg.lat, dg.lng, mode)));
     if (!route) return null;
-    return { fromLabel, toLabel: opts.to, distanceKm: route.distanceKm, durationMin: route.durationMin, mode };
+    return { fromLabel, toLabel: opts.to, distanceKm: route.distanceKm, durationMin: route.durationMin, mode, fromLat, fromLng, toLat: dg.lat, toLng: dg.lng };
   } catch { return null; }
 }

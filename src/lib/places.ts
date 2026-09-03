@@ -4,7 +4,16 @@
 // name is given) + Overpass (POIs within a radius, by category). Pure parse/format helpers exported +
 // unit-tested; the network fetch is injected so it runs offline. No key, no vendor.
 
-export interface Place { name: string; category: string; distanceKm: number; openHours?: string; phone?: string }
+export interface Place { name: string; category: string; distanceKm: number; openHours?: string; phone?: string; lat?: number; lng?: number }
+
+/** A tappable Google Maps link for a place (maps-link-on-nearby-directions): prefer exact coords
+ * (drops a pin), else a name search. So a "coffee near me" row is navigable, not a dead end. Exported. */
+export function mapsLink(name: string, lat?: number, lng?: number): string {
+  if (typeof lat === "number" && typeof lng === "number") {
+    return `https://www.google.com/maps/search/?api=1&query=${lat}%2C${lng}`;
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+}
 
 // Map common user words to OSM tag filters for the Overpass query. Each entry is a list of
 // key=value tag selectors OR'd together. A miss falls back to a broad amenity search.
@@ -97,7 +106,7 @@ export function parsePlaces(body: string, originLat: number, originLng: number, 
       const t = el.tags!;
       const category = t.amenity || t.shop || t.tourism || t.leisure || label;
       out.push({
-        name, category,
+        name, category, lat: el.lat, lng: el.lon,
         distanceKm: haversineKm(originLat, originLng, el.lat, el.lon),
         ...(t.opening_hours ? { openHours: t.opening_hours } : {}),
         ...(t.phone || t["contact:phone"] ? { phone: t.phone || t["contact:phone"] } : {}),
@@ -115,8 +124,9 @@ export function formatPlaces(places: Place[], what: string, units: "metric" | "i
   if (!places.length) return `I couldn't find any ${what} nearby.`;
   const dist = (km: number) => units === "metric" ? `${km.toFixed(1)}km` : `${(km * 0.621371).toFixed(1)}mi`;
   const lines = places.map((p) => {
-    const bits = [`${p.name} (${dist(p.distanceKm)}`];
-    return `• ${bits[0]})${p.openHours ? ` — ${p.openHours}` : ""}${p.phone ? ` — ${p.phone}` : ""}`;
+    // Append a tappable maps link so the user can navigate, not just read a name + distance
+    // (maps-link-on-nearby-directions).
+    return `• ${p.name} (${dist(p.distanceKm)})${p.openHours ? ` — ${p.openHours}` : ""}${p.phone ? ` — ${p.phone}` : ""}\n  ${mapsLink(p.name, p.lat, p.lng)}`;
   });
   return `Nearby ${what}:\n${lines.join("\n")}`;
 }

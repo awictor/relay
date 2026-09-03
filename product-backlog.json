@@ -32,7 +32,7 @@
       "title": "'near me' / directions results have no address or tappable map link",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "formatPlaces + formatRoute emit text only (name + straight-line distance, maybe hours) — no street address, no Google/Apple Maps link — so a 'coffee near me' / 'directions to X' answer locates a place the user still can't navigate to or find, on a phone. 'best sushi near me' is literally a system-prompt example (audit 26 A#1).",
       "how": "Add a maps deep-link per place row (https://www.google.com/maps/search/?api=1&query=<name+coords> or a geo: URI) + per route (maps dir link), and surface the address when the data source has it. Turns a lookup into a tap-to-navigate action. Reuse the lat/lng already in the Place/Route model."
     },
@@ -2040,6 +2040,10 @@
     {
       "id": "trigger-to-action-recipe-shape",
       "note": "Closed the last recipe-execution path that ran a chain/slot recipe literally: an alert's 'then run <recipe>' (index runThen) called runAgent(rec.task) directly — no isChain/runChain, no hasSlots — so a 'then' recipe that was a '>>' chain or had a {slot} appended garbage (literal 'a >> b' / unfilled '{slot}') to the ping, degrading the watch-and-DO feature. runThen now skips a slotted recipe (no per-fire value) and runs a chain via runChain like /run + schedule + digest do, else the single runAgent. tsc-verified; relies on the existing trigger-to-action dep-contract tests + the digest-runner chain tests (same runChain integration) — the guard is a direct mirror of the tested digest-member path, and index's inline runThen isn't separately unit-harnessed. call-tested: false. 1189 tests green."
+    },
+    {
+      "id": "maps-link-on-nearby-directions",
+      "note": "A 'coffee near me' / 'directions to X' answer was a dead end on a phone — name + straight-line distance, no way to navigate. Added lat/lng to the Place model (parsePlaces now carries the node coords) + a mapsLink helper (coords -> a pinned https://google.com/maps/search query, else a name search); formatPlaces appends a tappable link per row. Directions: added from/to coords to Route + a directionsLink helper (https://google.com/maps/dir with origin/destination coords or labels + travelmode from the mode); formatRoute appends it. So both marquee location errands are now tap-to-navigate. 4 tests (place link w/ coords + name-search fallback / route link w/ labels + coords). call-tested: false (pure format; live path needs anvil+Nominatim). 1191 tests green."
     }
   ],
   "audits": [

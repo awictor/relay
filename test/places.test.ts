@@ -78,9 +78,14 @@ describe("parsePlaces", () => {
 
 describe("formatPlaces", () => {
   it("renders a list in miles by default", () => {
-    const out = formatPlaces([{ name: "Zen", category: "cafe", distanceKm: 1.60934, openHours: "7-19" }], "coffee");
+    const out = formatPlaces([{ name: "Zen", category: "cafe", distanceKm: 1.60934, openHours: "7-19", lat: 30.27, lng: -97.74 }], "coffee");
     expect(out).toMatch(/Nearby coffee:/);
     expect(out).toMatch(/Zen \(1\.0mi\) — 7-19/);
+    expect(out).toContain("https://www.google.com/maps/search/?api=1&query=30.27%2C-97.74"); // tappable pin (maps-link-on-nearby-directions)
+  });
+  it("uses a name search link when a place has no coords", () => {
+    const out = formatPlaces([{ name: "Blue Bottle", category: "cafe", distanceKm: 0.5 }], "coffee");
+    expect(out).toContain("https://www.google.com/maps/search/?api=1&query=Blue%20Bottle");
   });
   it("empty -> a friendly none line", () => {
     expect(formatPlaces([], "sushi")).toMatch(/couldn't find any sushi nearby/i);
