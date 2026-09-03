@@ -37,7 +37,7 @@ import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summa
 import { parseChartRequest, renderChart } from "./lib/chart.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
-import { SavedStore, parseSavePage, parseSavedRecall, hostLabel, readingRecap, isUnreadSavedRequest, formatUnreadNudge } from "./lib/readlater.js";
+import { SavedStore, parseSavePage, parseSavedRecall, hostLabel, readingRecap, isUnreadSavedRequest, formatUnreadNudge, parseUnreadNudgeToggle } from "./lib/readlater.js";
 import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
 import { LogStore, parseLogCommand, parseLogQuery, sumSeries } from "./lib/logs.js";
@@ -240,6 +240,14 @@ const scheduleRunner = makeScheduleRunner({
   recordTurn, // proactive fires count in the same Metrics as inbound turns (m8)
   maxPerChatPerHour: intEnv(process.env.RELAY_PROACTIVE_MAX_PER_HOUR, { fallback: 10, allowZeroDisable: true }), // anti-spam (m8); 0 = unlimited
   digestRun: (chatId, name) => digestRunText(chatId, name), // scheduled digests (m9)
+  // Weekly read-it-later nudge (weekly-unread-proactive-nudge): pure store read; null when nothing's
+  // stale-unread (stay silent). Stamps the nudged pages recalled so they don't re-surface next week.
+  unreadNudge: (chatId) => {
+    const pages = saved.unread(chatId, SAVED_STALE_MS, Date.now());
+    const note = formatUnreadNudge(pages);
+    if (note) saved.markRecalled(chatId, pages.map((p) => p.url), Date.now());
+    return note;
+  },
   alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
   recipeResolveTask: (chatId, name) => { const r = recipes.get(chatId, name); return r ? r.task : null; }, // scheduled recipes: resolve current task at fire time
   // Scheduled chained recipe = sequential workflow. Return the structured result (final + stoppedEarly)
@@ -826,6 +834,19 @@ const handle = createHandler({
   },
   isDigest: (chatId, name) => !!digests.get(chatId, name),
   digestRun: (chatId, name) => digestRunText(chatId, name),
+  // Weekly unread-nudge opt-in (weekly-unread-proactive-nudge): add/remove a WEEKLY "unread:" schedule the
+  // runner fires via the unreadNudge dep. One per chat (removeByTask first so a re-opt-in doesn't stack).
+  unreadNudgeToggle: (chatId, text) => {
+    const t = parseUnreadNudgeToggle(text);
+    if (!t) return null;
+    schedules.removeByTask(chatId, "unread:reading-list");
+    if (!t.on) return "Okay, I've turned off your weekly reading-list nudges.";
+    const p = parseScheduleFor("every monday at 9am", "unread:reading-list", Date.now(), profiles.offsetMin(chatId));
+    if (!p) return "I couldn't set that up just now — try again.";
+    const s = schedules.add(chatId, p, Date.now());
+    if (!s) return "You have a lot of automations already — remove one and try again.";
+    return "Done — every Monday morning I'll remind you of saved pages you haven't gotten back to. Say \"stop reading list nudges\" to turn it off.";
+  },
   digestSchedule: (chatId, name, whenClause, now) => {
     const d = digests.get(chatId, name);
     if (!d) return { ok: false, reason: "unknown" };

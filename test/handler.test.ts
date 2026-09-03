@@ -6,7 +6,7 @@ import { formatReply } from "../src/lib/format-reply.js";
 import { NotesStore, parseRemember, parseForgetFact } from "../src/lib/notes.js";
 import { ListStore, parseListCommand, parseListExport, splitItems } from "../src/lib/lists.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "../src/lib/places-store.js";
-import { SavedStore, parseSavePage, parseSavedRecall } from "../src/lib/readlater.js";
+import { SavedStore, parseSavePage, parseSavedRecall, parseUnreadNudgeToggle } from "../src/lib/readlater.js";
 import { parseCityReply } from "../src/lib/profile.js";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
@@ -1930,5 +1930,21 @@ describe("read-it-later routing (read-it-later-capture)", () => {
     expect(agentRan).toBe(false);
     await handle(msg("what's the capital of France", 8));
     expect(agentRan).toBe(true); // ordinary question still reaches the agent
+  });
+  it("'nudge me about my reading list' opts in; 'stop reading list nudges' opts out; unrelated falls through", async () => {
+    let agentRan = false;
+    const toggles: Array<{ on: boolean }> = [];
+    const { handle, sent } = harness({
+      unreadNudgeToggle: (_c, text) => { const t = parseUnreadNudgeToggle(text); if (!t) return null; toggles.push(t); return t.on ? "Done — weekly nudge on." : "Turned off."; },
+      runAgentFn: async () => { agentRan = true; return { reply: "AGENT", steps: 1, tools: [] }; },
+    });
+    await handle(msg("nudge me about my reading list", 9));
+    expect(sent[0]!.text).toMatch(/weekly nudge on/i);
+    await handle(msg("stop reading list nudges", 9));
+    expect(sent[1]!.text).toMatch(/turned off/i);
+    expect(toggles).toEqual([{ on: true }, { on: false }]);
+    expect(agentRan).toBe(false);
+    await handle(msg("remind me to read the newspaper at 8am", 9)); // a real reminder, not the toggle
+    expect(toggles).toHaveLength(2); // toggle didn't fire
   });
 });

@@ -485,6 +485,30 @@ describe("makeScheduleRunner.tick", () => {
     expect(sent.some((s) => /weather: sunny/.test(s.text))).toBe(true);  // the recovered briefing was actually sent
   });
 
+  it("an 'unread:' schedule sends the nudge when there are stale saves, and reschedules (weekly-unread-proactive-nudge)", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock, {
+      unreadNudge: () => "📚 You saved these but haven't revisited them:\n• Fed rates — https://a.com",
+    });
+    store.add(1, { kind: "weekly", task: "unread:reading-list", dueMs: NOW - 1, hourMin: "09:00", weekdays: [1] }, NOW);
+    await runner.tick();
+    expect(sent.some((s) => /haven't revisited/.test(s.text))).toBe(true);
+    expect(store.list(1)).toHaveLength(1); // weekly rescheduled, not dropped
+  });
+
+  it("an 'unread:' schedule with nothing stale stays SILENT + reschedules (a quiet week isn't a failure)", async () => {
+    const clock = { t: NOW };
+    let calls = 0;
+    const { store, runner, sent } = harness(clock, {
+      unreadNudge: () => { calls++; return null; }, // nothing stale-unread
+    });
+    store.add(1, { kind: "weekly", task: "unread:reading-list", dueMs: NOW - 1, hourMin: "09:00", weekdays: [1] }, NOW);
+    await runner.tick();
+    expect(calls).toBe(1);
+    expect(sent).toHaveLength(0);          // silent
+    expect(store.list(1)).toHaveLength(1); // still armed for next week
+  });
+
   it("a ONCE recipe whose content is gone stays silent (no notice — it just drops)", async () => {
     const clock = { t: NOW };
     const notices: unknown[] = [];

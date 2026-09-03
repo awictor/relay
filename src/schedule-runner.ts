@@ -54,6 +54,11 @@ export interface ScheduleRunnerDeps {
   // Digests (m9 digest-3): a scheduled digest stores the task "digest:<name>"; when it fires,
   // run the digest to a composed message instead of the agent. Optional.
   digestRun?: (chatId: number, name: string) => Promise<DigestOutcome>;
+  // Read-it-later weekly nudge (weekly-unread-proactive-nudge): a scheduled "unread:" task fires this to
+  // get a "you saved these but never read them" message, or null when there's nothing stale-unread (stay
+  // silent + reschedule — a quiet week is normal, not a failure). No agent/anvil — a pure store read.
+  // Optional; absent -> an "unread:" schedule stays silent.
+  unreadNudge?: (chatId: number) => string | null;
   // Alerts (m10 alert-3): a scheduled alert stores "alert:<name>"; on fire, check it and get back
   // the notify message ONLY if it changed (null = silent) + a commit() to advance the baseline, which
   // MUST be called only AFTER a successful send so a failed send re-fires next check. Optional.
@@ -256,6 +261,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     const digestMatch = s.task.match(/^digest:(.+)$/);
     const alertMatch = s.task.match(/^alert:(.+)$/);
     const recipeMatch = s.task.match(/^recipe:(.+)$/);
+    const unreadMatch = s.task.match(/^unread:/);
     let res: { reply: string; steps?: number; tools?: string[]; degraded?: boolean };
     let sendText: string | null;
     // The UNTRIMMED text behind sendText, cached for a "more"/"link" follow-up so a long digest's dropped
@@ -265,7 +271,21 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     // For an alert: advance the baseline ONLY after the send below succeeds (a failed send would
     // otherwise eat the crossing forever). Held here, called right after deps.send.
     let alertCommit: (() => void) | null = null;
-    if (alertMatch && deps.alertCheck) {
+    if (unreadMatch && deps.unreadNudge) {
+      // Read-it-later weekly nudge (weekly-unread-proactive-nudge): pure store read. null = nothing
+      // stale-unread this week — stay silent + reschedule (a quiet week is normal, like an unchanged
+      // alert), never a failure. A message gets the same delivery-gated send/complete as any proactive.
+      const note = deps.unreadNudge(s.chatId);
+      if (note === null) {
+        if (isCancelled()) return;
+        deps.store.complete(s.id, deps.now());
+        log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, unread: true, ok: true, sent: false })}`);
+        deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
+        return;
+      }
+      res = { reply: note };
+      sendText = deps.formatReply(note);
+    } else if (alertMatch && deps.alertCheck) {
       // Alert: only sends when the watched value changed (null = silent). Always completes
       // (a daily alert reschedules) so it keeps watching.
       const checked = await deps.alertCheck(s.chatId, alertMatch[1]!.trim());

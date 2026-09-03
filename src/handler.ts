@@ -160,6 +160,10 @@ export interface HandlerDeps {
   // older wiring/tests are unaffected. savePage is async (it fetches the page to summarize).
   savePage?: (chatId: number, text: string) => Promise<{ title: string; url: string; saved: boolean; dup: boolean } | { error: string } | null>;
   recallSaved?: (chatId: number, text: string) => string | null;
+  // Weekly unread nudge opt-in (weekly-unread-proactive-nudge): "nudge me about my reading list" starts a
+  // weekly proactive "you saved these but never read them" ping; "stop reading list nudges" cancels it.
+  // Returns a confirmation, or null if it isn't a toggle command. Optional.
+  unreadNudgeToggle?: (chatId: number, text: string) => string | null;
   // Countdown (countdown-tracker): parse "countdown to X on <date>" / "days until X <date>" and schedule
   // milestone pings (a week out / day before / morning of), returning the immediate day-count. null when
   // it isn't a countdown command; { ok:false, reason:"past" } for an already-passed date. Optional.
@@ -938,6 +942,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // so it's served from the store with no agent run; then capture ("save this <link>") which scrapes +
     // summarizes the page. Both are whole-message shapes that would otherwise hit the agent. Recall before
     // capture so "what did I save" isn't mistaken for a save. Checked before the memory/scheduler/agent.
+    if (deps.unreadNudgeToggle) {
+      const out = deps.unreadNudgeToggle(msg.chatId, msg.text);
+      if (out) { await deps.sendMessage(msg.chatId, out); return; }
+    }
     if (deps.recallSaved) {
       const out = deps.recallSaved(msg.chatId, msg.text);
       if (out) { await deps.sendMessage(msg.chatId, out); return; }

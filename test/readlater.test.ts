@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { parseSavePage, parseSavedRecall, hostLabel, SavedStore, readingRecap, isReadingRecapMember, isUnreadSavedRequest, formatUnreadNudge } from "../src/lib/readlater.js";
+import { parseSavePage, parseSavedRecall, hostLabel, SavedStore, readingRecap, isReadingRecapMember, isUnreadSavedRequest, formatUnreadNudge, parseUnreadNudgeToggle } from "../src/lib/readlater.js";
 
 const tmp = () => join(mkdtempSync(join(tmpdir(), "relay-saved-")), "s.json");
 const NOW = 1_700_000_000_000;
@@ -77,6 +77,16 @@ describe("unread nudge (saved-page-unread-nudge)", () => {
     s.add(1, { url: "https://a.com", title: "A", summary: "x" }, NOW - 30 * DAY);
     s.markRecalled(1, ["https://a.com"], NOW - 20 * DAY); // last seen 20d ago, before the 7d cutoff
     expect(s.unread(1, 7 * DAY, NOW).map((p) => p.url)).toEqual(["https://a.com"]);
+  });
+  it("parseUnreadNudgeToggle recognizes on/off, ignores other text", () => {
+    expect(parseUnreadNudgeToggle("nudge me about my reading list")).toEqual({ on: true });
+    expect(parseUnreadNudgeToggle("remind me about my saved pages weekly")).toEqual({ on: true });
+    expect(parseUnreadNudgeToggle("weekly reading nudge")).toEqual({ on: true });
+    expect(parseUnreadNudgeToggle("stop reading list nudges")).toEqual({ on: false });
+    expect(parseUnreadNudgeToggle("stop nudging me about my reading list")).toEqual({ on: false });
+    expect(parseUnreadNudgeToggle("turn off reading nudges")).toEqual({ on: false });
+    expect(parseUnreadNudgeToggle("remind me to read the newspaper")).toBeNull(); // a real reminder, not the toggle
+    expect(parseUnreadNudgeToggle("what's the weather")).toBeNull();
   });
   it("formatUnreadNudge renders titles+links, or null when empty", () => {
     expect(formatUnreadNudge([])).toBeNull();

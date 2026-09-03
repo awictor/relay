@@ -73,6 +73,24 @@ export function isUnreadSavedRequest(text: string): boolean {
   return /^\s*(?:what\s+haven'?t\s+i\s+read|what\s+did\s+i\s+save\s+and\s+(?:forget|not\s+read)|what'?s\s+(?:in\s+my\s+)?unread|unread\s+(?:saved|reading\s+list|pages?)|(?:my\s+)?reading\s+list\s+i\s+haven'?t\s+read|what\s+have\s+i\s+not\s+read)\b.*\??\s*$/i.test(t);
 }
 
+/** Parse an opt-in/opt-out command for the WEEKLY proactive unread nudge (weekly-unread-proactive-nudge),
+ * or null if it isn't one. { on: true } = start the weekly nudge, { on: false } = stop it.
+ *   on:  "nudge me about my reading list", "remind me about my saved pages weekly", "weekly reading nudge"
+ *   off: "stop reading list nudges", "stop nudging me about my reading list", "turn off reading nudges" */
+export function parseUnreadNudgeToggle(text: string): { on: boolean } | null {
+  const t = text.trim().toLowerCase();
+  if (/^\s*(?:stop|turn off|disable|cancel|no more)\b.*\b(?:reading|saved|read[- ]?it[- ]?later)\b.*\bnudg/i.test(t)
+      || /^\s*(?:stop|turn off|disable)\s+nudging\s+me\s+about\s+(?:my\s+)?(?:reading|saved)\b/i.test(t)) {
+    return { on: false };
+  }
+  if (/^\s*(?:nudge|remind)\s+me\s+(?:about\s+)?(?:my\s+)?(?:reading\s+list|saved|unread|read[- ]?it[- ]?later)\b/i.test(t)
+      || /^\s*(?:weekly\s+)?(?:reading|unread)\s+(?:list\s+)?nudges?\b/i.test(t)
+      || /^\s*(?:start\s+)?nudging\s+me\s+about\s+(?:my\s+)?(?:reading|saved)\b/i.test(t)) {
+    return { on: true };
+  }
+  return null;
+}
+
 /** Format an unread-nudge line for a set of stale-unread saved pages (saved-page-unread-nudge), or null
  * when there are none. Used by both a "what haven't I read" reply and a proactive weekly nudge. */
 export function formatUnreadNudge(pages: SavedPage[]): string | null {

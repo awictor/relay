@@ -2966,7 +2966,7 @@
       "title": "Proactively ping stale-unread saves once a week",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "'what haven't I read' now works on demand + unread state is tracked, but a forgotten save still only resurfaces if the user thinks to ask; a gentle weekly proactive nudge would actually close the loop.",
       "how": "A scheduled reminder-style job (opt-in, reuse scheduler) that fires formatUnreadNudge(saved.unread(...)) once a week per chat if there are stale-unread pages, gated on the anti-spam cap + quiet hours + delivery like other proactive sends; skip silently when none."
     }
@@ -4155,6 +4155,10 @@
     {
       "id": "saved-page-unread-nudge",
       "note": "Saved pages now track lastRecalledAt (stamped whenever a page appears in a recall or the digest recap), and SavedStore.unread(staleMs) returns saved-before-cutoff + never/long-ago-revisited pages oldest-first. 'what haven't I read' / 'what did I save and forget' (isUnreadSavedRequest, checked before general recall) replies with formatUnreadNudge and marks them seen. RELAY_SAVED_STALE_MS (default 7d) tunes the cutoff. Closes the leak where a saved-and-forgotten page never got a second nudge. +5 tests, 1948 green."
+    },
+    {
+      "id": "weekly-unread-proactive-nudge",
+      "note": "Opt-in weekly proactive reading-list nudge. 'nudge me about my reading list' adds a WEEKLY 'unread:reading-list' schedule (Mon 9am, one per chat, removeByTask-first so re-opt-in doesn't stack); 'stop reading list nudges' removes it (parseUnreadNudgeToggle, handler-routed before recall so it isn't shadowed). Scheduler fires it via a new unreadNudge dep — pure store read, null = nothing stale this week -> silent + reschedule (like an unchanged alert), never a failure; a message gets the same delivery-gated send/complete as any proactive. As kind:weekly it already inherits quiet-hours defer + anti-spam grace. Nudged pages are markRecalled so they don't re-surface next week. +4 tests, 1952 green. Live proactive fire needs the running bot (offline) — fire branch + toggle + store all unit-verified."
     }
   ],
   "audits": [
@@ -4421,6 +4425,9 @@
     },
     {
       "note": "Agent spawn cap still exhausted (200/200) — no 3-agent audit. Built saved-page-unread-nudge. Seeded weekly-unread-proactive-nudge (the proactive follow-on) + carried save-page-confirm-dedupe-feedback."
+    },
+    {
+      "note": "Agent spawn cap still exhausted (200/200) — no 3-agent audit. Built weekly-unread-proactive-nudge, completing the read-it-later arc (capture via command + agent tool, recall, digest recap, on-demand unread, now proactive weekly). Only save-page-confirm-dedupe-feedback (low/S) + owner/low remain — next run should self-audit for fresh findings."
     }
   ]
 }
