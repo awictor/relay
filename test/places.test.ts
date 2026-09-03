@@ -90,6 +90,23 @@ describe("formatPlaces", () => {
   it("empty -> a friendly none line", () => {
     expect(formatPlaces([], "sushi")).toMatch(/couldn't find any sushi nearby/i);
   });
+  it("with a local time, tags open/closed-now + lists open places first (nearby-open-now)", () => {
+    // Mon 9pm (dow=1, mins=1260). A closer place is already closed; a farther one is still open.
+    const places = [
+      { name: "Early Pharmacy", category: "pharmacy", distanceKm: 0.3, openHours: "Mo-Fr 08:00-18:00" },
+      { name: "Night Pharmacy", category: "pharmacy", distanceKm: 1.2, openHours: "Mo-Su 08:00-23:00" },
+    ];
+    const out = formatPlaces(places, "pharmacy", "imperial", { dow: 1, mins: 1260 });
+    expect(out).toMatch(/Night Pharmacy.*open now/); // open one shown
+    expect(out).toMatch(/Early Pharmacy.*closed now/); // closed one tagged, not raw hours
+    // Open place listed BEFORE the closer-but-closed one.
+    expect(out.indexOf("Night Pharmacy")).toBeLessThan(out.indexOf("Early Pharmacy"));
+  });
+  it("without a local time, shows raw hours (back-compat)", () => {
+    const out = formatPlaces([{ name: "Zen", category: "cafe", distanceKm: 1, openHours: "Mo-Fr 08:00-18:00" }], "coffee");
+    expect(out).toMatch(/— Mo-Fr 08:00-18:00/);
+    expect(out).not.toMatch(/open now|closed now/);
+  });
 });
 
 describe("findNearby (injected fetch)", () => {

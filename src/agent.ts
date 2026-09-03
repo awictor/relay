@@ -1090,7 +1090,14 @@ export async function runAgent(
           } else {
             // Note the radius when it widened past the default 3km so the user knows how far out these are.
             const widened = r.radiusKm > 3 ? ` (nearest within ${Math.round(r.radiusKm)}km)` : "";
-            push("find_nearby", `${formatPlaces(r.places, what, units)}${widened} Report this to the user.`);
+            // Compute the user's LOCAL day + minute from the injected clock + tz so formatPlaces can tag
+            // open/closed-now + list open places first (nearby-open-now). Omitted if no clock is wired.
+            let now: { dow: number; mins: number } | undefined;
+            if (deps.nowMs !== undefined) {
+              const d = new Date(deps.nowMs + (deps.tzOffsetMin ?? 0) * 60_000);
+              now = { dow: d.getUTCDay(), mins: d.getUTCHours() * 60 + d.getUTCMinutes() };
+            }
+            push("find_nearby", `${formatPlaces(r.places, what, units, now)}${widened} Report this to the user.`);
           }
         } catch (e) {
           push("find_nearby", `ERROR finding places: ${e instanceof Error ? e.message : String(e)}`);

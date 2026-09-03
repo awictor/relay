@@ -4,6 +4,8 @@
 // name is given) + Overpass (POIs within a radius, by category). Pure parse/format helpers exported +
 // unit-tested; the network fetch is injected so it runs offline. No key, no vendor.
 
+import { openTag, isOpenNow } from "./openhours.js";
+
 export interface Place { name: string; category: string; distanceKm: number; openHours?: string; phone?: string; lat?: number; lng?: number }
 
 /** A tappable Google Maps link for a place (maps-link-on-nearby-directions): prefer exact coords
@@ -119,14 +121,25 @@ export function parsePlaces(body: string, originLat: number, originLng: number, 
   } catch { return []; }
 }
 
-/** Format nearby places into a short human list, honoring the user's unit preference (mi vs km). */
-export function formatPlaces(places: Place[], what: string, units: "metric" | "imperial" = "imperial"): string {
+/** Format nearby places into a short human list, honoring the user's unit preference (mi vs km). When
+ * `now` (the user's LOCAL day-of-week 0-6 + minutes-since-midnight) is given, each place is tagged
+ * open/closed-now from its OSM hours (nearby-open-now) and OPEN places are listed first — so "pharmacy
+ * near me" at 9pm doesn't lead with one that closed at 6. Without `now`, behaves as before (raw hours). */
+export function formatPlaces(places: Place[], what: string, units: "metric" | "imperial" = "imperial", now?: { dow: number; mins: number }): string {
   if (!places.length) return `I couldn't find any ${what} nearby.`;
   const dist = (km: number) => units === "metric" ? `${km.toFixed(1)}km` : `${(km * 0.621371).toFixed(1)}mi`;
-  const lines = places.map((p) => {
+  // Rank open-first when we can evaluate hours (open=0, unknown=1, closed=2), keeping distance order within.
+  const ranked = now
+    ? [...places].map((p, i) => ({ p, i, r: p.openHours ? ({ open: 0, unknown: 1, closed: 2 } as const)[isOpenNow(p.openHours, now.dow, now.mins)] : 1 }))
+        .sort((a, b) => a.r - b.r || a.i - b.i).map((x) => x.p)
+    : places;
+  const lines = ranked.map((p) => {
     // Append a tappable maps link so the user can navigate, not just read a name + distance
-    // (maps-link-on-nearby-directions).
-    return `• ${p.name} (${dist(p.distanceKm)})${p.openHours ? ` — ${p.openHours}` : ""}${p.phone ? ` — ${p.phone}` : ""}\n  ${mapsLink(p.name, p.lat, p.lng)}`;
+    // (maps-link-on-nearby-directions). When we know the time, show a computed "open now"/"closed now"
+    // tag instead of (or alongside) the raw OSM hours string.
+    const tag = now ? openTag(p.openHours, now.dow, now.mins) : "";
+    const hours = tag ? ` — ${tag}` : (p.openHours ? ` — ${p.openHours}` : "");
+    return `• ${p.name} (${dist(p.distanceKm)})${hours}${p.phone ? ` — ${p.phone}` : ""}\n  ${mapsLink(p.name, p.lat, p.lng)}`;
   });
   return `Nearby ${what}:\n${lines.join("\n")}`;
 }
