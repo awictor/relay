@@ -693,9 +693,11 @@ export async function runAgent(
           // page renders the status; scrape returns its text for the model to read out the latest event.
           const url = trackingUrl(carrier, rawNum);
           const r = await backend.scrape(url);
-          const body = truncateForModel(r.content || "");
-          if (!body.trim()) { push("track_package", `Opened ${carrierName(carrier)} tracking for ${rawNum} but the page came back empty (it may need a moment or the number may be wrong). Tell the user + suggest re-checking the number.`); continue; }
-          push("track_package", `${carrierName(carrier)} tracking page for ${rawNum}:\n${body}\n\nSummarize the LATEST status + expected delivery for the user in one line; if the page shows no match, say the number wasn't found.`);
+          // Use formatPageForModel (not raw truncate) so a JS-only shell / cookie-wall — the COMMON case
+          // on carrier pages — returns an honest "couldn't read it" marker instead of being summarized as
+          // a confident-but-bogus status (tracking-page-shell-guard). It also handles truncation + paywall.
+          const page = formatPageForModel(`${carrierName(carrier)} tracking ${rawNum}`, url, r.content || "");
+          push("track_package", `${page}\n\nIf the text above is a real tracking page, summarize the LATEST status + expected delivery in one line (say so if the number shows no match); if it's the "nearly empty / needs a login / blocked" marker, tell the user you couldn't read the ${carrierName(carrier)} page and suggest re-checking the number or the carrier site directly.`);
         } catch (e) {
           push("track_package", `ERROR reading the ${carrierName(carrier)} tracking page: ${e instanceof Error ? e.message : String(e)}`);
         }

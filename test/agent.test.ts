@@ -284,8 +284,12 @@ describe("runAgent track_package (package-tracking-watcher)", () => {
       { toolCall: { name: "reply", args: { text: "Your UPS package is out for delivery." } } },
     ]);
     let scraped = "";
+    // A realistic tracking page (>200 non-whitespace chars) so it passes the empty-shell guard.
+    const trackingPage = "UPS Tracking Detail. Tracking Number 1Z999AA10123456784. Status: Out for delivery — arriving today by 9:00 PM. " +
+      "Latest activity: Nov 15, 7:02 AM — On FedEx vehicle for delivery, Austin TX. Nov 14, 11:40 PM — Departed facility. " +
+      "Nov 14, 3:15 PM — Arrived at facility. Nov 13 — Origin scan. Shipped from Louisville KY. Weight 2.4 lbs. Service Ground.";
     const backend = {
-      scrape: async (url: string) => { scraped = url; return { title: "", content: "Out for delivery — arriving today by 9pm", url }; },
+      scrape: async (url: string) => { scraped = url; return { title: "UPS", content: trackingPage, url }; },
       createSession: async () => ({ id: "s" }),
       navigate: async (_i: string, url: string) => ({ url, title: "" }),
       click: async () => {}, type: async () => {},
@@ -298,9 +302,31 @@ describe("runAgent track_package (package-tracking-watcher)", () => {
     expect(scraped).toBe("https://www.ups.com/track?tracknum=1Z999AA10123456784"); // UPS URL from shape detection
     expect(reply).toMatch(/out for delivery/i);
     const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
-    expect(toolMsg!.content).toMatch(/UPS tracking page/);
+    expect(toolMsg!.content).toMatch(/UPS tracking 1Z999AA10123456784/); // formatPageForModel TITLE line
     expect(toolMsg!.content).toMatch(/Out for delivery/);
+    expect(toolMsg!.content).not.toMatch(/came back nearly empty/); // a real page isn't flagged as a shell
   });
+  it("a JS-shell / near-empty carrier page returns an honest 'couldn't read' marker, not a bogus status (tracking-page-shell-guard)", async () => {
+    const llm = new MockLLM([
+      { toolCall: { name: "track_package", args: { number: "1Z999AA10123456784" } } },
+      { toolCall: { name: "reply", args: { text: "I couldn't read the UPS page — double-check the number." } } },
+    ]);
+    const backend = {
+      scrape: async (url: string) => ({ title: "", content: "Enable JavaScript", url }), // JS shell, <200 nonWs
+      createSession: async () => ({ id: "s" }),
+      navigate: async (_i: string, url: string) => ({ url, title: "" }),
+      click: async () => {}, type: async () => {},
+      readCurrent: async () => ({ title: "", content: "", url: "" }),
+      releaseSession: async () => {},
+      discoverLinks: async () => [],
+      fetchJson: async () => ({ status: 200, contentType: "application/json", text: "{}" }),
+    };
+    await runAgent("track 1Z999AA10123456784", { llm, backend });
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toMatch(/nearly empty|needs a login|blocked/i); // honest marker, not invented events
+    expect(toolMsg!.content).not.toMatch(/out for delivery|delivered/i);
+  });
+
   it("asks which carrier when the number's shape is unrecognized", async () => {
     const llm = new MockLLM([
       { toolCall: { name: "track_package", args: { number: "12345" } } },

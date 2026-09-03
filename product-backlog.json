@@ -1,6 +1,42 @@
 {
   "items": [
     {
+      "id": "tracking-page-shell-guard",
+      "title": "track_package summarizes a JS-shell carrier page as a confident-but-bogus status",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "The just-shipped track_package fed truncateForModel(r.content) straight to the model with only a !body.trim() empty check — skipping the formatPageForModel empty/paywall/JS-shell guard scrape+read use. Carrier pages are heavily JS-rendered, so the COMMON failure (a shell/cookie-wall stub) got summarized as an invented 'no info found'/fake status instead of an honest 'couldn't read it' (audit 25 B#1, a regression in the new tool).",
+      "how": "Use formatPageForModel (not raw truncate) for the tracking page so a near-empty shell / paywall returns the honest marker; instruct the model to relay 'couldn't read the page' when it sees the marker. Add a shell-page dispatch test."
+    },
+    {
+      "id": "watch-redefine-baseline-reset",
+      "title": "re-defining an alert via 'watch <name>: ...' doesn't reset the baseline, so it never fires",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "AlertStore.add() (the define-overwrite path) updates task/threshold/condition/then but only clears lastValue on a feed toggle — the conversational-edit path (updateTrigger) correctly clears it. So 'watch btc: bitcoin below 45000' on an existing btc alert keeps the stale baseline, prevHolds computes from the OLD value, and an already-true predicate is suppressed: the alert the user just set up is silently dead (audit 25 B#2).",
+      "how": "In AlertStore.add(), when an existing alert's trigger (threshold/condition/task) actually changes, clear lastValue (+ series baseline as appropriate) so the new trigger edge-evaluates fresh — mirroring updateTrigger. Guard: don't reset on a pure no-op re-define. Test: redefine into an already-true predicate fires on the next check."
+    },
+    {
+      "id": "plural-weekday-recurring",
+      "title": "'remind me mondays at 9am' schedules once, not weekly",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "The single-weekday->once rule (recurring = every|group|weekdays.length>1) treats a PLURAL 'mondays'/'fridays' as one day [1] with no 'every', so 'mondays at 9am submit timesheet' fires once next Monday then never again — the plural 's' is a clear recurring signal that's silently swallowed (audit 25 B#4, a regression in the just-shipped single-weekday-once fix).",
+      "how": "In the weekly branch, treat a plural weekday token ('mondays', 'fridays', 'tuesdays'...) as a recurring signal (like 'every') so it stays kind:weekly. Detect the trailing 's' on the matched day word(s). Test: 'mondays at 9am' -> weekly [1]; 'monday at 9am' still -> once."
+    },
+    {
+      "id": "parse-tracking-spaced-number",
+      "title": "a space/dash-separated tracking number ('9400 1118 ...') fails to parse",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "parseTrackingRequest tokenizes the RAW text on \\b[0-9A-Z]{10,}\\b before norm() strips spaces/dashes, so a number pasted the way carriers PRINT it ('9400 1118 9922 3817 6123 45', '1Z 999 AA1 ...') splits into sub-10-char fragments that match nothing -> 'couldn't tell which carrier', despite the module's whole premise being 'users paste them' (audit 25 B#5).",
+      "how": "Normalize (strip spaces/dashes) BEFORE tokenizing, or also try collapsing whitespace runs of alnum groups into a candidate. Then detectCarrier the joined form. Test: a spaced USPS + spaced UPS number both resolve."
+    },
+    {
       "id": "matchByRef-word-boundary",
       "title": "snooze/pause substring-matches, silently freezing the wrong automation",
       "impact": "medium",
@@ -1948,9 +1984,16 @@
     {
       "id": "snooze-zero-duration-guard",
       "note": "Fixed a fat-finger black hole: 'snooze btc for 0 hours' / 'pause btc 0 days' — the duration regex matched but the old n>=1 guard left untilMs undefined AND didn't strip the clause, so the name became 'btc 0 hours' (no match) or fell through to an indefinite PAUSE_INDEFINITE, silently freezing btc forever. parseSnoozeCommand now ALWAYS strips the duration clause off the name and REJECTS a zero/negative duration (returns null) so it's a no-op, not an indefinite pause — the caller's non-snooze fall-through handles it; a positive duration on the same phrasing still parses. 1 test (0 hours + 0 days -> null / positive still parses). call-tested: false (pure parse). 1183 tests green."
+    },
+    {
+      "id": "tracking-page-shell-guard",
+      "note": "Fixed a regression in the just-shipped track_package: it fed truncateForModel(r.content) to the model with only a !body.trim() empty check, skipping the formatPageForModel empty/paywall/JS-shell guard that scrape + read use. Carrier pages are heavily JS-rendered, so the common failure (a shell/cookie-wall stub) got summarized as an invented status instead of an honest 'couldn't read it'. Now uses formatPageForModel (near-empty <200 nonWs -> honest marker, paywall detection, truncation) + tells the model to relay 'couldn't read the page' when it sees the marker. 2 tests updated/added (real page summarizes + isn't flagged / JS-shell page returns the honest marker, not invented events). call-tested: false (offline unit; scrape needs live anvil). 1184 tests green."
     }
   ],
   "audits": [
+    {
+      "note": "Audit 25 (backlog dry except owner-gated confirm-to-act). A/new-user: read-a-PDF-URL isn't a tool (scrape opens the browser PDF viewer -> garbage; describeDocument is upload-only), /start hides the instant keyless tools (track/quote/convert/weather absent from START, present only in HELP), location-PIN sets coords but not tz (first daily still fires UTC), no dictionary/define tool, background-ACK gives no ETA. B/reliability: track_package skips the formatPageForModel shell/paywall guard -> bogus status on a JS-shell carrier page (TOP — built, a regression in the new tool), watch-redefine doesn't reset baseline (re-set alert never fires), extractValue currency-branch returns FIRST not nearest when hint doesn't match, plural-weekday 'mondays' -> one-shot not weekly (regression in single-weekday-once), parseTrackingRequest fails on spaced/dashed numbers, time-series+then re-run un-gated on failed-send re-fire. C/power: automation-coach mining the PERSISTENT answer-log (top flywheel, 80% infra exists), geofence/location-triggered reminders (NET-NEW), inline-keyboard one-tap accept for suggestions. Built tracking-page-shell-guard (B#1); seeded watch-redefine-baseline-reset(S), plural-weekday-recurring(S), parse-tracking-spaced-number(S). Deferred: automation-coach(M), geofence-reminders(M), inline-keyboards(S/M), read-pdf-url(M), start-copy-instant-tools(S), pin-derives-tz(M), dictionary-tool(S), extractValue-currency-first(S), timeseries-then-ungated(S), + prior deferred set."
+    },
     {
       "note": "Audit 24 (backlog dry except owner-gated confirm-to-act). A/new-user: background errand no progress-ping (silent 1-3min), package-tracking unsupported, capability-regex misses 'what's this'/'what does this do' opener (TOP — built), read-my-account (calendar/email) floundering no honest bounce, no cancel-in-flight-background-errand. B/reliability: proactive runs date-blind + ignore user units (schedule/alert/digest/chain runAgent gets no nowMs/tz/units — big), digest all-transient-fail goes silent-forever no failed-watch-receipt (real:false conflates dead vs transient), send-cap silently skips alert CHECKS losing crossings, matchByRef substring over-match on pause/snooze, transient send-fail on daily alert delays crossing ~24h, parseSnoozeCommand 'for 0 hours' -> indefinite pause. C/power: package/flight/order tracking watcher (unanimous top), automation-coach (mine answer-log -> suggest standing automations, NET-NEW), self-service site-login capture, RSS-subscribe. Built capability-regex-opener-phrasings (A#3); seeded proactive-runs-datetime-units-blind(M), sendcap-drops-alert-checks(M). Deferred (strong): package-tracking-watcher(M), background-errand-progress-ping(S), automation-coach(M), digest-failstreak-receipt(M), matchByRef-word-boundary(S), snooze-zero-duration(S), read-account-honest-bounce(S), cancel-background-errand(S), site-login-capture(L), RSS(S), + prior deferred (world-clock, help-split, bare-url-summary, retry-affordance, inline-keyboards, sports-scores, translate, TTS, computed-trigger, DST, atomic-store-errors)."
     },
