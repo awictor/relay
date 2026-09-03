@@ -69,6 +69,11 @@ export interface ScheduleRunnerDeps {
   // silent for that case. index wires this to notify ONLY on a "once" task (an explicit "remind me
   // to X" going dark is a black hole) with a friendlyError line, and stay silent on "daily".
   failureNotice?: (s: Schedule, rawError: string) => string | null;
+  // Per-task fire timeout (slow-task-starves-due-reminders): injectable timers so a test can drive the
+  // timeout deterministically. Absent -> real setTimeout/clearTimeout (unref'd). setTimer returns an
+  // opaque handle passed back to clearTimer.
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (handle: unknown) => void;
 }
 
 export interface ScheduleRunner {
@@ -94,6 +99,17 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   // it's delivered ANYWAY (once-reminder-cap-starvation). An explicit promise slipping this far past
   // its time is worse than one extra send over the anti-spam cap. Default 15 min.
   const ONCE_CAP_GRACE_MS = Math.max(0, Number(process.env.RELAY_ONCE_CAP_GRACE_MS) || 15 * 60_000);
+  // Per-task wall-clock ceiling for one fireOne (slow-task-starves-due-reminders). tick() runs due tasks
+  // SEQUENTIALLY, so a single hung anvil/LLM run (the agent has step caps + per-fetch timeouts but no
+  // overall bound) would block every OTHER chat's due reminder behind it. Race each fireOne against this
+  // timeout: a timeout throws into the existing per-task catch (a once retries next tick, a recurring
+  // advances), so one stuck task can't starve the batch. 0 disables. Default 90s (a long errand + margin).
+  const FIRE_TIMEOUT_MS = (() => {
+    const raw = process.env.RELAY_FIRE_TIMEOUT_MS;
+    if (raw === undefined || raw === "") return 90_000;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : 90_000; // an explicit 0 disables the timeout
+  })();
   const cap = deps.maxPerChatPerHour ?? 0;
   const sendTimes = new Map<number, number[]>(); // chatId -> recent send epochs (rolling hour)
 
@@ -242,6 +258,25 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     }
   }
 
+  // Race a fire against the per-task wall-clock ceiling. On timeout, reject so the caller's catch runs
+  // (once retries / recurring advances) instead of blocking the whole tick on a stuck run. The underlying
+  // fireOne isn't cancelled (it'll settle + be ignored), but the batch moves on. No-op when disabled.
+  // A test/host may inject setTimer/clearTimer; otherwise real timers, unref'd so a pending one can't
+  // keep the process alive.
+  function withFireTimeout<T>(p: Promise<T>): Promise<T> {
+    if (!FIRE_TIMEOUT_MS) return p;
+    const set = deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+    const clr = deps.clearTimer ?? ((h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>));
+    return new Promise<T>((resolve, reject) => {
+      const h = set(() => reject(new Error(`fire timed out after ${FIRE_TIMEOUT_MS}ms`)), FIRE_TIMEOUT_MS);
+      if (typeof (h as { unref?: () => void })?.unref === "function") (h as { unref: () => void }).unref();
+      p.then(
+        (v) => { clr(h); resolve(v); },
+        (e) => { clr(h); reject(e); },
+      );
+    });
+  }
+
   async function tick(): Promise<number> {
     if (running) return 0;
     running = true;
@@ -308,7 +343,9 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
             continue;
           }
         }
-        try { await fireOne(s); fired++; deps.store.resetFailures(s.id); } // success clears any failure streak
+        // Bound each fire so one hung task can't starve the rest of the due batch (slow-task-starves-
+        // due-reminders). A timeout rejects into the catch below — a once retries, a recurring advances.
+        try { await withFireTimeout(fireOne(s)); fired++; deps.store.resetFailures(s.id); } // success clears any failure streak
         catch (e) {
           deps.onError?.(e);
           const raw = e instanceof Error ? e.message : String(e);

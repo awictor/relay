@@ -1769,7 +1769,7 @@
       "title": "One hung proactive task delays every other chat’s due reminders",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "tick() is strictly sequential (for..await fireOne) with no per-task wall-clock timeout; a stalled anvil/LLM makes all other due reminders land late or miss the tick.",
       "how": "Wrap fireOne in a Promise.race timeout, or run due tasks via mapPool (as digest/watchlist already do), bounded so the anvil pool is safe."
     },
@@ -2485,6 +2485,10 @@
     {
       "item": "once-complete-ignores-persist",
       "note": "complete() now returns the persist bool + guards a once against double-firing on a failed disk write. A once is marked delivered=true BEFORE the removal write; dueNow() excludes delivered items so it can't re-fire this session even if the splice-write failed; the item is spliced from memory only on a successful persist (a later persist drops it). schedule-runner logs a complete_persist_failed warn when complete() returns false. Was: complete() spliced the once then discarded persist()'s result, so on a full/unwritable disk the once vanished in memory but survived on disk -> duplicate ping after restart. 3 new tests. Suite 1380 green, tsc clean."
+    },
+    {
+      "item": "slow-task-starves-due-reminders",
+      "note": "Bounded each proactive fire with a per-task wall-clock timeout (RELAY_FIRE_TIMEOUT_MS, default 90s, 0 disables). tick() runs due tasks sequentially with only step caps + per-fetch timeouts (no overall bound), so one hung anvil/LLM run blocked every other chat's due reminder. withFireTimeout races fireOne against the ceiling; a timeout rejects into the existing per-task catch (a once retries next tick, a recurring advances), so the batch moves on. Injectable timers (setTimer/clearTimer deps) for tests; real timers unref'd otherwise. 1 new test (hung task times out, 2nd chat still fires). .env.example documented. Suite 1381 green, tsc clean."
     }
   ],
   "audits": [

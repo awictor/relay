@@ -37,6 +37,38 @@ describe("makeScheduleRunner.tick", () => {
     expect(sent).toHaveLength(0);
   });
 
+  it("a hung task times out so the rest of the due batch still fires (slow-task-starves-due-reminders)", async () => {
+    const prev = process.env.RELAY_FIRE_TIMEOUT_MS;
+    process.env.RELAY_FIRE_TIMEOUT_MS = "30"; // short real timeout for the test
+    try {
+      const clock = { t: NOW };
+      const sent: Array<{ chatId: number; text: string }> = [];
+      const store = new ScheduleStore({ file: tmpFile() });
+      let firstStarted = false;
+      const runner = makeScheduleRunner({
+        store,
+        llm: {} as never,
+        // chat 1's run hangs forever (never resolves -> hits the 30ms timeout); chat 2 resolves at once.
+        runAgent: async (task) => {
+          if (task === "hang") { firstStarted = true; return new Promise<{ reply: string }>(() => {}); }
+          return { reply: `did:${task}` };
+        },
+        send: async (chatId, text) => { sent.push({ chatId, text }); },
+        formatReply: (t) => t,
+        now: () => clock.t,
+        periodMs: 0,
+      });
+      store.add(1, { kind: "once", task: "hang", dueMs: NOW - 2 }, NOW);
+      store.add(2, { kind: "once", task: "stretch", dueMs: NOW - 1 }, NOW);
+      const n = await runner.tick();
+      expect(firstStarted).toBe(true);         // the hung task did start
+      expect(n).toBe(1);                        // only the 2nd fired (the 1st timed out)
+      expect(sent.some((m) => m.chatId === 2)).toBe(true); // chat 2 wasn't starved behind the hang
+    } finally {
+      if (prev === undefined) delete process.env.RELAY_FIRE_TIMEOUT_MS; else process.env.RELAY_FIRE_TIMEOUT_MS = prev;
+    }
+  });
+
   it("fires a due once-task, texts the chat unprompted, and removes it", async () => {
     const clock = { t: NOW };
     const { store, runner, sent, ran } = harness(clock);
