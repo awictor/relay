@@ -14,7 +14,7 @@
       "title": "watchlist + plain change-alerts flap + poison baseline on a numberless reply",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The threshold + predicate alert paths guard a transient numberless reply (extractValue null / indeterminate), but the WATCHLIST member path and the PLAIN non-threshold change path do NOT: a successful-but-numberless reply ('N/A', 'price unavailable') isn't degraded, reads as a change via text-diff, false-pings '🔔 changed', and stores the garbage as baseline so it re-fires. Recurring false alarms + a corrupted watch for a daily-reliant user (audit B#1).",
       "how": "Apply the same guard the threshold/predicate paths use to the watchlist-member compare (alert-runner ~84) and the plain-change path (~199): if the alert tracks a value and extractValue(new) is null (and it's not the first run), skip notify + skip setLast so the last GOOD value stays the baseline. Test both paths."
     },
@@ -1749,6 +1749,10 @@
     {
       "id": "extractvalue-largest-magnitude-wrong",
       "note": "Fixed a silent wrong-value miss on the headline threshold-alert feature: extractValue fell back to the LARGEST-magnitude number, so an 'S&P 500 below 6000' watch compared the Dow's 42,000 in a multi-index reply and never fired. Added an optional `hint` (the watched task) to extractValue/conditionHolds/changed, threaded from alert-runner (alert.task) at every call site. When >1 candidate survives the currency/decimal ordering AND the hint's entity words appear in the reply, it picks the number that comes closest AFTER an entity mention (financial phrasing is '<entity> <value>'), excludes numbers that are part of the entity's own name (the '500' in 'S&P 500'), and falls back to largest-magnitude with no/unmatched hint (existing behavior unchanged, all prior tests green). 3 tests (entity-nearest / no-hint regression / below-alert fires on the right index). call-tested: false (pure parse logic). 1135 tests green."
+    },
+    {
+      "id": "alert-numberless-flap-watchlist-plain",
+      "note": "Closed the last two alert paths that flapped on a transient numberless reply (the threshold + predicate paths already guarded it). (1) PLAIN change-alert (no threshold): a reply that lost its number ('price temporarily unavailable') fell through to changed()'s text-diff, false-pinged '🔔 changed', and stored the garbage as baseline — now, if the last value tracked a number and the new one has none, skip notify + keep the last GOOD value. Non-numeric watches (top HN story) are unaffected: their baseline has no extractable number so the guard never triggers. (2) WATCHLIST members: same guard per-member — a member whose numeric baseline gets an 'N/A' this tick isn't flagged changed and its baseline isn't overwritten (used extractValue with the member's own task as hint). Also threaded the extractValue entity-hint into the watchlist changed() call. 3 tests (plain-change numberless silent+baseline-kept / non-numeric watch still fires / watchlist member numberless not-flagged+baseline-kept). call-tested: false (pure alert logic). 1138 tests green."
     }
   ],
   "audits": [

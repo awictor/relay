@@ -83,8 +83,15 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
     const changedLines: string[] = [];
     for (const { mem, value } of results) {
       if (value === null) continue; // couldn't read this member this tick — leave its baseline
+      // Numberless-reply guard (alert-numberless-flap): if this member's prior value tracked a NUMBER but
+      // the new reply has none ("N/A", "price unavailable" — real, not degraded), don't flag it changed
+      // and DON'T overwrite its baseline. Otherwise changed() falls back to text-diff, false-pings, and
+      // stores the numberless string, so the next real check re-fires + the tracked value is lost.
+      if (!firstRunWl && mem.last !== undefined && extractValue(mem.last, mem.task) !== null && extractValue(value, mem.task) === null) {
+        continue; // keep the last GOOD value as this member's baseline; stay silent for it
+      }
       updates.push({ label: mem.label, value });
-      if (!firstRunWl && mem.last !== undefined && changed(mem.last, value)) {
+      if (!firstRunWl && mem.last !== undefined && changed(mem.last, value, undefined, mem.task)) {
         changedLines.push(`• ${mem.label}: ${value}`);
       }
     }
@@ -192,8 +199,13 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   // as lastValue — silently bypassing the threshold across the gap. Keep the last GOOD value + stay
   // silent this tick (mirrors the predicate-refire guard above + the degraded guard). First run with
   // no number still seeds (nothing to protect yet).
-  if (!firstRun && alert.threshold !== undefined && extractValue(value, alert.task) === null) {
-    return { notify: false, message: null, value: alert.lastValue ?? value, commit: noop };
+  // Extends beyond the threshold case (alert-numberless-flap): ANY change-alert whose last value tracked
+  // a NUMBER but whose new reply has none ("price unavailable") must not fire or poison the baseline —
+  // changed() would fall back to text-diff (numeric-vs-nonnumeric = "changed"), spuriously ping, and store
+  // the numberless string. Keep the last GOOD value + stay silent this tick. A genuinely non-numeric watch
+  // (top HN story) is unaffected: its lastValue has no extractable number, so the guard doesn't trigger.
+  if (!firstRun && alert.lastValue !== undefined && extractValue(alert.lastValue, alert.task) !== null && extractValue(value, alert.task) === null) {
+    return { notify: false, message: null, value: alert.lastValue, commit: noop };
   }
 
   const didChange = firstRun ? true : changed(alert.lastValue!, value, alert.threshold, alert.task);

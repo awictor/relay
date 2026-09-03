@@ -78,6 +78,23 @@ describe("checkAlert", () => {
     expect(again.notify).toBe(false); // +200 < 1000
   });
 
+  it("a PLAIN change-alert (no threshold) stays silent + keeps baseline on a numberless reply (alert-numberless-flap)", async () => {
+    // Last was a number ($65,000); a transient "price unavailable" has none. Text-diff would false-ping
+    // '🔔 changed' and store the garbage. Must stay silent + keep the last GOOD value.
+    const { d, lastSet } = deps("Price temporarily unavailable");
+    const r = await checkAlert(alert({ lastValue: "$65,000" }), d); // NO threshold
+    expect(r.notify).toBe(false);
+    expect(lastSet).toEqual([]);          // baseline NOT poisoned
+    expect(r.value).toBe("$65,000");      // last GOOD value preserved
+  });
+
+  it("a genuinely non-numeric watch is unaffected by the numberless guard (top HN story)", async () => {
+    // lastValue has no number, so the guard doesn't trigger; a real content change still fires.
+    const { d } = deps("The top story is a new AI model launch");
+    const r = await checkAlert(alert({ task: "top HN story", lastValue: "The top story is a merger" }), d);
+    expect(r.notify).toBe(true);          // real change fires
+  });
+
   it("first run with no number still seeds (nothing to protect yet)", async () => {
     const { d, lastSet } = deps("Price unavailable");
     const r = await checkAlert(alert({ threshold: 1000 }), d); // no lastValue
@@ -345,5 +362,18 @@ describe("checkAlert — watchlists", () => {
     expect(committed).toEqual([]);   // not yet
     r.commit();
     expect(committed).toContainEqual({ label: "btc", value: "$65k" });
+  });
+
+  it("a member whose numeric baseline gets a numberless reply is NOT flagged + keeps its baseline (alert-numberless-flap)", async () => {
+    // btc reply is a transient "N/A" (no number, prior was $60k); eth genuinely moved. Only eth pings,
+    // and btc's baseline is NOT overwritten (no stale-$60k -> "N/A" text-diff false-ping).
+    const { d, committed } = wlDeps({ "btc price": "temporarily unavailable", "eth price": "$4k" });
+    const r = await checkAlert(wl([{ label: "btc", task: "btc price", last: "$60k" }, { label: "eth", task: "eth price", last: "$3k" }]), d);
+    expect(r.notify).toBe(true);
+    expect(r.message).toMatch(/eth: \$4k/);
+    expect(r.message).not.toMatch(/btc/);     // the numberless member did NOT false-fire
+    r.commit();
+    expect(committed).toContainEqual({ label: "eth", value: "$4k" });
+    expect(committed).not.toContainEqual({ label: "btc", value: "temporarily unavailable" }); // baseline kept
   });
 });
