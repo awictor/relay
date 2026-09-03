@@ -934,6 +934,7 @@ const handle = createHandler({
   // Inline-button tap ack (inline-tap-buttons): telegram channel clears the spinner + shows a toast;
   // console channel has no callbacks, so this is absent there.
   answerCallback: channel.answerCallback ? (id, toast) => channel.answerCallback!(id, toast) : undefined,
+  editReplyMarkup: channel.editReplyMarkup ? (chatId, messageId, keyboard) => channel.editReplyMarkup!(chatId, messageId, keyboard) : undefined,
   // "Run again" on a scheduled-recipe ping (inline-tap-buttons): resolve + run the recipe's CURRENT
   // task by name, chain-aware, mirroring the scheduler's runThen path. null when gone/slotted/degraded.
   recipeRunByName: async (chatId, name) => {

@@ -2471,7 +2471,7 @@
       "title": "button taps send a NEW message instead of updating the pinged one",
       "impact": "low",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Tapping Refresh/Snooze/Stop posts a fresh message, so a chat accretes duplicate cards. editMessageText/editMessageReplyMarkup would update the original ping in place (e.g. grey out Stop after stopping), which feels native and keeps the thread clean.",
       "how": "Add editMessageText/editMessageReplyMarkup to telegram.ts + the Channel; thread the tapped message_id (already parsed into callback) through the handler; for terminal actions (Stop) edit the original to a done state instead of sending a new line."
     },
@@ -3095,6 +3095,24 @@
       "status": "done",
       "why": "parseCountdown peels the trailing date phrase off the label; for a bare-holiday countdown ('days until Christmas') the holiday IS the whole phrase, so the label came out empty -> 'it', and the pings/confirmation read 'it is N days away' instead of naming the holiday.",
       "how": "When the label is empty but the date phrase is a NAME (alphabetic, not a numeric/ISO date), use that phrase as the label. Christmas/Halloween/new year/thanksgiving now label correctly; a bare ISO date still falls back to 'it'."
+    },
+    {
+      "id": "callback-edit-terminal-actions-more",
+      "title": "Retire buttons on other terminal taps (snooze, digest/recipe gone)",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "Stop now strips the tapped ping's buttons; other end-states leave a stale card — a Snoozed watch still shows a live Refresh, and a Run-again on a since-deleted digest/recipe keeps offering the button. editReplyMarkup is already wired, so extending it is cheap.",
+      "how": "On snooze, swap the keyboard to a single 'Resume' (or strip Refresh); when digestRun/recipeRunByName returns null (gone), strip the tapped ping's buttons via editReplyMarkup(messageId) like Stop does."
+    },
+    {
+      "id": "anvil-live-e2e-when-up",
+      "title": "Run a real anvil e2e pass once the browser is up (verify call-tested path)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "Every recent change is unit-verified offline (anvil DOWN for many runs); the data-source + scrape/click paths have never been call-tested in this streak, so a live regression could hide behind green units.",
+      "how": "When ctx_execute shows anvil localhost:3000/v1/live = 200, drive one real errand end-to-end via the console channel (e.g. a scrape + a get_weather) + assert a coherent reply; report call-tested:true. Owner-gated only in that it needs anvil started."
     }
   ],
   "history": [
@@ -4345,6 +4363,10 @@
     {
       "id": "unitprice-three-way-and-percent-savings",
       "note": "Unit-price 3-way compares read right now. The math was already correct (cheapest ✅) but: a 3+ option compare dropped the '% cheaper' entirely (only 2-way computed it), and a dead tie said '(0% cheaper)' + ✅-picked an arbitrary winner. Now: savings computed vs the RUNNER-UP ('X% cheaper than the next-best' for 3+, plain 'X% cheaper' for 2), and an all-equal tie says 'Same price either way — $Y per unit' with NO checkmark. +3 tests, 2011 green."
+    },
+    {
+      "id": "callback-edit-in-place",
+      "note": "Terminal Stop tap now retires the tapped ping's inline buttons in place instead of leaving a dead card that can be re-tapped. Added editMessageReplyMarkup to telegram.ts + Channel.editReplyMarkup + handler dep; threaded the tapped messageId through handleCallback; on a successful alertForget, strip the buttons via editReplyMarkup(chatId, messageId). Best-effort + gated on a REAL stop (a no-op forget leaves buttons). Scoped to the terminal action (full every-reply-in-place edit was heavier than the low warranted). +2 tests, 2013 green."
     }
   ],
   "audits": [
@@ -4659,6 +4681,9 @@
     },
     {
       "note": "Cleared unitprice-three-way low. Backlog now: owner-gated confirm-to-act (high/L) + one low (callback-edit-in-place low/M). Product surface converged; the only high left needs the owner's confirm-before-acting decision."
+    },
+    {
+      "note": "Cleared the last non-owner todo (callback-edit-in-place, terminal-Stop slice). Backlog was down to owner-gated confirm-to-act only -> seeded callback-edit-terminal-actions-more (extend the just-built edit) + anvil-live-e2e-when-up (the honest gap: long offline streak, nothing call-tested). confirm-to-act (high) remains owner-gated: needs Alex's confirm-before-acting product decision."
     }
   ]
 }

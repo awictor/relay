@@ -72,6 +72,10 @@ export interface HandlerDeps {
   // Acknowledge an inline-button tap (inline-tap-buttons) so the client clears its spinner + shows an
   // optional toast. Optional; absent -> a callback tap is still routed, just without the spinner ack.
   answerCallback?: (callbackQueryId: string, toast?: string) => Promise<unknown>;
+  // Strip/replace the inline keyboard on the tapped ping (callback-edit-in-place) — used to retire a
+  // watch's buttons after a terminal Stop so its dead card can't be re-tapped. Optional; absent -> the
+  // buttons stay (prior behavior, harmless).
+  editReplyMarkup?: (chatId: number, messageId: number, keyboard?: InlineKeyboard) => Promise<unknown>;
   // Re-run a saved recipe BY NAME (inline-tap-buttons "Run again" button), chain/slot-aware like the
   // scheduled path. Returns the reply text, or null when the recipe is gone / slotted / degraded.
   // Optional; absent -> a recipe "Run again" tap replies that it couldn't run.
@@ -476,7 +480,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   // button (or null for none). Decodes callback_data to an action, rate-limits, then does the bounded
   // work: alert Refresh (re-check now, send if it fired), Snooze (pause the watch 1 day), Stop (forget
   // the watch), digest/recipe Run again. A stale/unknown payload (old deploy) toasts a gentle note.
-  async function handleCallback(chatId: number, data: string): Promise<string | null> {
+  async function handleCallback(chatId: number, data: string, messageId = 0): Promise<string | null> {
     const action = decodeCallback(data);
     if (!action) { await deps.sendMessage(chatId, "That button's no longer valid — it may be from an older message.").catch(() => {}); return "Expired"; }
     const rl = deps.checkRateLimit(chatId);
@@ -551,6 +555,9 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         // stop
         if (!deps.alertForget) return null;
         const removed = deps.alertForget(chatId, action.name);
+        // Terminal action: retire the tapped ping's buttons (callback-edit-in-place) so the now-dead
+        // watch's Refresh/Snooze/Stop can't be tapped again on a stale card. Best-effort, after the stop.
+        if (removed && messageId) await deps.editReplyMarkup?.(chatId, messageId).catch(() => {});
         await deps.sendMessage(chatId, removed ? `🔕 Stopped watching "${action.name}".` : `"${action.name}" wasn't an active watch.`);
         return removed ? "Stopped" : null;
       }
@@ -582,7 +589,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // the same recipeRunByName the scheduler uses). Rate-limited like any turn so button-mashing can't spam.
     if (msg.callback) {
       log(`[in] ${msg.from}: [tap] ${msg.callback.data.slice(0, 40)}`);
-      const ackToast = await handleCallback(msg.chatId, msg.callback.data);
+      const ackToast = await handleCallback(msg.chatId, msg.callback.data, msg.messageId);
       if (deps.answerCallback) await deps.answerCallback(msg.callback.callbackQueryId, ackToast ?? undefined).catch(() => {});
       return;
     }

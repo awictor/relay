@@ -19,6 +19,9 @@ export interface Channel {
   /** Acknowledge an inline-button tap (inline-tap-buttons) so the client clears its spinner; optional
    * toast confirms. Optional — a channel without inline buttons (console) omits it. */
   answerCallback?(callbackQueryId: string, toast?: string): Promise<unknown>;
+  /** Replace/clear the inline keyboard on an already-sent message (callback-edit-in-place) — e.g. strip a
+   * ping's buttons after a terminal Stop tap. Optional; a channel without inline buttons (console) omits it. */
+  editReplyMarkup?(chatId: number, messageId: number, keyboard?: InlineKeyboard): Promise<unknown>;
   sendTyping?(chatId: number): Promise<unknown>;
   sendPhoto?(chatId: number, bytes: Uint8Array, caption?: string): Promise<unknown>;
   sendDocument?(chatId: number, bytes: Uint8Array, filename?: string, caption?: string): Promise<unknown>;
@@ -31,13 +34,14 @@ export interface Channel {
 
 // TelegramChannel: wraps the existing src/telegram.ts functions as a Channel. No behavior
 // change — index.ts just talks to this instead of importing telegram fns directly.
-import { startPolling, sendMessage, sendTyping, sendPhoto, sendDocument, sendLocationRequest, answerCallback, hasToken } from "./telegram.js";
+import { startPolling, sendMessage, sendTyping, sendPhoto, sendDocument, sendLocationRequest, answerCallback, editMessageReplyMarkup, hasToken } from "./telegram.js";
 
 export const telegramChannel: Channel = {
   name: "telegram",
   start: (onMessage) => startPolling(onMessage),
   sendMessage: (chatId, text, keyboard) => sendMessage(chatId, text, keyboard),
   answerCallback: (id, toast) => answerCallback(id, toast),
+  editReplyMarkup: (chatId, messageId, keyboard) => editMessageReplyMarkup(chatId, messageId, keyboard),
   sendTyping: (chatId) => sendTyping(chatId),
   sendPhoto: (chatId, bytes, caption) => sendPhoto(chatId, bytes, caption),
   sendDocument: (chatId, bytes, filename, caption) => sendDocument(chatId, bytes, filename, caption),

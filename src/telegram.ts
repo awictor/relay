@@ -160,6 +160,23 @@ export async function answerCallback(callbackQueryId: string, toast?: string): P
   }
 }
 
+/** Replace (or clear) the inline keyboard on an already-sent message (inline-tap-buttons). Passing no
+ * keyboard STRIPS the buttons — used to retire the buttons on a ping after a terminal tap (Stop) so a
+ * dead watch's card can't be re-tapped (callback-edit-in-place). Best-effort; never throws. */
+export async function editMessageReplyMarkup(chatId: number, messageId: number, keyboard?: InlineKeyboard): Promise<void> {
+  if (!TOKEN || !messageId) return;
+  try {
+    await fetch(`${API}/editMessageReplyMarkup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: keyboard ? { inline_keyboard: keyboard } : { inline_keyboard: [] } }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
 /** Send a message with a one-tap "share location" reply-keyboard button (one-shot-location-button). A
  * cold user's first "near me"/"weather" otherwise dead-ends on hunting for 📎→Location or typing a city;
  * the request_location button resolves it in one tap and feeds the already-wired inbound-pin path. The

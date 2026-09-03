@@ -82,6 +82,31 @@ describe("handler — inline-button callbacks", () => {
     expect(acked[0]).toMatch(/Stopped/);
   });
 
+  it("alert Stop retires the tapped ping's buttons in place (callback-edit-in-place)", async () => {
+    const edits: Array<{ chatId: number; messageId: number; keyboard: unknown }> = [];
+    const { handle } = harness({
+      alertForget: () => true,
+      editReplyMarkup: async (chatId, messageId, keyboard) => { edits.push({ chatId, messageId, keyboard }); },
+    });
+    // A tap carries the pinged message's id (42 here) so the edit targets the right card.
+    const t = { chatId: 1, from: "u", text: "", messageId: 42, callback: { data: encodeCallback({ kind: "alert", action: "stop", name: "btc" })!, callbackQueryId: "q1" } } as InboundMessage;
+    await handle(t);
+    expect(edits).toHaveLength(1);
+    expect(edits[0]).toMatchObject({ chatId: 1, messageId: 42 });
+    expect(edits[0]!.keyboard).toBeUndefined(); // no keyboard passed = strip the buttons
+  });
+
+  it("alert Stop that finds nothing to forget does NOT strip buttons (only on a real stop)", async () => {
+    const edits: number[] = [];
+    const { handle } = harness({
+      alertForget: () => false, // wasn't an active watch
+      editReplyMarkup: async (_c, messageId) => { edits.push(messageId); },
+    });
+    const t = { chatId: 1, from: "u", text: "", messageId: 42, callback: { data: encodeCallback({ kind: "alert", action: "stop", name: "gone" })!, callbackQueryId: "q1" } } as InboundMessage;
+    await handle(t);
+    expect(edits).toHaveLength(0);
+  });
+
   it("digest Run again composes + sends with a Run-again button", async () => {
     const { handle, sent, acked } = harness({ digestRun: async () => "☀️ Morning brief: ..." });
     await handle(tap(encodeCallback({ kind: "digest", action: "run", name: "morning" })!));
