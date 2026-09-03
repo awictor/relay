@@ -187,7 +187,7 @@ export interface HandlerDeps {
     { ok: true; kind: string } | { ok: false; reason: "unknown" | "unparsed" | "capped" };
   // Change-alerts (m10 alert-3): "watch <name>: <task>" defines + auto-schedules a check.
   // All optional. alertDefine parses + stores + schedules (default cadence); returns the cadence.
-  alertDefine?: (chatId: number, text: string, now: number) => { ok: true; name: string; feed?: boolean; then?: string; members?: number; pageUrl?: string; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" };
+  alertDefine?: (chatId: number, text: string, now: number) => { ok: true; name: string; feed?: boolean; then?: string; members?: number; pageUrl?: string; weather?: string; saved?: boolean } | { ok: false; reason: "unparsed" | "capped" };
   // Follow-feed subscriptions (follow-feed-subscriptions): "follow r/x / a blog / HN topic / a YT
   // channel" -> a keyless feed watch that pings only on NEW items. null = not a follow command (falls
   // through); { reason: "unresolved" } = a follow we couldn't map to a keyless feed (suggest the agent
@@ -1025,6 +1025,8 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         const thenNote = r.then ? ` Then I'll run your "${r.then}" recipe and include its result.` : "";
         await deps.sendMessage(msg.chatId, (r.members
           ? `Watching "${r.name}" — ${r.members} items in one list; I'll send a single update with only the ones that change.`
+          : r.weather
+          ? `Watching the forecast for "${r.name}" — I'll message you if there's ${r.weather}.`
           : r.pageUrl
           ? `Watching that page for "${r.name}" — I'll message you with what changed when its content updates.`
           : r.feed

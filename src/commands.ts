@@ -84,6 +84,8 @@ Follow a feed: "follow r/programming", "follow HN rust", "follow this blog https
 
 Watch for NEW items in a list: "watch jobs: remote react roles for new listings" or "watch deals: new deals on OLED TVs" — I ping you only when a NEW entry shows up (not on every check). Great for job boards, listings, restocks, releases.
 
+Watch the weather: "watch umbrella: if it rains tomorrow", "watch cold: if it's below freezing tonight", "watch heat: if it gets above 95 today" — I check the forecast and ping you once if it's going to happen. Add "in <city>" for somewhere other than your saved location.
+
 Watch, then DO: add "then run <recipe>" to any watch — "watch jobs: new remote roles for new listings then run summarize-jobs" — and when it fires I'll also run that saved recipe and include its result.
 
 Watch a whole list at once: separate items with semicolons — "watch markets: btc price; eth price; gold price" — and I track them as one watchlist, sending a single update with only the ones that moved.

@@ -286,6 +286,13 @@ describe("feed-watch (new-item-feed-watch)", () => {
     expect(parseAlertCommand("watch jobs: remote react roles for new listings")).toEqual({ name: "jobs", task: "remote react roles", feed: true });
     expect(parseAlertCommand("watch ps5: new PS5 restocks")).toEqual({ name: "ps5", task: "new PS5 restocks", feed: true });
   });
+  it("parses a weather-conditional watch (weather-conditional-alert)", () => {
+    expect(parseAlertCommand("watch umbrella: if it rains tomorrow")).toEqual({ name: "umbrella", task: "if it rains tomorrow", weather: { op: "rain", horizon: "tomorrow" } });
+    expect(parseAlertCommand("alert cold: if it's below freezing tonight")).toMatchObject({ name: "cold", weather: { op: "below", operand: 32, horizon: "today" } });
+    // A plain numeric watch (no weather word) is NOT a weather alert.
+    expect(parseAlertCommand("watch btc: bitcoin below 50000")).toMatchObject({ name: "btc", condition: { op: "below", operand: 50000 } });
+    expect((parseAlertCommand("watch btc: bitcoin below 50000") as { weather?: unknown }).weather).toBeUndefined();
+  });
   it("parses a bare-URL watch as a page-diff watch (watch-any-page-diff)", () => {
     expect(parseAlertCommand("watch terms: https://site.com/terms")).toEqual({ name: "terms", task: "https://site.com/terms", pageUrl: "https://site.com/terms" });
     expect(parseAlertCommand("watch job: this page: https://site.com/careers")).toEqual({ name: "job", task: "https://site.com/careers", pageUrl: "https://site.com/careers" });

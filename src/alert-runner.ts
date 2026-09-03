@@ -7,6 +7,7 @@ import type { LLMClient, LLMMessage } from "./llm.js";
 import type { Alert } from "./lib/alerts.js";
 import { changed, conditionHolds, extractValue, extractListItems, feedItemKey, looksLikeErrorReply } from "./lib/alerts.js";
 import { pageKey, pageText, diffPages, formatPageDiff } from "./lib/pagediff.js";
+import { evalWeatherCondition } from "./lib/weather-alert.js";
 import { mapPool } from "./lib/pool.js";
 import type { AgentEnv } from "./chain-runner.js";
 
@@ -71,6 +72,9 @@ export interface AlertRunnerDeps {
   bumpFlap?: (chatId: number, name: string) => number;
   resetFlap?: (chatId: number, name: string) => void;
   muteWatch?: (chatId: number, name: string) => void;
+  // Weather-conditional (weather-conditional-alert): fetch the forecast for the alert's place/coords, or
+  // null on failure. Absent -> a weather alert can't check (holds silently).
+  fetchWeather?: (chatId: number, place?: string) => Promise<import("./lib/weather.js").WeatherResult | null>;
 }
 
 /**
@@ -95,6 +99,26 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
       return out ? `${message}\n\n▶ ${alert.then}:\n${out}` : message;
     } catch { return message; }
   };
+
+  // Weather-conditional (weather-conditional-alert): fetch the forecast, evaluate the predicate, and notify
+  // EDGE-TRIGGERED — fire only when it FIRST becomes true (was false/unknown last check), so "if it rains
+  // tomorrow" pings once, not every check while the forecast still shows rain. lastValue holds "1"/"0"
+  // (last predicate state). A fetch failure / unassessable forecast HOLDS (keeps the last state, silent).
+  if (alert.weather && deps.fetchWeather) {
+    let w: import("./lib/weather.js").WeatherResult | null = null;
+    try { w = await deps.fetchWeather(alert.chatId, alert.weather.place); } catch { w = null; }
+    const ev = w ? evalWeatherCondition(alert.weather, w) : null;
+    if (!ev) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop }; // can't assess -> hold
+    const nowHolds = ev.holds;
+    const prevHolds = alert.lastValue === "1";
+    if (nowHolds && !prevHolds) {
+      // Edge: became true. DEFER the state advance to the caller's post-send commit (a failed send re-fires).
+      return { notify: true, message: await withThen(ev.detail), value: "1", commit: () => deps.setLast(alert.chatId, alert.name, "1") };
+    }
+    // No edge (still true, or false): record the current state now (no send to gate on), stay silent.
+    deps.setLast(alert.chatId, alert.name, nowHolds ? "1" : "0");
+    return { notify: false, message: null, value: nowHolds ? "1" : "0", commit: noop };
+  }
 
   // Watch-any-page (watch-any-page-diff): a bare-URL watch fetches the page DIRECTLY and pings when its
   // visible text changes, showing the added/removed lines. First run seeds the snapshot silently. A fetch

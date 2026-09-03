@@ -103,6 +103,20 @@ describe("checkAlert", () => {
     expect(lastSet).toEqual([{ name: "btc", value: "Trading paused pending listing" }]);
   });
 
+  it("a weather-conditional watch fires edge-triggered, once, when the forecast first says rain (weather-conditional-alert)", async () => {
+    const wxRain = { place: "Austin", current: { tempC: 20, tempF: 68, code: 63, desc: "rain", windKph: 10 }, today: { hiC: 22, loC: 15, hiF: 72, loF: 59, precipPct: 80 }, days: [{ date: "2026-09-03", hiC: 22, loC: 15, hiF: 72, loF: 59, precipPct: 80, code: 63, desc: "rain" }] };
+    const al = alert({ weather: { op: "rain", horizon: "today" } });
+    // Edge up: no prior state, forecast rainy -> notify.
+    const r1 = await checkAlert(al, deps("", { fetchWeather: async () => wxRain as never }).d);
+    expect(r1.notify).toBe(true);
+    expect(r1.message).toMatch(/Rain likely today/);
+    // Still rainy on the next check (prev state "1") -> silent, no repeat ping.
+    const r2 = await checkAlert(alert({ weather: { op: "rain", horizon: "today" }, lastValue: "1" }), deps("", { fetchWeather: async () => wxRain as never }).d);
+    expect(r2.notify).toBe(false);
+    // Fetch fails -> hold (no notify, keep last state).
+    const r3 = await checkAlert(al, deps("", { fetchWeather: async () => { throw new Error("net"); } }).d);
+    expect(r3.notify).toBe(false);
+  });
   it("a page-diff watch seeds silently on first check, then pings with what changed (watch-any-page-diff)", async () => {
     let page = "<p>Out of stock</p>";
     const { d, lastSet } = deps("unused", { fetchPage: async () => page });

@@ -2444,7 +2444,7 @@
       "title": "no \"text me if it rains tomorrow\" weather-conditional alert",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "'text me tomorrow morning if it's going to rain' / 'ping me if it drops below freezing tonight' — the most-wanted PROACTIVE weather errand — has no path; only a flaky agent-driven prose watch. get_weather (keyless open-meteo) + the alert engine's edge-triggered numeric + feedSource plumbing already exist. This is the flagship 'proactive assistant' promise new users test in minute one.",
       "how": "Add a weather-alert kind: parse 'if it rains/snows tomorrow', 'if it drops below X', 'if above X', 'if wind over X'; on each check fetch the forecast (hourly rain-timing already built) + evaluate the predicate edge-triggered (fire when it FIRST becomes true), reusing the alert seen-set/scheduler. Offline-testable with an injected forecast. New parse + a runner branch or a feedSource-style checker."
     },
@@ -3418,6 +3418,10 @@
     {
       "item": "timer-quiet-hours-defer",
       "note": "A timer / short 'in N min' reminder no longer gets deferred hours by quiet-hours. The runner only exempted a wall-clock 'once' (clockTime) from the quiet defer, so 'timer for 20 minutes' at 11pm (or 'remind me in 30 min') was pushed to the window end (e.g. 7am) — the most common errand silently broken by hours (latent: gated on RELAY_QUIET_START/END being set). Added a SHORT-HORIZON exemption: a once with no clockTime whose dueMs-created <= 3h is a deliberate near-term instant (timer / 'in a couple hours') and fires on time; a LONG relative once ('in 2 days', incidental late-night instant) still defers. 2 new runner tests (short once fires in quiet hours; long relative once still defers) + updated 2 existing quiet-defer tests to use a long-horizon once. suite 1664 green, tsc clean. call-tested:false (offline runner, injected clock+quietUntil)."
+    },
+    {
+      "item": "weather-conditional-alert",
+      "note": "Added weather-conditional alerts — the flagship proactive errand. 'watch umbrella: if it rains tomorrow' / 'watch cold: if it's below freezing tonight' / 'watch heat: if it gets above 95 today' now check the keyless Open-Meteo forecast on the alert cadence and ping ONCE (edge-triggered) when it's going to happen. New src/lib/weather-alert.ts: parseWeatherCondition (rain/snow/below/above/wind + today|tomorrow + 'in <place>'; 'below freezing'->32F), evalWeatherCondition (rain/snow via WMO code or precip>=50%, below/above vs the day's lo/hi in the threshold's units, wind via current windKph proxy; missing day -> hold), describeWeatherCondition. Wired: Alert.weather field + parseAlertCommand branch (gated on a weather/temp cue so a plain 'below 50000' stays a numeric watch) + AlertStore.add/overwrite persist+reset + alert-runner branch (edge-triggered via lastValue '1'/'0', holds on fetch fail) + index fetchWeather dep (named place or saved home coords) + alertDefine return + handler confirm + HELP. 20 new tests; live-probed Open-Meteo forecast (200, daily code/precip/hi/lo present) so call-tested:true for the source, runner+parse offline-tested. suite 1674 green, tsc clean."
     }
   ],
   "audits": [

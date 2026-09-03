@@ -5,6 +5,7 @@
 
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
 import { pageWatchUrl } from "./pagediff.js";
+import { parseWeatherCondition } from "./weather-alert.js";
 
 export interface Alert {
   chatId: number;
@@ -13,6 +14,10 @@ export interface Alert {
   lastValue?: string;  // last agent reply, for change comparison
   threshold?: number;  // optional: only notify if a numeric value moved >= this much
   condition?: AlertCondition; // optional: notify when a predicate holds (below/above/in-stock)
+  // Weather-conditional (weather-conditional-alert): "text me if it rains tomorrow" — a forecast predicate
+  // (rain/snow/below/above/wind + today|tomorrow) checked directly against the keyless Open-Meteo forecast,
+  // edge-triggered (fires when it FIRST becomes true). Present -> the runner takes the weather branch.
+  weather?: import("./weather-alert.js").WeatherCondition;
   // Feed-watch (new-item-feed-watch): the task returns a LIST (jobs, listings, restocks) and we notify
   // only when a NEW entry appears — not on any value change. `seen` is the set of item keys already
   // reported; undefined = never checked (seed silently on the first run so setup doesn't dump the
@@ -74,6 +79,7 @@ export interface ParsedAlert {
   threshold?: number;
   condition?: AlertCondition;
   feed?: boolean; // notify on a NEW list item, not on a value change
+  weather?: import("./weather-alert.js").WeatherCondition; // weather-conditional-alert
   pageUrl?: string; // watch-any-page-diff: a bare-URL watch that pings on any page-content change
   feedSource?: { kind: "rss" | "reddit" | "hn" | "youtube"; url: string; label: string }; // follow-feed-subscriptions
   then?: string;  // run this saved recipe when the alert fires (trigger-to-action-alerts)
@@ -214,6 +220,19 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
   // clause) so the price/stock/feed parsing below still sees a clean task tail.
   const thenClause = task.match(/\s+then\s+(?:run\s+)?(?:recipe\s+)?([a-z0-9][\w -]{0,58})\s*$/i);
   if (thenClause) { then = normalizeName(thenClause[1]!); task = task.slice(0, thenClause.index).trim(); }
+
+  // Weather-conditional (weather-conditional-alert): "watch umbrella: if it rains tomorrow" / "alert cold:
+  // if it drops below freezing tonight". Requires a WEATHER cue word (rain/snow/wind/freez/temp-threshold)
+  // so a plain "watch btc: ... below 50000" (no weather word) does NOT match. Checked before the numeric/
+  // feed/page parsing (those clauses don't co-occur with a weather cue).
+  // A weather cue: precip/wind words, OR a temperature framing (freezing/cold/hot/degrees/°) — the latter
+  // lets "if it drops below 32°"/"if it's below freezing" be a weather alert, while a plain "if it goes
+  // below 50000" (no temp/weather word) stays a numeric watch. parseWeatherCondition returns null anyway
+  // if it can't build a condition, so this gate is just a cheap pre-filter.
+  if (name && /\b(rains?|rainy|snows?|snowy|freez\w*|frost|wind\w*|gust\w*|umbrella|sunny|storm\w*|showers?|cold|chilly|hot|heat|temperature|degrees?)\b|°/i.test(task)) {
+    const wx = parseWeatherCondition(task);
+    if (wx) { const base = { name, task, weather: wx }; return then ? { ...base, then } : base; }
+  }
 
   // Watchlist (watchlists): a SEMICOLON-separated task is a basket of sub-watches — "watch markets: btc
   // price; eth price; gold price" -> one grouped ping of only the members that moved. Checked before the
@@ -570,6 +589,9 @@ export class AlertStore {
       if (!!existing.feed !== !!a.feed) { existing.feed = a.feed; existing.seen = undefined; existing.lastValue = undefined; }
       // Re-following the same name can change the source (e.g. r/x -> a blog); reset seen so it reseeds.
       if (JSON.stringify(existing.feedSource) !== JSON.stringify(a.feedSource)) { existing.feedSource = a.feedSource; existing.seen = undefined; existing.lastValue = undefined; }
+      // Re-defining to/from a weather-conditional (weather-conditional-alert): sync it + reset the baseline
+      // so the new predicate edge-evaluates fresh (mirrors the pageUrl/feed reset).
+      if (JSON.stringify(existing.weather) !== JSON.stringify(a.weather)) { existing.weather = a.weather; existing.lastValue = undefined; }
       // Re-stating a watchlist replaces its members (preserving each member's last value by label so an
       // unchanged member doesn't re-fire), or clears them when it's no longer a watchlist.
       if (a.members) {
@@ -580,7 +602,7 @@ export class AlertStore {
       }
       this.persist(); return existing;
     }
-    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, feed: a.feed, ...(a.pageUrl ? { pageUrl: a.pageUrl } : {}), ...(a.feedSource ? { feedSource: a.feedSource } : {}), then: a.then, members: a.members?.map((m) => ({ label: m.label, task: m.task })), created: now };
+    const rec: Alert = { chatId, name, task: a.task, threshold: a.threshold, condition: a.condition, feed: a.feed, ...(a.weather ? { weather: a.weather } : {}), ...(a.pageUrl ? { pageUrl: a.pageUrl } : {}), ...(a.feedSource ? { feedSource: a.feedSource } : {}), then: a.then, members: a.members?.map((m) => ({ label: m.label, task: m.task })), created: now };
     this.items.push(rec);
     this.persist();
     return rec;

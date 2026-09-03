@@ -18,6 +18,8 @@ import { createShutdown, installSignalHandlers, installCrashHandlers } from "./s
 import { formatStatus, makeAnvilPinger } from "./lib/status.js";
 import { makeMetricsHeartbeat } from "./lib/metrics-heartbeat.js";
 import { runAgent, defaultFetchText, defaultFetchBytes } from "./agent.js";
+import { getWeather as getWeatherFn } from "./lib/weather.js";
+import { describeWeatherCondition } from "./lib/weather-alert.js";
 import { fetchFeedItems, resolveFeedSource, parseFollowCommand } from "./lib/feeds.js";
 import { readQrFromBytes } from "./lib/qr-decode.js";
 import { formatReply, formatReplyParts } from "./lib/format-reply.js";
@@ -160,6 +162,9 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
     setMemberLasts: (c, n, updates) => alerts.setMemberLasts(c, n, updates),
     fetchFeed: (src) => fetchFeedItems(src, defaultFetchText), // follow-feed-subscriptions: keyless direct fetch
     fetchPage: (url) => defaultFetchText(url), // watch-any-page-diff: SSRF-guarded direct page fetch
+    // Weather-conditional (weather-conditional-alert): forecast for the alert's named place, else the
+    // chat's saved home coords (a standing automation ignores the coord TTL, like the digest weather).
+    fetchWeather: (chatId, place) => getWeatherFn(place ? { place, near: profiles.homeCoords(chatId) } : (profiles.homeCoords(chatId) ? { lat: profiles.homeCoords(chatId)!.lat, lng: profiles.homeCoords(chatId)!.lng } : {}), defaultFetchText),
     bumpFlap: (c, n) => alerts.bumpFlap(c, n),  // page-diff-flap-guard
     resetFlap: (c, n) => alerts.resetFlap(c, n),
     // Auto-mute a flapping page watch: pause its schedule indefinitely (user resumes by name). Reuse the
@@ -636,7 +641,7 @@ const handle = createHandler({
     // saved = both the alert row AND its cadence schedule reached disk (either failing means the watch
     // won't survive a restart / won't actually fire) — persist-bool-all-stores.
     const saved = alertSaved && (!sp || schedules.lastSaveOk());
-    return { ok: true, name: rec.name, feed: rec.feed, then: rec.then, members: rec.members?.length, ...(rec.pageUrl ? { pageUrl: rec.pageUrl } : {}), saved };
+    return { ok: true, name: rec.name, feed: rec.feed, then: rec.then, members: rec.members?.length, ...(rec.pageUrl ? { pageUrl: rec.pageUrl } : {}), ...(rec.weather ? { weather: describeWeatherCondition(rec.weather) } : {}), saved };
   },
   // Follow-feed subscriptions (follow-feed-subscriptions): "follow r/x / a blog / HN topic / a YT
   // channel" -> a feed watch backed by a KEYLESS direct fetch (feedSource), auto-scheduled on the same
