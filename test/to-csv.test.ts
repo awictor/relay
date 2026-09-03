@@ -33,6 +33,15 @@ describe("rowsToCsv (csv-export-compare)", () => {
     expect(csv).not.toContain("'normal");
   });
 
+  it("does NOT quote a legitimate negative number (stays sortable)", () => {
+    const rows = [{ pnl: "-5.2", big: "-1,000.00", n: -3, formula: "-cmd|calc" }];
+    const csv = rowsToCsv(rows);
+    expect(csv).toContain("-5.2");      // negative number untouched (no leading quote)
+    expect(csv).not.toContain("'-5.2");
+    expect(csv).toContain("-3");
+    expect(csv).toContain("'-cmd|calc"); // a non-numeric formula-lead still guarded
+  });
+
   it("empty / invalid input -> empty string", () => {
     expect(rowsToCsv([])).toBe("");
     expect(rowsToCsv(null)).toBe("");

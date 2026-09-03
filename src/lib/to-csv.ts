@@ -12,8 +12,10 @@ function csvCell(v: unknown): string {
   else s = String(v);
   // CSV formula-injection guard: cells come from arbitrary scraped pages (untrusted). A value starting
   // with = + - @ (or a tab/CR that Excel treats as a formula lead) executes as a formula on open in
-  // Excel/Sheets. Prefix a single quote to neutralize it while keeping the text readable.
-  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  // Excel/Sheets. Prefix a single quote to neutralize it — BUT don't corrupt a legitimate negative
+  // number (e.g. "-5.2", "-1,000.00"), which is a normal data value that must stay sortable/summable.
+  const isPlainNumber = /^-?\d[\d,]*(\.\d+)?$/.test(s);
+  if (/^[=+\-@\t\r]/.test(s) && !isPlainNumber) s = "'" + s;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

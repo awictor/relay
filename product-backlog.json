@@ -1079,6 +1079,69 @@
       "status": "done",
       "why": "memberLabel = first 4 words; two similar members collapse to one label so setMemberLasts updates the wrong one + one member re-fires every check.",
       "how": "Disambiguate duplicate labels (append an index) or key members by task, not label."
+    },
+    {
+      "id": "csv-negative-number-guard",
+      "title": "CSV formula-guard corrupts legitimate negative numbers",
+      "impact": "med",
+      "effort": "S",
+      "status": "done",
+      "why": "The just-added CSV injection guard quoted any cell starting with - (a negative price/temp/%-delta) as text, so the exported sheet could not sort/sum that column — broke the deliverable it exists for.",
+      "how": "Skip the quote for a plain numeric cell (-?d...); still guard a non-numeric =/+/-/@ lead."
+    },
+    {
+      "id": "near-me-poi",
+      "title": "\"near me\" / local place search has no backend (advertised, broken)",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "Onboarding + the location-pin ack promise \"near me\"; LOCATION_ERRAND_RE detects nearby/closest but there is no POI tool, so the first location errand flounders on a logged-out map scrape.",
+      "how": "Nominatim geocode + Overpass around:<coords> query by category -> name/distance/opening_hours/phone; keyless. Reuse the weather fetchText pattern."
+    },
+    {
+      "id": "directions-eta",
+      "title": "directions / travel-time promised but unbuilt",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "\"how far is the airport\", \"directions to X\" match LOCATION_ERRAND_RE + are advertised, but no routing tool exists — returns nothing usable.",
+      "how": "Nominatim geocode both endpoints + OSRM public server (router.project-osrm.org, keyless) for distance+duration; one-line ETA reply."
+    },
+    {
+      "id": "weather-ambiguous-city",
+      "title": "get_weather resolves an ambiguous city to the biggest same-name match",
+      "impact": "med",
+      "effort": "M",
+      "status": "todo",
+      "why": "\"weather in Portland/Springfield\" returns the highest-population match, not the user; count=1 + results[0] with no disambiguation.",
+      "how": "Fetch a few geocode candidates; if the top two are far apart / different regions, ask which, or prefer one near the user saved coords."
+    },
+    {
+      "id": "ics-calendar-export",
+      "title": ".ics calendar export in the composer",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "A found event/deadline dead-ends at text; no add-to-calendar. compose.ts already proves the non-gated artifact pattern.",
+      "how": "compose kind:calendar -> a data:text/calendar VEVENT + a Google-cal deep link; pure formatting, never trips the send guard."
+    },
+    {
+      "id": "multi-slot-recipes",
+      "title": "recipes give the single arg to EVERY slot",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "applySlots stuffs one arg into all slots (its own comment flags it), so \"track {item} at {store}\" cannot take two values — recipes stay toys.",
+      "how": "Parse distinct positional/named args; map each to its slot."
+    },
+    {
+      "id": "compose-invalid-recipient",
+      "title": "compose echoes an invalid recipient but blanks the deep link",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "A malformed to shows \"To: john at x.com\" in the copy block yet the mailto/sms link has an empty address — tapping opens a blank draft; user thinks it is addressed.",
+      "how": "When to fails EMAIL_RE/PHONE_RE, omit the To: line + note the address could not be parsed, or keep it out of both."
     }
   ],
   "history": [
@@ -1453,6 +1516,10 @@
     {
       "id": "watchlist-member-label-collision",
       "note": "Watchlist members whose 4-word label collides (e.g. \"news on tesla model 3\" / \"...model y\" both -> \"news on tesla model\") now get a numeric suffix so labels are unique. setMemberLasts keys on label, so a collision used to update the wrong member + one re-fired every check. 996 tests green."
+    },
+    {
+      "id": "csv-negative-number-guard",
+      "note": "Fixed the CSV formula-injection guard (shipped 2 iters ago) that also quoted legitimate negative numbers (-5.2 -> '-5.2), breaking sort/sum in the exported sheet. Now a plain numeric cell is left untouched; a non-numeric =/+/-/@ lead is still guarded. Also flipped watchlist-member-label-collision this iteration. 997 tests green."
     }
   ],
   "audits": [
@@ -1530,6 +1597,9 @@
     },
     {
       "note": "Backlog dry after telegram-location-pin -> 3-agent audit. A(new-user): NO weather/geocode/route/POI backend behind the advertised weather/near-me/directions (Open-Meteo/Nominatim/OSRM/Overpass), translation not in the answer-direct list, package-tracking has no free API. B(reliability): watchlist unbounded fan-out (BUILT fix) + CSV formula injection (BUILT fix), coords leak to LLM forever no TTL, FX \"live\" claim ~daily + tiny-rate 0.0000, member-label collision. C(power): draft-to-send composer, template gallery, recipe chaining, .ics export, shareable recipes. Built the watchlist+CSV fix cluster (broken just-shipped path + a security gap); seeded the rest."
+    },
+    {
+      "note": "Backlog dry after draft-to-send-composer -> 3-agent audit. A(new-user): near-me POI + directions/ETA (Nominatim/Overpass/OSRM) still advertised-but-unbuilt, package tracking via real anvil browser, is-it-open-now. B(reliability): CSV guard corrupts negative numbers (BUILT fix), get_weather ambiguous-city, compose invalid-recipient blank link, convert_currency NaN->1 silent, weather F-default for metric user. C(power): conditional recipe chaining, .ics export, multi-slot recipes, starter library, shareable recipes. Built the CSV-negative fix (broken just-shipped path); seeded the rest."
     }
   ]
 }
