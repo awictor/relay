@@ -2417,9 +2417,45 @@
       "title": "a watch reads \"1.2M subscribers\" as 1.2 (off by 6 orders of magnitude)",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "extractValue excludes bare m/t from the untagged magnitude branch (to avoid '3m ago'/'5t'), but a plain '1.2M subscribers' (no $ or %) collapses to 1.2 -> a 'below 50000'/'above 2000000' predicate fires/never-fires against a value off by 6+ orders, + the series records garbage. Same class as the fixed $60k bug, uncaught for non-currency counts (followers/subs/views/tokens).",
       "how": "Accept a magnitude suffix (k/m/b/t) when glued to the number AND followed by a word boundary/plural noun (not a bare standalone letter) even without a currency tag: '1.2M subscribers' -> 1200000, '3m ago' stays untouched. Offline test in alerts extractValue."
+    },
+    {
+      "id": "extractvalue-bare-kb-overscale",
+      "title": "extractValue over-scales any number before a bare k/b word (\"4 boxes\"->4e9)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "The untagged magnitude scan /(d+)s?(k|bn|b|thousand|million|billion|trillion)?/ excludes bare m/t (to avoid '3m ago') but LEFT bare k and b. So a non-currency count reply '4 boxes left' matches the 'b'illion suffix -> 4,000,000,000; '3 bedrooms'->3e9; '5 kids'/'3 km'/'2 kg'->x1000. A 'below 10'/'above N' predicate then false-fires/misses + recordPoint logs phantom multi-billion spikes. My count-magnitude fix added the count-noun path but didn't tighten the GENERAL branch's bare k/b. Broad silent-wrong across count/inventory/rental watches.",
+      "how": "In the untagged branch require the k/b/etc suffix be followed by a word boundary NOT a letter (mirror the m/t exclusion): a bare 'b'/'k' immediately followed by a letter ('boxes','km','kids','kg') must NOT scale. Only 'k'/'b' at a true token end (or the explicit bn/billion/thousand words) scale. Keep the count-noun path ('900k downloads') working. Offline test: '4 boxes left'->4, '3 km'->3, '2 kg'->2, '900k downloads'->900000, '$60k'->60000."
+    },
+    {
+      "id": "timer-quiet-hours-defer",
+      "title": "a timer / short reminder is deferred hours by quiet-hours",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "The timer + relative-once branches return {kind:'once', dueMs:now+ms, reminderOnly:true} with NO clockTime flag, and schedule-runner only exempts isClockOnce from the quiet-hours defer. So with quiet hours on, 'timer for 20 minutes' at 11pm (or 'remind me in 30 min') is pushed to the window end (e.g. 7am) — the most common errand silently breaks by hours. Gated on RELAY_QUIET_START/END being set (off by default), so latent.",
+      "how": "Exempt a SHORT-HORIZON once (timer, or a relative 'in N min/hours' due within the quiet window's start) from the quiet defer, mirroring the clock-once alarm exemption — the fire instant is deliberate + near-term. Offline test: a timer inside the quiet window fires at its time, not deferred."
+    },
+    {
+      "id": "weather-conditional-alert",
+      "title": "no \"text me if it rains tomorrow\" weather-conditional alert",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "'text me tomorrow morning if it's going to rain' / 'ping me if it drops below freezing tonight' — the most-wanted PROACTIVE weather errand — has no path; only a flaky agent-driven prose watch. get_weather (keyless open-meteo) + the alert engine's edge-triggered numeric + feedSource plumbing already exist. This is the flagship 'proactive assistant' promise new users test in minute one.",
+      "how": "Add a weather-alert kind: parse 'if it rains/snows tomorrow', 'if it drops below X', 'if above X', 'if wind over X'; on each check fetch the forecast (hourly rain-timing already built) + evaluate the predicate edge-triggered (fire when it FIRST becomes true), reusing the alert seen-set/scheduler. Offline-testable with an injected forecast. New parse + a runner branch or a feedSource-style checker."
+    },
+    {
+      "id": "inline-tap-buttons",
+      "title": "proactive pings are text-only — no one-tap Refresh/Snooze/Stop/Run-again buttons",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "Every alert/digest/reminder/recipe result is a dead-end requiring the user to compose a reply; callback_query is completely unwired (telegram.ts has only request_location). Retention lives on recurring touchpoints, and each is friction. Flagged by the audit as the single biggest cheap retention win, resurfacing repeatedly. task-suggest already computes the next action but delivers it as retype-it text.",
+      "how": "Wire Telegram inline keyboards (reply_markup) + a callback_query handler + a small payload registry, and attach one-tap actions (Refresh/Run again/Snooze/Stop watching/Show more, pick-a-result) to proactive sends + suggestion prose. Offline-testable by feeding injected callback deltas through the handler. Bigger surface (channel + handler) — scope carefully."
     }
   ],
   "history": [
@@ -3370,6 +3406,10 @@
     {
       "item": "unitprice-thousands-comma",
       "note": "Fixed unit_price breaking on a thousands-separated number. parseUnitPrice split on the ',' option separator BEFORE per-option comma-stripping, so '$1,299 for 3 vs $1,499 for 4' split into '$1'/'299 for 3' -> unparseable -> null -> the model fell back to mental math (the silently-wrong arithmetic the tool exists to prevent). Now strips in-number thousands commas (a comma between a digit and exactly-3-more-digits, via lookbehind/lookahead — the (?:D|$) tail so '1,200g' works too) BEFORE the separator split. 2 new assertions ('$1,299 for 3 vs $1,499 for 4' compares; comma in the qty too), suite 1661 green, tsc clean. call-tested:false (pure parse)."
+    },
+    {
+      "item": "watch-magnitude-suffix",
+      "note": "Fixed a watch reading '1.2M subscribers' as 1.2 (off by 6 orders). extractValue's untagged branch excludes a bare m/t (to avoid '3m ago'/'5t'), and a NON-currency count has no $ tag, so '1.2M subscribers' collapsed to 1.2 -> a 'below 50000'/'above 2000000' predicate fired/never-fired + the series recorded garbage. Added a count-magnitude scan (before the general untagged branch): a k/m/b/t/mn/bn suffix IS scaled when immediately followed by a COUNT NOUN (subscribers/followers/views/downloads/users/stars/tokens/streams/members/... — never a time word), so '1.2M subscribers'->1200000, '5B views'->5e9, '5T tokens'->5e12, while '3m ago' stays 3. Hint-nearest applies for multi-number replies. 8 new assertions (count-magnitude scaling + 3m-ago regression + below/above predicate correctness), suite 1662 green, tsc clean. call-tested:false (pure extractValue)."
     }
   ],
   "audits": [
@@ -3570,6 +3610,9 @@
     },
     {
       "note": "3-lens audit (unit_price shipped, backlog down to owner-gated confirm-to-act). RELIABILITY found NEW bugs: (1) reminder grabs an HH:MM from the task body -> wrong-hour fire; (2) unit_price splits on comma before stripping thousands-separators -> '$1,299' breaks (just-shipped regression); (3) 'check on mom' still routes to the browser agent not reminder-only; (4) watch reads '1.2M subscribers' as 1.2 (non-currency magnitude). NEW-USER: movie/TV lookup (M, TVmaze keyless), reverse-dictionary/typo-tolerant define (S, Datamuse), single-named-place open-now (S, openhours already built), Wikipedia fact lookup (parked), moon phase (S). POWER: inline one-tap buttons (M, parked, flagged highest-leverage — task-suggest already computes suggestions), weekly value recap (S), voice-note input (M), fan-out a task over a saved list (M). Seeded 4: reminder-time-from-task-body (high/M), unitprice-thousands-comma (med/S), checkon-todo-browses (high/S), watch-magnitude-suffix (med/M). Parked the rest."
+    },
+    {
+      "note": "3-lens audit (watch-magnitude-suffix shipped, backlog down to owner-gated confirm-to-act). RELIABILITY found a CRITICAL regression in my just-shipped extractValue: the untagged branch still has bare k/b, so '4 boxes'->4e9, '3 km'->3000, '2 kg'->2000 — false-fires + phantom chart spikes across count/inventory/rental watches. Also: timer/short-reminder deferred by quiet-hours (no clockTime exemption); all-failed digest with gone members mislabels a dead automation as transient. NEW-USER: weather-conditional alert ('text me if it rains', M, flagship), sunset-anchored reminders (M), leave-by ETA reminder (L), reverse-geocode pin (S, parked), named-place open-now (S, parked). POWER (audit says the strongest moves are PARKED — say so): inline one-tap buttons (M, highest-leverage cheap), confirm-to-submit (L), my-info vault (M), weekly recap (S). Seeded 4: extractvalue-bare-kb-overscale (high/S), timer-quiet-hours-defer (med/S), weather-conditional-alert (high/M), inline-tap-buttons (high/M). Parked the rest."
     }
   ]
 }

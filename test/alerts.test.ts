@@ -107,6 +107,16 @@ describe("extractValue (salient value, not first number)", () => {
     expect(extractValue("posted 3m ago, score is 4200")).toBe(4200); // "3m" = 3 min, not 3 million
     expect(extractValue("the reading is 500 units")).toBe(500);
   });
+  it("scales a k/m/b/t magnitude on a NON-currency count noun (watch-magnitude-suffix)", () => {
+    expect(extractValue("1.2M subscribers", "subs")).toBe(1_200_000);
+    expect(extractValue("5B views", "views")).toBe(5e9);
+    expect(extractValue("900k downloads")).toBe(900_000);
+    expect(extractValue("it's at 5T tokens", "tokens")).toBe(5e12);
+    // Still NOT a count-magnitude: bare "3m ago" (time), and a "1.2M subscribers" predicate reads right.
+    expect(extractValue("posted 3m ago")).toBe(3);
+    expect(conditionHolds({ op: "above", operand: 1_000_000 }, "now at 1.2M subscribers", "subscribers")).toBe(true);
+    expect(conditionHolds({ op: "below", operand: 50_000 }, "1.2M subscribers", "subs")).toBe(false); // not 1.2
+  });
 
   it("with a hint, picks the number nearest the watched entity, not the largest (extractvalue-largest-magnitude)", () => {
     // "S&P 500 below 5000" watch: reply mentions the bigger Dow number too. Must track the S&P (5900).

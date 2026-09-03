@@ -395,6 +395,18 @@ export function extractValue(s: string, hint?: string): number | null {
     if (hints.length && cands.length > 1) return nearestByHint(cands);
     return cands[0]!.v;
   }
+  // Count-magnitude (watch-magnitude-suffix): a NON-currency count like "1.2M subscribers", "5B views",
+  // "900k downloads" — the general untagged branch below excludes a bare "m"/"t" (to avoid "3m ago" /
+  // "5t"), so "1.2M subscribers" collapsed to 1.2 and a "below 50000"/"above 2000000" predicate fired
+  // against a value off by 6+ orders. Here a k/m/b/t/mn/bn suffix IS scaled when it's immediately
+  // followed by a count noun (subscribers/followers/views/... — never a time word like "ago"/"min").
+  const COUNT_NOUN = "(?:subscribers?|subs?|followers?|views?|downloads?|installs?|users?|stars?|tokens?|streams?|members?|likes?|reads?|plays?|watchers?|forks?|commits?|listeners?|readers?|viewers?|units?|copies|copy|sales?|orders?)";
+  const countMag = [...t.matchAll(new RegExp(`(-?\\d+(?:\\.\\d+)?)\\s?(k|mn|mm|bn|m|b|t|thousand|million|billion|trillion)\\s+${COUNT_NOUN}\\b`, "gi"))];
+  if (countMag.length) {
+    const cands = countMag.map((c) => ({ v: parseFloat(c[1]!) * magMult(c[2], true), at: c.index ?? 0 }));
+    if (hints.length && cands.length > 1) return nearestByHint(cands);
+    return cands[0]!.v;
+  }
   // Collect every number, flagging those immediately followed by % (a rate/change, not the value)
   // and scaling a trailing k/bn/billion/million/thousand magnitude suffix (bare m/t excluded here).
   const all: Array<{ v: number; at: number }> = [], nonPct: Array<{ v: number; at: number }> = [];
