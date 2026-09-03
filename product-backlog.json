@@ -2705,9 +2705,18 @@
       "title": "calorie/macro lookup ('calories in a banana') has no tool -> guessed",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "'how many calories in 2 eggs' / 'carbs in a Big Mac' falls to a slow web_search with conflicting numbers or the model silently invents figures — photo-intent.ts even matches calories|carbs|nutrition but nothing backs it. A daily health errand answered unreliably.",
       "how": "A get_nutrition tool: keyless Open Food Facts (branded items by name/barcode) + a small static table or USDA FoodData DEMO_KEY for whole foods; parse kcal/protein/carbs/fat, format, cite. Mirror meals.ts' food-data pattern. Say 'I'm not sure' on a miss rather than inventing."
+    },
+    {
+      "id": "movie-where-to-watch",
+      "title": "'where can I stream X' / movie rating has no tool -> cold web_search",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "'is Dune 2 any good' / 'where can I watch Oppenheimer' is a top evening errand that falls to a flaky logged-out scrape floating a number with no source or streaming answer.",
+      "how": "anvil drives a JustWatch (or Google) title page for streaming availability + a rating; reuse the browse/extract tools. Or a keyless-ish source if one exists. Report rating + where-to-stream + a link, honest on a miss."
     }
   ],
   "history": [
@@ -3782,6 +3791,10 @@
     {
       "item": "good-deal-price-verdict",
       "note": "Good-deal price verdict on watch pings (good-deal-price-verdict). A change-watch ping showed just the new number; now once the watch has >=5 recorded points it appends where the value sits in its range — 'Lowest in ~30d — a good time if you're buying' / 'Highest — pricey right now' / near-low / near-high / middle(low..high) — turning a one-shot number into a judgment (the recurring 'what does Relay say' hook). New pure priceVerdict(points,current,minPoints=5) in alerts.ts (null under minPoints or on a flat range; direction-agnostic — a low frames as buy, a high as pricey, user decides). alert-runner change-watch notify appends it for a numeric watch via a new seriesOf dep (index wires alerts.seriesOf); prose/first-run/thin-history watches append nothing. 8 new tests (priceVerdict low/high/near-low/mid/flat/thin; checkAlert appends-verdict + none-when-thin). HELP updated. suite 1833 green, tsc clean. Offline; anvil-independent (reuses the recorded series)."
+    },
+    {
+      "item": "nutrition-lookup",
+      "note": "Nutrition lookup (nutrition-lookup): 'calories in a banana' / 'protein in chicken breast' / 'carbs in a Big Mac' now answered from USDA FoodData Central instead of a web_search guess or invented figures. New src/lib/nutrition.ts: nutritionUrl (keyless USDA search, restricted to whole-food datasets Foundation/SR-Legacy/Survey so 'banana' isn't a random branded product; public DEMO_KEY, optional USDA_API_KEY for a real quota) + parseNutrition (top match -> per-100g kcal/protein/carb/fat; takes the KCAL energy row, NEVER lets a KJ value land in kcal; null when no macros) + formatNutrition (matched-food name so a mismatch is visible + a per-100g/source note) + getNutrition (null on miss/throw). Wired get_nutrition tool + dispatch (miss -> 'say not sure, don't invent') + BrowserBackend.getNutrition + defaultBackend + prompt menu + HELP + pinned tool-name list (42 tools) + USDA_API_KEY .env.example parity. 11 new tests (url, parse KCAL-vs-KJ/fallback/null, format, getNutrition resolve/throw/empty; 2 dispatch incl no-fabricate-on-miss). suite 1844 green, tsc clean. Live-probed USDA (200, banana/chicken/big-mac clean per-100g macros) so call-tested:true for the source; agent path offline-tested. Anvil-independent (keyless)."
     }
   ],
   "audits": [
@@ -4006,6 +4019,9 @@
     },
     {
       "note": "No audit this run — built from the prior audit's seeded queue (good-deal-price-verdict). Refilled by promoting a parked Agent-A finding: nutrition-lookup (medium/M, keyless Open Food Facts). Remaining: nutrition-lookup, callback-edit-in-place(low), confirm-to-act(owner-gated)."
+    },
+    {
+      "note": "No audit this run — built from the prior queue (nutrition-lookup). Refilled by promoting a parked Agent-A/C finding: movie-where-to-watch (medium/M, anvil JustWatch/Google). Remaining: movie-where-to-watch, callback-edit-in-place(low), confirm-to-act(owner-gated)."
     }
   ]
 }

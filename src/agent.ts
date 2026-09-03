@@ -18,6 +18,7 @@ import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
 import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
 import { getFact as factFetch, formatFact } from "./lib/wikifact.js";
+import { getNutrition as nutritionFetch, formatNutrition } from "./lib/nutrition.js";
 import { parseWorldClock, runWorldClock } from "./lib/worldclock.js";
 import { runDateCalc, type Ymd } from "./lib/datecalc.js";
 import { getScores as scoresFetch, formatScores, getNextGame as nextGameFetch, formatNextGame, wantsNextGame } from "./lib/scores.js";
@@ -230,6 +231,15 @@ export const TOOLS: ToolSpec[] = [
       type: "object",
       properties: { word: { type: "string", description: "The single English word to define, e.g. \"obsequious\" or \"escrow\"." } },
       required: ["word"],
+    },
+  },
+  {
+    name: "get_nutrition",
+    description: "Look up a food's calories + macros (protein/carbs/fat) from USDA data (no key, instant). Use this — NOT web_search/scrape, and NEVER guess from memory — for \"calories in X\", \"how much protein in X\", \"carbs in a Big Mac\", \"is X healthy\" (get the numbers first). Returns per-100g figures for the closest match + a source note. Pass the food name. If it returns nothing, say you're not sure rather than inventing numbers.",
+    parameters: {
+      type: "object",
+      properties: { food: { type: "string", description: "The food to look up, e.g. \"banana\", \"chicken breast\", \"Big Mac\"." } },
+      required: ["food"],
     },
   },
   {
@@ -457,6 +467,7 @@ Tools:
 - "get_scores" (request): sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight" AND upcoming games "when do the Lakers play next"/"next Arsenal game"/"upcoming NFL". Pass the request verbatim (keep their "next"/"when do they play" wording). Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
 - "define" (word): a word's definition, pronunciation, and synonyms. Use this — NOT web_search/scrape — for "what does X mean"/"define X"/"synonyms for X"/"how do you spell X". English words only; pass the single word.
 - "get_fact" (query): a quick cited Wikipedia summary. Use this — NOT web_search — for "who is X"/"what is X"/"how tall/old/big is X"/"tell me about X" general-knowledge asks. Pass the ENTITY (not the whole sentence). Falls back to web_search on a miss/ambiguous term.
+- "get_nutrition" (food): calories + macros from USDA. Use this — NOT web_search, NEVER guess — for "calories in X"/"protein in X"/"carbs in X"/"is X healthy". Per-100g for the closest match; say "not sure" on a miss instead of inventing numbers.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
 - "get_flight" (flight): flight route + live position by number. Use this — NOT web_search — for "is AA100 on time"/"where's UA83"/"when does DL215 land". Returns airline + from→to + airborne-now + a tracker link; it CAN'T get scheduled gate/on-time — report honestly, don't invent a gate/delay.
@@ -529,6 +540,9 @@ export interface BrowserBackend {
   // Optional: a quick Wikipedia fact (wikipedia-fast-fact). Absent -> the get_fact tool reports it's
   // unavailable. Returns {fact:null} on a miss, or {fact:null,disambiguation:true} for an ambiguous term.
   getFact?(query: string): Promise<{ fact: import("./lib/wikifact.js").WikiFact | null; disambiguation?: boolean }>;
+  // Optional: a food's per-100g calories + macros (nutrition-lookup). Absent -> the get_nutrition tool
+  // reports it's unavailable. Returns null on no match / fetch failure (caller says "not sure").
+  getNutrition?(food: string): Promise<import("./lib/nutrition.js").Nutrition | null>;
   // Optional: today's sports scores for a league/team (sports-scores-tool). Absent -> the get_scores
   // tool reports it's unavailable. Returns null on an unknown league / fetch failure.
   getScores?(query: string): Promise<{ leagueName: string; games: import("./lib/scores.js").GameScore[]; teamNotPlaying?: boolean } | null>;
@@ -671,6 +685,7 @@ const defaultBackend: BrowserBackend = {
   getCrypto: (coin) => cryptoFetch(coin, defaultFetchText),
   defineWord: (word) => dictFetch(word, defaultFetchText),
   getFact: (query) => factFetch(query, defaultFetchText),
+  getNutrition: (food) => nutritionFetch(food, defaultFetchText),
   getScores: (query) => scoresFetch(query, defaultFetchText),
   getNextGame: (query, nowMs) => nextGameFetch(query, nowMs, defaultFetchText),
   getNews: (topic) => newsFetch(topic, defaultFetchText),
@@ -1009,6 +1024,20 @@ export async function runAgent(
           push("define", `${formatDefinition(e)}\n\nReport this definition to the user (include the pronunciation + a synonym or two if present).`);
         } catch (e) {
           push("define", `ERROR looking up definition: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "get_nutrition") {
+        if (!backend.getNutrition) { push("get_nutrition", "ERROR: nutrition lookup isn't available."); continue; }
+        const food = String(call.args.food ?? "").trim();
+        if (!food) { push("get_nutrition", "No food given — ask the user which food."); continue; }
+        try {
+          const n = await backend.getNutrition(food);
+          if (!n) { push("get_nutrition", `No nutrition data for "${food}". Tell the user you're not sure — do NOT invent calorie/macro numbers; offer web_search.`); continue; }
+          push("get_nutrition", `${formatNutrition(n)}\n\nReport this to the user. Note the matched food name (so a mismatch is visible) + that figures are per 100g; if they asked about a specific portion, scale it + say you did.`);
+        } catch (e) {
+          push("get_nutrition", `ERROR looking up nutrition: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

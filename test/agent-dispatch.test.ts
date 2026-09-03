@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
     );
   });
 
@@ -235,6 +235,29 @@ describe("runAgent dispatch", () => {
     const out = await runAgent("how tall is everest", { llm, backend: b });
     expect(hits).toContain("getFact:Mount Everest");
     expect(out.reply).toMatch(/Everest/);
+  });
+
+  it("get_nutrition -> backend.getNutrition, reaches reply, no browser (nutrition-lookup)", async () => {
+    const { b, hits } = recordingBackend();
+    b.getNutrition = async (food) => { hits.push(`getNutrition:${food}`); return { food: "Banana, raw", kcal: 89, proteinG: 1.1, carbG: 22.8, fatG: 0.3 }; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_nutrition", args: { food: "banana" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "A banana is ~89 kcal per 100g." } } as ToolCall },
+    ]);
+    const out = await runAgent("calories in a banana", { llm, backend: b });
+    expect(hits).toContain("getNutrition:banana");
+    expect(out.reply).toMatch(/89 kcal/);
+  });
+
+  it("get_nutrition miss -> the model is told to say 'not sure', not invent numbers", async () => {
+    const { b } = recordingBackend();
+    b.getNutrition = async () => null;
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_nutrition", args: { food: "asdfqwer" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "I'm not sure about that one." } } as ToolCall },
+    ]);
+    const out = await runAgent("calories in asdfqwer", { llm, backend: b });
+    expect(out.reply).toMatch(/not sure/i);
   });
 
   it("get_fact on an ambiguous term does not fabricate — the disambiguation note reaches the model", async () => {

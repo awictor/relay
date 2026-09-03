@@ -46,6 +46,7 @@ const HELP = `Relay — what I can do:
 • Translate: "how do you say 'where's the pharmacy' in Spanish", "translate this page to English: <link>" → the translation (with pronunciation for non-Latin scripts).
 • Define a word: "what does obsequious mean", "synonyms for happy" → definition, pronunciation, and synonyms, instantly.
 • Quick facts: "who is the CEO of OpenAI", "how tall is Everest", "what is a Roth IRA" → a one-paragraph answer from Wikipedia with a source link, instantly.
+• Nutrition: "calories in a banana", "how much protein in chicken breast", "carbs in a Big Mac" → calories + protein/carbs/fat from USDA data (per 100g), instantly. I say so if I'm not sure rather than guessing.
 • World clock: "what time is it in Tokyo", "what's 9am PT in London" → the time there or a zone conversion, instantly.
 • Dates: "how many days until Christmas", "what day is July 4 2026", "how old if born 1990-05-06", "days between two dates" → exact calendar math, instantly.
 • Sports scores: "did the Lakers win?", "Man City score", "NBA scores tonight" → today's scores + status, instantly (NBA/NFL/MLB/NHL/NCAA + major soccer).
