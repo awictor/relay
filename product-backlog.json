@@ -3002,7 +3002,7 @@
       "title": "Single-slot recipe run with a name=value arg keeps the literal 'name='",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "applySlots fills a SINGLE slot with the whole arg string verbatim, so '/run greet name=Sam' on 'hi {name}' yields 'hi name=Sam' instead of 'hi Sam' — a user who mirrors the multi-slot name=value form gets the literal pair.",
       "how": "In the single-slot branch, if the arg is a lone 'slotname=value' matching the slot, use just the value; else keep the whole-string fill (a bare 'oat milk' still works)."
     },
@@ -4333,6 +4333,10 @@
     {
       "id": "chain-step-cap-silent-drop",
       "note": "Chain recipe saved with >6 steps silently kept only the first 6 (parseChainSteps slice). Added chainOverflow(task) (pure, no change to parseChainSteps's shape so its many callers are untouched); recipeSave + recipeSaveNamed return droppedSteps, and both save confirmations tell the user 'a chain runs up to 6 steps, so I dropped the last N'. Completes the cap-drop trust class (lists, digests, watchlists, now chains). +1 test, 2006 green."
+    },
+    {
+      "id": "single-slot-named-arg-literal",
+      "note": "Self-audit (agent cap 200/200): probed 3 fresh surfaces first — answer-log recall matching (precise, clean), cookie-jar host-scoping (sound: subdomain match, no suffix-confusion leak), earlier recurrence/countdown-milestones (clean) — CONVERGENCE confirmed on reliability veins. Then cleared the single-slot papercut: '/run greet name=Sam' on 'hi {name}' yielded 'hi name=Sam'; now a 'slot=value' arg naming THAT slot fills just the value (bare value still works, non-matching pair stays literal, value-with-= preserved, multi-slot unaffected). +1 test, 2007 green."
     }
   ],
   "audits": [
@@ -4638,6 +4642,9 @@
     },
     {
       "note": "Cap-drop trust class COMPLETE across lists/digests/watchlists/chains. Backlog now only owner-gated (confirm-to-act high/L) + low papercuts (callback-edit, save-page-dedupe, unitprice-three-way, single-slot-named-arg). The medium+ reliability/parse/safety/feed veins are swept; recent finds trended low. Next run should either clear a remaining low or, if a fresh-surface self-audit comes up clean, report convergence honestly."
+    },
+    {
+      "note": "Self-audit inline (agent cap 200/200): 3 fresh surfaces (answer-log, cookie-jar host-scoping, recurrence/milestones) all CLEAN — reliability veins converged. Cleared single-slot-named-arg papercut. Remaining: owner-gated confirm-to-act (high/L) + 3 lows (callback-edit, save-page-dedupe, unitprice-three-way). Loop has reached the point where the top item is owner-gated; further runs clear lows or await owner on confirm-to-act."
     }
   ]
 }

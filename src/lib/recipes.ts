@@ -142,7 +142,15 @@ export function applySlots(task: string, args: string): string {
   const names = slotNames(task);
   if (names.length === 0) return task;
   const a = args.trim();
-  if (names.length === 1) return task.replace(/\{[a-z0-9_]+\}/gi, a);
+  if (names.length === 1) {
+    // A user who mirrors the multi-slot "name=value" form on a SINGLE-slot recipe ("/run greet name=Sam"
+    // on "hi {name}") shouldn't get the literal "hi name=Sam" (single-slot-named-arg-literal). If the arg
+    // is exactly a "slot=value" pair naming THIS slot, fill with just the value; else the whole arg fills
+    // it (a bare "oat milk" still works, and a value that legitimately contains "=" is untouched).
+    const pair = a.match(/^([a-z0-9_]+)\s*=\s*(?:"([^"]*)"|(.+))$/i);
+    const val = pair && pair[1]!.toLowerCase() === names[0] ? (pair[2] ?? pair[3] ?? "").trim() : a;
+    return task.replace(/\{[a-z0-9_]+\}/gi, val);
+  }
 
   // Multiple slots: try name=value pairs first.
   const byName = new Map<string, string>();

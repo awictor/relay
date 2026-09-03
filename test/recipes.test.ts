@@ -57,6 +57,14 @@ describe("applySlots", () => {
   it("fills a named slot with the arg string", () => {
     expect(applySlots("check the price of {item}", "sneakers")).toBe("check the price of sneakers");
   });
+  it("a single-slot recipe run with a 'slot=value' arg fills the VALUE, not the literal pair (single-slot-named-arg-literal)", () => {
+    expect(applySlots("hi {name}", "name=Sam")).toBe("hi Sam");           // not "hi name=Sam"
+    expect(applySlots("price of {item}", "item=oat milk")).toBe("price of oat milk");
+    expect(applySlots("hi {name}", 'name="Sam Jones"')).toBe("hi Sam Jones"); // quoted value
+    expect(applySlots("hi {name}", "oat milk")).toBe("hi oat milk");      // bare value still works
+    expect(applySlots("hi {name}", "other=Sam")).toBe("hi other=Sam");    // pair naming a DIFFERENT slot -> literal
+    expect(applySlots("set {v}", "v=a=b")).toBe("set a=b");               // value containing '=' preserved
+  });
   it("fills every slot with the arg (recipes are simple)", () => {
     expect(applySlots("compare {item} on site A vs {item} on site B", "gpu")).toBe("compare gpu on site A vs gpu on site B");
   });
