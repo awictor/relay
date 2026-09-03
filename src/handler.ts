@@ -19,7 +19,7 @@ import { isBackgroundErrand, stripDispatchPhrasing, BACKGROUND_MAX_STEPS } from 
 import { isAnswerRecall, relativeAge } from "./lib/answer-log.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./lib/recipes.js";
 import { getTemplate, templateCatalog } from "./lib/templates.js";
-import { photoNeedsAgent } from "./lib/photo-intent.js";
+import { photoNeedsAgent, photoIsQrScan } from "./lib/photo-intent.js";
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -121,6 +121,10 @@ export interface HandlerDeps {
   // Inbound photo (product-loop): when a message carries photoFileId, describeImage answers about it
   // (caption = the question). Optional; absent -> a photo message gets a "can't read images yet" note.
   describeImage?: (fileId: string, caption: string) => Promise<string>;
+  // Decode a QR/barcode from a sent photo (read-qr-from-photo): downloads the image + reads its payload
+  // via a keyless decoder. Returns the decoded string, or null when there's no readable code. Optional;
+  // absent -> a QR-scan caption falls back to the vision describe.
+  readQr?: (fileId: string) => Promise<string | null>;
   // Inbound voice note (product-loop): transcribe the audio to text; the handler then runs the
   // transcript as a normal task. Optional; absent -> a voice note gets a "can't do voice" note.
   transcribeVoice?: (fileId: string) => Promise<string>;
@@ -382,6 +386,21 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       try {
         await deps.sendTyping(msg.chatId);
         const caption = msg.text?.trim() ?? "";
+        // Read a QR/barcode from the photo (read-qr-from-photo): a "scan this QR" caption decodes the
+        // payload with a keyless reader instead of the vision describe (which can't reliably read it).
+        // Checked first — it's the most specific intent. Falls through to describe if there's no code.
+        if (caption && photoIsQrScan(caption) && deps.readQr) {
+          const payload = await deps.readQr(msg.photoFileId);
+          if (payload) {
+            const isUrl = /^https?:\/\//i.test(payload.trim());
+            const out = isUrl ? `That QR code links to:\n${payload.trim()}` : `That QR code contains:\n${payload.trim()}`;
+            await deps.sendMessage(msg.chatId, out);
+            deps.memorySet(msg.chatId, [...deps.memoryGet(msg.chatId), { role: "user", content: `[photo] ${caption}` }, { role: "assistant", content: out }]);
+            return;
+          }
+          await deps.sendMessage(msg.chatId, "I couldn't find a QR code I could read in that image — try a clearer, closer photo of just the code.");
+          return;
+        }
         // Photo-to-action (photo-to-action): a caption that asks Relay to DO something with the image
         // ("split this receipt 3 ways +20% tip", "convert these prices to USD", "translate this menu")
         // must NOT be answered by the vision model's own guesswork — that's the silent-math error the

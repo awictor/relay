@@ -50,7 +50,7 @@ const HELP = `Relay — what I can do:
 • Meal ideas: "what can I make with chicken and rice", "dinner ideas", "recipe for carbonara" → dishes to cook + full recipes.
 • Sunrise/sunset: "what time is sunset today", "when's sunrise tomorrow in Denver", "how much daylight" → exact times, instantly.
 • Air quality + UV: "how's the air", "is it smoky", "safe to run outside", "do I need sunscreen today" → AQI, smoke/PM2.5, and the UV index, instantly.
-• QR codes: "make a QR code for https://mysite.com", "QR for my wifi" → I text you back a scannable QR image.
+• QR codes: "make a QR code for https://mysite.com", "QR for my wifi" → I text you back a scannable QR image. Send me a photo of a QR + "scan this" and I'll read it back.
 • Track a package: "where's my package 1Z999..." or "track 9400..." → I spot the carrier (UPS/FedEx/USPS/DHL) + read its tracking page. Add "watch" to get pinged when the status changes.
 • Share your location: tap 📎 → Location and I'll use it for "near me", weather, and directions.
 • Big errands: "find the 5 cheapest flights to Lisbon and get back to me" → I work on it in the background and text you when it's done.

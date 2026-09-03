@@ -20,3 +20,15 @@ export function photoNeedsAgent(caption: string): boolean {
   if (DESCRIBE_ONLY_RE.test(c)) return false;
   return ACTION_RE.test(c);
 }
+
+// A caption asking to DECODE a QR/barcode in the photo (read-qr-from-photo) — routed to a keyless QR
+// decoder, not the vision describe (which can't reliably read the payload). Also fires on a bare photo
+// (empty caption) only via the caller's own heuristic; here we key on explicit scan/QR/barcode words.
+const QR_SCAN_RE = /\b(scan|read|decode|what'?s in|open|follow)\b[^.]*\b(qr|qr[\s-]?code|barcode|bar[\s-]?code|code)\b|\b(qr|qr[\s-]?code|barcode|bar[\s-]?code)\b[^.]*\?|^\s*(scan|read|decode)\s+(this|it)\s*[?.!]*\s*$/i;
+
+/** True if a photo caption asks to scan/decode a QR or barcode. Exported. */
+export function photoIsQrScan(caption: string): boolean {
+  const c = caption.trim();
+  if (!c) return false;
+  return QR_SCAN_RE.test(c);
+}

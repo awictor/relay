@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { photoNeedsAgent } from "../src/lib/photo-intent.js";
+import { photoNeedsAgent, photoIsQrScan } from "../src/lib/photo-intent.js";
 
 describe("photoNeedsAgent (photo-to-action)", () => {
   it("routes action captions through the agent", () => {
@@ -21,5 +21,18 @@ describe("photoNeedsAgent (photo-to-action)", () => {
   });
   it("an empty / whitespace caption is not actionable", () => {
     expect(photoNeedsAgent("   ")).toBe(false);
+  });
+});
+
+describe("photoIsQrScan (read-qr-from-photo)", () => {
+  it("recognizes a scan-QR caption", () => {
+    for (const c of ["scan this QR code", "read the qr", "what's in this QR code?", "decode this", "scan this barcode", "open this qr code"]) {
+      expect(photoIsQrScan(c), c).toBe(true);
+    }
+  });
+  it("is false for a non-QR caption + empty", () => {
+    for (const c of ["what is this?", "split this receipt", "", "describe this photo"]) {
+      expect(photoIsQrScan(c), JSON.stringify(c)).toBe(false);
+    }
   });
 });

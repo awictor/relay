@@ -2273,9 +2273,45 @@
       "title": "can generate QR but can’t READ one from a sent photo",
       "impact": "med",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "make_qr generates QR codes but a user who photographs a QR poster / product barcode and asks 'what is this / open this' gets the generic vision describe, which can't reliably decode the payload — the errand dead-ends. Natural symmetric complement to make_qr + the new photo-to-action pipeline.",
       "how": "Keyless local decode (jsQR/quirc-style) on the already-downloaded image bytes -> the URL/wifi/text payload; hook the photo branch. Offline-testable against fixture images."
+    },
+    {
+      "id": "page-diff-flap-guard",
+      "title": "watch-any-page on a dynamic page pings every check, bypassing cap + quiet hours",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "A page that legitimately changes every load (nonce/CSRF token, embedded timestamp, 'X min ago', rotating ad) makes diffPages see a change on EVERY fetch, so the watch fires each scheduler tick — including 3am. Alerts are EXEMPT from the anti-spam cap AND quiet-hours defer (premise: 'an alert only sends on a rare real change'), which is FALSE for page-diff — the one watch type that can flap is the one allowed to storm. Regression in the just-shipped watch-any-page.",
+      "how": "Add a flap guard: track consecutive-change count per page watch; after N straight changes (e.g. 3), auto-mute or downgrade to 'this page changes constantly — stop watching?' instead of pinging. Alternatively strip volatile tokens (digits/timestamps) harder in pageText before diffing. Offline test: a page that changes every fetch stops pinging after the cap."
+    },
+    {
+      "id": "page-diff-snapshot-cap",
+      "title": "page-diff snapshot stored uncapped — a big page bloats the whole alerts store",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "The page snapshot is stored as lastValue with NO cap, unlike MAX_SERIES_POINTS(400) + MAX_SEEN_KEYS(200). A big page (long terms/policy/search-results, hundreds of KB) inflates every atomic rewrite of the shared alerts file; on a constrained disk the write starts failing and atomicWriteJson failure means EVERY user's alerts silently stop persisting.",
+      "how": "Cap the stored page snapshot to the first N KB (e.g. slice to ~16KB of normalized text) in the page-diff branch before setLast, mirroring the series/seen caps. Offline test: a huge page's stored snapshot is bounded."
+    },
+    {
+      "id": "timer-seconds-honest",
+      "title": "seconds-granularity timers silently rounded up to a full minute",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "'timer for 20 seconds' fires at 60s; 'timer for 90 seconds' at 120s. schedule.ts rounds sec -> Math.max(MINUTE, round(n/60)*MINUTE), a materially wrong duration confirmed as if correct. Short timers (egg, plank, steep) are among the most common.",
+      "how": "Honor sub-minute timers honestly if the runner tick allows (or) tell the user 'my shortest timer is 1 minute' instead of silently reshaping. Prefer honest sub-minute if schedule tick granularity permits; else disclose. Offline test: 20s either fires ~20s or the confirm says it was rounded."
+    },
+    {
+      "id": "get-fun-tool",
+      "title": "no instant joke / fun-fact / trivia (common first message)",
+      "impact": "med",
+      "effort": "S",
+      "status": "todo",
+      "why": "'tell me a joke' / 'fun fact' / 'trivia question' — among the most common literal FIRST messages to a new bot — fall to a slow 10-30s browse or a stale from-memory answer. The first delightful instant reply earns a real errand next.",
+      "how": "Add a keyless get_fun tool (official-joke-api / uselessfacts / opentdb). Fetch + format, offline-testable with fixtures. New TOOLS[] entry + dispatch + prompt + HELP + sorted tool-list test."
     }
   ],
   "history": [
@@ -3170,6 +3206,10 @@
     {
       "item": "watch-any-page-diff",
       "note": "Added watch-any-page: 'watch terms: https://site/terms' pings when THAT page's content changes — restocks, price drops with no fixed number, policy/status/appointment pages the numeric/feed watches can't cover. New src/lib/pagediff.ts: pageText (strip tags/scripts/styles + collapse to comparable lines), pageKey (case/whitespace-insensitive), diffPages (order-independent added/removed line sets), formatPageDiff (a 'what changed' summary), pageWatchUrl (a bare-URL task). Alert gains pageUrl; parseAlertCommand detects a bare-URL task (before feed/threshold); alert-runner has a page branch: fetch DIRECTLY (new fetchPage dep = SSRF-guarded defaultFetchText), seed silently on first check, notify with the diff on a real change, stay silent on unchanged / whitespace-drift / a failed fetch (never a false change), baseline advance deferred to post-send commit. Auto-scheduled on the alert cadence like any watch; handler confirms 'watching that page... I'll message you with what changed'. 16 new tests (pagediff lib + parse + runner seed/change/unchanged/fetch-fail); live-probed example.com through pageText (200, clean extract) so call-tested:true for the fetch+extract, agent-free runner offline-tested. suite 1619 green, tsc clean."
+    },
+    {
+      "item": "read-qr-from-photo",
+      "note": "Relay can now READ a QR from a sent photo (symmetric with make_qr). Send a photo + 'scan this QR' -> the payload is decoded by a keyless reader instead of the vision describe (which can't reliably read it). New src/lib/qr-decode.ts: parseQrRead (pull the payload from the api.qrserver.com read-endpoint JSON) + readQrFromBytes (injected multipart POST, null on no-code/failure). photo-intent gains photoIsQrScan (scan/read/decode + qr/barcode). Handler photo branch: a QR-scan caption calls readQr FIRST (before photo-to-action/describe), frames a URL payload as a link + other payloads as text, or says 'couldn't find a QR' + falls back. index wires readQr (download + multipart POST to the fixed qrserver host — no SSRF surface since no user URL). 8 new tests (lib parse/decode + intent + 2 handler routes); live-probed the qrserver read endpoint with real QR bytes (200, exact payload decoded) so call-tested:true for the decoder, handler offline-tested. suite 1627 green, tsc clean."
     }
   ],
   "audits": [
@@ -3358,6 +3398,9 @@
     },
     {
       "note": "3-lens audit (photo-to-action shipped). RELIABILITY found photo-to-action DEAD IN PROD (gated on unwired runAgentFn) — FIXED same iteration via runIt, plus media tail-trim (formatReplyParts+drilldown) + OCR-echo prompt. Remaining flagged: rate-limit gap on the 2nd media call + voice path (parked, low harm). NEW-USER: timers (S, top — most common errand missing), reminder-with-no-time silent drop (S), Wikipedia instant fact lookup (M), read-QR-from-photo (M). POWER: watch-any-page content-diff (M, killer generic), sparkline+delta in pings (S, parked but near-free), playbooks/run-many-recipes (M), compound+cooldown alerts (M), reply-to-refine (M, parked). Seeded 4: timer-support (high/S), reminder-no-time-ask (high/S), watch-any-page-diff (high/M), read-qr-from-photo (med/M). Parked the rest."
+    },
+    {
+      "note": "3-lens audit (read-qr-from-photo shipped, backlog down to owner-gated confirm-to-act). RELIABILITY found 3 REGRESSIONS in just-shipped code: (1) watch-any-page on a DYNAMIC page (nonce/timestamp) fires every check + is exempt from cap AND quiet-hours -> 3am firehose; (2) page snapshot stored UNCAPPED -> a big page bloats the shared alerts store + can fail all persists; (3) timer seconds silently rounded to a full minute. NEW-USER: get_fun (joke/fact/trivia, S, common first msg), send-a-photo-of-X image lookup (M), text-metrics word-count (S), Wikipedia fact lookup (parked). POWER: inline one-tap buttons (M, parked but highest-leverage — multiplies every feature), voice-note input (M), proactive 'watch this?' offer (M), confirm-to-submit (L, overlaps owner-gated confirm-to-act), playbooks (S). Seeded 4: page-diff-flap-guard (high/M), page-diff-snapshot-cap (high/S), timer-seconds-honest (med/S), get-fun-tool (med/S). Parked the rest."
     }
   ]
 }

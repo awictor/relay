@@ -224,6 +224,24 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/cafe/);
   });
 
+  it("a 'scan this QR' photo decodes the payload via readQr, not vision (read-qr-from-photo)", async () => {
+    let visionCalled = false;
+    const { handle, sent } = harness({
+      readQr: async () => "https://mysite.com/menu",
+      describeImage: async () => { visionCalled = true; return "a poster"; },
+    });
+    await handle({ chatId: 5, from: "u", text: "scan this QR code", messageId: 1, photoFileId: "F1" } as InboundMessage);
+    expect(visionCalled).toBe(false);                 // decoded, not described
+    expect(sent[0]!.text).toMatch(/https:\/\/mysite\.com\/menu/);
+    expect(sent[0]!.text).toMatch(/links to/i);       // URL payload framed as a link
+  });
+
+  it("a QR-scan photo with no readable code says so", async () => {
+    const { handle, sent } = harness({ readQr: async () => null, describeImage: async () => "x" });
+    await handle({ chatId: 5, from: "u", text: "read the qr", messageId: 1, photoFileId: "F1" } as InboundMessage);
+    expect(sent[0]!.text).toMatch(/couldn't find a QR/i);
+  });
+
   it("an ACTION photo caption extracts the image then runs the agent so it chains into tools (photo-to-action)", async () => {
     let extractPrompt = ""; let agentTask = "";
     const { handle, sent } = harness({

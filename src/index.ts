@@ -19,6 +19,7 @@ import { formatStatus, makeAnvilPinger } from "./lib/status.js";
 import { makeMetricsHeartbeat } from "./lib/metrics-heartbeat.js";
 import { runAgent, defaultFetchText, defaultFetchBytes } from "./agent.js";
 import { fetchFeedItems, resolveFeedSource, parseFollowCommand } from "./lib/feeds.js";
+import { readQrFromBytes } from "./lib/qr-decode.js";
 import { formatReply, formatReplyParts } from "./lib/format-reply.js";
 import { friendlyError } from "./lib/failure.js";
 import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
@@ -385,6 +386,18 @@ const handle = createHandler({
         return llm.describeImage!(file.bytes, file.mimeType, prompt);
       }
     : undefined,
+  // Decode a QR/barcode from a sent photo (read-qr-from-photo): download the image, POST it multipart to
+  // the keyless api.qrserver.com reader. Fixed host (no user-supplied URL) so no SSRF surface.
+  readQr: async (fileId) => {
+    const file = await downloadFile(fileId);
+    if (!file) return null;
+    return readQrFromBytes(file.bytes, async (url, bytes) => {
+      const fd = new FormData();
+      fd.append("file", new Blob([bytes], { type: file.mimeType || "image/png" }), "qr.png");
+      const r = await fetch(url, { method: "POST", body: fd });
+      return r.text();
+    });
+  },
   // Inbound voice note (product-loop): download + transcribe to text (the handler then runs it).
   transcribeVoice: llm.transcribeAudio
     ? async (fileId) => {
