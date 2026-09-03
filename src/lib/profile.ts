@@ -343,6 +343,18 @@ export class ProfileStore {
     return loc ? (inferZoneFromLocation(loc) ?? undefined) : undefined;
   }
 
+  /** The chat's tz offset (min east of UTC) DST-CORRECT at `atMs` (current-datetime-dst-stale): the stored
+   * tzOffsetMin is frozen when the location was set, so the agent's "current time"/"today" line ran an hour
+   * off (and a wrong calendar day near midnight) after a DST boundary. When the saved location resolves to
+   * an IANA zone, recompute the live offset at `atMs`; else fall back to the frozen offset. undefined only
+   * when no offset is known at all (caller uses the global default). */
+  offsetMinAt(chatId: number, atMs: number): number | undefined {
+    const stored = this.get(chatId)?.tzOffsetMin;
+    const z = this.zone(chatId);
+    if (z) { const off = offsetForZoneAt(z, atMs); if (off !== null) return off; }
+    return stored;
+  }
+
   /** Forget a chat's stored profile (location/units/tz). Returns true if there was one to clear. */
   clear(chatId: number): boolean {
     const before = this.items.length;

@@ -2912,7 +2912,7 @@
       "title": "Verify sunrise/sunset + any other tz-derived tool for the same DST gap",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "get_time was standard-time-only; suntimes.ts + datecalc.ts + the agent's current-datetime line may share the same fixed-offset assumption and be an hour off in DST months for a named city.",
       "how": "Audit suntimes/datecalc/status for CITY_TZ/fixed-offset use; route city-derived times through offsetForZoneAt(zone, atMs) like worldclock now does; add DST tests."
     },
@@ -4090,6 +4090,10 @@
     {
       "id": "world-clock-dst",
       "note": "get_time/runWorldClock now DST-correct: a city/region resolves via its IANA zone (offsetForZoneAt) at the query instant, so 'time in London' in July is BST not GMT; a typed abbreviation (PST/EST) is honored as-is; the always-on 'may be an hour off' disclaimer now shows only for standard-only offsets. Reuses the CITY_ZONE infra from the reminder-DST fix. Tool descriptions updated. +5 tests, 1922 green."
+    },
+    {
+      "id": "suntimes-dst-check",
+      "note": "Swept the tz-derived tools for the DST gap. suntimes.ts (Open-Meteo timezone=auto, local ISO) + datecalc.ts (UTC-anchored day math, injected today) are DST-safe. Found + fixed the real one: the agent's live 'current time'/'today' line used the FROZEN profile tzOffsetMin (chatTzOffsetMin + agentEnvFor), so after a DST boundary it ran an hour off + wrong calendar day near midnight (current-datetime-dst-stale). Added ProfileStore.offsetMinAt(chatId, atMs): resolves the saved location's IANA zone -> DST-correct offset at now, frozen offset as fallback. Both live-datetime sites now use it. +1 test, 1923 green."
     }
   ],
   "audits": [

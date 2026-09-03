@@ -115,6 +115,20 @@ describe("ProfileStore", () => {
     s.set(2, { location: "Mumbai", tzOffsetMin: 330 });
     expect(s.contextLine(2)).toMatch(/timezone is UTC\+5:30/); // half-hour zone shown correctly
   });
+  it("offsetMinAt is DST-correct at the instant when the location resolves to a zone (current-datetime-dst-stale)", () => {
+    const JUL = Date.UTC(2025, 6, 1, 12, 0, 0), JAN = Date.UTC(2025, 0, 1, 12, 0, 0);
+    const s = new ProfileStore({ file: tmp() });
+    // Chicago set in winter: frozen offset -360. The live offset must follow DST regardless.
+    s.set(1, { location: "Austin, TX", tzOffsetMin: -360 });
+    expect(s.offsetMinAt(1, JAN)).toBe(-360); // CST
+    expect(s.offsetMinAt(1, JUL)).toBe(-300); // CDT — NOT the frozen -360
+    expect(s.offsetMin(1)).toBe(-360);        // frozen accessor unchanged
+    // A location that doesn't resolve to a zone falls back to the frozen offset.
+    s.set(2, { location: "Narnia", tzOffsetMin: 120 });
+    expect(s.offsetMinAt(2, JUL)).toBe(120);
+    // No profile at all -> undefined (caller uses the global default).
+    expect(s.offsetMinAt(99, JUL)).toBeUndefined();
+  });
   it("contextLine is empty for an unknown chat", () => {
     expect(new ProfileStore({ file: tmp() }).contextLine(99)).toBe("");
   });

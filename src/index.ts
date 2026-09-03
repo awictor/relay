@@ -143,7 +143,9 @@ const backgroundStore = new BackgroundStore({ file: paths.background });
 // ad-hoc inbound path (index wires weatherCoords: freshCoords there).
 const agentEnvFor = (chatId: number) => ({
   nowMs: Date.now(),
-  tzOffsetMin: profiles.offsetMin(chatId) ?? tzOffsetMin(),
+  // DST-correct offset at NOW (current-datetime-dst-stale): the frozen tzOffsetMin would make the agent's
+  // "current time"/"today" line an hour off + wrong calendar day near midnight after a DST boundary.
+  tzOffsetMin: profiles.offsetMinAt(chatId, Date.now()) ?? tzOffsetMin(),
   weatherCoords: profiles.homeCoords(chatId),
   weatherUnits: profiles.get(chatId)?.units,
 });
@@ -312,7 +314,7 @@ const handle = createHandler({
   // Agent context = profile (location/units/tz) + remembered facts (remember-facts-store), so every
   // answer is filtered through both without the user re-stating them.
   profileContext: (chatId) => [profiles.contextLine(chatId, Date.now()), notes.contextLine(chatId), places.contextLine(chatId)].filter(Boolean).join("; "),
-  chatTzOffsetMin: (chatId) => profiles.offsetMin(chatId) ?? tzOffsetMin(), // for the agent's current-datetime line
+  chatTzOffsetMin: (chatId) => profiles.offsetMinAt(chatId, Date.now()) ?? tzOffsetMin(), // DST-correct at now (current-datetime-dst-stale)
 
   // /profile view + clear (product-loop): echo the stored profile so a wrong city/tz is visible.
   profileView: (chatId) => { const l = profiles.contextLine(chatId); return l ? l.charAt(0).toUpperCase() + l.slice(1) : null; },
