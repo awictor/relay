@@ -14,7 +14,7 @@
       "title": "first 'weather'/'near me' dead-ends on a typed location ask; no one-tap share",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A cold user's two most common instant errands (near-me, weather) both stop on location: they get a text prompt to hunt for 📎→Location or type a city. The inbound location-pin path is already wired, so a Telegram request_location reply-keyboard button turns it into one tap (audit A#1).",
       "how": "When the handler asks for location (near-me / weather with no profile), attach a reply-keyboard with a request_location button (telegram.ts sendMessage gains an optional reply_markup). Removes the one manual step between a cold user and their first geo answer."
     },
@@ -1845,6 +1845,10 @@
     {
       "id": "weekly-single-weekday-once",
       "note": "Fixed a one-shot reminder silently becoming permanent spam: the weekly branch guard accepted any '\\bat\\b', so 'remind me Friday at 3pm to submit taxes' (a single weekday + time, no 'every') parsed kind:weekly and pinged every Friday forever — and there was no way to get a single next-weekday reminder. The weekly branch now recurs ONLY when the user signalled repetition ('every', a weekday/weekend group, or >1 named day); a lone weekday+time returns kind:once at the next occurrence (nextWeeklyMs already computes the right instant). 3 tests ('Friday at 3pm' -> once on a Friday / 'every friday' stays weekly / 'mon and thu' stays weekly). call-tested: false (pure parse). 1152 tests green."
+    },
+    {
+      "id": "one-shot-location-button",
+      "note": "A cold user's first 'weather'/'coffee near me' dead-ended on a typed city ask (hunt for 📎→Location or type + spell a city). The inbound location-pin path was already wired, so added a Telegram request_location reply-keyboard button: new telegram.ts sendLocationRequest (one-time, resize keyboard) + a requestLocation method on the Channel interface (telegram wires it; console omits it) + an optional requestLocation handler dep. The near-me/weather location-ask now sends the tap-to-share button (falls back to a plain sendMessage when the channel lacks it, e.g. console), and the tapped pin flows into the existing saveCoords path. The tz-ask branch stays plain text (a pin gives coords, not a tz offset). 2 handler tests (button used when wired / plain fallback when not). call-tested: false (reply_markup needs a live bot; offline unit covers routing). 1154 tests green."
     }
   ],
   "audits": [

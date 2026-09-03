@@ -16,13 +16,16 @@ export interface Channel {
   sendTyping?(chatId: number): Promise<unknown>;
   sendPhoto?(chatId: number, bytes: Uint8Array, caption?: string): Promise<unknown>;
   sendDocument?(chatId: number, bytes: Uint8Array, filename?: string, caption?: string): Promise<unknown>;
+  /** Send a message with a one-tap "share location" affordance (one-shot-location-button). Optional —
+   * a channel without it (console) just falls back to a plain sendMessage in the handler. */
+  requestLocation?(chatId: number, text: string): Promise<unknown>;
   /** True when the channel is configured enough to run (e.g. token present). */
   ready(): boolean;
 }
 
 // TelegramChannel: wraps the existing src/telegram.ts functions as a Channel. No behavior
 // change — index.ts just talks to this instead of importing telegram fns directly.
-import { startPolling, sendMessage, sendTyping, sendPhoto, sendDocument, hasToken } from "./telegram.js";
+import { startPolling, sendMessage, sendTyping, sendPhoto, sendDocument, sendLocationRequest, hasToken } from "./telegram.js";
 
 export const telegramChannel: Channel = {
   name: "telegram",
@@ -31,6 +34,7 @@ export const telegramChannel: Channel = {
   sendTyping: (chatId) => sendTyping(chatId),
   sendPhoto: (chatId, bytes, caption) => sendPhoto(chatId, bytes, caption),
   sendDocument: (chatId, bytes, filename, caption) => sendDocument(chatId, bytes, filename, caption),
+  requestLocation: (chatId, text) => sendLocationRequest(chatId, text),
   ready: () => hasToken(),
 };
 

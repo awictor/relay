@@ -127,6 +127,33 @@ export async function sendMessage(chatId: number, text: string): Promise<void> {
   }
 }
 
+/** Send a message with a one-tap "share location" reply-keyboard button (one-shot-location-button). A
+ * cold user's first "near me"/"weather" otherwise dead-ends on hunting for 📎→Location or typing a city;
+ * the request_location button resolves it in one tap and feeds the already-wired inbound-pin path. The
+ * keyboard is one-time (dismisses after use) + resizes; best-effort like sendMessage. */
+export async function sendLocationRequest(chatId: number, text: string): Promise<void> {
+  if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
+  try {
+    const r = await fetch(`${API}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        reply_markup: {
+          keyboard: [[{ text: "📍 Share my location", request_location: true }]],
+          resize_keyboard: true,
+          one_time_keyboard: true,
+        },
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) console.error("telegram sendLocationRequest failed:", r.status, (await r.text().catch(() => "")).slice(0, 200));
+  } catch (e) {
+    console.error("telegram sendLocationRequest error:", e instanceof Error ? e.message : String(e));
+  }
+}
+
 /** Download a Telegram file by file_id (product-loop): getFile -> file_path -> the file bytes.
  * Returns { bytes, mimeType } or null on any failure. Used to fetch inbound photos for vision. */
 export async function downloadFile(fileId: string): Promise<{ bytes: Uint8Array; mimeType: string } | null> {

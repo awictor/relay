@@ -497,6 +497,7 @@ const handle = createHandler({
   sendPhoto,
   sendDocument,
   sendTyping,
+  requestLocation: channel.requestLocation ? (chatId, text) => channel.requestLocation!(chatId, text) : undefined,
   handleCommand,
   checkRateLimit,
   // Redact secrets AND any seeded cookie values (m29 cookies-2) from logged/echoed text.

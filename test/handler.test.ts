@@ -858,6 +858,27 @@ describe("first-run location capture (first-location-capture)", () => {
     expect(agentRan()).toBeNull(); // didn't run the errand yet
   });
 
+  it("uses the one-tap requestLocation button when wired (one-shot-location-button)", async () => {
+    const reqLoc: Array<{ chatId: number; text: string }> = [];
+    let stored: { location: string } | null = null;
+    const { handle, sent } = harness({
+      hasLocation: () => stored !== null,
+      captureLocation: (_c, t) => (parseCityReply(t) ? (stored = { location: "X" }) : null),
+      requestLocation: async (chatId, text) => { reqLoc.push({ chatId, text }); },
+      runAgentFn: async () => ({ reply: "ok", steps: 1, tools: [] }),
+    });
+    await handle(msg("coffee near me", 5));
+    expect(reqLoc).toHaveLength(1);                    // asked via the location button
+    expect(reqLoc[0]!.text).toMatch(/share your location|tap the button/i);
+    expect(sent.some((m) => /what city/i.test(m.text))).toBe(false); // NOT via plain sendMessage
+  });
+
+  it("falls back to a plain sendMessage ask when requestLocation isn't wired (console channel)", async () => {
+    const { handle, sent } = locHarness(false); // no requestLocation dep
+    await handle(msg("weather", 5));
+    expect(sent[0]!.text).toMatch(/what city are you in/i); // plain text ask, no crash
+  });
+
   it("the city reply is saved and the original errand re-runs", async () => {
     const { handle, sent, agentRan, city } = locHarness(false);
     await handle(msg("weather tomorrow", 5));

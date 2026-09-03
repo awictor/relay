@@ -62,6 +62,10 @@ export interface HandlerDeps {
   // Shared location pin (telegram-location-pin): save the chat's precise coords so "near me"/directions
   // resolve against them. Optional; absent -> a location pin just gets a generic ack.
   saveCoords?: (chatId: number, lat: number, lng: number) => void;
+  // One-tap location share (one-shot-location-button): send a message with a Telegram request_location
+  // reply-keyboard button so a cold user's first "near me"/"weather" is one tap, not a typed city. Falls
+  // back to a plain sendMessage when absent (e.g. the console channel). Optional.
+  requestLocation?: (chatId: number, text: string) => Promise<unknown>;
   // Weather (geo-tool-cluster): the chat's saved coords + unit preference, passed to the agent so
   // get_weather with no place uses their location and renders in their units. Optional.
   weatherCoords?: (chatId: number) => { lat: number; lng: number } | undefined;
@@ -479,7 +483,8 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     if (deps.hasLocation && deps.captureLocation && !deps.hasLocation(msg.chatId)
         && !pendingLocation.has(msg.chatId) && needsLocationContext(msg.text)) {
       pendingLocation.set(msg.chatId, msg.text);
-      await deps.sendMessage(msg.chatId, "What city are you in? I'll save it so I don't have to ask again (add \"UTC-5\" and I'll get your reminder times right too).");
+      const ask = "What city are you in? Tap the button to share your location, or type a city (add \"UTC-5\" and I'll get your reminder times right too). I'll save it so I don't have to ask again.";
+      if (deps.requestLocation) await deps.requestLocation(msg.chatId, ask); else await deps.sendMessage(msg.chatId, ask);
       return;
     }
 
