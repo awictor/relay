@@ -31,7 +31,11 @@ export function stableText(raw: string): string {
   return pageText(raw)
     .replace(/\b[0-9a-f]{16,}\b/gi, "§")                         // long hex tokens (nonces, session ids)
     .replace(/\b\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}(?::\d{2})?\b/gi, "§") // ISO timestamps
-    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?\b/gi, "§")  // clock times
+    // Clock times ONLY when adjacent to a volatile lead-in ("last updated 3:15pm", "as of 09:00", "at
+    // 3:15pm ET refreshed") — masking EVERY bare time erased content-bearing ones ("Next available:
+    // 3:15pm", "Departs 9:00"), so a schedule/appointment page never pinged on the change it's watched for
+    // (pagewatch-time-masked). A bare time with no volatile label is kept + diffed.
+    .replace(/\b(?:last\s+)?(?:updated|refreshed|as\s+of|current\s+time|now)\b[^\n]{0,20}?\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?\b/gi, "§")
     .replace(/\b\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago\b/gi, "§") // "3 minutes ago"
     .replace(/\b\d{10,}\b/g, "§");                               // long digit runs (epoch ms, ids)
 }
@@ -76,5 +80,11 @@ export function pageWatchUrl(task: string): string | null {
   const t = task.trim();
   // Accept a task that is ESSENTIALLY just a URL (optionally prefixed with "this page"/"the page"/"page").
   const m = t.match(/^(?:(?:this|the)\s+page\s*:?\s*|page\s*:?\s*|watch\s+)?(https?:\/\/\S+)\s*$/i);
-  return m ? m[1]! : null;
+  if (!m) return null;
+  // Trim trailing sentence punctuation / a dangling close-bracket glued on by \S+ (pagewatch-trailing-
+  // punct): "watch terms: https://site/policy." stored the URL WITH the period -> every fetch 404'd ->
+  // the watch was a silent black hole. Mirrors last-result.extractLinks. Keep a balanced trailing ")".
+  let url = m[1]!.replace(/[.,;:!?'"’”]+$/, "");
+  if (url.endsWith(")") && !url.includes("(")) url = url.slice(0, -1); // stray close-paren, no open
+  return url || null;
 }

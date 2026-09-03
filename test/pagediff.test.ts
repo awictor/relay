@@ -16,6 +16,14 @@ describe("pageText / pageKey", () => {
     const huge = "<p>" + "word ".repeat(20000) + "</p>"; // ~100KB of text
     expect(pageText(huge).length).toBeLessThanOrEqual(16_000);
   });
+  it("a content-bearing time change IS detected; a 'last updated' time churn is NOT (pagewatch-time-masked)", () => {
+    // Appointment/departure page: the meaningful change is the time itself -> must register.
+    expect(pageKey("<p>Next available: 3:15pm</p>")).not.toBe(pageKey("<p>Next available: 5:45pm</p>"));
+    expect(pageKey("<p>Departs 9:00</p>")).not.toBe(pageKey("<p>Departs 10:30</p>"));
+    // A volatile "last updated" stamp churning must NOT count as a change.
+    expect(pageKey("<p>Status: OK</p><span>Last updated 3:15pm</span>")).toBe(pageKey("<p>Status: OK</p><span>Last updated 5:45pm</span>"));
+    expect(pageKey("<p>Status: OK</p><span>as of 09:00</span>")).toBe(pageKey("<p>Status: OK</p><span>as of 14:30</span>"));
+  });
   it("pageKey masks volatile tokens so a nonce/timestamp re-render isn't a change (page-diff-flap-guard)", () => {
     // Same content, different CSRF nonce + timestamp + 'N minutes ago' each load -> equal keys.
     const a = "<p>In stock</p><input name=csrf value=a1b2c3d4e5f60718><span>Updated 2026-09-03T10:00:00</span><span>3 minutes ago</span>";
@@ -67,5 +75,13 @@ describe("pageWatchUrl", () => {
   it("null for a non-URL task (a normal value/prose watch)", () => {
     expect(pageWatchUrl("price of bitcoin")).toBeNull();
     expect(pageWatchUrl("the top HN story")).toBeNull();
+  });
+  it("trims trailing sentence punctuation so the watch isn't a dead 404 (pagewatch-trailing-punct)", () => {
+    expect(pageWatchUrl("https://site.com/policy.")).toBe("https://site.com/policy"); // the task after "watch <name>:" is just the URL
+    expect(pageWatchUrl("this page: https://site.com/policy.")).toBe("https://site.com/policy");
+    expect(pageWatchUrl("https://site.com/p,")).toBe("https://site.com/p");
+    expect(pageWatchUrl("this page: https://site.com/x)")).toBe("https://site.com/x"); // stray close-paren
+    // A URL with a legitimately balanced trailing paren keeps it.
+    expect(pageWatchUrl("https://en.wikipedia.org/wiki/Foo_(bar)")).toBe("https://en.wikipedia.org/wiki/Foo_(bar)");
   });
 });

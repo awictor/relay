@@ -2327,7 +2327,7 @@
       "title": "pageWatchUrl keeps trailing punctuation -> dead page watch",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "pageWatchUrl captures https?://S+ up to whitespace, so 'watch terms: https://site/policy.' stores the literal URL with the trailing period -> every fetch 404s -> pagediff silent branch forever. User is told 'Watching...' but never pinged. A black hole on the just-shipped watch-any-page.",
       "how": "Trim trailing sentence punctuation + a dangling close-paren/bracket from the captured URL (mirror last-result.extractLinks which already does this). Offline test: a URL with a trailing period/paren yields the clean URL."
     },
@@ -2336,7 +2336,7 @@
       "title": "page-diff stableText masks meaningful times -> appointment/status page never pings",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "stableText masks ALL clock times + ISO timestamps to stop volatile 'last updated' flap, but that erases CONTENT-bearing times: 'Next available: 3:15pm'->'5:45pm' or 'Departs 9:00'->'10:30' mask to the same key, and pageKey equality short-circuits before diffPages runs. The appointment/departure watch — the module's advertised use case — goes silent on exactly the change it's for.",
       "how": "Narrow the volatile-time mask to times that co-occur with a volatile lead-in ('last updated'/'as of'/'N ago'/a timestamp label), not every bare time on the page. Or diff the RAW text (unmasked) once pageKey says changed, and only use the mask to gate the flap counter. Offline test: 'Next available 3:15pm'->'5:45pm' registers as a change; a 'last updated 3:15pm' churn does not."
     },
@@ -3262,6 +3262,10 @@
     {
       "item": "error-reply-overbroad",
       "note": "Fixed looksLikeErrorReply over-reach that silently killed real watches. ERROR_REPLY_RE ended with bare \berror\b + lone words (cannot/blocked/failed/unable/no results), which occur constantly in legitimate content — so a news/HN/value watch on 'Why you cannot trust AI benchmarks' / 'Tesla recall blocked by court' / 'No results for the Lakers' was treated as a fetch failure, held at the old baseline, and went DARK on that change forever (regression from my earlier error-reply-false-fires fix). Rewrote the regex ANCHORED to real failure phrasing: (a) explicit HTTP error+code either order ('error 404', 'returned a 503', '404 error'), (b) first-person fetch failure 'couldn't/can't/unable to/failed to <fetch-verb>' (load/fetch/reach/get/retrieve/find/connect/access/read/open/pull/lookup/...), (c) standalone idioms ('try again later', 'access denied', 'the server is down', 'no data available', 'request timed out'). Legit headlines with cannot/blocked/error mid-sentence no longer flagged; genuine soft failures still are. 9 new assertions (false-positive guards + real-failure cases), suite 1639 green, tsc clean. call-tested:false (pure regex + existing runner/digest tests)."
+    },
+    {
+      "item": "pagewatch-trailing-punct + pagewatch-time-masked",
+      "note": "Fixed 2 coupled regressions in watch-any-page. (1) TRAILING PUNCT: pageWatchUrl captured https?://S+ up to whitespace, so a URL ending a sentence ('...policy.') kept the trailing period -> every fetch 404'd -> the watch was a silent black hole ('Watching...' but never pings). Now trims trailing sentence punctuation + a stray unbalanced close-paren (mirrors last-result.extractLinks); a balanced '(bar)' in a Wikipedia URL is kept. (2) TIME MASK: stableText masked ALL clock times to stop 'last updated' flap, but that erased CONTENT-bearing times, so an appointment/departure page ('Next available 3:15pm'->'5:45pm', 'Departs 9:00'->'10:30') never pinged on exactly the change it's watched for. Now a clock time is masked ONLY when adjacent to a volatile lead-in (last updated / as of / refreshed / now); a bare content time is kept + diffed. 6 new assertions (trailing-punct incl. balanced paren + content-time-detected + last-updated-still-masked), suite 1641 green, tsc clean. call-tested:false (pure lib)."
     }
   ],
   "audits": [
