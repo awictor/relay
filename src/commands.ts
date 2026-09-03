@@ -25,6 +25,7 @@ const HELP = `Relay — what I can do:
 • Find then fetch: "find newest listings for <thing>" → I open the search page, grab the results, and read them.
 • See a page: "screenshot the top of Hacker News" → I send you an image of it.
 • Save a page: "save this as a PDF: <link>" → I send you a PDF document.
+• Send me a file: forward a PDF, CSV, spreadsheet, or text file (with a question in the caption) → I read it and answer. "what's my total?", "summarize this statement".
 • Summarize a video: send a YouTube link + "tldr this" → I read its transcript and sum it up.
 • Weather: "weather in Paris" or just "weather" (if you've shared your location) → current + today's high/low, instantly.
 • Find places nearby: "coffee near me", "nearest pharmacy" (share your location first) → real nearby spots with distance + hours.

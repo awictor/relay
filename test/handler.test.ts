@@ -257,6 +257,17 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/\$88/);
   });
 
+  it("threads the document's file_name + mime into describeDocument (textual-doc routing)", async () => {
+    let gotName: string | undefined; let gotMime: string | undefined;
+    const { handle, sent } = harness({
+      describeDocument: async (_id, _cap, fileName, mimeType) => { gotName = fileName; gotMime = mimeType; return "Total: $1,200."; },
+    });
+    await handle({ chatId: 5, from: "u", text: "total?", messageId: 1, documentFileId: "D1", documentName: "budget.csv", documentMime: "text/csv" } as InboundMessage);
+    expect(gotName).toBe("budget.csv");
+    expect(gotMime).toBe("text/csv");
+    expect(sent[0]!.text).toMatch(/\$1,200/);
+  });
+
   it("a document with no describeDocument dep gets a clear note", async () => {
     const { handle, sent } = harness();
     await handle({ chatId: 5, from: "u", text: "", messageId: 1, documentFileId: "D1" } as InboundMessage);

@@ -1634,7 +1634,7 @@
       "title": "Handle forwarded PDF/CSV/image documents",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Voice notes + photos are ingested but Telegram document attachments are not — a glaring asymmetry; \"deal with this bill/statement\" is a daily errand.",
       "how": "Wire Telegram document fileId download into the same treat-as-task path as photos; feed to existing pdf/extract/multimodal tooling."
     },
@@ -1646,6 +1646,15 @@
       "status": "todo",
       "why": "On a full/unwritable disk Relay says \"saved\"/\"reminder set\" but nothing persisted; user never told, data vanishes on restart.",
       "how": "atomicWriteJson return success bool; callers surface a soft warning when a persist fails (schedule/notes/lists/profile/alerts)."
+    },
+    {
+      "id": "ssrf-fail-closed-parity",
+      "title": "SSRF DoH guard failed OPEN (drifted from mcp-forge fix)",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "Relay url-validator lagged a security fix (DEV-0211): hostResolvesToBlockedIp returned false on resolver error/timeout, so an attacker forcing a DoH timeout could reach an internal/metadata IP. Also broke the shared-lib parity guard (red before this run).",
+      "how": "Backport mcp-forge fail-closed logic into relay copy: query() returns null on error, both-null -> block."
     }
   ],
   "history": [
@@ -2264,6 +2273,14 @@
     {
       "item": "world-clock-tz",
       "note": "Added get_time tool: new src/lib/worldclock.ts (resolveZone via profile CITY_TZ + a tz-abbrev map PST/EST/JST/etc + UTC±offset parsing, parseClockTime, parseWorldClock now/convert, runWorldClock from injected nowMs). Wired agent.ts (TOOLS, dispatch using deps.nowMs, prompt), pinned tool list, HELP. \"what time is it in Tokyo\"/\"9am PT in London\"/\"convert 3pm EST to Tokyo\" now deterministic + instant instead of LLM guessing (datetime injection only covered the user own zone). Day-shift + standard-time (non-DST) caveat surfaced honestly. 15 new tests, suite 1286 green, tsc clean. call-tested:false (pure offset math, no network)."
+    },
+    {
+      "item": "inbound-document-handling",
+      "note": "Textual documents (CSV/JSON/TXT/MD/log) now read via the TEXT model instead of the vision path. describeDocument split by type (new src/lib/docs.ts isTextualDoc/decodeTextDoc/buildDocPrompt): textual -> decode bytes + complete(); pdf/image -> keep describeImage. A CSV was previously mislabeled image/jpeg (not in the MIME map) and fed to vision -> garbage. Threaded file_name + mime through telegram->handler->index. Now works even on a text-only provider. Added csv/tsv/json/md/xml/yaml to the download MIME map. 12 new tests + a handler routing test, suite 1295 green."
+    },
+    {
+      "item": "ssrf-fail-closed-parity",
+      "note": "Backported mcp-forge DEV-0211: relay url-validator DoH rebind guard now FAILS CLOSED (both A+AAAA lookups failing -> treat host as blocked) instead of fail-open. Fixes a real SSRF hole (attacker forces DoH timeout to reach metadata IP) + restores shared-lib-parity (was red). Updated host-resolves tests to assert fail-closed + a clean-empty-still-allowed case. mcp-forge untouched (relay copy only)."
     }
   ],
   "audits": [
@@ -2380,6 +2397,9 @@
     },
     {
       "note": "AUDIT (backlog dry, only owner-gated confirm-to-act left). A/new-user: HN-heavy onboarding copy, no dictionary, no world-clock, no sports/flight status. B/reliability: DST-blind reminders (L), lists remove() substring collateral (S, in code I just shipped), atomicWriteJson silent write failures (M), ambiguous-city tz, feed-watch reword false-new. C/power: confirm-to-act committing actions (owner-gated), autofill vault, inbound document handling, self-service login. Seeded: dictionary-tool, world-clock-tz, inbound-document-handling, lists-remove-atomic-write-failure. Built THIS run: lists-remove-substring-collateral."
+    },
+    {
+      "note": "Mid-build discovery (not a full 3-agent audit): the inbound-document feature was already wired end-to-end (telegram parse + handler branch + index describeImage/PDF) — audit item was stale. Real gaps found + fixed: (1) textual docs routed to vision model -> garbage; (2) shared-lib-parity RED because relay url-validator drifted from mcp-forge, missing the DEV-0211 fail-closed SSRF fix. Seeded+shipped ssrf-fail-closed-parity."
     }
   ]
 }

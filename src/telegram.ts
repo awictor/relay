@@ -24,6 +24,8 @@ export interface InboundMessage {
   documentFileId?: string; // set when the message is a document/PDF (product-loop): file_id; `text`
                            // carries the caption. Handler downloads + asks the vision LLM about it.
   documentMime?: string;   // the document's declared mime_type (e.g. application/pdf), if any.
+  documentName?: string;   // the document's original file_name (e.g. statement.csv) — used to classify
+                           // textual vs vision docs when the mime is generic/absent.
   location?: { latitude: number; longitude: number }; // set when the message is a shared location pin
                                                       // (the natural "near me" move). Handler saves it
                                                       // as the chat's coords + acks, so it's not dropped.
@@ -170,7 +172,11 @@ export async function downloadFile(fileId: string): Promise<{ bytes: Uint8Array;
     const ext = path.split(".").pop()?.toLowerCase();
     const MIME: Record<string, string> = { png: "image/png", webp: "image/webp", jpg: "image/jpeg", jpeg: "image/jpeg",
       oga: "audio/ogg", ogg: "audio/ogg", mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav",
-      pdf: "application/pdf", txt: "text/plain" };
+      pdf: "application/pdf",
+      // Textual documents (product-loop): route to a TEXT prompt, not the vision model. A CSV/JSON sent
+      // as bytes to describeImage was mislabeled image/jpeg -> garbage. See lib/docs.ts isTextualDoc.
+      txt: "text/plain", csv: "text/csv", tsv: "text/tab-separated-values", json: "application/json",
+      md: "text/markdown", markdown: "text/markdown", log: "text/plain", xml: "text/xml", yaml: "text/yaml", yml: "text/yaml" };
     const mimeType = (ext && MIME[ext]) || "image/jpeg"; // photos are the common case + have no reliable ext
     return { bytes, mimeType };
   } catch {
@@ -275,7 +281,7 @@ export function parseUpdates(updates: TgUpdate[], offset: number): { messages: I
       messages.push({ chatId: m.chat.id, text: "", from, messageId: m.message_id, voiceFileId: m.voice.file_id });
     } else if (m.document?.file_id) {
       // Forwarded document/PDF (product-loop): handler downloads + asks the vision LLM. Caption = the question.
-      messages.push({ chatId: m.chat.id, text: (m.caption ?? "").trim(), from, messageId: m.message_id, documentFileId: m.document.file_id, documentMime: m.document.mime_type });
+      messages.push({ chatId: m.chat.id, text: (m.caption ?? "").trim(), from, messageId: m.message_id, documentFileId: m.document.file_id, documentMime: m.document.mime_type, documentName: m.document.file_name });
     } else if (m.location && typeof m.location.latitude === "number" && typeof m.location.longitude === "number") {
       // A shared location pin (telegram-location-pin): text-less, so it was silently dropped. Carry the
       // coords + any caption so the handler can save them + acknowledge (the natural "near me" move).

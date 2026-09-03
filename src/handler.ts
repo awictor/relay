@@ -114,7 +114,7 @@ export interface HandlerDeps {
   transcribeVoice?: (fileId: string) => Promise<string>;
   // Inbound document/PDF (product-loop): describe/answer about a forwarded file (caption = question).
   // Optional; absent -> a document gets a "can't read files" note.
-  describeDocument?: (fileId: string, caption: string) => Promise<string>;
+  describeDocument?: (fileId: string, caption: string, fileName?: string, mimeType?: string) => Promise<string>;
   // Scheduled/proactive tasks (m4 sched-3). All optional so older wiring stays valid; when
   // absent, a "remind me" message just falls through to the normal agent.
   scheduleAdd?: (chatId: number, text: string, now: number) => { ok: true; kind: string; task: string; whenMs: number; whenText?: string; noTz?: boolean } | { ok: false; reason: "unparsed" | "capped" };
@@ -360,7 +360,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       if (!deps.describeDocument) { await deps.sendMessage(msg.chatId, "I can't read files yet — send me a task in words for now."); return; }
       try {
         await deps.sendTyping(msg.chatId);
-        const answer = await deps.describeDocument(msg.documentFileId, msg.text);
+        const answer = await deps.describeDocument(msg.documentFileId, msg.text, msg.documentName, msg.documentMime);
         const out = formatReply(answer);
         await deps.sendMessage(msg.chatId, out);
         // Persist the turn so a follow-up about the document has context (see the photo branch).

@@ -33,6 +33,7 @@ import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summa
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { ListStore, parseListCommand, splitItems } from "./lib/lists.js";
+import { isTextualDoc, decodeTextDoc, buildDocPrompt } from "./lib/docs.js";
 import { AnswerLog, recallKeywords } from "./lib/answer-log.js";
 import { BackgroundStore, planErrandReplay } from "./lib/background-store.js";
 import { checkAlert } from "./alert-runner.js";
@@ -326,17 +327,26 @@ const handle = createHandler({
         return llm.transcribeAudio!(file.bytes, file.mimeType);
       }
     : undefined,
-  // Inbound document/PDF (product-loop): download + ask the multimodal LLM (Gemini reads PDFs via the
-  // same inlineData path as images). Reuses describeImage; the downloaded mime (application/pdf) is
-  // passed through so Gemini treats it as a document.
-  describeDocument: llm.describeImage
-    ? async (fileId, caption) => {
-        const file = await downloadFile(fileId);
-        if (!file) return "I couldn't download that file — try resending it.";
-        const prompt = caption?.trim() || "Summarize this document and flag anything important (totals, dates, actions).";
-        return llm.describeImage!(file.bytes, file.mimeType, prompt);
-      }
-    : undefined,
+  // Inbound document (product-loop / inbound-document-handling): download, then split by type.
+  //  - TEXTUAL (csv/json/txt/md/log): decode the bytes + answer via the TEXT model (complete). A CSV
+  //    handed to the vision path came back as garbage (bytes mislabeled image/jpeg) — this is the fix.
+  //  - VISION (pdf/image scan): keep the multimodal inlineData path (needs describeImage/Gemini).
+  // Always defined (complete() always exists), so textual docs work even on a text-only provider.
+  describeDocument: async (fileId, caption, fileName, mimeType) => {
+    const file = await downloadFile(fileId);
+    if (!file) return "I couldn't download that file — try resending it.";
+    const mime = mimeType || file.mimeType;
+    if (isTextualDoc(mime, fileName)) {
+      const text = decodeTextDoc(file.bytes);
+      if (!text.trim()) return "That file looks empty or I couldn't read it as text — try resending it.";
+      const prompt = buildDocPrompt(text, caption ?? "", fileName);
+      const r = await llm.complete([{ role: "user", content: prompt }], []);
+      return r.text?.trim() || "I read the file but couldn't produce an answer — try asking about a specific part.";
+    }
+    if (!llm.describeImage) return "That looks like a scanned/PDF file, and I can't read those on this setup yet — if it's a CSV or text file, resend it as one and I'll read it.";
+    const prompt = caption?.trim() || "Summarize this document and flag anything important (totals, dates, actions).";
+    return llm.describeImage(file.bytes, mime, prompt);
+  },
   scheduleAdd: (chatId, text, now) => {
     // Use the chat's own timezone (from their profile) so "every morning" fires at THEIR 9am,
     // not the deploy host's UTC. Falls back to the global RELAY_TZ_OFFSET_MIN when unset.
