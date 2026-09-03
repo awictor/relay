@@ -2255,7 +2255,7 @@
       "title": "a reminder with no time given is silently dropped, never set",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'remind me to call mom' (no when-clause) fails parseSchedule (empty time clause) so it's never stored + drops to the agent (no reminder tool) — the user believes a reminder is set when nothing was. A trust-killing silent failure on the core feature.",
       "how": "Detect a reminder shape with a missing time and ask one 'when should I remind you?', stashing + re-running like the pending-location clarify flow already in the handler. Deterministic, offline-testable."
     },
@@ -3162,6 +3162,10 @@
     {
       "item": "timer-support",
       "note": "Added timers — the most common assistant errand that silently fell through. parseSchedule handled 'in N min' + 'alarm at HH' but not the 'timer'/'for N minutes' form, so 'set a timer for 20 minutes' dropped to the agent (no timer tool) -> confused reply. New timer parse branch (before relative): 'set/start a timer for N min', 'timer N min', 'N minute timer', worded ('half an hour', 'a couple hours'), min/hour/sec units (sec rounds up to 1 min floor). It's a once + reminderOnly schedule that pings 'timer's up ⏰' after the duration; a labeled purpose ('for the pasta') is kept as the note. Wired: schedule cue includes 'timer' + HELP line. 3 new tests (parse forms + handler routing), suite 1605 green, tsc clean. call-tested:false (offline parse + handler)."
+    },
+    {
+      "item": "reminder-no-time-ask",
+      "note": "A reminder with no time no longer loses the task. 'remind me to call mom' failed parseSchedule (no time clause); the handler already ASKED 'when?' but discarded the task, so the reply 'at 3pm' had no 'call mom' and either mis-scheduled or dropped. Added a pendingReminder stash (mirrors pendingLocation): the ask-branch strips 'remind me to' + a dangling vague-time word and stashes the bare to-do; the next message, if it looks like a time (at/in/tomorrow/tonight/HH[:MM][am/pm]), recombines 'remind me to <task> <time>' + re-runs scheduleAdd; a non-time reply abandons the pending state + routes normally (never trapped); an unparseable time re-asks once. 4 new tests (resume schedules stashed task; non-time reply drops+routes to agent; + the existing ask tests still green), suite 1607 green, tsc clean. call-tested:false (offline handler)."
     }
   ],
   "audits": [

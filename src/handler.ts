@@ -265,6 +265,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   // as the city reply, saved, and the errand re-run. Cleared on capture / on a non-city reply (so the
   // user can bail out with any other message).
   const pendingLocation = new Map<number, string>();
+  // A reminder the user asked for WITHOUT a time ("remind me to call mom") — we ask "when?" and stash the
+  // bare to-do here so the reply ("at 3pm") re-runs it as a full schedule instead of losing the task
+  // (reminder-no-time-ask). Keyed by chat; the stored string is the extracted task ("call mom").
+  const pendingReminder = new Map<number, string>();
   // In-flight detached background errands per chat (async-background-errands). A detached run lives for
   // minutes off the rate-limited chain, so without a cap a user firing several "get back to me" tasks
   // (the ack invites it) spawns unbounded parallel agent runs that exhaust the browser pool + starve
@@ -476,6 +480,35 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // treat THIS message as the answer — save it and re-run the errand we stashed. A reply that isn't a
     // place (a slash command, a fresh task, "never mind") returns null from captureLocation: we drop the
     // pending state and let the message route normally, so the user is never trapped.
+    // Reminder-with-no-time resume (reminder-no-time-ask): we asked "when?" for a timeless reminder and
+    // stashed the task. THIS message is the time — combine "remind me to <task> <time>" and re-run it
+    // through the normal schedule path. A reply that clearly isn't a time (a fresh command / task /
+    // "never mind") drops the pending state and routes normally, so the user is never trapped.
+    if (deps.scheduleAdd && pendingReminder.has(msg.chatId)) {
+      const task = pendingReminder.get(msg.chatId)!;
+      pendingReminder.delete(msg.chatId);
+      const reply = msg.text.trim();
+      // A time-ish reply: "at 3pm", "in 2 hours", "tomorrow at 9", "tonight", "3pm", a bare "9:30".
+      const looksLikeTime = /\b(at\s+\d|in\s+\d|in\s+(an?|a\s+few|a\s+couple|half)|tomorrow|tonight|today|this\s+(morning|afternoon|evening)|every|\d{1,2}\s*(am|pm)|\d{1,2}:\d{2})\b/i.test(reply)
+        || /^\s*\d{1,2}\s*(am|pm)?\s*$/i.test(reply);
+      if (looksLikeTime) {
+        const combined = `remind me to ${task} ${reply}`;
+        const r = deps.scheduleAdd(msg.chatId, combined, deps.now());
+        if (r.ok) {
+          const when = r.whenText ? ` Next: ${r.whenText}.` : "";
+          const tzWarn = r.noTz ? ` ⚠️ No timezone set, so this is UTC — set yours with "/setlocation <city> UTC-5".` : "";
+          if (r.saved === false) { await deps.sendMessage(msg.chatId, `Set it up for now, but I couldn't save it to disk — it may be lost if I restart. Try again in a moment.`); return; }
+          await deps.sendMessage(msg.chatId, `Got it — I'll remind you: "${r.task}".${when}${tzWarn}`);
+          return;
+        }
+        // Still couldn't parse a time out of the reply — ask once more, re-stashing the task.
+        pendingReminder.set(msg.chatId, task);
+        await deps.sendMessage(msg.chatId, `I didn't catch a time in that. Try "at 3pm", "in 2 hours", or "tomorrow at 9am" (or say "never mind").`);
+        return;
+      }
+      // Not a time — abandon the pending reminder and let this message route normally.
+    }
+
     if (deps.captureLocation && pendingLocation.has(msg.chatId)) {
       const errand = pendingLocation.get(msg.chatId)!;
       const saved = deps.captureLocation(msg.chatId, msg.text);
@@ -852,6 +885,14 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         && !/\bremind\s+me\s+(why|what|who|when|where|how|whether|if)\b/i.test(msg.text);
       const hasVagueTime = /\b(tonight|later|this (morning|afternoon|evening)|soon|in a (min|minute|bit|sec|second|hour)|at \d)/i.test(msg.text);
       if (isReminderToDo || (/\bremind\b/i.test(msg.text) && hasVagueTime)) {
+        // Stash the bare to-do so the user's time reply re-runs it as a full reminder instead of losing
+        // the task (reminder-no-time-ask). Strip the "remind me to/about/that" lead + any dangling vague
+        // time word so "call mom" is stored clean.
+        const task = msg.text.trim()
+          .replace(/^\s*(?:please\s+)?remind\s+me\s+(?:to|about|that)\s+/i, "")
+          .replace(/\b(tonight|later|soon|this (?:morning|afternoon|evening))\s*$/i, "")
+          .replace(/\s+/g, " ").replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, "").trim();
+        if (task) pendingReminder.set(msg.chatId, task);
         await deps.sendMessage(msg.chatId, "When should I remind you? Give me a time like \"at 3pm\", \"in 2 hours\", or \"tomorrow at 9am\".");
         return;
       }

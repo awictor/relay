@@ -114,6 +114,30 @@ describe("handler — schedule routing", () => {
     expect(calls()).toBe(0);
   });
 
+  it("after asking 'when?', the time reply re-runs the STASHED task as a full reminder (reminder-no-time-ask)", async () => {
+    const added: string[] = [];
+    // First call (no time) -> unparsed; second call (combined with the time) -> ok.
+    const { handle, sent, calls } = harness({
+      scheduleAdd: (_c, text) => {
+        added.push(text);
+        return /\bat\s+3pm\b/i.test(text) ? { ok: true, kind: "once", task: "call mom", whenMs: 0, whenText: "today 3:00pm" } : { ok: false, reason: "unparsed" };
+      },
+    });
+    await handle(msg("remind me to call mom"));          // no time -> asks
+    expect(sent[0]).toMatch(/when should i remind you/i);
+    await handle(msg("at 3pm"));                          // the time reply
+    expect(added[added.length - 1]).toMatch(/remind me to call mom at 3pm/i); // task + time recombined
+    expect(sent[1]).toMatch(/I'll remind you.*call mom/i);
+    expect(calls()).toBe(0);                             // never fell to the agent
+  });
+
+  it("a non-time reply after 'when?' drops the pending reminder + routes normally", async () => {
+    const { handle, calls } = harness({ scheduleAdd: () => ({ ok: false, reason: "unparsed" }) });
+    await handle(msg("remind me to call mom"));  // asks
+    await handle(msg("what's the weather"));     // not a time -> abandons pending, goes to agent
+    expect(calls()).toBe(1);
+  });
+
   it("capped scheduling tells the user, no agent", async () => {
     const { handle, sent, calls } = harness({
       scheduleAdd: () => ({ ok: false, reason: "capped" }),
