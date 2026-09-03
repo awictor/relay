@@ -2717,6 +2717,42 @@
       "status": "done",
       "why": "'is Dune 2 any good' / 'where can I watch Oppenheimer' is a top evening errand that falls to a flaky logged-out scrape floating a number with no source or streaming answer.",
       "how": "anvil drives a JustWatch (or Google) title page for streaming availability + a rating; reuse the browse/extract tools. Or a keyless-ish source if one exists. Report rating + where-to-stream + a link, honest on a miss."
+    },
+    {
+      "id": "threshold-suffix-drop",
+      "title": "'watch btc: below 50k' silently becomes a fire-on-every-wiggle change-watch",
+      "impact": "high",
+      "effort": "S",
+      "status": "done",
+      "why": "The below/above/by operand regex accepted only plain digits (no k/m/bn suffix, nothing trailing), so '50k'/'1.2M'/'50,000 usd' — the dominant way people write levels — failed to parse the condition and fell through to a plain change-watch that pings on every delta, never on the crossing asked for; confirmation never revealed the threshold was dropped.",
+      "how": "Scale a trailing magnitude suffix + tolerate a currency word in the operand grammar, mirroring extractValue on the value side; shared parseOperand."
+    },
+    {
+      "id": "inbound-send-fail-swallowed",
+      "title": "a failed inbound reply is invisible + memory records it as delivered",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "sendMessage returns a delivered-boolean the PROACTIVE runner gates on, but the inbound handler ignores it — a 429/network/one-chunk failure means the user gets nothing/truncated with no notice, and the assistant turn is still written to memory as answered (next turn's context claims an answer never seen).",
+      "how": "Check sendMessage's return on the inbound path; on false, don't write the assistant turn to memory as delivered (or note the miss) + optionally retry once — mirror the proactive commit-gating already built."
+    },
+    {
+      "id": "onboarding-weather-deadend",
+      "title": "the flagship '☀️ Weather' tap-to-try asks 'which city?' instead of answering",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The onboarding tap-to-try row exists to manufacture a first win, but a cold user (no saved location) taps the top button and gets 'What city are you in?' — the one dead-end in an otherwise instant onboarding.",
+      "how": "Change the TRY_EXAMPLES weather entry to a city-bearing example ('weather in New York') or reorder a no-location example first, so the first tap always lands an answer."
+    },
+    {
+      "id": "countdown-tracker",
+      "title": "'days until' is one-shot — no saved countdown with milestone pings",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "datecalc computes a difference on demand; nothing persists a countdown or pings at milestones. Countdowns (trips/birthdays/deadlines) are emotionally sticky + every proactive ping is a re-engagement touch.",
+      "how": "A tiny countdown store + a scheduler-backed item ('countdown to my flight Dec 20') that fires milestone pings (1 week, tomorrow); reuse schedule.ts + datecalc + safe-store."
     }
   ],
   "history": [
@@ -3799,6 +3835,10 @@
     {
       "item": "movie-where-to-watch",
       "note": "Where-to-watch (movie-where-to-watch): 'where can I watch Dune Part Two' / 'is Oppenheimer streaming' now returns a JustWatch per-region availability link instead of a cold logged-out scrape guessing a service. Probed the keyless options — TMDb/OMDb need a key (signup=owner-gated), iTunes movie search returns empty, JustWatch has no keyless API + needs anvil (down) — so, like the transit-directions bridge, built an HONEST link tool rather than inventing 'it's on Netflix'. New src/lib/watch-where.ts: parseWatchQuery (title out of 'where can I watch X'/'is X on Netflix', strips platform clause + 'the movie' filler, gated on a watch/stream cue) + justWatchUrl (per-region search URL, verified 200) + formatWatchWhere (link + a can't-confirm-a-service note). Wired a PURE where_to_watch tool (no backend) + dispatch (accepts a raw title or parses a verbatim sentence) + prompt menu + HELP + pinned tool-name list (43 tools). Tool desc steers rating/plot asks to get_fact. 5 new tests (parse extract/reject, url per-region, format honest-no-service; dispatch no-browser). suite 1849 green, tsc clean. Live-probed JustWatch search (200). Offline/anvil-independent (link-only, no fetch)."
+    },
+    {
+      "item": "threshold-suffix-drop",
+      "note": "Fixed the flagship 'watch below X' silently degrading on the commonest phrasing (threshold-suffix-drop). The below/above/by operand regexes accepted only $?(digits with commas) anchored s*$ — so 'below 50k', 'above 1.2M', 'below 50,000 usd' matched NOTHING, leaving condition/threshold undefined and the alert falling through to a plain change-watch (fires on every wiggle, never the crossing; also the non-edge, non-quiet-deferrable kind that buzzes all day) — and the confirmation never revealed the threshold was dropped. extractValue already scaled k/m/bn on the VALUE side, so the parser was asymmetric. Extended the below/above/by grammar (parseAlertCommand AND parseAlertEdit) with an optional magnitude suffix (k/m/mm/mn/bn/b/t/thousand/…) + a trailing currency word (usd/eur/dollars/…), via a shared parseOperand(numStr,suffix) that strips commas + scales (magMult, allowBareMT since an explicit clause is unambiguous). 7 new assertions across parseAlertCommand + parseAlertEdit (50k/1.2m/50,000 usd/1.5bn/by 10k; edit 45k/1.2m). suite 1850 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
@@ -4026,6 +4066,9 @@
     },
     {
       "note": "No audit this run — built from the prior queue (nutrition-lookup). Refilled by promoting a parked Agent-A/C finding: movie-where-to-watch (medium/M, anvil JustWatch/Google). Remaining: movie-where-to-watch, callback-edit-in-place(low), confirm-to-act(owner-gated)."
+    },
+    {
+      "note": "Backlog dry (low/M+owner-gated) -> 3-agent audit. A(new-user): onboarding-weather-deadend [SEEDED], local-events-near-me, movie-showtimes, named-business-hours. B(reliability): threshold-suffix-drop [SEEDED+BUILT], inbound-send-fail-swallowed [SEEDED], degraded-recipe-pushed-as-briefing, digest-all-failed-bypasses-gate, multi-tenant memory LRU. C(power): quick-log personal tracker, countdown-tracker [SEEDED], contact-tied follow-up nudges, call-prep bridge. Seeded: threshold-suffix-drop(built), inbound-send-fail-swallowed, onboarding-weather-deadend, countdown-tracker."
     }
   ]
 }

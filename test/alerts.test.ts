@@ -33,6 +33,15 @@ describe("parseAlertCommand", () => {
   it("parses a 'back in stock' predicate", () => {
     expect(parseAlertCommand("watch ps5: the PS5 on bestbuy back in stock")).toEqual({ name: "ps5", task: "the PS5 on bestbuy", condition: { op: "in_stock" } });
   });
+  it("scales a magnitude suffix + trailing currency in the operand (threshold-suffix-drop)", () => {
+    // "50k"/"1.2M"/"50,000 usd" are the dominant ways people write levels — must NOT degrade to a
+    // plain change-watch (the old regex dropped the suffix, leaving condition undefined).
+    expect(parseAlertCommand("watch btc: bitcoin below 50k")).toEqual({ name: "btc", task: "bitcoin", condition: { op: "below", operand: 50000 } });
+    expect(parseAlertCommand("watch btc: bitcoin above 1.2m")).toEqual({ name: "btc", task: "bitcoin", condition: { op: "above", operand: 1_200_000 } });
+    expect(parseAlertCommand("watch btc: bitcoin below 50,000 usd")).toEqual({ name: "btc", task: "bitcoin", condition: { op: "below", operand: 50000 } });
+    expect(parseAlertCommand("watch mktcap: market cap above 1.5bn")).toEqual({ name: "mktcap", task: "market cap", condition: { op: "above", operand: 1_500_000_000 } });
+    expect(parseAlertCommand("watch subs: my channel by 10k")).toEqual({ name: "subs", task: "my channel", threshold: 10000 });
+  });
 });
 
 describe("priceVerdict (good-deal-price-verdict)", () => {
@@ -321,6 +330,9 @@ describe("parseAlertEdit (conversational retune, product-loop)", () => {
     expect(parseAlertEdit("update sneakers to back in stock")).toEqual({ name: "sneakers", condition: { op: "in_stock" } });
     expect(parseAlertEdit("set btc to by 500")).toEqual({ name: "btc", threshold: 500 });
     expect(parseAlertEdit("change btc under $200")).toEqual({ name: "btc", condition: { op: "below", operand: 200 } });
+    // magnitude suffix (threshold-suffix-drop): "45k"/"1.2m" retune correctly instead of a no-op.
+    expect(parseAlertEdit("change btc to below 45k")).toEqual({ name: "btc", condition: { op: "below", operand: 45000 } });
+    expect(parseAlertEdit("make btc fire above 1.2m")).toEqual({ name: "btc", condition: { op: "above", operand: 1_200_000 } });
   });
   it("returns null for a non-edit / clauseless message", () => {
     expect(parseAlertEdit("change my flight to Tuesday")).toBeNull(); // no trigger clause

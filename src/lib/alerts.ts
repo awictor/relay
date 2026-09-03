@@ -294,17 +294,25 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
   if (feedTail) { feed = true; task = task.slice(0, feedTail.index).trim(); }
   else if (/^new\s+\S/i.test(task)) { feed = true; }
 
-  const below = task.match(/\s+(?:when\s+it\s+)?(?:drops?\s+)?(?:below|under|<)\s+\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s*$/i);
-  const above = task.match(/\s+(?:when\s+it\s+)?(?:goes?\s+|rises?\s+)?(?:above|over|hits?|reaches?|>)\s+\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s*$/i);
+  // Operand grammar (threshold-suffix-drop): a magnitude suffix (k/m/mm/mn/bn/b/t/thousand/million/…)
+  // AND an optional trailing currency word (usd/eur/dollars/…) are now accepted, mirroring extractValue
+  // on the VALUE side. Before, "below 50k" / "above 1.2M" / "below 50,000 usd" failed the operand parse,
+  // silently degrading the alert into a plain fire-on-every-wiggle change-watch (the exact opposite of
+  // the crossing the user asked for) — and "50k"/"1.2M" is the dominant way people write price levels.
+  const NUM = "(\\d+(?:,\\d{3})*(?:\\.\\d+)?)";
+  const SFX = "\\s?(k|mm|mn|bn|b|m|t|thousand|million|billion|trillion)?";
+  const CUR = "(?:\\s?(?:usd|eur|gbp|dollars?|euros?|pounds?))?";
+  const below = task.match(new RegExp(`\\s+(?:when\\s+it\\s+)?(?:drops?\\s+)?(?:below|under|<)\\s+\\$?${NUM}${SFX}${CUR}\\s*$`, "i"));
+  const above = task.match(new RegExp(`\\s+(?:when\\s+it\\s+)?(?:goes?\\s+|rises?\\s+)?(?:above|over|hits?|reaches?|>)\\s+\\$?${NUM}${SFX}${CUR}\\s*$`, "i"));
   const stock = task.match(/\s+(?:when\s+(?:it'?s\s+)?)?(?:back\s+)?in\s+stock\s*$/i);
-  const th = task.match(/\s+(?:when it changes\s+)?by\s+(\d+(?:\.\d+)?)\s*$/i);
+  const th = task.match(new RegExp(`\\s+(?:when it changes\\s+)?by\\s+${NUM}${SFX}${CUR}\\s*$`, "i"));
 
   // A price/stock trigger takes precedence over the feed cue (an explicit number/stock clause is
   // unambiguous); only treat as a feed watch when no such trigger is present.
-  if (below) { condition = { op: "below", operand: parseFloat(below[1]!.replace(/,/g, "")) }; task = task.slice(0, below.index).trim(); feed = false; }
-  else if (above) { condition = { op: "above", operand: parseFloat(above[1]!.replace(/,/g, "")) }; task = task.slice(0, above.index).trim(); feed = false; }
+  if (below) { condition = { op: "below", operand: parseOperand(below[1]!, below[2]) }; task = task.slice(0, below.index).trim(); feed = false; }
+  else if (above) { condition = { op: "above", operand: parseOperand(above[1]!, above[2]) }; task = task.slice(0, above.index).trim(); feed = false; }
   else if (stock) { condition = { op: "in_stock" }; task = task.slice(0, stock.index).trim(); feed = false; }
-  else if (th) { threshold = parseFloat(th[1]!); task = task.slice(0, th.index).trim(); feed = false; }
+  else if (th) { threshold = parseOperand(th[1]!, th[2]); task = task.slice(0, th.index).trim(); feed = false; }
 
   if (!name || !task) return null;
   const base = feed ? { name, task, feed: true }
@@ -331,15 +339,21 @@ export function parseAlertEdit(text: string): { name: string; threshold?: number
   const clause = " " + m[2]!.trim();
   if (!name) return null;
 
-  const below = clause.match(/\s+(?:when\s+it\s+)?(?:drops?\s+)?(?:below|under|<)\s+\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s*$/i);
-  const above = clause.match(/\s+(?:when\s+it\s+)?(?:goes?\s+|rises?\s+)?(?:above|over|hits?|reaches?|>)\s+\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s*$/i);
+  // Same operand grammar as parseAlertCommand (threshold-suffix-drop): scale a k/m/bn suffix + tolerate a
+  // trailing currency word, so "change btc to below 45k" / "make btc fire under 1.2m" retune correctly
+  // instead of silently failing to parse (leaving the old trigger in place — a confusing no-op).
+  const NUM = "(\\d+(?:,\\d{3})*(?:\\.\\d+)?)";
+  const SFX = "\\s?(k|mm|mn|bn|b|m|t|thousand|million|billion|trillion)?";
+  const CUR = "(?:\\s?(?:usd|eur|gbp|dollars?|euros?|pounds?))?";
+  const below = clause.match(new RegExp(`\\s+(?:when\\s+it\\s+)?(?:drops?\\s+)?(?:below|under|<)\\s+\\$?${NUM}${SFX}${CUR}\\s*$`, "i"));
+  const above = clause.match(new RegExp(`\\s+(?:when\\s+it\\s+)?(?:goes?\\s+|rises?\\s+)?(?:above|over|hits?|reaches?|>)\\s+\\$?${NUM}${SFX}${CUR}\\s*$`, "i"));
   const stock = clause.match(/\s+(?:when\s+(?:it'?s\s+)?)?(?:back\s+)?in\s+stock\s*$/i);
-  const th = clause.match(/\s+by\s+(\d+(?:\.\d+)?)\s*$/i);
+  const th = clause.match(new RegExp(`\\s+by\\s+${NUM}${SFX}${CUR}\\s*$`, "i"));
 
-  if (below) return { name, condition: { op: "below", operand: parseFloat(below[1]!.replace(/,/g, "")) } };
-  if (above) return { name, condition: { op: "above", operand: parseFloat(above[1]!.replace(/,/g, "")) } };
+  if (below) return { name, condition: { op: "below", operand: parseOperand(below[1]!, below[2]) } };
+  if (above) return { name, condition: { op: "above", operand: parseOperand(above[1]!, above[2]) } };
   if (stock) return { name, condition: { op: "in_stock" } };
-  if (th) return { name, threshold: parseFloat(th[1]!) };
+  if (th) return { name, threshold: parseOperand(th[1]!, th[2]) };
   return null;
 }
 
@@ -372,6 +386,14 @@ function magMult(sfx: string | undefined, allowBareMT: boolean): number {
   const key = sfx.toLowerCase();
   if (!allowBareMT && (key === "m" || key === "t")) return 1;
   return MAG[key] ?? 1;
+}
+
+/** Parse an alert-OPERAND number string + optional magnitude suffix into its numeric value
+ * (threshold-suffix-drop): strips in-number commas + scales k/m/bn/… so "50k"->50000, "1.2M"->1200000,
+ * "50,000"->50000. allowBareMT is true here — an explicit trigger clause ("below 1.2m") unambiguously
+ * means the magnitude, unlike free-text extraction where a bare "m"/"t" is risky. Exported for tests. */
+export function parseOperand(numStr: string, suffix?: string): number {
+  return parseFloat(numStr.replace(/,/g, "")) * magMult(suffix, true);
 }
 
 // Words in a watched task that DON'T identify the entity (so the entity-proximity hint keys on the real
