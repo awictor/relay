@@ -40,16 +40,48 @@ export function checkRateLimit(chatId: number, now = Date.now()): { allowed: boo
 // ---- dangerous-action guard ------------------------------------------------
 
 // State-changing / irreversible actions the agent must not perform autonomously
-// (mirrors mcp-forge auto-scan's DANGEROUS button filter). Used to gate any
-// click/type/submit on matching element text once agent-2 adds those tools.
-// m26 safety-audit-2: added committing synonyms the sweep caught missing — subscribe, bid, add to
-// cart, book(ing), donate — all start a payment/commitment the agent must not trigger autonomously.
+// (mirrors mcp-forge auto-scan's DANGEROUS button filter). Used to gate any click/type/submit on
+// matching element text.
+//
+// Two tiers (dangerous-action-false-refuse). The bare-noun list over-blocked benign navigation:
+// "order" matched "Order status", "reset" matched "reset filters", "remove"/"send" matched selectors
+// like ".remove-filter" / "#send-search" — dead-ending a legit multi-step browse with a false REFUSED.
+//   STRONG: unambiguous commit/destroy verbs — dangerous on their own (a button labeled just this IS
+//           the committing act). e.g. pay, delete, checkout, unsubscribe, submit.
+//   CONTEXTUAL: nouns that are ONLY dangerous with a committing object/verb nearby (order, send, reset,
+//           remove, cancel, book, confirm) — "place order"/"send money"/"reset password" are caught,
+//           but "order status"/"send-search"/"reset filters" pass. Matched via explicit collocations.
+// m26 safety-audit-2 kept the committing synonyms (subscribe, bid, add to cart, donate); this split
+// (dangerous-action-false-refuse) narrows the ambiguous ones without weakening the genuine catches.
 export const DANGEROUS_ACTION_RE =
-  /\b(delete|remove|cancel|logout|log out|sign out|subscribe|unsubscribe|close account|deactivate|submit|confirm|pay|purchase|buy|checkout|order|send|transfer|withdraw|approve|authorize|destroy|reset|wipe|erase|bid|add to cart|book|booking|donate|donation)\b/i;
+  /\b(delete|logout|log out|sign out|subscribe|unsubscribe|close account|close my account|deactivate|submit|pay|purchase|buy|checkout|transfer|withdraw|approve|authorize|destroy|wipe|erase|bid|add to cart|donate|donation|place (?:order|bid)|complete (?:order|purchase|checkout))\b/i;
 
-/** True if the given action/target text describes a destructive or committing action. */
+// A committing object that turns an ambiguous verb into a real commit. "order/booking/purchase/
+// payment/funds/money/subscription/account/reservation/card/transfer/donation".
+const COMMIT_OBJ = "(?:order|orders|booking|reservation|purchase|payment|funds|money|subscription|account|card|donation|transfer|bid|gift|item|items|cart)";
+// Ambiguous verb + a committing object (either order) — the genuinely dangerous phrasings, while a
+// read/nav collocation ("order status", "booking reference", "send search") is left alone.
+const CONTEXTUAL_RE = new RegExp(
+  // <verb> ... <commit-object>:  "cancel my subscription", "remove payment card", "send money"
+  "\\b(?:cancel|remove|send|reset|change|update|edit|book|confirm|make|start|renew)\\s+(?:\\w+\\s+){0,3}?" + COMMIT_OBJ + "\\b"
+  // <commit-object> ... <verb>:  "order — place", "subscription cancel" (rare, but symmetric)
+  + "|\\b(?:place|confirm|complete|submit)\\s+(?:the\\s+|a\\s+|your\\s+)?" + COMMIT_OBJ
+  // password/security-sensitive resets + factory reset (destructive even without a commit object)
+  + "|\\breset\\s+(?:my\\s+|the\\s+|your\\s+)?(?:password|account|settings|device|data|everything)\\b"
+  + "|\\bfactory\\s+reset\\b"
+  // "book (a) <thing>" / "book now" — a reservation commitment (but not "bookings"/"booking reference")
+  + "|\\bbook\\s+(?:now|a\\s+|the\\s+|your\\s+|this\\s+)"
+  // "confirm <commit>" collocations Excel/checkout use ("confirm and pay", "confirm order")
+  + "|\\bconfirm\\s+(?:and\\s+)?(?:order|purchase|payment|booking|and\\s+pay|subscription|reservation)\\b",
+  "i",
+);
+
+/** True if the given action/target text describes a destructive or committing action. STRONG verbs
+ * match on their own; ambiguous nouns (order/send/reset/remove/book/confirm/cancel) match only in a
+ * committing collocation so benign navigation ("Order status", "reset filters", ".remove-filter",
+ * "#send-search") isn't false-refused (dangerous-action-false-refuse). */
 export function isDangerousAction(text: string): boolean {
-  return DANGEROUS_ACTION_RE.test(text);
+  return DANGEROUS_ACTION_RE.test(text) || CONTEXTUAL_RE.test(text);
 }
 
 // ---- redaction -------------------------------------------------------------

@@ -2669,7 +2669,7 @@
       "title": "benign browse clicks refused by the destructive-action guard",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "DANGEROUS_ACTION_RE matches bare nouns order|book|send|reset|remove|close|confirm against label+selector, so legit navigation ('Order status', 'Bookings', a .remove-filter selector) dead-ends a multi-step browse with 'that looks destructive' — the core browse differentiator silently stalls.",
       "how": "Require committing-verb CONTEXT ('place order', 'confirm booking', 'delete account') rather than the bare noun; keep the guard strict on genuine commit phrasing."
     },
@@ -3757,6 +3757,10 @@
     {
       "item": "sticky-cap-drop-burns-budget",
       "note": "Fixed a sticky nag silently retiring early when the hourly cap drops it (sticky-cap-drop-burns-budget). A sticky 'nag me every 15 min until done' is kind:interval (not graceEligible), so a busy/over-cap hour hit the drop branch which called safeComplete(s) with complete()'s default fired:true — incrementing stickyFired toward stickyMax for a ping that was NEVER sent, so a few capped hours silently exhausted the budget + dropped the meds/water safety-net with no message. Changed the over-cap drop to safeComplete(s,false) so only a CONFIRMED ping counts toward the anti-nag cap (mirrors the sticky-send-fail-burns-budget guard on the thrown-failure path). fired only gates the sticky increment; plain daily/weekly/interval still advance normally. 1 new test (over-cap sticky drop keeps stickyFired at 0, stays alive). suite 1799 green, tsc clean. Offline; anvil-independent."
+    },
+    {
+      "item": "dangerous-action-false-refuse",
+      "note": "Stopped the destructive-action guard false-refusing benign browse clicks (dangerous-action-false-refuse). DANGEROUS_ACTION_RE matched bare ambiguous nouns (order|send|reset|remove|book|confirm|cancel) against label+selector, so legit navigation dead-ended a multi-step browse with a false REFUSED: 'Order status'/'Track order'/'My orders', 'Bookings'/'booking reference', 'reset filters', selectors like .remove-filter / #send-search. Split into two tiers in safety.ts: STRONG (unambiguous commit/destroy verbs — pay/delete/checkout/submit/unsubscribe/add to cart/'place order' — dangerous on their own) + CONTEXTUAL (ambiguous verb + a committing OBJECT — 'cancel my subscription', 'send money', 'remove payment card', 'reset password', 'factory reset', 'book now', 'confirm order/and pay' — but 'order status'/'reset filters'/'.remove-filter'/'#send-search' pass). isDangerousAction OR's both. All original m26 MUST_CATCH cases still flagged. 21 new tests (12 false-refuse-regression allows + 9 contextual catches). suite 1820 green, tsc clean. Offline; anvil-independent (the guard runs before any click)."
     }
   ],
   "audits": [
