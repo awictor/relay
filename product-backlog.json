@@ -1859,7 +1859,7 @@
       "title": "Ambiguous team name returns the wrong sport confidently",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "TEAM_LEAGUE maps giants->mlb, rangers->nhl, kings->nba unconditionally, so \"did the Giants win\" always answers SF Giants (never NFL), \"Rangers\" always NHL (never Texas Rangers MLB) — a confident wrong answer, no hedge.",
       "how": "Drop the genuinely-ambiguous team names from TEAM_LEAGUE (or require the league/sport word in-query); resolveLeague then returns null for a bare ambiguous team -> agent asks which."
     },
@@ -2607,6 +2607,10 @@
     {
       "item": "weather-future-day-falls-back-to-today",
       "note": "Fixed future-day weather silently showing today. resolveWhen: 'next <weekday>' now resolves to the following week (+7, no today collision), and returns the day index even when it's past the forecast window. formatWeatherWhen: a beyond-window day returns an honest 'that day is beyond my N-day forecast' note (+ a partial note when only some requested days are out of range) instead of null -> which had made the agent render TODAY's numbers for a future question, the exact opposite of what the tool advertises. 3 new tests. Suite 1406 green, tsc clean."
+    },
+    {
+      "item": "scores-ambiguous-team-wrong-sport",
+      "note": "Dropped cross-sport ambiguous team names (giants, rangers) from scores TEAM_LEAGUE. Was: 'did the Giants win' always answered SF Giants (MLB, never NY NFL); 'Rangers' always NHL (never Texas Rangers MLB / Rangers FC) — a confident wrong-sport answer, no hedge. Now a bare ambiguous name resolves to null -> get_scores tells the user it doesn't cover it + they can name the league; 'giants NFL score' / 'rangers MLB' still resolve via the league word-match. Only unambiguous team names remain in the table. 1 new test (ambiguous->null, league-named->resolves). Suite 1407 green, tsc clean."
     }
   ],
   "audits": [

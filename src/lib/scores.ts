@@ -40,13 +40,19 @@ const LEAGUES: Record<string, { sport: string; league: string; name: string }> =
 // A few well-known teams -> their league word, so "did the Lakers win" routes to NBA without the user
 // naming the league. Lowercased whole-word/substring match on the query. Small on purpose — the common
 // asks — and a team not here still works if the user names the league ("nba scores").
+// DELIBERATELY EXCLUDES cross-sport ambiguous names (scores-ambiguous-team-wrong-sport): "giants" (SF
+// MLB vs NY NFL), "rangers" (Texas MLB vs NY NHL vs Rangers FC), "kings" (LA NHL vs Sacramento NBA),
+// "cardinals" (MLB vs NFL), "panthers" (NFL vs NHL), "jets" (NFL vs NHL). Mapping one of those to a
+// single league would confidently answer the wrong sport with no hedge — worse than not knowing. A bare
+// ambiguous team returns null here (-> the agent asks which), while naming the league ("NY Giants NFL
+// score") still resolves via the LEAGUES word-match above. Only UNAMBIGUOUS team names live here.
 const TEAM_LEAGUE: Array<[RegExp, string]> = [
   [/\b(lakers|celtics|warriors|knicks|bulls|heat|nets|bucks|suns|nuggets|mavericks|mavs|clippers|sixers|76ers)\b/i, "nba"],
-  [/\b(yankees|red sox|dodgers|mets|cubs|astros|braves|giants|phillies)\b/i, "mlb"],
+  [/\b(yankees|red sox|dodgers|mets|cubs|astros|braves|phillies)\b/i, "mlb"],
   [/\b(chiefs|eagles|cowboys|packers|49ers|niners|patriots|bills|ravens|steelers)\b/i, "nfl"],
   [/\b(man city|manchester city|man united|manchester united|liverpool|arsenal|chelsea|tottenham|spurs)\b/i, "epl"],
   [/\b(real madrid|barcelona|barca|atletico)\b/i, "laliga"],
-  [/\b(rangers|bruins|maple leafs|oilers|canucks|penguins)\b/i, "nhl"],
+  [/\b(bruins|maple leafs|oilers|canucks|penguins)\b/i, "nhl"],
 ];
 
 export interface LeagueRef { sport: string; league: string; name: string; }

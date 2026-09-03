@@ -30,6 +30,16 @@ describe("resolveLeague", () => {
     expect(resolveLeague("underwater basket weaving")).toBeNull();
     expect(resolveLeague("")).toBeNull();
   });
+  it("does NOT guess a sport for a cross-sport ambiguous team name (scores-ambiguous-team-wrong-sport)", () => {
+    // "Giants" = SF (MLB) or NY (NFL); "Rangers" = Texas (MLB) / NY (NHL) / Rangers FC. A bare name must
+    // NOT confidently answer one sport -> null so the agent asks which.
+    expect(resolveLeague("did the giants win")).toBeNull();
+    expect(resolveLeague("rangers score")).toBeNull();
+    // but naming the league still resolves.
+    expect(resolveLeague("giants NFL score")!.league).toBe("nfl");
+    expect(resolveLeague("rangers NHL")!.league).toBe("nhl");
+    expect(resolveLeague("rangers MLB game")!.league).toBe("mlb");
+  });
 });
 
 describe("scoreboardUrl", () => {
