@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { parseSavePage, parseSavedRecall, hostLabel, SavedStore, readingRecap, isReadingRecapMember } from "../src/lib/readlater.js";
+import { parseSavePage, parseSavedRecall, hostLabel, SavedStore, readingRecap, isReadingRecapMember, isUnreadSavedRequest, formatUnreadNudge } from "../src/lib/readlater.js";
 
 const tmp = () => join(mkdtempSync(join(tmpdir(), "relay-saved-")), "s.json");
 const NOW = 1_700_000_000_000;
@@ -44,6 +44,45 @@ describe("hostLabel", () => {
     expect(hostLabel("https://www.nytimes.com/x/y")).toBe("nytimes.com");
     expect(hostLabel("http://example.org")).toBe("example.org");
     expect(hostLabel("not a url")).toBe("not a url");
+  });
+});
+
+describe("unread nudge (saved-page-unread-nudge)", () => {
+  const DAY = 86_400_000;
+  const NOW = 1_700_000_000_000;
+  it("isUnreadSavedRequest matches the not-revisited phrasings only", () => {
+    for (const s of ["what haven't I read", "what did I save and forget", "unread saved", "what have I not read", "my reading list I haven't read"]) {
+      expect(isUnreadSavedRequest(s)).toBe(true);
+    }
+    expect(isUnreadSavedRequest("my reading list")).toBe(false);     // that's the full-list recall
+    expect(isUnreadSavedRequest("what did I save about rust")).toBe(false);
+  });
+  it("unread() returns pages saved before the cutoff and never revisited, oldest first", () => {
+    const s = new SavedStore({ file: tmp() });
+    s.add(1, { url: "https://old.com", title: "Old", summary: "x" }, NOW - 10 * DAY);   // stale
+    s.add(1, { url: "https://older.com", title: "Older", summary: "x" }, NOW - 20 * DAY); // stale, oldest
+    s.add(1, { url: "https://fresh.com", title: "Fresh", summary: "x" }, NOW - 1 * DAY);  // recent -> not stale
+    const stale = s.unread(1, 7 * DAY, NOW);
+    expect(stale.map((p) => p.url)).toEqual(["https://older.com", "https://old.com"]); // oldest-first, fresh excluded
+  });
+  it("markRecalled clears a page from the unread set", () => {
+    const s = new SavedStore({ file: tmp() });
+    s.add(1, { url: "https://a.com", title: "A", summary: "x" }, NOW - 10 * DAY);
+    expect(s.unread(1, 7 * DAY, NOW).map((p) => p.url)).toEqual(["https://a.com"]);
+    expect(s.markRecalled(1, ["https://a.com"], NOW)).toBe(1);
+    expect(s.unread(1, 7 * DAY, NOW)).toEqual([]); // revisited just now -> no longer stale-unread
+  });
+  it("a page recalled long ago is stale-unread again", () => {
+    const s = new SavedStore({ file: tmp() });
+    s.add(1, { url: "https://a.com", title: "A", summary: "x" }, NOW - 30 * DAY);
+    s.markRecalled(1, ["https://a.com"], NOW - 20 * DAY); // last seen 20d ago, before the 7d cutoff
+    expect(s.unread(1, 7 * DAY, NOW).map((p) => p.url)).toEqual(["https://a.com"]);
+  });
+  it("formatUnreadNudge renders titles+links, or null when empty", () => {
+    expect(formatUnreadNudge([])).toBeNull();
+    const out = formatUnreadNudge([{ url: "https://a.com", title: "Fed rates", summary: "x", created: NOW }])!;
+    expect(out).toMatch(/haven't revisited it/);
+    expect(out).toContain("Fed rates — https://a.com");
   });
 });
 

@@ -2948,7 +2948,7 @@
       "title": "Nudge saved pages the user never revisited",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "the reading-list recap surfaces recent saves but doesn't track whether the user actually re-opened one, so a saved-and-forgotten page never gets a second nudge — the read-it-later value leaks.",
       "how": "Record a lastRecalledAt when a page appears in a recall/recap; add a 'saved but not revisited in N days' view + an optional weekly 'still want to read these?' proactive nudge, reusing SavedStore + the scheduler."
     },
@@ -2960,6 +2960,15 @@
       "status": "todo",
       "why": "re-saving the same URL silently updates in place; the agent save_page path doesn't distinguish add vs update in its confirmation, so a user re-saving a link isn't told it was already there.",
       "how": "Thread the SavedStore dup flag through the agent save_page tool result (the command path already says Updated/Saved) so the agent's confirmation matches."
+    },
+    {
+      "id": "weekly-unread-proactive-nudge",
+      "title": "Proactively ping stale-unread saves once a week",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "'what haven't I read' now works on demand + unread state is tracked, but a forgotten save still only resurfaces if the user thinks to ask; a gentle weekly proactive nudge would actually close the loop.",
+      "how": "A scheduled reminder-style job (opt-in, reuse scheduler) that fires formatUnreadNudge(saved.unread(...)) once a week per chat if there are stale-unread pages, gated on the anti-spam cap + quiet hours + delivery like other proactive sends; skip silently when none."
     }
   ],
   "history": [
@@ -4142,6 +4151,10 @@
     {
       "id": "saved-page-digest-integration",
       "note": "A reserved digest member ('reading list'/'saved'/'reading recap'/'read later') now folds a recap of recent read-it-later saves into a briefing — 'define digest morning: weather, reading list'. digest-runner intercepts the recap member BEFORE resolveRecipe (new savedRecap dep, pure store read, no agent/anvil); nothing-saved reads as an empty 'gone' member so a digest of only an empty reading list stays silent like an all-deleted one. New readingRecap + isReadingRecapMember in readlater.ts; index wires savedRecap: readingRecap(saved.list). HELP updated. +6 tests, 1943 green."
+    },
+    {
+      "id": "saved-page-unread-nudge",
+      "note": "Saved pages now track lastRecalledAt (stamped whenever a page appears in a recall or the digest recap), and SavedStore.unread(staleMs) returns saved-before-cutoff + never/long-ago-revisited pages oldest-first. 'what haven't I read' / 'what did I save and forget' (isUnreadSavedRequest, checked before general recall) replies with formatUnreadNudge and marks them seen. RELAY_SAVED_STALE_MS (default 7d) tunes the cutoff. Closes the leak where a saved-and-forgotten page never got a second nudge. +5 tests, 1948 green."
     }
   ],
   "audits": [
@@ -4405,6 +4418,9 @@
     },
     {
       "note": "Agent spawn cap still exhausted (200/200) — no 3-agent audit. Built saved-page-digest-integration (completes read-it-later: capture via command + agent tool, recall, now digest recap). Seeded 2 follow-ons: saved-page-unread-nudge, save-page-confirm-dedupe-feedback."
+    },
+    {
+      "note": "Agent spawn cap still exhausted (200/200) — no 3-agent audit. Built saved-page-unread-nudge. Seeded weekly-unread-proactive-nudge (the proactive follow-on) + carried save-page-confirm-dedupe-feedback."
     }
   ]
 }

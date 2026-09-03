@@ -37,7 +37,7 @@ import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summa
 import { parseChartRequest, renderChart } from "./lib/chart.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
-import { SavedStore, parseSavePage, parseSavedRecall, hostLabel, readingRecap } from "./lib/readlater.js";
+import { SavedStore, parseSavePage, parseSavedRecall, hostLabel, readingRecap, isUnreadSavedRequest, formatUnreadNudge } from "./lib/readlater.js";
 import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
 import { LogStore, parseLogCommand, parseLogQuery, sumSeries } from "./lib/logs.js";
@@ -132,6 +132,8 @@ const notes = new NotesStore({ file: paths.notes });
 const places = new PlacesStore({ file: paths.places });
 const logs = new LogStore({ file: paths.logs });
 const saved = new SavedStore({ file: paths.saved });
+// A saved page is "stale-unread" after this long with no revisit (saved-page-unread-nudge). Default 7 days.
+const SAVED_STALE_MS = Math.max(3_600_000, Number(process.env.RELAY_SAVED_STALE_MS) || 7 * 86_400_000);
 const lists = new ListStore({ file: paths.lists });
 const contacts = new ContactStore({ file: paths.contacts });
 const answerLog = new AnswerLog({ file: paths.answers });
@@ -163,8 +165,10 @@ const digestRunText = (chatId: number, name: string): Promise<DigestOutcome> => 
   const d = digests.get(chatId, name);
   if (!d) return Promise.resolve(null);
   return runDigest(d, { llm, resolveRecipe: (c, n) => { const r = recipes.get(c, n); return r ? { task: r.task } : null; }, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor,
-    // Reading-list recap member (saved-page-digest-integration): fold recent saves into the briefing.
-    savedRecap: (c) => readingRecap(saved.list(c)),
+    // Reading-list recap member (saved-page-digest-integration): fold recent saves into the briefing. The
+    // recap shows the most-recent saves, so stamp them recalled (saved-page-unread-nudge) — a page that
+    // appears in the daily recap isn't "forgotten".
+    savedRecap: (c) => { const list = saved.list(c); const recap = readingRecap(list); if (recap) saved.markRecalled(c, [...list].sort((a, b) => b.created - a.created).slice(0, 5).map((p) => p.url), Date.now()); return recap; },
     // A chained-recipe member runs as a sequential workflow, not a literal task (digest-chain-member-literal).
     runChain: async (c, task) => (await runChain(c, task, { llm, runAgent, formatReply, contextFor: (cc) => profiles.contextLine(cc, Date.now()), agentEnv: agentEnvFor })).final });
 };
@@ -368,6 +372,15 @@ const handle = createHandler({
     return { title: r.page.title, url, saved: r.saved, dup: r.dup };
   },
   recallSaved: (chatId, text) => {
+    // "what haven't I read" -> the stale-unread nudge (saved-page-unread-nudge), checked before the
+    // general recall so it isn't shadowed by the broader recall matcher.
+    if (isUnreadSavedRequest(text)) {
+      const pages = saved.unread(chatId, SAVED_STALE_MS, Date.now());
+      const nudge = formatUnreadNudge(pages);
+      if (!nudge) return "Nothing saved that you haven't already revisited. Save a page with \"save this <link>\".";
+      saved.markRecalled(chatId, pages.map((p) => p.url), Date.now()); // seeing them here counts as a revisit
+      return nudge;
+    }
     const q = parseSavedRecall(text);
     if (!q) return null;
     const hits = saved.search(chatId, q.topic, 8);
@@ -376,6 +389,7 @@ const handle = createHandler({
         ? `Nothing saved matching "${q.topic}". Save a page with "save this <link>".`
         : `You haven't saved anything yet. Send "save this <link>" and I'll summarize + file it for recall.`;
     }
+    saved.markRecalled(chatId, hits.map((p) => p.url), Date.now()); // recalled = revisited, don't nudge these
     const head = q.topic ? `Saved pages about "${q.topic}":` : "Your recent saved pages:";
     const body = hits.map((p) => `• ${p.title} — ${p.summary}\n  ${p.url}`).join("\n\n");
     return `${head}\n${body}`;

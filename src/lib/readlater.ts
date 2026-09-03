@@ -13,6 +13,8 @@ export interface SavedPage {
   title: string;   // a short human label (the page title, or the URL host as a fallback)
   summary: string; // the captured gist, so recall doesn't need to re-fetch
   created: number;  // epoch ms, for ordering + oldest-first eviction
+  lastRecalledAt?: number; // epoch ms the user last SAW this page in a recall/recap — so a saved-and-
+                           // forgotten page can be nudged (saved-page-unread-nudge). Unset = never revisited.
 }
 interface ChatSaved { chatId: number; pages: SavedPage[] }
 
@@ -61,6 +63,22 @@ export function parseSavedRecall(text: string): { topic: string } | null {
 
 function cleanTopic(s: string): string {
   return s.trim().replace(/^["']|["']$/g, "").replace(/[.?!;]\s*$/g, "").trim();
+}
+
+/** True if a whole message asks what's saved-but-unread ("what haven't I read", "what did I save and
+ * forget", "unread saved", "reading list I haven't read"). Distinct from parseSavedRecall (which lists/
+ * searches ALL saves) — this scopes to the not-revisited ones. */
+export function isUnreadSavedRequest(text: string): boolean {
+  const t = text.trim();
+  return /^\s*(?:what\s+haven'?t\s+i\s+read|what\s+did\s+i\s+save\s+and\s+(?:forget|not\s+read)|what'?s\s+(?:in\s+my\s+)?unread|unread\s+(?:saved|reading\s+list|pages?)|(?:my\s+)?reading\s+list\s+i\s+haven'?t\s+read|what\s+have\s+i\s+not\s+read)\b.*\??\s*$/i.test(t);
+}
+
+/** Format an unread-nudge line for a set of stale-unread saved pages (saved-page-unread-nudge), or null
+ * when there are none. Used by both a "what haven't I read" reply and a proactive weekly nudge. */
+export function formatUnreadNudge(pages: SavedPage[]): string | null {
+  if (!pages.length) return null;
+  const lines = pages.map((p) => `• ${p.title} — ${p.url}`);
+  return `📚 You saved ${pages.length === 1 ? "this" : `these ${pages.length}`} a while back but haven't revisited ${pages.length === 1 ? "it" : "them"}:\n${lines.join("\n")}\n\nWant a recap of any? Say "what did I save about …".`;
 }
 
 /** A short host label from a URL, for a fallback title ("nytimes.com"). */
@@ -146,6 +164,30 @@ export class SavedStore {
     const scored = pages.map((p) => ({ p, score: this.score(p, terms) })).filter((x) => x.score > 0);
     scored.sort((a, b) => (b.score - a.score) || (b.p.created - a.p.created));
     return scored.slice(0, limit).map((x) => x.p);
+  }
+
+  /** Stamp that the user just SAW these URLs in a recall/recap (saved-page-unread-nudge), so an unread
+   * nudge doesn't keep re-surfacing a page they've revisited. Best-effort persist; a failed write only
+   * means a page might be nudged once more, which is harmless. Returns how many were stamped. */
+  markRecalled(chatId: number, urls: string[], now: number): number {
+    const c = this.items.find((x) => x.chatId === chatId);
+    if (!c) return 0;
+    const set = new Set(urls);
+    let n = 0;
+    for (const p of c.pages) if (set.has(p.url)) { p.lastRecalledAt = now; n++; }
+    if (n) this.persist();
+    return n;
+  }
+
+  /** Saved pages the user hasn't revisited in a while (saved-page-unread-nudge): saved before `now -
+   * staleMs` AND never recalled (or last recalled before that cutoff). Oldest-save first (the most
+   * forgotten). `limit` caps the result. Empty when nothing qualifies. */
+  unread(chatId: number, staleMs: number, now: number, limit = 5): SavedPage[] {
+    const cutoff = now - staleMs;
+    return this.list(chatId)
+      .filter((p) => p.created <= cutoff && (p.lastRecalledAt === undefined || p.lastRecalledAt <= cutoff))
+      .sort((a, b) => a.created - b.created)
+      .slice(0, limit);
   }
 
   // Relevance of a page to the search terms: whole-word hits across title + summary + url host, summed,
