@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseAlertCommand, parseAlertEdit, changed, normalizeForCompare, firstNumber, extractValue, conditionHolds, extractListItems, feedItemKey, parseTrendRequest, summarizeSeries, looksLikeErrorReply, AlertStore } from "../src/lib/alerts.js";
+import { parseAlertCommand, parseAlertEdit, changed, normalizeForCompare, firstNumber, extractValue, conditionHolds, extractListItems, feedItemKey, parseTrendRequest, summarizeSeries, looksLikeErrorReply, isQuietDeferrable, AlertStore } from "../src/lib/alerts.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -32,6 +32,21 @@ describe("parseAlertCommand", () => {
   });
   it("parses a 'back in stock' predicate", () => {
     expect(parseAlertCommand("watch ps5: the PS5 on bestbuy back in stock")).toEqual({ name: "ps5", task: "the PS5 on bestbuy", condition: { op: "in_stock" } });
+  });
+});
+
+describe("isQuietDeferrable (quiet-hours-persistent-alerts + unthrottled-change-watch)", () => {
+  it("a predicate or weather alert is NOT deferrable (edge-triggered, must run on cadence)", () => {
+    expect(isQuietDeferrable({ condition: { op: "below", operand: 50000 } })).toBe(false);
+    expect(isQuietDeferrable({ condition: { op: "in_stock" } })).toBe(false);
+    expect(isQuietDeferrable({ weather: { op: "rain", horizon: "tomorrow" } as never })).toBe(false);
+  });
+  it("a plain/threshold change-watch, watchlist, feed, or page-diff IS deferrable (persistent value)", () => {
+    expect(isQuietDeferrable({})).toBe(true);                       // plain "watch btc: price of bitcoin"
+    expect(isQuietDeferrable({ threshold: 1000 } as never)).toBe(true); // change-by-N watch
+    expect(isQuietDeferrable({ feed: true } as never)).toBe(true);
+    expect(isQuietDeferrable({ pageUrl: "https://x" } as never)).toBe(true);
+    expect(isQuietDeferrable({ members: [] } as never)).toBe(true); // watchlist
   });
 });
 

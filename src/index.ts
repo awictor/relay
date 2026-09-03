@@ -33,7 +33,7 @@ import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots
 import { matchRecipe } from "./lib/task-suggest.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest } from "./digest-runner.js";
-import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summarizeSeries } from "./lib/alerts.js";
+import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summarizeSeries, isQuietDeferrable } from "./lib/alerts.js";
 import { parseChartRequest, renderChart } from "./lib/chart.js";
 import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
@@ -231,14 +231,17 @@ const scheduleRunner = makeScheduleRunner({
   // chat's tz. Off unless RELAY_QUIET_START/END set (default start===end 0 = no window).
   quietUntil: (chatId, now) => quietUntilMs(now, QUIET_START, QUIET_END, profiles.offsetMin(chatId) ?? tzOffsetMin()),
   deferTo: (id, whenMs) => { schedules.deferTo(id, whenMs); },
-  // Quiet-hours alert classification (quiet-hours-persistent-alerts): a feed (new-items) or page-diff
-  // watch shows a PERSISTENT change — safe to defer its send to quiet-end. A value/predicate/weather/
-  // watchlist alert is EDGE-triggered (a crossing can revert overnight), so it stays exempt (must run
-  // on cadence). Unknown alert -> not deferrable (safe default: keep exempt).
+  // Quiet-hours alert classification (quiet-hours-persistent-alerts + unthrottled-change-watch): a watch
+  // whose signal PERSISTS to morning is safe to defer to quiet-end (nothing lost, no 3am buzz). Only a
+  // PREDICATE (below/above/in_stock) or WEATHER alert is genuinely edge-triggered — a crossing can revert
+  // overnight and be missed if the CHECK is deferred, so those stay exempt (run on cadence). Everything
+  // else — a plain/threshold change-watch (its new value is still there in the morning), a watchlist (a
+  // group of change-watches), a feed/page-diff — is deferrable. This ALSO fixes a plain "watch btc: price
+  // of bitcoin" (no threshold, level-triggered) spamming all night: it now batches to quiet-end instead
+  // of pinging every cadence check overnight. Unknown alert -> not deferrable (safe default: keep exempt).
   alertQuietDeferrable: (chatId, name) => {
     const a = alerts.get(chatId, name);
-    if (!a) return false;
-    return !!(a.feed || a.feedSource || a.pageUrl);
+    return a ? isQuietDeferrable(a) : false; // unknown alert -> not deferrable (safe default: keep exempt)
   },
   // m14 degrade-4: a failed ONE-SHOT reminder shouldn't vanish silently — tell the user, once,
   // with a friendly (non-leaking) line. A "daily" stays silent (it retries tomorrow; a misfiring

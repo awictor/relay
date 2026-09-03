@@ -204,6 +204,16 @@ export function conditionHolds(cond: AlertCondition, value: string, hint?: strin
   return cond.op === "below" ? v < cond.operand : v > cond.operand;
 }
 
+/** True if this alert's signal PERSISTS to morning, so its send is safe to defer past quiet hours
+ * (quiet-hours-persistent-alerts + unthrottled-change-watch). Only a PREDICATE (below/above/in_stock)
+ * or WEATHER alert is edge-triggered — a crossing can revert overnight and be missed if the CHECK is
+ * deferred, so those must run on cadence (NOT deferrable). Everything else — a plain/threshold
+ * change-watch (its new value is still there in the morning), a watchlist, a feed, a page-diff — is
+ * deferrable, which also stops a no-threshold "watch btc: price of bitcoin" from pinging all night. */
+export function isQuietDeferrable(alert: Pick<Alert, "condition" | "weather">): boolean {
+  return !alert.condition && !alert.weather;
+}
+
 function normalizeName(s: string): string {
   return s.trim().replace(/^["']|["']$/g, "").replace(/\s+/g, " ").toLowerCase().slice(0, 60);
 }

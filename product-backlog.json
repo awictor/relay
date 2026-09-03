@@ -2678,7 +2678,7 @@
       "title": "a plain 'watch X: price of Y' fires on every check, all hours",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A no-threshold change-watch on a volatile value (BTC/stock/temp) is level-triggered (changed() true on any delta>0), and value alerts skip BOTH the anti-spam cap AND quiet hours — so the headline watch feature can spam the user overnight with no way to know they needed a threshold.",
       "how": "Give a no-threshold change alert a minimum re-notify interval (e.g. once/6h unless it crosses a magnitude), OR treat a plain change-watch as quiet-deferrable so it batches to morning."
     },
@@ -3761,6 +3761,10 @@
     {
       "item": "dangerous-action-false-refuse",
       "note": "Stopped the destructive-action guard false-refusing benign browse clicks (dangerous-action-false-refuse). DANGEROUS_ACTION_RE matched bare ambiguous nouns (order|send|reset|remove|book|confirm|cancel) against label+selector, so legit navigation dead-ended a multi-step browse with a false REFUSED: 'Order status'/'Track order'/'My orders', 'Bookings'/'booking reference', 'reset filters', selectors like .remove-filter / #send-search. Split into two tiers in safety.ts: STRONG (unambiguous commit/destroy verbs — pay/delete/checkout/submit/unsubscribe/add to cart/'place order' — dangerous on their own) + CONTEXTUAL (ambiguous verb + a committing OBJECT — 'cancel my subscription', 'send money', 'remove payment card', 'reset password', 'factory reset', 'book now', 'confirm order/and pay' — but 'order status'/'reset filters'/'.remove-filter'/'#send-search' pass). isDangerousAction OR's both. All original m26 MUST_CATCH cases still flagged. 21 new tests (12 false-refuse-regression allows + 9 contextual catches). suite 1820 green, tsc clean. Offline; anvil-independent (the guard runs before any click)."
+    },
+    {
+      "item": "unthrottled-change-watch",
+      "note": "Stopped a plain change-watch spamming overnight (unthrottled-change-watch). A no-threshold 'watch btc: price of bitcoin' is level-triggered (changed() true on any delta) and value alerts were EXEMPT from the quiet-hours defer (the classifier only marked feed/page persistent), so it pinged every cadence check all night. Reworked the quiet-deferrable classifier: extracted a pure isQuietDeferrable(alert) in alerts.ts — only a PREDICATE (below/above/in_stock) or WEATHER alert is edge-triggered (a crossing can revert overnight, must run on cadence -> not deferrable); everything else (plain/threshold change-watch, watchlist, feed, page-diff) has a PERSISTENT signal still there in the morning -> deferrable, so it batches to quiet-end instead of buzzing at 3am. index's alertQuietDeferrable now delegates to the pure helper (unknown -> not deferrable). The anti-spam hourly cap still exempts alert CHECKS (edge crossings mustn't be dropped) — this is only the quiet-hours SEND defer. 2 new tests (predicate/weather not deferrable; plain/threshold/watchlist/feed/page deferrable); existing runner persistent-defers + edge-exempt tests unchanged. suite 1822 green, tsc clean. Offline; anvil-independent."
     }
   ],
   "audits": [
