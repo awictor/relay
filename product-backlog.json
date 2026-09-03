@@ -1076,7 +1076,7 @@
       "title": "watchlist member labels can collide",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "memberLabel = first 4 words; two similar members collapse to one label so setMemberLasts updates the wrong one + one member re-fires every check.",
       "how": "Disambiguate duplicate labels (append an index) or key members by task, not label."
     }
@@ -1449,6 +1449,10 @@
     {
       "id": "draft-to-send-composer",
       "note": "Added a compose tool — the non-gated slice of Instinct acting: the agent drafts an email/text and returns a copy block + a one-tap mailto:/sms: deep link the USER sends; Relay never sends (safety guard untouched). New src/lib/compose.ts (mailtoLink/smsLink RFC-encoded, formatDraft) + agent tool/dispatch/prompt; passed to the user verbatim. Closes the read-only \"here is what I found\" dead-end. 995 tests green."
+    },
+    {
+      "id": "watchlist-member-label-collision",
+      "note": "Watchlist members whose 4-word label collides (e.g. \"news on tesla model 3\" / \"...model y\" both -> \"news on tesla model\") now get a numeric suffix so labels are unique. setMemberLasts keys on label, so a collision used to update the wrong member + one re-fired every check. 996 tests green."
     }
   ],
   "audits": [

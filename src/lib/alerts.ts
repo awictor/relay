@@ -153,8 +153,18 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
   // single-trigger parsing (which assumes one task). At least 2 non-empty parts required.
   const parts = task.split(";").map((p) => p.trim()).filter(Boolean);
   if (parts.length >= 2) {
-    const members = parts.slice(0, MAX_WATCHLIST_MEMBERS).map((p) => ({ label: memberLabel(p), task: p }));
     if (!name) return null;
+    // Labels are the member IDENTITY used by setMemberLasts — two similar tasks ("news on tesla model
+    // 3" / "...model y") can derive the same 4-word label, so setMemberLasts would update the wrong one
+    // and one member re-fires every check (watchlist-member-label-collision). Disambiguate duplicates
+    // with a numeric suffix so every label is unique within the watchlist.
+    const seen = new Map<string, number>();
+    const members = parts.slice(0, MAX_WATCHLIST_MEMBERS).map((p) => {
+      const base = memberLabel(p);
+      const n = (seen.get(base) ?? 0) + 1;
+      seen.set(base, n);
+      return { label: n > 1 ? `${base} (${n})` : base, task: p };
+    });
     return { name, task, members };
   }
 

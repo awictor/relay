@@ -306,6 +306,13 @@ describe("watchlists", () => {
     expect(p.threshold).toBeUndefined();
     expect(p.condition).toBeUndefined();
   });
+  it("disambiguates members that derive the same label (watchlist-member-label-collision)", () => {
+    const p = parseAlertCommand("watch tesla: news on tesla model 3; news on tesla model y")!;
+    // Both reduce to "news on tesla model" (first 4 words) -> second gets a numeric suffix so labels
+    // are unique (setMemberLasts keys on label, so a collision would update the wrong member).
+    expect(p.members!.map((m) => m.label)).toEqual(["news on tesla model", "news on tesla model (2)"]);
+    expect(new Set(p.members!.map((m) => m.label)).size).toBe(2); // unique
+  });
   it("a single task (no semicolon) is NOT a watchlist", () => {
     expect(parseAlertCommand("watch btc: price of bitcoin")!.members).toBeUndefined();
   });
