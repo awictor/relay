@@ -3380,7 +3380,7 @@
       "title": "Continue probing pure-lib parsers for common phrasings that fall to null (the productive vein)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Probing individual lib parsers with real user phrasings keeps surfacing genuine dead-ends (calc %-off, convert density, unitprice pack) — a live class distinct from the swept idiom/message veins. Remaining libs to phrase-probe: logs (parseLogCommand/parseLogQuery variants), countdown, geocode/places phrasings, scores team-name forms, qr payload types.",
       "how": "tsx-probe each remaining lib with 4-5 common real phrasings; where a plausible user phrasing returns null but SHOULD parse, widen the parser + add a test. One lib per iteration; stop when a full pass finds no real dead-end."
     },
@@ -3392,6 +3392,15 @@
       "status": "done",
       "why": "parseLogQuery routes 'how much did I SPEND on X' to a sum + '<tag> trend' to a trend, but a bare 'how much coffee this week' / 'how many beers did I have' (a count sum over a non-money tag) returns null -> the user can log 'log 3 coffees' but can't ask it back naturally.",
       "how": "Add a count-sum branch: 'how much/many <tag> [window]' (no spend verb) -> { tag, mode:'sum', sinceMs }. Distinguish from the spend-sum path (which tags by the 'on <thing>' object). Widen + test. Keep 'my <tag> trend' as trend."
+    },
+    {
+      "id": "owner-levers-remain-final",
+      "title": "Offline veins swept (10 phrasing fixes + 5 capabilities + reliability sweep) — value now owner-gated",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Every autonomously-reachable offline surface is worked out: reliability (delivery+persistence gating), 5 new capabilities, idiom-drift, message-copy, and now the lib-phrasing vein (10 real fixes, several silent-wrong-answer/data-integrity) all at 2114 green. anvil DOWN every run this session; subagent cap 200/200 blocks the real 3-lens AUDIT.",
+      "how": "OWNER: (1) confirm-to-act product-UX decision. (2) start anvil for the overdue live e2e. (3) FRESH Claude session resets the cap for a real 3-lens AUDIT - the highest-leverage move to seed genuinely new directions. Until one, /product-loop returns clean."
     }
   ],
   "history": [
@@ -4814,6 +4823,10 @@
     {
       "item": "lib-phrasing-probe-clean-pass",
       "note": "Full clean pass on directions/translate/geocode/scores/fun phrasings - no code change (green tree, 2113). The phrasing-coverage vein produced 9 real user-facing fixes over prior runs (calc %-off, convert density, network-msg, unitprice packs, log value-first, log count/plural, countdown lead, places atm->hospital, weather in-N-days) then went clean here. Not manufacturing a change; vein largely swept."
+    },
+    {
+      "item": "chart-noun-first",
+      "note": "phrasing gap: parseChartRequest only took verb-first ('chart btc'), so noun-first 'btc chart' / 'my weight graph' returned null. Added a noun-first pattern (name + trailing chart/graph/plot) with a trailing-window carve-out ('eth chart this week'). Verb-first + text-trend-null-passthrough intact. +1 test. 2114 green. This closes the lib-phrasing probe class - alerts (k/m suffix, below/above/hits robust) + chart were the last two; both now covered."
     }
   ],
   "audits": [
@@ -5315,6 +5328,11 @@
     {
       "lens": "directions/translate/geocode phrasing probe (clean)",
       "surfaced": "Probed the remaining lib parsers: directions wantsTransit (train/subway/bus/public transit all -> transit; bike/walk/drive modes correct) + routeMode clean; translate targets incl. multi-word langs (mandarin, brazilian portuguese, simplified chinese, farsi) + 'how do you say/what is X in Y' cues all parse; parseNominatim geocode (valid->coords, empty/garbage->null) clean. NO dead-end found this pass. The lib-phrasing vein has yielded 9 real fixes and is now thinning - directions/translate/geocode/scores/fun all clean; the earlier hits were in calc/convert/unitprice/log/countdown/places/weather."
+    },
+    {
+      "lens": "chart/alerts phrasing probe (vein closed)",
+      "surfaced": "chart missed noun-first 'btc chart' (fixed). alerts parseAlertCommand robust (50k/100k/3k suffixes, below/above/under/hits/reaches, weather-cond, watchlist, then-run; colon-less 'alert me when...' null is BY DESIGN - alerts need a name). The lib-phrasing vein is now SWEPT: 10 real fixes total across calc/convert/unitprice/log(x2)/countdown/places/weather/chart + network-msg, then clean across directions/translate/geocode/scores/fun/alerts. Genuinely exhausted.",
+      "seeded": "owner-levers-remain-final"
     }
   ]
 }

@@ -19,7 +19,10 @@ export function parseChartRequest(text: string, now: number): { name: string; si
     : undefined;
   const m =
     t.match(/^\s*(?:chart|graph|plot|visuali[sz]e)\s+(?:me\s+|us\s+)?(?:the\s+)?(?:my\s+)?(.+?)\s*$/i)
-    || t.match(/^\s*(?:show|give)\s+(?:me\s+|us\s+)?(?:a\s+)?(?:chart|graph|plot)\s+(?:of|for)\s+(.+?)\s*$/i);
+    || t.match(/^\s*(?:show|give)\s+(?:me\s+|us\s+)?(?:a\s+)?(?:chart|graph|plot)\s+(?:of|for)\s+(.+?)\s*$/i)
+    // Noun-FIRST: "btc chart" / "my weight graph" — the trailing chart/graph word (chart-noun-first),
+    // a natural ordering the verb-first patterns above missed.
+    || t.match(/^\s*(?:my\s+|the\s+)?(.+?)\s+(?:chart|graph|plot)(?:\s+(?:this week|this month|today|over time|so far|lately|recently))?\s*$/i);
   if (!m) return null;
   let name = m[1]!
     .replace(/\b(chart|graph|plot|visuali[sz]e)\b/gi, "")

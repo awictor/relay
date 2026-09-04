@@ -18,6 +18,12 @@ describe("parseChartRequest", () => {
     expect(r.name).toBe("btc");
     expect(r.sinceMs).toBe(NOW - 7 * DAY);
   });
+  it("parses the noun-first ordering 'btc chart' / 'my weight graph' (chart-noun-first)", () => {
+    expect(parseChartRequest("btc chart", NOW)).toEqual({ name: "btc" });
+    expect(parseChartRequest("my weight graph", NOW)).toEqual({ name: "weight" });
+    // noun-first still captures a trailing window
+    expect(parseChartRequest("eth chart this week", NOW)).toEqual({ name: "eth", sinceMs: NOW - 7 * DAY });
+  });
   it("does NOT match a bare text-trend ask (no chart word) so watchTrend still handles it", () => {
     expect(parseChartRequest("how has btc moved this week", NOW)).toBeNull();
     expect(parseChartRequest("btc trend", NOW)).toBeNull();
