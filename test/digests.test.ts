@@ -20,6 +20,11 @@ describe("parseDigestCommand", () => {
     expect(parseDigestCommand("digest morning:")).toBeNull();
     expect(parseDigestCommand("what's the weather")).toBeNull();
   });
+  it("strips a trailing courtesy so the LAST member isn't silently dropped (courtesy-tail)", () => {
+    // "hn please" matches no recipe -> the member would vanish from the digest without warning.
+    expect(parseDigestCommand("digest morning: weather, hn please")).toEqual({ name: "morning", members: ["weather", "hn"] });
+    expect(parseDigestCommand("define digest evening: btc, news thanks")).toEqual({ name: "evening", members: ["btc", "news"] });
+  });
 });
 
 describe("DigestStore", () => {

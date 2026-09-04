@@ -4,6 +4,7 @@
 // Pure parse + persistent store (JSON file, gitignored, like RecipeStore/ScheduleStore).
 
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
+import { stripTrailingCourtesy } from "./text-clean.js";
 
 export interface Digest {
   chatId: number;
@@ -29,7 +30,10 @@ function normalizeName(s: string): string {
  * Members are comma-separated recipe names (normalized). Empty members -> null.
  */
 export function parseDigestCommand(text: string): ParsedDigest | null {
-  const m = text.trim().match(/^\s*(?:define\s+)?digest\s+([^:]+?)\s*:\s*(.+)$/i);
+  // Strip a trailing courtesy so "digest morning: weather, hn please" keeps member "hn", not
+  // "hn please" — the latter matches no recipe and the member is silently dropped from the digest
+  // (courtesy-tail bug class; the last comma-member sits at the very tail).
+  const m = stripTrailingCourtesy(text.trim()).match(/^\s*(?:define\s+)?digest\s+([^:]+?)\s*:\s*(.+)$/i);
   if (!m) return null;
   const name = normalizeName(m[1]!);
   const members = m[2]!.split(",").map((s) => normalizeName(s)).filter(Boolean);

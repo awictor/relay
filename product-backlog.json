@@ -3209,9 +3209,18 @@
       "title": "Sweep parsers that take LABELED/multi-clause free text for phrasing leaks beyond courtesy",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Courtesy-tail is now swept across 14 parsers. The residual risk class is LABELED/multi-clause inputs (e.g. 'set my home to <addr>', 'convert 5 usd to eur as of friday', digest/chain step phrasing) where a trailing qualifier or an interior label can corrupt the stored/parsed value in ways a bare courtesy strip won't catch.",
       "how": "tsx-probe parseSetLocation, parseSavePlace, parseDigestCommand, parseChainSteps, parseFx, parseLogCommand with labeled + qualified inputs; fix leaks with a targeted strip + test. One class per iteration."
+    },
+    {
+      "id": "probe-agent-tool-dispatch",
+      "title": "Probe the agent-loop tool DISPATCH + argument extraction, not just the lib parsers",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "The lib/*.ts pure parsers are now well-swept. The untested surface is src/agent.ts: how the LLM's tool-call arguments are validated/coerced before dispatch, and whether a malformed/edge arg (empty string, wrong type, huge value, missing required field) produces a wrong reply or throws vs a graceful message. That's where a real texting user's odd phrasing actually lands.",
+      "how": "Read agent.ts dispatch switch; for 3-4 representative tools, feed edge-case args via a mock-LLM tool call and assert a graceful reply (not a throw/blank). Fix any that mishandle. Offline-testable with the injected LLM."
     }
   ],
   "history": [
@@ -4522,6 +4531,10 @@
     {
       "item": "courtesy-tail-recipes-watch",
       "note": "Swept 4 more free-text parsers for courtesy-tail (parsers 11-14): parseSaveThatAs (recipe name 'dinner plans please'->'dinner plans'), parseWatchThat (bare 'watch that please' no longer conditions on 'please'), parseScheduleThat ('run that every morning please'->'every morning', was failing schedule parse), parseWatchQuery (JustWatch title 'Dune please'->'Dune'). All via shared stripTrailingCourtesy. +3 tests. parseRemember confirmed clean."
+    },
+    {
+      "item": "courtesy-tail-digest",
+      "note": "Probed labeled/multi-clause parsers (parseSetLocation, parseSavePlace, parseDigestCommand, parseFx). parseDigestCommand (15th parser) leaked: 'digest morning: weather, hn please' kept last member 'hn please' -> matches no recipe -> silently dropped from the digest. Fixed via stripTrailingCourtesy. +1 test. parseSavePlace/parseSetLocation already robust; parseFx is a RESPONSE-body parser not user input (skipped)."
     }
   ],
   "audits": [
@@ -4880,6 +4893,11 @@
       "lens": "inline single-surface probe (3-agent AUDIT blocked: subagent cap 200/200 reached)",
       "surfaced": "Enumerated all 90+ parse/detect/resolve exports; probed the free-text ones not yet in the courtesy sweep (parseRemember, parseTranslateRequest, parseSaveThatAs). parseTranslateRequest leaked a trailing courtesy into the 2-word target-language capture — real bug (wrong translation target). parseRemember/parseSaveThatAs modules import-guarded, not exercised this probe.",
       "seeded": "probe-remaining-freetext-parsers"
+    },
+    {
+      "lens": "inline labeled-input probe (agent cap 200/200)",
+      "surfaced": "The 'labeled input beyond courtesy' thesis mostly did NOT pan out - parseSavePlace strips trailing addr courtesy already, parseSetLocation robust, parseFx isn't user-facing. The one real leak (parseDigestCommand last comma-member) was still plain courtesy-tail. Verbatim-storing/parsed-into-key parsers are now swept for the courtesy class (15 total).",
+      "seeded": "probe-agent-tool-dispatch"
     }
   ]
 }
