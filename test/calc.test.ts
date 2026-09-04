@@ -136,6 +136,13 @@ describe("natural phrasing: tip idiom, scientific notation, factorial (calc-natu
     expect(calc("5 mod 2")).toBe(1);
     expect(calc("1,000 + 1")).toBe(1001);
   });
+  it("compound + simple interest (calc-interest)", () => {
+    expect(Math.round(calc("compound(1000, 5, 3)") * 100) / 100).toBe(1161.47); // monthly, 3yr
+    expect(calc("simple(1000, 5, 3)")).toBe(1150);
+    expect(calc("simple(500, 4, 2)")).toBe(540);
+    expect(calc("compound(1000, 0, 5)")).toBe(1000); // 0% -> unchanged
+    expect(() => calc("compound(1000, 5)")).toThrow(/takes 3/); // arity enforced
+  });
   it("percent CHANGE from A to B (calc-percent-change)", () => {
     expect(calc("50 to 75 percent change")).toBe(50);
     expect(calc("what percent increase from 50 to 75")).toBe(50);

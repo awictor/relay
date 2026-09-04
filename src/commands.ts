@@ -62,7 +62,7 @@ const HELP = `Relay — what I can do:
 • Convert currency: "how much is 200 USD in EUR" → I use the live rate, instantly.
 • Convert units: "180C to F", "5 foot 11 in cm", "2 cups of flour in grams", "10 miles in km", "500 MB in GB", "100 km/h to mph", "50 knots to mph" → exact, instantly.
 • Better buy: "which is cheaper, 500g for $4 or 1.2kg for $9?" → I compare price-per-unit and name the winner.
-• Do the math: "split $127.50 three ways with 20% tip", "monthly payment on a $30k loan at 6% for 5 years", "50 to 75 percent change", "20% off $80" → I compute it exactly, not a guess.
+• Do the math: "split $127.50 three ways with 20% tip", "monthly payment on a $30k loan at 6% for 5 years", "50 to 75 percent change", "20% off $80", "how much is $1000 at 5% for 3 years" → I compute it exactly, not a guess.
 • Translate: "how do you say 'where's the pharmacy' in Spanish", "translate this page to English: <link>" → the translation (with pronunciation for non-Latin scripts).
 • Define a word: "what does obsequious mean", "synonyms for happy" → definition, pronunciation, and synonyms, instantly.
 • Quick facts: "who is the CEO of OpenAI", "how tall is Everest", "what is a Roth IRA" → a one-paragraph answer from Wikipedia with a source link, instantly.

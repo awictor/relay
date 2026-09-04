@@ -317,7 +317,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "calculate",
-    description: "Evaluate an arithmetic/financial expression EXACTLY (no key, instant). Use this — do NOT do the mental math yourself — for anything beyond a trivial one-step sum: chained math, splitting a bill, tips, percentages (\"20% of 47\", \"$127.50 split 3 ways +20% tip\"), or a loan payment (loanpayment(principal, annualRatePct, years)). Also does percent change (\"50 to 75 percent change\", \"percent increase from 50 to 75\") and \"20% off 80\". Supports + - * / % ^, parens, sqrt/round/abs/min/max/pow/loanpayment. Pass the expression; I compute it deterministically.",
+    description: "Evaluate an arithmetic/financial expression EXACTLY (no key, instant). Use this — do NOT do the mental math yourself — for anything beyond a trivial one-step sum: chained math, splitting a bill, tips, percentages (\"20% of 47\", \"$127.50 split 3 ways +20% tip\"), or a loan payment (loanpayment(principal, annualRatePct, years)). Also does percent change (\"50 to 75 percent change\", \"percent increase from 50 to 75\"), \"20% off 80\", and savings growth: compound(principal, annualRatePct, years) [monthly] + simple(principal, annualRatePct, years) — e.g. \"how much is $1000 at 5% for 3 years\" -> compound(1000, 5, 3). Supports + - * / % ^, parens, sqrt/round/abs/min/max/pow/loanpayment. Pass the expression; I compute it deterministically.",
     parameters: {
       type: "object",
       properties: { expression: { type: "string", description: "The math to compute, e.g. \"(127.50*1.2)/3\" or \"loanpayment(30000, 6, 5)\"." } },
@@ -624,7 +624,7 @@ Tools:
 - "convert_units" (request): convert units of measure EXACTLY (temperature/length/weight/volume/cooking). Use for "180C to F"/"5 foot 11 in cm"/"2 cups in grams"/"10 miles in km". NOT currency (use convert_currency).
 - "unit_price" (request): compare package sizes + name the better buy by price-per-unit EXACTLY. Use for "which is cheaper, 500g for $4 or 1.2kg for $9"/"$3.99 for 12oz vs $5.49 for 20oz"/"12 for $6 or 30 for $13". NOT mental math.
 - "translate" (request): translate text or a whole page into another language. Use for "translate X to Spanish"/"how do you say X in Japanese"/"read me this page in English: <url>". Pass the request verbatim.
-- "calculate" (expression): compute arithmetic/financial math EXACTLY. Use for chained math, bill-splits, tips, percentages, loan payments — anything past a trivial one-step sum (don't do it in your head, that's silently wrong). loanpayment(principal, annualRatePct, years) for a monthly payment.
+- "calculate" (expression): compute arithmetic/financial math EXACTLY. Use for chained math, bill-splits, tips, percentages, loan payments — anything past a trivial one-step sum (don't do it in your head, that's silently wrong). loanpayment(principal, annualRatePct, years) for a monthly payment; compound(principal, rate%, years) / simple(principal, rate%, years) for savings growth ("$1000 at 5% for 3 years" -> compound(1000,5,3)).
 - "get_bmi" (request): compute BMI from a height + weight (either units). Use for "what's my BMI at 5'10 160lb" / "BMI 70kg 1.75m". NOT calculate.
 - "convert_base" (request): integer base conversion (dec/hex/binary/octal). Use for "255 in binary", "0xFF to decimal", "42 to octal". NOT calculate (base-10) or encode_decode (text hex).
 - "convert_roman" (request): Roman numerals both directions (1–3999). Use for "42 in roman numerals", "MMXXIV to a number".

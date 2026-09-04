@@ -8,7 +8,7 @@
 
 export type Token = { t: "num"; v: number } | { t: "op"; v: string } | { t: "fn"; v: string; argc?: number } | { t: "paren"; v: "(" | ")" } | { t: "comma" };
 
-const FUNCS = new Set(["sqrt", "abs", "round", "floor", "ceil", "min", "max", "pow", "loanpayment", "fact"]);
+const FUNCS = new Set(["sqrt", "abs", "round", "floor", "ceil", "min", "max", "pow", "loanpayment", "fact", "compound", "simple"]);
 // operator precedence + right-assoc flag. Unary minus is handled as a special "neg" op at parse time.
 const OPS: Record<string, { prec: number; right?: boolean }> = {
   "+": { prec: 2 }, "-": { prec: 2 }, "*": { prec: 3 }, "/": { prec: 3 }, "%": { prec: 3 },
@@ -217,6 +217,20 @@ export function evalRpn(rpn: Token[]): number {
           const r = ratePct! / 100 / 12, n = years! * 12;
           const pay = r === 0 ? principal! / n : (principal! * r) / (1 - Math.pow(1 + r, -n));
           st.push(pay); break;
+        }
+        // compound(principal, annualRatePct, years) -> the FINAL balance, compounded MONTHLY (the common
+        // savings default). 3-arg only — a 4th "times/yr" arg is intentionally omitted (calc-interest):
+        // the evaluator's variadic arity is unreliable past 3 args, so monthly-compounding keeps the answer
+        // correct rather than risk a garbled 4-arg parse. (Annual/daily variants can be added if that's fixed.)
+        case "compound": {
+          const [principal, ratePct, years] = need(3, "compound");
+          const nper = 12;
+          st.push(principal! * Math.pow(1 + (ratePct! / 100) / nper, nper * years!)); break;
+        }
+        // simple(principal, annualRatePct, years) -> the FINAL balance with simple interest.
+        case "simple": {
+          const [principal, ratePct, years] = need(3, "simple");
+          st.push(principal! * (1 + (ratePct! / 100) * years!)); break;
         }
         default: throw new Error(`Unknown function ${tok.v}.`);
       }

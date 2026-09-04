@@ -3579,9 +3579,18 @@
       "title": "Interest calc: \"compound interest on $1000 at 5% for 3 years\", simple interest",
       "impact": "low",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "calc has loanpayment but not savings-growth compound/simple interest — a common personal-finance ask (\"how much will $1000 grow at 5% over 3 years\").",
       "how": "Add compound(principal,ratePct,years,[n]) + simple(principal,ratePct,years) to calc.ts FUNCS, or a dedicated tool that parses the phrasing. Tests."
+    },
+    {
+      "id": "calc-variadic-arity-bug",
+      "title": "BUG: calc variadic fns garble 4+ args — max(1000,5,10,365)=10365 (last two concatenate)",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "Found while adding compound interest: min/max (+ any variadic fn) with 4+ args mis-parses — the 3rd/4th operands concatenate (max(1000,5,10,365) -> 10365, not 1000). A user calling max/min with 4+ values gets a silently WRONG answer. Real correctness bug in the shunting-yard arg-count/pop path.",
+      "how": "Debug toRpn argc tracking + evalRpn popN for 4+ args (the comma-depth counter or the operand stack order). Add a min/max 4-5 arg test that currently fails, fix, then compound() can regain its optional times/yr arg. Reproduce: max(1000,5,10,365) should be 1000."
     }
   ],
   "history": [
@@ -5180,6 +5189,10 @@
     {
       "item": "text-stats",
       "note": "New text_stats tool: word count, character count (with/without spaces), reverse, palindrome check — quick text utilities an LLM miscounts/mangles. src/lib/textstats.ts (wordCount/charCount code-point-aware/reverseText/isPalindrome alnum-normalized + parseTextStats classifier + runTextStats). Tool + dispatch (pure) + SYSTEM_PROMPT + /help. +8 tests. 2301 green. call-tested: n/a (pure lib). 7th everyday-errand this session (holidays, BMI, on-this-day, number-base, roman, percent-change, text-stats)."
+    },
+    {
+      "item": "interest-calc",
+      "note": "calc.ts gained compound(principal,rate%,years) [monthly] + simple(principal,rate%,years) for savings growth (\"$1000 at 5% for 3 years\" -> compound(1000,5,3)=1161.47). 3-arg only: while adding a 4th times/yr arg I FOUND a real pre-existing bug (variadic fn arity garbles 4+ args: max(1000,5,10,365)=10365, last two concatenate) — kept compound 3-arg/monthly to stay correct + seeded calc-variadic-arity-bug to fix the root cause. Tool desc + SYSTEM_PROMPT + /help. +1 test. 2302 green. call-tested: n/a (pure calc). 8th everyday improvement this session."
     }
   ],
   "audits": [
