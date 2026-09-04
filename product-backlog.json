@@ -4878,6 +4878,10 @@
     {
       "item": "meal-something-with-ingredient",
       "note": "phrasing gap: parseMealRequest missed 'something/anything with X' (a very common ingredient ask) -> null, and 'what's for dinner' (only 'dinner ideas' matched) -> null. Added 'something|anything with|using|from|out of X' to the ingredient branch + 'what's for/good for dinner|lunch|breakfast' to the random branch. First-salient-ingredient split intact ('rice and beans'->rice). +1 test. 2123 green. Confirmed parseNutrition takes an API body (not user text) - the user-facing nutrition parse is agent.ts arg-extraction, robust."
+    },
+    {
+      "item": "phrasing-vein-clean-pass",
+      "note": "Clean pass on youtube-id + news parsing - no code change (green tree, 2123). The lib-phrasing+setter vein produced 16 real user-facing fixes/additions this session (calc/convert/unitprice/log x2/countdown/places/weather/network-msg/chart/snooze x2/setlocation/citreply/units-pref/meal) then went clean. Not manufacturing a change; vein worked out."
     }
   ],
   "audits": [
@@ -5414,6 +5418,10 @@
       "lens": "meal/nutrition phrasing probe",
       "surfaced": "parseMealRequest missed 'something with X' + 'what's for dinner' - fixed. parseNutrition is a response-body parser (not user text). 16 phrasing/setter fixes+additions total. Remaining unprobed user-text parsers are thin; this vein is near its end.",
       "seeded": "(vein near end; owner levers remain)"
+    },
+    {
+      "lens": "youtube/news phrasing probe (clean)",
+      "surfaced": "parseYouTubeId robust (watch/youtu.be/shorts/embed/m. + tail params + surrounding text all extract). parseHeadlines + parseNutrition are feed/response-body parsers (not user text); their user-facing side is LLM arg-extraction, robust. NO user-text-parser gap this pass. The phrasing/setter vein (16 real fixes this session) is now genuinely worked out - remaining parsers are body-parsers or already-covered."
     }
   ]
 }
