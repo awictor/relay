@@ -436,6 +436,11 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   // as the city reply, saved, and the errand re-run. Cleared on capture / on a non-city reply (so the
   // user can bail out with any other message).
   const pendingLocation = new Map<number, string>();
+  // Chats already asked "which city?" once (post-onboarding-set-city-prompt): the first-location capture
+  // must fire AT MOST ONCE per chat. Without this, a user who DECLINES (replies with a fresh task / "never
+  // mind" instead of a city) gets re-asked on every later weather/near-me errand — the nag the one-time
+  // capture is meant to avoid. Set when we ask; a successful save is moot (they'll have a location then).
+  const locationAsked = new Set<number>();
   // A reminder the user asked for WITHOUT a time ("remind me to call mom") — we ask "when?" and stash the
   // bare to-do here so the reply ("at 3pm") re-runs it as a full schedule instead of losing the task
   // (reminder-no-time-ask). Keyed by chat; the stored string is the extracted task ("call mom").
@@ -1054,8 +1059,9 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // agent ask every time (and leaving tz unset, which mis-times reminders). Next message is the reply,
     // handled above. Only when the deps are wired + nothing else already owns this message shape.
     if (deps.hasLocation && deps.captureLocation && !deps.hasLocation(msg.chatId)
-        && !pendingLocation.has(msg.chatId) && needsLocationContext(msg.text)) {
+        && !pendingLocation.has(msg.chatId) && !locationAsked.has(msg.chatId) && needsLocationContext(msg.text)) {
       pendingLocation.set(msg.chatId, msg.text);
+      locationAsked.add(msg.chatId); // ask ONCE per chat; a decline must not re-nag on the next errand
       const ask = "What city are you in? Tap the button to share your location, or type a city (add \"UTC-5\" and I'll get your reminder times right too). I'll save it so I don't have to ask again.";
       if (deps.requestLocation) await deps.requestLocation(msg.chatId, ask); else await deps.sendMessage(msg.chatId, ask);
       return;

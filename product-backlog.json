@@ -3696,9 +3696,18 @@
       "title": "After a first weather/near-me errand with no saved city, offer to save it once",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "first-location-capture exists, but confirm which flows actually offer the one-time save. A new user whose first successful errand is weather/near-me benefits most from being asked to save their city right then — it makes every future weather/reminder work without re-typing, the core stickiness loop. Verify + tighten the prompt so it fires on that first location errand and never nags after.",
       "how": "Audit needsLocationContext + the first-location-capture offer path in handler; ensure a location errand with no saved profile offers save exactly once (not every time, not after a decline). Add/verify offline tests for the fire-once + decline-sticks behavior."
+    },
+    {
+      "id": "save-city-cta-on-agent-weather",
+      "title": "When a user names a city inline (\"weather in Denver\") with no saved profile, offer to save it as home",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "first-location-capture only triggers on a location errand with NO city in the message (weather / near me). A user who types the city inline (\"weather in Denver\", \"time in Tokyo\") answers fine but is never offered to SAVE Denver as home — so tomorrows bare \"weather\" asks again. Detecting the inline city + offering a one-tap save closes the loop for the most common phrasing.",
+      "how": "After an agent weather/location answer where the message contained an explicit place + the chat has no saved location, append a one-time (respect locationAsked) \"want me to save <place> as your home? y/n\" or a tap button; on yes, store it. Reuse the place extraction already in the agent context. Offline test: inline-city weather offers save once, decline sticks."
     }
   ],
   "history": [
@@ -5345,6 +5354,10 @@
     {
       "item": "onboarding-first-message-tour",
       "note": "Onboarding tap-to-try now works on NO-BUTTON channels too (console / a client without inline buttons). It already fired the START card + tap-to-try buttons for a first-timer, but those buttons only render where answerCallback is wired — a plain first-timer got the wall + nothing runnable. Now when START goes to a first contact WITHOUT buttons, we append a numbered try-list (\"reply with a number to try one now: 1. Weather ...\") + register the chat so a bare 1..N RUNS that TRY_EXAMPLE through the normal pipeline (via handleOne, NOT handle — would deadlock the per-chat chain), one-shot so a later real-list \"2\" isnt hijacked. Button channels keep the taps unchanged. Reused TRY_EXAMPLES + parsePickIndex. +3 handler tests (numbered list shown + number runs the example; hidden when buttons available; bare number with no onboarding context falls through). 2357 green. call-tested: offline (handler routing)."
+    },
+    {
+      "item": "post-onboarding-set-city-prompt",
+      "note": "First-location capture now fires AT MOST ONCE per chat. The one-time save offer existed, but on a DECLINE (a user who replies with a fresh task / \"never mind\" instead of a city) the pending state just dropped with nothing recorded — so the NEXT weather/near-me errand re-asked \"which city?\", the exact nag the capture is meant to avoid. Added a locationAsked Set: set when we ask, checked alongside the existing hasLocation/pendingLocation guards so a declined chat is never re-prompted (they can still /setlocation whenever they want). A successful save is moot (theyll have a location). +1 test (decline -> later errand does NOT re-ask). 2358 green. call-tested: offline (handler routing)."
     }
   ],
   "audits": [

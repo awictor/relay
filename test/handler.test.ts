@@ -1585,6 +1585,15 @@ describe("first-run location capture (first-location-capture)", () => {
     expect(sent.some((m) => /what city/i.test(m.text))).toBe(false);
     expect(agentRan()).toBe("weather"); // straight to the agent
   });
+
+  it("after a DECLINE, a later location errand does NOT re-ask (asks once per chat) — post-onboarding-set-city-prompt", async () => {
+    const { handle, sent } = locHarness(false);
+    await handle(msg("weather", 5));                          // 1st ask
+    await handle(msg("actually top HN story", 5));            // declines (not a city) — routes normally
+    const asksAfterDecline = sent.filter((m) => /what city/i.test(m.text)).length;
+    await handle(msg("weather tomorrow", 5));                 // 2nd location errand — must NOT re-nag
+    expect(sent.filter((m) => /what city/i.test(m.text)).length).toBe(asksAfterDecline); // no new ask
+  });
 });
 
 describe("background errands (async-background-errands)", () => {
