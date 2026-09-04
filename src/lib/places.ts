@@ -36,9 +36,17 @@ const CATEGORY_TAGS: Record<string, string[]> = {
 /** Pick the OSM tag selectors for a free-text "what" (e.g. "coffee", "nearest pharmacy"). Falls back to
  * a general amenity+shop search when nothing matches. Exported for tests. */
 export function categoryFilters(what: string): { tags: string[]; label: string } {
-  const w = what.toLowerCase().replace(/\b(nearest|closest|nearby|near me|a|an|the|some|good|best|find)\b/g, " ").replace(/\s+/g, " ").trim();
-  for (const key of Object.keys(CATEGORY_TAGS)) {
-    if (w.includes(key)) return { tags: CATEGORY_TAGS[key]!, label: key };
+  // Strip locational filler INCLUDING "here"/"around here"/"right now" (places-category-substring): a bare
+  // "here" left the short key "er" (hospital) matching inside it, so "atm around here" resolved to HOSPITAL.
+  const w = what.toLowerCase()
+    .replace(/\b(nearest|closest|nearby|near\s*me|near\s*here|around\s*here|round\s*here|over\s*here|right\s*now|near|around|a|an|the|some|good|best|find|me)\b/g, " ")
+    .replace(/\s+/g, " ").trim();
+  // Match on WORD BOUNDARIES, not raw substring (so "er" doesn't hit "here"/"beer", "gas" doesn't hit
+  // "gasket"). Try longer keys first so "gas station" beats "gas" + a multi-word key wins over a partial.
+  const keys = Object.keys(CATEGORY_TAGS).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    const re = new RegExp(`\\b${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}s?\\b`, "i"); // trailing -s tolerated ("restaurants")
+    if (re.test(w)) return { tags: CATEGORY_TAGS[key]!, label: key };
   }
   // Unknown category: search named amenities + shops broadly, filtered by name match downstream.
   return { tags: ["amenity", "shop"], label: w || "places" };

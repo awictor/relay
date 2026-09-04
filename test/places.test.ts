@@ -12,6 +12,17 @@ describe("categoryFilters (near-me-poi)", () => {
     expect(f.tags).toEqual(["amenity", "shop"]);
     expect(f.label).toBe("blacksmith");
   });
+  it("matches on word boundaries + strips 'here'/'around here' so a short key can't hit inside a filler word (places-category-substring)", () => {
+    // Regression: "atm around here" resolved to HOSPITAL because the short key "er" matched inside "here".
+    expect(categoryFilters("atm around here").tags).toEqual(["amenity=atm"]);
+    expect(categoryFilters("atm right now").tags).toEqual(["amenity=atm"]);
+    // longer/multi-word key wins over a partial: "gas station" > "gas"; "hardware store" isn't "store"
+    expect(categoryFilters("closest gas station").label).toBe("gas station");
+    expect(categoryFilters("hardware store").tags).toEqual(["shop=hardware", "shop=doityourself"]);
+    // a trailing plural still matches the singular key
+    expect(categoryFilters("restaurants nearby").tags).toEqual(["amenity=restaurant"]);
+    expect(categoryFilters("banks near me").tags).toEqual(["amenity=bank"]);
+  });
 });
 
 describe("haversineKm", () => {
