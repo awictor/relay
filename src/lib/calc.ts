@@ -18,11 +18,15 @@ const OPS: Record<string, { prec: number; right?: boolean }> = {
 /** Normalize a raw math string: strip $ and thousands commas + collapse spaces. Word operators
  * (times/plus/divided by) and the percent idioms are handled by the tokenizer. Exported for tests. */
 export function normalizeExpr(raw: string): string {
-  return String(raw ?? "")
-    .replace(/[$£€]/g, "")
-    // Strip ONLY thousands-separator commas (a digit, then a comma, then exactly 3 digits) — keep
-    // argument-separator commas ("max(1, 2, 3)") so the parser can count function arity.
-    .replace(/(?<=\d),(?=\d{3}(?:\D|$))/g, "")
+  let s = String(raw ?? "").replace(/[$£€]/g, "");
+  // Strip thousands-separator commas ("1,000,000" -> "1000000"). A comma before EXACTLY 3 digits looks
+  // identical to a function ARG separator when the next arg is 3 digits ("max(10,365)" — 365 is an arg,
+  // not a grouping), which silently concatenated the operands (calc-variadic-arity-bug: max(1000,5,10,365)
+  // -> 10365). So only apply the thousands-strip when there's NO function call (no "(") in the expression:
+  // a lone number like "1,234 + 1" still de-commas, but inside "fn(...)" every comma stays an arg boundary.
+  // A thousands separator inside a function arg is vanishingly rare; a 3-digit arg is common.
+  if (!s.includes("(")) s = s.replace(/(?<=\d),(?=\d{3}(?:\D|$))/g, "");
+  return s
     .replace(/\bdivided by\b/gi, "/").replace(/\btimes\b|\bmultiplied by\b/gi, "*")
     .replace(/\bplus\b/gi, "+").replace(/\bminus\b/gi, "-")
     .replace(/\bto the power of\b|\braised to\b/gi, "^")
@@ -218,13 +222,16 @@ export function evalRpn(rpn: Token[]): number {
           const pay = r === 0 ? principal! / n : (principal! * r) / (1 - Math.pow(1 + r, -n));
           st.push(pay); break;
         }
-        // compound(principal, annualRatePct, years) -> the FINAL balance, compounded MONTHLY (the common
-        // savings default). 3-arg only — a 4th "times/yr" arg is intentionally omitted (calc-interest):
-        // the evaluator's variadic arity is unreliable past 3 args, so monthly-compounding keeps the answer
-        // correct rather than risk a garbled 4-arg parse. (Annual/daily variants can be added if that's fixed.)
+        // compound(principal, annualRatePct, years, [timesPerYear=12]) -> the FINAL balance. Defaults to
+        // MONTHLY; pass 1 for annual, 4 quarterly, 365 daily (calc-interest). The 4-arg form is safe now
+        // that the thousands-comma bug that garbled 4+ args is fixed (calc-variadic-arity-bug).
         case "compound": {
-          const [principal, ratePct, years] = need(3, "compound");
-          const nper = 12;
+          if (argc !== undefined && (argc < 3 || argc > 4)) throw new Error("compound takes 3 arguments (principal, rate%, years) + optional times/yr.");
+          const args = popN(argc ?? 3);
+          if (args.length < 3) throw new Error("compound takes 3 arguments (principal, rate%, years) + optional times/yr.");
+          const [principal, ratePct, years] = args;
+          const nper = args[3] ?? 12;
+          if (nper <= 0) throw new Error("compound's times-per-year must be positive.");
           st.push(principal! * Math.pow(1 + (ratePct! / 100) / nper, nper * years!)); break;
         }
         // simple(principal, annualRatePct, years) -> the FINAL balance with simple interest.

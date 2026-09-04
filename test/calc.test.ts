@@ -142,6 +142,19 @@ describe("natural phrasing: tip idiom, scientific notation, factorial (calc-natu
     expect(calc("simple(500, 4, 2)")).toBe(540);
     expect(calc("compound(1000, 0, 5)")).toBe(1000); // 0% -> unchanged
     expect(() => calc("compound(1000, 5)")).toThrow(/takes 3/); // arity enforced
+    // optional times/yr (4-arg) works now the arity bug is fixed
+    expect(Math.round(calc("compound(1000, 5, 3, 1)") * 100) / 100).toBe(1157.63); // annual
+    expect(Math.round(calc("compound(1000, 5, 10, 365)"))).toBe(1649); // daily
+  });
+
+  it("variadic fns handle 4+ args (calc-variadic-arity-bug) + thousands commas still strip", () => {
+    // the bug: a 3-digit final arg concatenated onto the prior operand via the thousands-comma stripper.
+    expect(calc("max(1000, 5, 10, 365)")).toBe(1000);
+    expect(calc("min(1000, 5, 10, 365)")).toBe(5);
+    expect(calc("max(1, 2, 3, 4, 5)")).toBe(5);
+    // thousands separators outside a function call still de-comma:
+    expect(calc("1,234 + 1")).toBe(1235);
+    expect(calc("1,000,000 / 1000")).toBe(1000);
   });
   it("percent CHANGE from A to B (calc-percent-change)", () => {
     expect(calc("50 to 75 percent change")).toBe(50);

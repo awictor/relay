@@ -3588,7 +3588,7 @@
       "title": "BUG: calc variadic fns garble 4+ args — max(1000,5,10,365)=10365 (last two concatenate)",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Found while adding compound interest: min/max (+ any variadic fn) with 4+ args mis-parses — the 3rd/4th operands concatenate (max(1000,5,10,365) -> 10365, not 1000). A user calling max/min with 4+ values gets a silently WRONG answer. Real correctness bug in the shunting-yard arg-count/pop path.",
       "how": "Debug toRpn argc tracking + evalRpn popN for 4+ args (the comma-depth counter or the operand stack order). Add a min/max 4-5 arg test that currently fails, fix, then compound() can regain its optional times/yr arg. Reproduce: max(1000,5,10,365) should be 1000."
     }
@@ -5193,6 +5193,10 @@
     {
       "item": "interest-calc",
       "note": "calc.ts gained compound(principal,rate%,years) [monthly] + simple(principal,rate%,years) for savings growth (\"$1000 at 5% for 3 years\" -> compound(1000,5,3)=1161.47). 3-arg only: while adding a 4th times/yr arg I FOUND a real pre-existing bug (variadic fn arity garbles 4+ args: max(1000,5,10,365)=10365, last two concatenate) — kept compound 3-arg/monthly to stay correct + seeded calc-variadic-arity-bug to fix the root cause. Tool desc + SYSTEM_PROMPT + /help. +1 test. 2302 green. call-tested: n/a (pure calc). 8th everyday improvement this session."
+    },
+    {
+      "item": "calc-variadic-arity-bug",
+      "note": "FIXED a real correctness bug: max/min/any variadic fn with a final 3-digit arg returned a WRONG concatenated value (max(1000,5,10,365)=10365). Root cause was NOT the shunting-yard (RPN + evalRpn were correct) but normalizeExpr's thousands-comma stripper: /(?<=d),(?=d{3}(D|$))/ ate the arg-separator comma before a 3-digit arg (\"10,365)\" -> \"10365)\"). Fix: only strip thousands commas when there's NO function call (no \"(\") in the expression — a lone \"1,234 + 1\" still de-commas, but inside fn(...) every comma stays an arg boundary. With that fixed, restored compound()'s optional 4th times/yr arg (annual/daily), guarded positive. +2 tests (variadic 4-5 args correct + thousands still strip; compound 4-arg annual/daily). 2303 green. call-tested: n/a (pure calc). max(1000,5,10,365) now = 1000."
     }
   ],
   "audits": [
