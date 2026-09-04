@@ -4935,6 +4935,10 @@
     {
       "item": "anvil-live-e2e",
       "note": "anvil brought UP (node dist/api.js, real Chrome, :3000). Ran the overdue LIVE end-to-end: (1) src/anvil.ts scrape('https://example.com') via live anvil -> title 'Example Domain' + real content (real Chrome fetch, EXIT 0); (2) FULL agent path runAgent('scrape example.com and tell me the title', {GeminiClient}) -> reply 'The title ... is \"Example Domain\"', tools [scrape, get_fact], 3 steps, degraded=false, ~33s. call-tested: TRUE. The channel->agent->anvil->reply pipe is verified working live with the real free-tier LLM + self-hosted browser - the core product promise, previously only unit-verified this session."
+    },
+    {
+      "item": "anvil-live-e2e-harder",
+      "note": "With anvil up, drove 2 HARDER live errands through the full Gemini+anvil pipe: 'top HN story' -> scrape, 2 steps, 4.9s, correct grounded reply; 'scrape HN + list first 3 titles' -> extract, 2 steps, 55s, clean 3-title list. Both not degraded, right tool auto-selected (scrape vs extract). NO live-only bug surfaced - the pipe is robust beyond the trivial example.com case. No code change."
     }
   ],
   "audits": [
@@ -5528,6 +5532,11 @@
       "lens": "live anvil e2e (anvil UP)",
       "surfaced": "With anvil up, verified the real pipe end-to-end: Gemini agent drove a live anvil Chrome scrape and returned a correct grounded reply (not degraded). The MVP's core loop works live, not just in mocks. This closes the session's one anvil-gated item. Remaining gated work: confirm-to-act (owner product-UX decision).",
       "seeded": "(anvil e2e done; confirm-to-act still owner-gated)"
+    },
+    {
+      "lens": "live anvil harder-errand probe",
+      "surfaced": "Beyond the example.com smoke test, the live pipe handles real dynamic pages (HN): correct scrape-vs-extract tool choice, grounded multi-item replies, no degradation. The core loop is genuinely solid live, not just on a static page. Only remaining substantive lever is confirm-to-act (owner product-UX). No autonomous code work surfaced.",
+      "seeded": "(live pipe robust; confirm-to-act owner-gated)"
     }
   ]
 }
