@@ -36,6 +36,14 @@ describe("parseForgetPlace / isListPlacesRequest", () => {
     expect(parseForgetPlace("forget the gym place")).toBe("gym");
     expect(parseForgetPlace("forget everything")).toBeNull(); // not a place-forget
   });
+  it("parses the natural 'forget my <alias>' form without a trailing noun (forget-place-natural)", () => {
+    // The caller checks the alias against saved places; the parser just extracts it.
+    expect(parseForgetPlace("forget my gym")).toBe("gym");
+    expect(parseForgetPlace("delete my office")).toBe("office");
+    expect(parseForgetPlace("remove my home")).toBe("home");
+    // still requires "my" (place-scoped) — a bare "forget gym" isn't a place-forget here
+    expect(parseForgetPlace("forget everything")).toBeNull();
+  });
   it("detects a list-places request", () => {
     expect(isListPlacesRequest("what places do you have")).toBe(true);
     expect(isListPlacesRequest("my saved places")).toBe(true);

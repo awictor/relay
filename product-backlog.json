@@ -3434,7 +3434,7 @@
       "title": "parseForgetPlace/parseForgetContact: accept the natural 'forget my gym' / 'forget mom' phrasing",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "parseForgetPlace only matches 'forget the gym PLACE' (trailing 'place' required) - 'forget my gym'/'delete my office' return null. parseForgetContact needs \"'s contact\" or 'contact <name>' - bare 'forget mom' / 'remove mom from contacts' return null. Both are the natural way to delete; a user who saved 'mom' can't easily remove her.",
       "how": "Widen parseForgetPlace to 'forget/delete/remove (my) <alias>' (guard against a fact/generic forget) + parseForgetContact to 'forget/remove <name>' / 'remove <name> from contacts'. Careful ordering vs parseForgetFact (which also starts 'forget ...'). +tests."
     }
@@ -4899,6 +4899,10 @@
     {
       "item": "forget-fact-scoped-not-all",
       "note": "DATA-LOSS bug: parseForgetFact's all-wipe regex 'forget (everything|all|what) ... you know' swallowed a scoping topic, so 'forget what you know about my diet' returned {all:true} and ERASED EVERY remembered fact when the user scoped it to diet only. Fixed: a scoped 'forget ... about <topic>' now returns {term:<topic>} (diet/job/etc); only a truly unscoped 'forget everything you know' / 'everything about me' / 'what you know' stays {all:true}. Verified the existing 'forget everything you know about me' still wipes-all. +2 test cases. 2125 green. Highest-severity find of the setter/forget sub-vein - silent total memory loss on a common scoped request."
+    },
+    {
+      "item": "forget-place-contact-natural",
+      "note": "phrasing gap: parseForgetPlace required a trailing 'place/address' noun ('forget my gym'->null), parseForgetContact required 'contact' keyword ('forget mom'->null) — the natural way to delete a saved place/contact didn't work. Widened both: parseForgetPlace now takes 'forget/delete/remove my <alias>' (dep gates on the alias being a SAVED place -> null falls through to fact, so 'forget my diet' isn't stolen); parseForgetContact takes 'remove X from contacts' + bare 'forget X' (excludes fact-lead words everything/all/what/that; dep gates on a saved contact). Dispatch order (place->fact->contact) + existence-gating keep them from shadowing each other. +2 tests. 2127 green."
     }
   ],
   "audits": [
@@ -5449,6 +5453,11 @@
       "lens": "forget/delete phrasing probe",
       "surfaced": "parseForgetFact had a real DATA-LOSS bug (scoped 'about my diet' -> wipe-all). Fixed. Also noted parseForgetPlace ('forget my gym'->null, only 'forget the gym place' works) + parseForgetContact ('forget mom'->null) are backwards from natural phrasing - real but lower-severity, seeded. 18 vein fixes; this one the most important (silent total memory erase).",
       "seeded": "forget-place-contact-phrasing"
+    },
+    {
+      "lens": "forget place/contact phrasing (sub-vein closed)",
+      "surfaced": "Both forget parsers now accept natural phrasing, existence-gated so they don't steal fact-forgets. The forget/delete sub-vein is complete: fact (scoped-vs-all data-loss fixed prior run) + place + contact all natural. 19 vein fixes total. The setter+forget+recall phrasing veins are now thoroughly worked.",
+      "seeded": "(forget sub-vein complete; owner levers remain)"
     }
   ]
 }

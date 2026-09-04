@@ -417,9 +417,10 @@ const handle = createHandler({
   forgetPlace: (chatId, text) => {
     const name = parseForgetPlace(text);
     if (!name) return null;
-    // saved reflects whether the removal persisted (delete-persist-hedge) — a failed write brings the
-    // alias back on restart, so the handler hedges instead of a clean "forgot it".
-    return places.forget(chatId, name) ? { name, saved: places.lastSaveOk() } : { name, saved: true, notFound: true };
+    // forget() returns false when the alias ISN'T a saved place -> return null so the message falls
+    // through to forget-fact/agent (forget-place-natural): the widened "forget my <alias>" form must not
+    // swallow "forget my diet" (a fact). saved reflects the delete persist (delete-persist-hedge).
+    return places.forget(chatId, name) ? { name, saved: places.lastSaveOk() } : null;
   },
   isListPlacesRequest: (text) => isListPlacesRequest(text),
   placeList: (chatId) => places.list(chatId).map((p) => ({ name: p.name, address: p.address })),

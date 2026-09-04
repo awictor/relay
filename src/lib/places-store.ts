@@ -52,10 +52,16 @@ export function parseSavePlace(text: string): { name: string; address: string } 
 /** Parse a "forget <name>" place command -> the alias, or null. Scoped to place phrasing so it doesn't
  * collide with /forget <recipe> or forget-a-fact. "forget my work address" / "forget the gym place". */
 export function parseForgetPlace(text: string): string | null {
-  const m = text.trim().match(/^\s*forget\s+(?:my\s+|the\s+)?([\w' -]{1,30}?)\s+(?:place|address|location|spot)\b/i);
-  if (!m) return null;
-  const name = normalizePlaceName(m[1]!);
-  return name || null;
+  const t = text.trim();
+  // Explicit form with a trailing place-noun: "forget my gym place" / "delete the office address".
+  let m = t.match(/^\s*(?:forget|delete|remove)\s+(?:my\s+|the\s+)?([\w' -]{1,30}?)\s+(?:place|address|location|spot)\b/i);
+  if (m) { const name = normalizePlaceName(m[1]!); return name || null; }
+  // Natural form WITHOUT the trailing noun: "forget my gym" / "delete my office" (forget-place-natural).
+  // The caller checks the alias against SAVED places + returns null (falls through to fact) when it isn't
+  // one, so a "forget my dog" (a fact, not a place) isn't stolen. Requires "my" to stay place-scoped.
+  m = t.match(/^\s*(?:forget|delete|remove)\s+my\s+([\w' -]{1,30}?)\s*$/i);
+  if (m) { const name = normalizePlaceName(m[1]!); return name || null; }
+  return null;
 }
 
 /** True if the WHOLE message asks to list saved places ("what places do you have", "my saved places"). */

@@ -42,6 +42,14 @@ describe("parseForgetContact", () => {
     expect(parseForgetContact("delete contact for dave")).toBe("dave");
     expect(parseForgetContact("remove the contact for my boss")).toBe("boss");
   });
+  it("parses natural forms: 'remove X from contacts' + bare 'forget X' (forget-contact-natural)", () => {
+    expect(parseForgetContact("remove mom from contacts")).toBe("mom");
+    expect(parseForgetContact("delete John from my contacts")).toBe("john");
+    expect(parseForgetContact("forget mom")).toBe("mom");
+    // must NOT shadow a fact-forget (those lead with everything/all/what/that)
+    expect(parseForgetContact("forget everything you know")).toBeNull();
+    expect(parseForgetContact("forget that I'm vegetarian")).toBeNull();
+  });
   it("returns null for a non-forget message", () => {
     expect(parseForgetContact("what's on my list")).toBeNull();
   });

@@ -94,8 +94,16 @@ function isValueWord(name: string): boolean {
 
 /** Parse "forget <name>'s contact" / "delete contact <name>" -> the name, or null. Exported for tests. */
 export function parseForgetContact(text: string): string | null {
-  const m = text.trim().match(/^\s*(?:forget|delete|remove)\s+(?:the\s+)?contact\s+(?:for\s+)?(.+?)\s*$/i)
-    ?? text.trim().match(/^\s*(?:forget|delete|remove)\s+(.+?)['']?s\s+contact\s*$/i);
+  const t = text.trim();
+  const m = t.match(/^\s*(?:forget|delete|remove)\s+(?:the\s+)?contact\s+(?:for\s+)?(.+?)\s*$/i)
+    ?? t.match(/^\s*(?:forget|delete|remove)\s+(.+?)['']?s\s+contact\s*$/i)
+    // "remove <name> from (my) contacts" / "delete <name> from contacts" (forget-contact-natural).
+    ?? t.match(/^\s*(?:forget|delete|remove|drop)\s+(.+?)\s+from\s+(?:my\s+)?contacts?\s*$/i)
+    // Bare "forget <name>" — the caller checks it against SAVED contacts + returns null (falls through)
+    // when it isn't one, so an unrelated "forget X" isn't stolen (this parse is the broadest, checked
+    // LAST in the handler after fact/place). Exclude the fact-forget lead words (everything/all/what/that/
+    // the) so it never shadows parseForgetFact, and keep the name short (a person, not a sentence).
+    ?? t.match(/^\s*(?:forget|delete)\s+(?!(?:everything|all|what|that|the)\b)([a-z][\w' -]{0,29}?)\s*$/i);
   if (!m) return null;
   const name = normalizeContactName(m[1]!);
   return name || null;
