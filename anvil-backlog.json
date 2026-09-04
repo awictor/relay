@@ -5,7 +5,7 @@
       "title": "Multi-page browse: follow pagination / 'next' / 'load more' to gather N results across pages",
       "impact": "high",
       "effort": "L",
-      "status": "todo",
+      "status": "done",
       "why": "anvil browse/scrape reads ONE page only (grep pagination|load more|next page = 0 in agent.ts + anvil.ts). A 'find the 5 cheapest flights' / 'newest 20 listings' errand only ever sees page-one results — the exact multi-page loop the competitor (Instinct) sells. A texting user asking for 'the 10 cheapest' silently gets whatever fit on one screen.",
       "how": "Add a bounded page-follow to the browse/find path: after reading a page, detect a next/pagination control (rel=next, a 'Next'/'More'/numbered pager, or an anchor whose text matches /next|more|older/), click it, accumulate results, cap at ~3-5 pages + a hard time budget. Reuse src/anvil.ts click+read. New tool arg or a 'depth'/'pages' hint. Offline unit test with a mock 2-page site + a LIVE e2e against a real paginated listing (e.g. HN news?p=2). Report items-gathered > page-one count."
     },
@@ -45,6 +45,10 @@
     {
       "item": "screenshot-fullpage",
       "note": "screenshot tool gained fullPage: \"screenshot the whole/entire/full page\" now captures top-to-bottom, not just the viewport fold. anvil already supported ?fullPage=true (actions.ts page.screenshot({fullPage})); threaded it through relay screenshot(url,fullPage) [+bumped timeout 20s->35s for tall renders], the agent tool schema + dispatch (fullPage:true), the BrowserBackend interface, and /help. +1 unit test. LIVE e2e drove real anvil on a long Wikipedia page: viewport 281KB vs fullPage 1.19MB (4.25x) - whole page captured. 2185 green. call-tested: TRUE (live anvil)."
+    },
+    {
+      "item": "browse-pagination",
+      "note": "Multi-page browse shipped: new anvil scrapePaged(url,maxPages) reads a listing, finds the next/more/older pager IN the rendered DOM (rel=next, else an anchor whose text/aria-label matches next|more|older|>>|», never previous), follows it reusing ONE session, accumulates labeled page text; capped 1-5 pages (default 3) + 45s budget, loop-guarded (seen-set) + SSRF-checked on each next URL. New agent tool scrape_pages (url,maxPages) + dispatch (clamps 1-5, reports pages read so the model doesn't overclaim) + BrowserBackend.scrapePaged + SYSTEM_PROMPT + /help. scrape() unchanged. +4 unit tests. LIVE e2e drove real anvil on Hacker News: followed More -> 3 distinct pages (news, ?p=2, ?p=3), 12.3K chars vs 4.2K single-page (2.95x). 2188 green. call-tested: TRUE (live anvil, real pagination)."
     }
   ],
   "probes": [

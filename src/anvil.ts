@@ -460,6 +460,73 @@ export async function scrape(
   }
 }
 
+// Find the "next page" URL on the current page (multi-page-browse). Looks, in order, for: a
+// <link rel=next> / <a rel=next>; then an anchor whose visible text or aria-label matches a
+// next/more/older pager word (NOT "previous"); returns an absolute http(s) URL or "". Runs in the
+// page via evaluate. Kept in-page (not a Relay-side heuristic) so it sees the rendered DOM + resolves
+// hrefs against the live location. Exported for the paged scrape; safe to call on any page.
+const NEXT_PAGE_SCRIPT = `(() => {
+  const abs = (h) => { try { return new URL(h, location.href).href; } catch (e) { return ''; } };
+  const rel = document.querySelector('link[rel~="next" i], a[rel~="next" i]');
+  if (rel && rel.href) return abs(rel.getAttribute('href') || rel.href);
+  const wants = /^(next|next page|more|show more|load more|older|older posts|›|»|>>?)$/i;
+  const cands = Array.from(document.querySelectorAll('a[href]'));
+  for (const a of cands) {
+    const label = ((a.innerText || a.textContent || '') + ' ' + (a.getAttribute('aria-label') || '') + ' ' + (a.getAttribute('title') || '')).trim();
+    if (/prev|previous|back|‹|«/i.test(label)) continue;         // never a "previous" control
+    if (wants.test(label.replace(/\\s+/g, ' ').trim())) { const h = a.getAttribute('href'); if (h && !/^javascript:/i.test(h)) return abs(h); }
+  }
+  return '';
+})()`;
+
+/** Scrape a listing/article across pagination: read the entry page, follow a detected "next" link
+ * up to `maxPages` (default 3, hard-capped 5) under a wall-clock budget, and return the concatenated
+ * text of each page (labeled) plus the list of URLs visited (multi-page-browse). One session is reused
+ * across the whole crawl. Stops early when no next link is found, a page repeats (loop guard), a next
+ * URL fails the SSRF check, or the time budget is hit. Falls back to a single page's text if nothing
+ * paginates — so a caller can always use it where scrape() would work. */
+export async function scrapePaged(
+  url: string,
+  maxPages = 3,
+  opts: { budgetMs?: number } = {}
+): Promise<{ content: string; title: string; url: string; pages: number; urls: string[] }> {
+  const check = isUrlSafe(url);
+  if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
+  const cap = Math.max(1, Math.min(5, maxPages));
+  const budgetMs = opts.budgetMs ?? 45000;
+  const started = Date.now();
+  const session = await createSession();
+  try {
+    const seen = new Set<string>();
+    const parts: string[] = [];
+    const urls: string[] = [];
+    let title = "";
+    let current = url;
+    for (let page = 1; page <= cap; page++) {
+      const key = current.split("#")[0]!;
+      if (seen.has(key)) break;                       // loop guard — a pager that points back at itself
+      seen.add(key);
+      await navigate(session.id, current, "domcontentloaded");
+      await new Promise((r) => setTimeout(r, 600));
+      if (page === 1) await dismissConsent(session.id); // consent modal only shows on the first landing
+      await new Promise((r) => setTimeout(r, 200));
+      const read = await readCurrent(session.id);
+      if (page === 1) title = read.title;
+      urls.push(read.url || current);
+      parts.push(cap > 1 ? `--- page ${page} ---\n${read.content}` : read.content);
+      if (page >= cap || Date.now() - started > budgetMs) break;
+      // Find the next page IN the rendered DOM; stop if none / unsafe / already seen.
+      let next = "";
+      try { const r = await action(session.id, "/v1/actions/evaluate", { script: NEXT_PAGE_SCRIPT }); next = typeof r === "string" ? r : ""; } catch { next = ""; }
+      if (!next || !isUrlSafe(next).safe || seen.has(next.split("#")[0]!)) break;
+      current = next;
+    }
+    return { content: parts.join("\n\n"), title, url: urls[0] ?? url, pages: parts.length, urls };
+  } finally {
+    await releaseSession(session.id);
+  }
+}
+
 /** Screenshot a URL: create a session, navigate, capture bytes, release. SSRF-guarded like scrape.
  * `fullPage` captures the whole scrollable page (anvil's ?fullPage=true) instead of just the viewport
  * fold (full-page-screenshot) — for "screenshot the WHOLE page". A full-page capture of a long page can

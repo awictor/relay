@@ -70,6 +70,11 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL" } }, required: ["url"] },
   },
   {
+    name: "scrape_pages",
+    description: "Like scrape, but follows the 'next'/'more'/'older' pagination link and returns the text of SEVERAL pages combined. Use when the user wants MORE results than fit on one page — \"the 20 newest listings\", \"the cheapest across a few pages\", \"top 30 stories\". Reads up to `maxPages` (default 3, max 5). For a single page or an article, use scrape instead.",
+    parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL of the first page / listing" }, maxPages: { type: "number", description: "How many pages to follow (1-5, default 3)" } }, required: ["url"] },
+  },
+  {
     name: "browse",
     description: "Open a page in a persistent browser session for MULTI-STEP interaction (then use click/type/read). Use when a task needs clicking or typing, not just reading. Returns the page title.",
     parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to open" } }, required: ["url"] },
@@ -490,6 +495,7 @@ export const SYSTEM_PROMPT = `You are Relay, an assistant reached over text mess
 
 Tools:
 - "scrape" (url): read a single page. Use for simple lookups. If the user names a site, infer the URL (Hacker News -> https://news.ycombinator.com).
+- "scrape_pages" (url, maxPages): read a listing ACROSS pagination (follows next/more/older), returning several pages combined. Use when the user wants MORE than one page holds ("20 newest", "cheapest across a few pages", "top 30"). Default 3 pages, max 5.
 - "browse" (url) then "click"/"type"/"read": for tasks needing interaction (search a site, fill a form, page through results). "read" returns the current page after your actions.
 - "fetch_json" (url): hit a JSON HTTP API directly, no browser — fastest for public data APIs (weather, prices, sports). Use when you know a JSON endpoint; use scrape/browse for HTML pages.
 - "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
@@ -550,6 +556,9 @@ Rules:
 // Injectable browser backend so tests run offline without anvil.
 export interface BrowserBackend {
   scrape(url: string): Promise<{ title: string; content: string; url: string }>;
+  // Multi-page scrape (multi-page-browse): follow pagination + return several pages' text combined.
+  // Optional — when absent the scrape_pages tool reports unavailable + the model falls back to scrape.
+  scrapePaged?(url: string, maxPages?: number): Promise<{ title: string; content: string; url: string; pages: number; urls: string[] }>;
   createSession(): Promise<{ id: string }>;
   navigate(sessionId: string, url: string): Promise<{ url: string; title: string }>;
   click(sessionId: string, selector: string): Promise<void>;
@@ -751,6 +760,7 @@ async function defaultFetchTextPost(url: string, body?: string): Promise<string>
 
 const defaultBackend: BrowserBackend = {
   scrape: (url) => anvil.scrape(url, { format: "text" }),
+  scrapePaged: (url, maxPages) => anvil.scrapePaged(url, maxPages),
   videoTranscript: (url) => fetchYouTubeTranscript(url, defaultFetchText),
   convertCurrency: (amount, from, to) => fxConvert(amount, from, to, defaultFetchText),
   getQuote: (symbol) => quoteFetch(symbol, defaultFetchText),
@@ -912,6 +922,23 @@ export async function runAgent(
           push("scrape", formatPageForModel(r.title, r.url, r.content));
         } catch (e) {
           push("scrape", `ERROR fetching ${url}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "scrape_pages") {
+        const url = String(call.args.url ?? "");
+        const safe = isUrlSafe(url);
+        if (!safe.safe) { push("scrape_pages", `ERROR: refused (${safe.reason}).`); continue; }
+        if (!backend.scrapePaged) { push("scrape_pages", "ERROR: multi-page scrape isn't available; use scrape."); continue; }
+        const maxPages = Math.max(1, Math.min(5, Number(call.args.maxPages) || 3));
+        try {
+          const r = await backend.scrapePaged(url, maxPages);
+          // Tell the model how many pages actually came back so it doesn't imply more coverage than it got.
+          const note = `Read ${r.pages} page${r.pages === 1 ? "" : "s"}${r.pages < maxPages ? " (no further 'next' link found)" : ""}.`;
+          push("scrape_pages", `${note}\n${formatPageForModel(r.title, r.url, r.content)}`);
+        } catch (e) {
+          push("scrape_pages", `ERROR fetching ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

@@ -21,6 +21,7 @@ function recordingBackend() {
   const hits: string[] = [];
   const b: BrowserBackend = {
     scrape: async (url) => { hits.push(`scrape:${url}`); return { title: "t", content: "PRICE=$1", url }; },
+    scrapePaged: async (url, maxPages) => { hits.push(`scrapePaged:${url}:${maxPages}`); return { title: "t", content: "--- page 1 ---\nA\n\n--- page 2 ---\nB", url, pages: 2, urls: [url, url + "?p=2"] }; },
     createSession: async () => { hits.push("createSession"); return { id: "s1" }; },
     navigate: async (_id, url) => { hits.push(`navigate:${url}`); return { url, title: "t" }; },
     click: async (_id, sel) => { hits.push(`click:${sel}`); },
@@ -39,7 +40,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "scrape_pages", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
     );
   });
 
@@ -71,6 +72,40 @@ describe("runAgent dispatch", () => {
     ]);
     await runAgent("read it", { llm, backend: b });
     expect(hits).toContain("scrape:https://x.com/p");
+  });
+
+  it("scrape_pages -> backend.scrapePaged with the page cap (multi-page-browse)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "scrape_pages", args: { url: "https://x.com/list", maxPages: 4 } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "got them" } } as ToolCall },
+    ]);
+    const r = await runAgent("the 20 newest listings on x", { llm, backend: b });
+    expect(hits).toContain("scrapePaged:https://x.com/list:4");
+    expect(r.tools).toContain("scrape_pages");
+  });
+
+  it("scrape_pages clamps maxPages into 1..5 and defaults to 3", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "scrape_pages", args: { url: "https://x.com/l1", maxPages: 99 } } as ToolCall },
+      { toolCall: { name: "scrape_pages", args: { url: "https://x.com/l2" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "done" } } as ToolCall },
+    ]);
+    await runAgent("lots of results", { llm, backend: b });
+    expect(hits).toContain("scrapePaged:https://x.com/l1:5"); // clamped down from 99
+    expect(hits).toContain("scrapePaged:https://x.com/l2:3"); // default
+  });
+
+  it("scrape_pages with no backend.scrapePaged reports unavailable (falls back to scrape)", async () => {
+    const { b } = recordingBackend();
+    delete (b as { scrapePaged?: unknown }).scrapePaged;
+    const llm = new ScriptLLM([
+      { toolCall: { name: "scrape_pages", args: { url: "https://x.com/l" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "used scrape instead" } } as ToolCall },
+    ]);
+    const r = await runAgent("more results", { llm, backend: b });
+    expect(r.reply).toBe("used scrape instead"); // no throw; model continues
   });
 
   it("fetch_json -> backend.fetchJson", async () => {
