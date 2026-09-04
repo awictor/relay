@@ -3428,6 +3428,15 @@
       "status": "done",
       "why": "Location capture is now clean both ways. The sibling profile setters - a units preference ('use metric', 'switch to fahrenheit', 'show me celsius') and profile clear ('forget my location', 'reset my profile') - haven't been phrase-probed; a missed phrasing silently ignores the preference.",
       "how": "Find where units-pref + profileClear are parsed (profile.ts / handler); probe natural phrasings; widen any that miss + test. Likely the last setter sub-surface."
+    },
+    {
+      "id": "forget-place-contact-phrasing",
+      "title": "parseForgetPlace/parseForgetContact: accept the natural 'forget my gym' / 'forget mom' phrasing",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "parseForgetPlace only matches 'forget the gym PLACE' (trailing 'place' required) - 'forget my gym'/'delete my office' return null. parseForgetContact needs \"'s contact\" or 'contact <name>' - bare 'forget mom' / 'remove mom from contacts' return null. Both are the natural way to delete; a user who saved 'mom' can't easily remove her.",
+      "how": "Widen parseForgetPlace to 'forget/delete/remove (my) <alias>' (guard against a fact/generic forget) + parseForgetContact to 'forget/remove <name>' / 'remove <name> from contacts'. Careful ordering vs parseForgetFact (which also starts 'forget ...'). +tests."
     }
   ],
   "history": [
@@ -4886,6 +4895,10 @@
     {
       "item": "readlater-recall-more",
       "note": "phrasing gap: parseSavedRecall missed common recall phrasings - bare 'my saved pages' (only 'my reading list' matched), 'recall'/'pull up my saved ... on X', and 'bookmark' as a save synonym ('what did I bookmark', 'my bookmarks about rust'). All -> null (user couldn't get back what they saved). Added the recall/pull-up/get verbs + bookmark synonym + bare 'my saved [pages]' + 'on X' topic. +1 test. 2124 green. read-it-later read side now matches the way people actually ask."
+    },
+    {
+      "item": "forget-fact-scoped-not-all",
+      "note": "DATA-LOSS bug: parseForgetFact's all-wipe regex 'forget (everything|all|what) ... you know' swallowed a scoping topic, so 'forget what you know about my diet' returned {all:true} and ERASED EVERY remembered fact when the user scoped it to diet only. Fixed: a scoped 'forget ... about <topic>' now returns {term:<topic>} (diet/job/etc); only a truly unscoped 'forget everything you know' / 'everything about me' / 'what you know' stays {all:true}. Verified the existing 'forget everything you know about me' still wipes-all. +2 test cases. 2125 green. Highest-severity find of the setter/forget sub-vein - silent total memory loss on a common scoped request."
     }
   ],
   "audits": [
@@ -5431,6 +5444,11 @@
       "lens": "readlater recall phrasing probe",
       "surfaced": "parseSavedRecall missed bare 'my saved pages', 'recall/pull up', and 'bookmark' synonym - fixed. This is the read side of the read-it-later feature (capture worked, but recall phrasings were narrow). 17 phrasing/setter fixes+additions this session. Vein still yielding on the read-back paths.",
       "seeded": "(read-it-later recall covered; owner levers remain)"
+    },
+    {
+      "lens": "forget/delete phrasing probe",
+      "surfaced": "parseForgetFact had a real DATA-LOSS bug (scoped 'about my diet' -> wipe-all). Fixed. Also noted parseForgetPlace ('forget my gym'->null, only 'forget the gym place' works) + parseForgetContact ('forget mom'->null) are backwards from natural phrasing - real but lower-severity, seeded. 18 vein fixes; this one the most important (silent total memory erase).",
+      "seeded": "forget-place-contact-phrasing"
     }
   ]
 }

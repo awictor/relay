@@ -43,7 +43,20 @@ export function parseRemember(text: string): string | null {
  * Scoped to FACT-forget phrasings so it doesn't collide with /forget <recipe-name>. */
 export function parseForgetFact(text: string): { term: string } | { all: true } | null {
   const t = text.trim();
-  if (/^\s*forget\s+(?:everything|all|what)\b.*\byou\s+know\b/i.test(t) || /^\s*forget\s+(?:everything|all)\s+about\s+me\b/i.test(t)) {
+  // A SCOPED "forget what you know about <topic>" / "forget everything about <topic>" is NOT a full wipe —
+  // it targets that topic (forget-fact-scoped-not-all): the old all:true regex swallowed the topic and
+  // erased EVERY fact when the user said "forget what you know about my diet" (silent total data-loss).
+  // Catch the scoped form FIRST and route it to a term. "about me" (the user themselves) is the exception:
+  // that IS the whole profile, so it stays a full wipe.
+  const scoped = t.match(/^\s*forget\s+(?:everything|all|what)\s+(?:you\s+know\s+)?about\s+(.+)$/i);
+  if (scoped && !/^\s*(?:me|myself)\b/i.test(scoped[1]!.trim())) {
+    const term = scoped[1]!.trim().replace(/^(?:my|the)\s+/i, "").replace(/^["']|["']$/g, "").replace(/[.;?]\s*$/, "").trim();
+    if (term) return { term };
+  }
+  // A truly unscoped wipe: "forget everything/all you know", "forget everything about me".
+  if (/^\s*forget\s+(?:everything|all)\s+(?:you\s+know)?\s*$/i.test(t)
+    || /^\s*forget\s+(?:everything|all|what)\s+(?:you\s+know\s+)?about\s+(?:me|myself)\b/i.test(t)
+    || /^\s*forget\s+what\s+you\s+know\s*$/i.test(t)) {
     return { all: true };
   }
   const m = t.match(/^\s*forget\s+(?:that\s+|the\s+fact\s+that\s+)(.+)$/i);

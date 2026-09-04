@@ -43,6 +43,14 @@ describe("parseForgetFact", () => {
   it("parses a clear-all", () => {
     expect(parseForgetFact("forget everything you know about me")).toEqual({ all: true });
     expect(parseForgetFact("forget what you know")).toEqual({ all: true });
+    expect(parseForgetFact("forget everything you know")).toEqual({ all: true });
+  });
+  it("a SCOPED 'forget what you know about <topic>' targets that topic, NOT a full wipe (forget-fact-scoped-not-all)", () => {
+    // Regression: "forget what you know about my diet" wiped EVERY fact (the all-regex swallowed the topic).
+    expect(parseForgetFact("forget what you know about my diet")).toEqual({ term: "diet" });
+    expect(parseForgetFact("forget everything about my job")).toEqual({ term: "job" });
+    // "about me/myself" is the whole profile -> still a full wipe
+    expect(parseForgetFact("forget everything about me")).toEqual({ all: true });
   });
   it("does NOT match a plain /forget <recipe-name> (no fact phrasing)", () => {
     expect(parseForgetFact("forget btc-price")).toBeNull();
