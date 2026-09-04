@@ -20,7 +20,10 @@ export function parseCountdown(text: string, today: Ymd): Countdown | null {
   const t = String(text ?? "").trim();
   // Grab everything after the intent verb, then peel the DATE off the end (longest trailing phrase that
   // parseDate accepts). "countdown to my flight on Dec 20" -> label "my flight", date "Dec 20".
-  const m = t.match(/^\s*(?:countdown\s+(?:to|for)|days?\s+(?:until|til|till|to)|time\s+(?:until|til|to))\s+(.+)$/i)
+  // Optional "start/set/create/make/add (a/the) [new]" lead so "start a countdown to my birthday June 3"
+  // parses like the bare "countdown to ..." (countdown-start-a-lead) — a natural way users open the ask.
+  const lead = "(?:(?:can\\s+you\\s+)?(?:start|set|create|make|add|set\\s+up)\\s+(?:a\\s+|an\\s+|the\\s+)?(?:new\\s+)?)?";
+  const m = t.match(new RegExp(`^\\s*${lead}(?:countdown\\s+(?:to|for)|days?\\s+(?:until|til|till|to)|time\\s+(?:until|til|to))\\s+(.+)$`, "i"))
     || t.match(/^\s*(.+?)\s+countdown\s+(.+)$/i);
   if (!m) return null;
   // Two shapes: intent-first (m[1] = "label ... date") or "<label> countdown <date>" (m[1]=label,m[2]=date).

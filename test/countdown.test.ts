@@ -32,6 +32,13 @@ describe("parseCountdown", () => {
     // a bare numeric/ISO date has no name -> stays "it" (nothing to name it).
     expect(parseCountdown("days until 2026-07-01", TODAY)!.label).toBe("it");
   });
+  it("accepts a 'start/set/create a [new] countdown to …' lead (countdown-start-a-lead)", () => {
+    expect(parseCountdown("start a countdown to my birthday June 3", TODAY)!.label).toBe("birthday");
+    expect(parseCountdown("set up a countdown to vacation on 2026-07-01", TODAY)!.label).toBe("vacation");
+    expect(parseCountdown("create a new countdown to Christmas", TODAY)!.label).toBe("Christmas");
+    // still needs a real countdown intent — a bare imperative isn't one
+    expect(parseCountdown("start a fire", TODAY)).toBeNull();
+  });
   it("null when there's no parseable date", () => {
     expect(parseCountdown("countdown to something someday", TODAY)).toBeNull();
     expect(parseCountdown("what's the weather", TODAY)).toBeNull();

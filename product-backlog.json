@@ -4798,6 +4798,10 @@
     {
       "item": "quick-log-count-query-and-plural",
       "note": "Closed the quick-log read/write symmetry (2 linked fixes): (1) parseLogQuery now handles non-spend COUNT sums 'how much coffee this week' / 'how many steps today' (was null; only spend-sum + trend existed) -> the read side of the value-first 'log 3 coffees' write. (2) normalizeTag now singularizes a trailing plural (coffees->coffee, steps->step, ies->y, ss/short-words left alone) so the WRITE tag and READ tag converge on ONE series — exact-match store otherwise split 'coffees' (logged) from 'coffee' (queried) + the count couldn't be read back. Updated 3 existing tag expectations to singular + added 2 tests (count-query, write/read convergence). 2110 green."
+    },
+    {
+      "item": "countdown-start-a-lead",
+      "note": "phrasing gap: parseCountdown required the message to START with 'countdown to'/'days until', so a natural 'start a countdown to my birthday June 3' / 'set up a countdown to vacation ...' / 'create a new countdown to X' returned null. Added an optional start/set/create/make/add [a/the] [new] lead. Bare intent forms + 'start a fire'->null intact. qr + countdown otherwise probed clean. +1 test. 2111 green."
     }
   ],
   "audits": [
@@ -5280,6 +5284,11 @@
       "lens": "quick-log symmetry probe",
       "surfaced": "The value-first log fix (prev run) exposed the read side: count queries unparsed + a singular/plural tag split between write and read. Both fixed; quick-log now round-trips ('log 3 coffees' then 'how much coffee this week'). The lib-phrasing vein remains productive - 6 real fixes now (calc/convert/network-msg/unitprice/log-value-first/log-count).",
       "seeded": "probe-remaining-lib-phrasings (continue: countdown, geocode/places, scores team-forms, qr)"
+    },
+    {
+      "lens": "countdown/qr phrasing probe",
+      "surfaced": "countdown missed the 'start a countdown to ...' lead (fixed); qr parseQrRequest handles url/wifi/text/phone payloads fine. 7 real lib-phrasing fixes now across the vein. Remaining libs to probe: geocode/places phrasings, scores team-name forms, get_fun kinds, translate lang-name edge forms.",
+      "seeded": "probe-remaining-lib-phrasings (continue: geocode/places, scores team-forms, get_fun)"
     }
   ]
 }
