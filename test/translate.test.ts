@@ -20,6 +20,13 @@ describe("parseTranslateRequest", () => {
   it("defaults the target to English when no 'to <lang>' clause", () => {
     expect(parseTranslateRequest("translate 'guten morgen'")).toEqual({ target: "English", text: "guten morgen" });
   });
+  it("strips a trailing courtesy so it isn't swallowed into the target language (courtesy-tail)", () => {
+    // "...to French please" must target "French", not "French please" (which the model would try to
+    // translate INTO literally). A courtesy word in the BODY is preserved — only the tail is stripped.
+    expect(parseTranslateRequest("translate good morning to French please")).toEqual({ target: "French", text: "good morning" });
+    expect(parseTranslateRequest("translate goodbye to Italian thanks")).toEqual({ target: "Italian", text: "goodbye" });
+    expect(parseTranslateRequest("how do you say thank you in Japanese")).toEqual({ target: "Japanese", text: "thank you" });
+  });
   it("returns null for a non-translate message", () => {
     expect(parseTranslateRequest("what's the weather")).toBeNull();
     expect(parseTranslateRequest("remind me to call mom")).toBeNull();

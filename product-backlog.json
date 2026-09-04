@@ -3194,6 +3194,15 @@
       "status": "done",
       "why": "Two more verbatim-storing parsers had the courtesy-tail bug: parseAlertCommand watched 'price of bitcoin please' (poisons value extraction) + made a garbage watchlist member 'eth price thanks'; parseListCommand read 'add milk to my grocery list please' as the list name 'grocery list please' — a wrong/new list, so the item vanished from the real one.",
       "how": "Applied the shared stripTrailingCourtesy: on parseAlertCommand's task (before then/weather/watchlist/threshold parsing, so a member's tail is dropped before the ';' split) and at parseListCommand's input top (item sits before the 'to my <list>' clause, never at the tail)."
+    },
+    {
+      "id": "probe-remaining-freetext-parsers",
+      "title": "Sweep the still-unaudited free-text parsers for phrasing/courtesy/tail leaks",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "90+ parse/detect exports; ~10 verbatim-storing ones swept for courtesy-tail, but parseRemember, parseSaveThatAs, parseWatchThat, parseSaveThat, parseChainSteps, parseRecipeCommand and others handle free text and may leak trailing/labeled phrasing into stored values.",
+      "how": "tsx sandbox probe each with please/thanks/labeled inputs; where a tail or label corrupts the stored value, apply stripTrailingCourtesy (or a labeled-tail strip) + add a test. One parser class per iteration."
     }
   ],
   "history": [
@@ -4496,6 +4505,10 @@
     {
       "item": "courtesy-tail-followup",
       "note": "parseFollowUp (9th verbatim parser) strips trailing please/thanks via shared stripTrailingCourtesy so the WHEN clause ('in 3 days please') parses instead of dead-ending a valid contact follow-up as 'unparsed'. +1 test."
+    },
+    {
+      "item": "courtesy-tail-translate",
+      "note": "parseTranslateRequest (10th verbatim parser) strips trailing please/thanks so 'translate X to French please' targets 'French' not 'French please' (the model was told to translate INTO 'french please'). Body-internal courtesy preserved ('how do you say thank you...'). +1 test."
     }
   ],
   "audits": [
@@ -4849,6 +4862,11 @@
     },
     {
       "note": "anvil DOWN, agent cap exhausted. Courtesy-tail: caught alerts + lists (I'd declared the class swept a run early — it wasn't). Both fixed via the shared helper. NOW genuinely swept (8 tools, one tested helper). confirm-to-act (owner) + anvil-live-e2e (anvil) remain the gated levers."
+    },
+    {
+      "lens": "inline single-surface probe (3-agent AUDIT blocked: subagent cap 200/200 reached)",
+      "surfaced": "Enumerated all 90+ parse/detect/resolve exports; probed the free-text ones not yet in the courtesy sweep (parseRemember, parseTranslateRequest, parseSaveThatAs). parseTranslateRequest leaked a trailing courtesy into the 2-word target-language capture — real bug (wrong translation target). parseRemember/parseSaveThatAs modules import-guarded, not exercised this probe.",
+      "seeded": "probe-remaining-freetext-parsers"
     }
   ]
 }

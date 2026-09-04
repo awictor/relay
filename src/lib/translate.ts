@@ -6,6 +6,7 @@
 // translates directly; a URL is scraped then translated. Pure parse + prompt helpers exported + tested;
 // the LLM + scrape are injected so it runs offline in tests.
 import type { LLMClient } from "../llm.js";
+import { stripTrailingCourtesy } from "./text-clean.js";
 
 /** Parse a translate request into { target, text?, url? }, or null. Handles:
  *   "translate 'hola' to English"            -> { target: "English", text: "hola" }
@@ -15,7 +16,11 @@ import type { LLMClient } from "../llm.js";
  * The target language defaults to English when a translate verb is present but no "to <lang>" clause
  * ("translate this German text" -> English). Exported for tests. */
 export function parseTranslateRequest(text: string): { target: string; text?: string; url?: string } | null {
-  const t = text.trim();
+  // Drop a trailing courtesy first so "translate good morning to french please" targets "french", not
+  // "french please" — the 2-word target capture would otherwise swallow the courtesy and the model gets
+  // told to translate "into french please" (courtesy-tail bug class). A URL tail is handled separately
+  // below, so stripping here only touches a trailing please/thanks on a text request.
+  const t = stripTrailingCourtesy(text.trim());
   if (!/\b(translate|translation|how (?:do|would) (?:you|i) say|what(?:'?s| is)\s+.+\s+in\s+[a-z]+)\b/i.test(t)) return null;
 
   // A URL anywhere -> translate that page. The target is a trailing "to/into/in <lang>" clause; capture
