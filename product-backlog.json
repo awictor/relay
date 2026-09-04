@@ -4939,6 +4939,10 @@
     {
       "item": "anvil-live-e2e-harder",
       "note": "With anvil up, drove 2 HARDER live errands through the full Gemini+anvil pipe: 'top HN story' -> scrape, 2 steps, 4.9s, correct grounded reply; 'scrape HN + list first 3 titles' -> extract, 2 steps, 55s, clean 3-title list. Both not degraded, right tool auto-selected (scrape vs extract). NO live-only bug surfaced - the pipe is robust beyond the trivial example.com case. No code change."
+    },
+    {
+      "item": "anvil-live-safety-verify",
+      "note": "With anvil up, live-verified the dangerous-action safety on the real pipe: isDangerousAction correctly flags 'Buy Now'/'submit payment' (true) vs 'search box' (false), and end-to-end runAgent('...place an order') REFUSED cleanly ('I can't place orders ... do it yourself') without attempting a committing click - the guard + system-prompt boundary hold live, not just in unit tests. No committing action reached anvil. call-tested: true (safety path). No code change."
     }
   ],
   "audits": [
@@ -5537,6 +5541,11 @@
       "lens": "live anvil harder-errand probe",
       "surfaced": "Beyond the example.com smoke test, the live pipe handles real dynamic pages (HN): correct scrape-vs-extract tool choice, grounded multi-item replies, no degradation. The core loop is genuinely solid live, not just on a static page. Only remaining substantive lever is confirm-to-act (owner product-UX). No autonomous code work surfaced.",
       "seeded": "(live pipe robust; confirm-to-act owner-gated)"
+    },
+    {
+      "lens": "live safety-boundary probe",
+      "surfaced": "The read-only/no-commit product boundary is verified LIVE: the agent declines a 'place an order' request rather than driving a real committing click, and the dangerous-action classifier is correct on money/commit verbs. This is the trust-critical guarantee (Relay never buys/pays/commits on its own) proven against the real browser pipe. Only remaining lever: confirm-to-act (owner) - which would ADD an optional confirm step, orthogonal to this hard refusal.",
+      "seeded": "(safety verified live; confirm-to-act owner-gated)"
     }
   ]
 }
