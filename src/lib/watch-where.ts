@@ -5,6 +5,8 @@
 // link (accurate, per-region streaming/rent/buy availability) + steers the user to get_fact for the
 // film's details, instead of inventing a "it's on Netflix" the model can't verify. Pure; no I/O.
 
+import { stripTrailingCourtesy } from "./text-clean.js";
+
 // A film/show title the user wants to watch. Extracted from phrasing so the query is the TITLE, not the
 // whole sentence ("where can I watch Dune Part Two" -> "Dune Part Two").
 const WATCH_RE = /\b(?:where\s+(?:can\s+i\s+)?(?:watch|stream)|how\s+(?:can\s+i\s+)?(?:watch|stream)|watch|stream|streaming|is)\s+(.+?)(?:\s+(?:streaming|available|online|on\s+(?:netflix|hulu|max|disney\+?|prime|paramount\+?|peacock|apple\s?tv\+?)))?\s*\??$/i;
@@ -13,7 +15,10 @@ const WATCH_RE = /\b(?:where\s+(?:can\s+i\s+)?(?:watch|stream)|how\s+(?:can\s+i\
  * a plain "Dune" doesn't hijack. Strips a trailing platform clause ("on Netflix") so the JustWatch query
  * is the bare title. Exported for tests. */
 export function parseWatchQuery(text: string): string | null {
-  const t = String(text ?? "").trim();
+  // Strip a trailing courtesy so "where to watch Dune please" queries "Dune", not "Dune please" — the
+  // title-capture is end-anchored and would otherwise fold "please" into the JustWatch query
+  // (courtesy-tail bug class). The gate cue (watch/stream) sits before the title, unaffected.
+  const t = stripTrailingCourtesy(String(text ?? "").trim());
   // Gate: must mention watch/stream (or "is X on <platform>"). Avoids catching every title mention.
   if (!/\b(watch|stream|streaming)\b/i.test(t) && !/\bis\s+.+\bon\s+(netflix|hulu|max|disney|prime|paramount|peacock|apple)/i.test(t)) return null;
   const m = t.match(WATCH_RE);

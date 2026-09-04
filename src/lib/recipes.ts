@@ -4,6 +4,7 @@
 // (recipe-2) routes commands; scheduled recipes (recipe-3) bridge to ScheduleStore.
 
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
+import { stripTrailingCourtesy } from "./text-clean.js";
 
 export interface Recipe {
   chatId: number;
@@ -40,7 +41,9 @@ export function parseRecipeCommand(text: string): ParsedRecipe | null {
  * user JUST ran without retyping it (the caller supplies the task from the prior turn). Returns the
  * normalized name, or null if it isn't this form. Distinct from parseRecipeCommand's "save <name>: <task>". */
 export function parseSaveThatAs(text: string): string | null {
-  const m = text.trim().match(/^\s*save\s+(?:that|this|the\s+last(?:\s+one)?|it)\s+as\s+(.+)$/i);
+  // Strip a trailing courtesy so "save that as dinner plans please" names the recipe "dinner plans",
+  // not "dinner plans please" (courtesy-tail bug class; the name sits at the very tail).
+  const m = stripTrailingCourtesy(text.trim()).match(/^\s*save\s+(?:that|this|the\s+last(?:\s+one)?|it)\s+as\s+(.+)$/i);
   if (!m) return null;
   const name = normalizeName(m[1]!);
   return name || null;
@@ -50,7 +53,9 @@ export function parseSaveThatAs(text: string): string | null {
  * "watch that"), or null if it isn't a watch-that. The caller supplies the task from the prior turn +
  * builds the alert. Zero-retype on-ramp from a one-off answer to a standing watch (watch-that-by-ref). */
 export function parseWatchThat(text: string): { clause: string } | null {
-  const m = text.trim().match(/^\s*(?:watch|alert\s+me\s+(?:on|about|if|when)?)\s+(?:that|this|it)\b\s*(.*)$/i);
+  // Strip a trailing courtesy so "watch that please" is a BARE watch (clause "") and doesn't try to
+  // parse "please" as an alert condition (courtesy-tail bug class).
+  const m = stripTrailingCourtesy(text.trim()).match(/^\s*(?:watch|alert\s+me\s+(?:on|about|if|when)?)\s+(?:that|this|it)\b\s*(.*)$/i);
   if (!m) return null;
   return { clause: m[1]!.trim() };
 }
@@ -58,7 +63,9 @@ export function parseWatchThat(text: string): { clause: string } | null {
 /** "schedule that <when>" / "every morning that" -> the timing clause, or null. Caller supplies the
  * task from the prior turn. Complements save-that-as for recurring schedules (watch-that-by-ref). */
 export function parseScheduleThat(text: string): { clause: string } | null {
-  const t = text.trim();
+  // Strip a trailing courtesy so "run that every morning please" schedules "every morning", not
+  // "every morning please" — the latter fails the schedule parser (courtesy-tail bug class).
+  const t = stripTrailingCourtesy(text.trim());
   // "schedule that every morning" / "schedule this at 9am"
   let m = t.match(/^\s*schedule\s+(?:that|this|it)\b\s+(.+)$/i);
   if (m) return { clause: m[1]!.trim() };

@@ -3200,9 +3200,18 @@
       "title": "Sweep the still-unaudited free-text parsers for phrasing/courtesy/tail leaks",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "90+ parse/detect exports; ~10 verbatim-storing ones swept for courtesy-tail, but parseRemember, parseSaveThatAs, parseWatchThat, parseSaveThat, parseChainSteps, parseRecipeCommand and others handle free text and may leak trailing/labeled phrasing into stored values.",
       "how": "tsx sandbox probe each with please/thanks/labeled inputs; where a tail or label corrupts the stored value, apply stripTrailingCourtesy (or a labeled-tail strip) + add a test. One parser class per iteration."
+    },
+    {
+      "id": "probe-labeled-input-parsers",
+      "title": "Sweep parsers that take LABELED/multi-clause free text for phrasing leaks beyond courtesy",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "Courtesy-tail is now swept across 14 parsers. The residual risk class is LABELED/multi-clause inputs (e.g. 'set my home to <addr>', 'convert 5 usd to eur as of friday', digest/chain step phrasing) where a trailing qualifier or an interior label can corrupt the stored/parsed value in ways a bare courtesy strip won't catch.",
+      "how": "tsx-probe parseSetLocation, parseSavePlace, parseDigestCommand, parseChainSteps, parseFx, parseLogCommand with labeled + qualified inputs; fix leaks with a targeted strip + test. One class per iteration."
     }
   ],
   "history": [
@@ -4509,6 +4518,10 @@
     {
       "item": "courtesy-tail-translate",
       "note": "parseTranslateRequest (10th verbatim parser) strips trailing please/thanks so 'translate X to French please' targets 'French' not 'French please' (the model was told to translate INTO 'french please'). Body-internal courtesy preserved ('how do you say thank you...'). +1 test."
+    },
+    {
+      "item": "courtesy-tail-recipes-watch",
+      "note": "Swept 4 more free-text parsers for courtesy-tail (parsers 11-14): parseSaveThatAs (recipe name 'dinner plans please'->'dinner plans'), parseWatchThat (bare 'watch that please' no longer conditions on 'please'), parseScheduleThat ('run that every morning please'->'every morning', was failing schedule parse), parseWatchQuery (JustWatch title 'Dune please'->'Dune'). All via shared stripTrailingCourtesy. +3 tests. parseRemember confirmed clean."
     }
   ],
   "audits": [

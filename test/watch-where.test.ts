@@ -14,6 +14,12 @@ describe("parseWatchQuery", () => {
     expect(parseWatchQuery("Dune")).toBeNull();
     expect(parseWatchQuery("what's the weather")).toBeNull();
   });
+  it("strips a trailing courtesy so it isn't folded into the title (courtesy-tail)", () => {
+    // "where to watch Dune please" queries "Dune", not "Dune please" (the end-anchored title capture
+    // would otherwise carry "please" into the JustWatch query).
+    expect(parseWatchQuery("where can I watch Dune please")).toBe("Dune");
+    expect(parseWatchQuery("where can I stream Oppenheimer thanks")).toBe("Oppenheimer");
+  });
 });
 
 describe("justWatchUrl", () => {

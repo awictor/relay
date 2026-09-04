@@ -35,6 +35,11 @@ describe("parseSaveThatAs (save-that-as)", () => {
     expect(parseSaveThatAs("what's the weather")).toBeNull();
     expect(parseSaveThatAs("save that")).toBeNull(); // no name
   });
+  it("strips a trailing courtesy from the recipe name (courtesy-tail)", () => {
+    // "...as dinner plans please" must name the recipe "dinner plans", not "dinner plans please".
+    expect(parseSaveThatAs("save that as dinner plans please")).toBe("dinner plans");
+    expect(parseSaveThatAs("save this as the invoice thanks")).toBe("the invoice");
+  });
 });
 
 describe("parseWatchThat / parseScheduleThat (watch-schedule-that-by-ref)", () => {
@@ -50,6 +55,12 @@ describe("parseWatchThat / parseScheduleThat (watch-schedule-that-by-ref)", () =
     expect(parseScheduleThat("do that every day at 8am")).toEqual({ clause: "every day at 8am" });
     expect(parseScheduleThat("schedule morning every day")).toBeNull(); // named recipe, not "that"
     expect(parseScheduleThat("do that thing")).toBeNull(); // no cadence clause
+  });
+  it("strips a trailing courtesy from the clause (courtesy-tail)", () => {
+    // "watch that please" is a BARE watch (clause ""), not a watch conditioned on "please"; and
+    // "run that every morning please" schedules "every morning", which the schedule parser accepts.
+    expect(parseWatchThat("watch that please")).toEqual({ clause: "" });
+    expect(parseScheduleThat("run that every morning please")).toEqual({ clause: "every morning" });
   });
 });
 
