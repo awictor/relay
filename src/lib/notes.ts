@@ -4,6 +4,7 @@
 // key-value note store, keyed by chatId, injected into the agent's context like the profile line.
 // Small atomic + corrupt-safe JSON store (safe-store), free-infra. Mirrors ProfileStore.
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
+import { stripTrailingCourtesy } from "./text-clean.js";
 
 export interface Note {
   text: string;    // the remembered fact, verbatim-ish (prefix stripped, trimmed)
@@ -29,7 +30,10 @@ export function parseRemember(text: string): string | null {
   if (/^to\s+/i.test(fact)) return null;
   // Trim trailing sentence punctuation, then surrounding quotes (order matters: `"…".` leaves a `"`
   // if quotes are stripped before the period).
-  fact = fact.replace(/[.;]\s*$/, "").replace(/^["']|["']$/g, "").replace(/[.;]\s*$/, "").trim().slice(0, MAX_NOTE_LEN);
+  fact = fact.replace(/[.;]\s*$/, "").replace(/^["']|["']$/g, "").replace(/[.;]\s*$/, "").trim();
+  // Drop a trailing courtesy so "remember I'm vegetarian please" isn't recited as the fact "...please"
+  // forever (courtesy-tail bug class).
+  fact = stripTrailingCourtesy(fact).slice(0, MAX_NOTE_LEN);
   return fact || null;
 }
 

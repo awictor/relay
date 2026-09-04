@@ -3176,6 +3176,15 @@
       "status": "done",
       "why": "cleanTask didn't drop a trailing courtesy word, so 'please'/'pls' got baked into the stored reminder/recipe task — the reminder re-pinged '⏰ Reminder: call mom please' forever, and a recipe/daily ran 'send me the weather thanks' through the agent verbatim.",
       "how": "In cleanTask (the single task chokepoint for every schedule kind), strip a TRAILING please/pls/plz only — NOT 'thanks' (can be the task, 'say thanks') and NOT a mid-task 'please' ('say please to grandma'). Only when task text precedes it."
+    },
+    {
+      "id": "courtesy-tail-sweep-shared",
+      "title": "Trailing 'please'/'thanks' polluted stored notes, follows, and saved places",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "Same courtesy-tail bug as datecalc/unit-convert/schedule, in 3 more verbatim-storing parsers: parseRemember stored 'I'm vegetarian please' (recited forever), parseFollowCommand targeted 'r/programming please' / made a garbage 'HN thanks' feed, parseSavePlace stored 'Gold's on Main please' (breaks near-me geocoding).",
+      "how": "Extracted a shared stripTrailingCourtesy(s,{onlyPlease?}) helper (src/lib/text-clean.ts) — strips a trailing please/pls/plz(/thanks) only when value text precedes it, keeps a mid-value or whole-value word. Applied in notes/feeds/places; refactored schedule.cleanTask to use it (onlyPlease=true, keeps 'say thanks'). DRY across the class."
     }
   ],
   "history": [
@@ -4466,6 +4475,10 @@
     {
       "id": "schedule-task-trailing-courtesy",
       "note": "Third courtesy/label-tail find in a row. cleanTask baked a trailing 'please'/'pls' into the stored reminder/recipe task, so it echoed back in every re-ping + ran verbatim in a recipe. Stripped trailing please/pls/plz at the cleanTask chokepoint (covers all schedule kinds); kept 'thanks' + mid-task words. +1 test, 2025 green."
+    },
+    {
+      "id": "courtesy-tail-sweep-shared",
+      "note": "Courtesy-tail sweep, run 4 (final): found the SAME trailing-please bug in 3 more verbatim parsers (notes/feeds/places). Instead of a 4th inline copy, extracted a shared stripTrailingCourtesy helper (text-clean.ts) + applied everywhere incl. refactoring the schedule fix onto it. onlyPlease flag lets schedule keep 'thanks'. +7 tests (helper unit + 3 parser cases + refactor coverage), 2032 green. Class now fully swept: datecalc, unit-convert, schedule, notes, feeds, places."
     }
   ],
   "audits": [
@@ -4813,6 +4826,9 @@
     },
     {
       "note": "anvil DOWN, agent cap exhausted. Courtesy-tail sweep, run 3: schedule cleanTask stored trailing 'please' into the task. Fixed at the chokepoint. Class nearly swept (datecalc, unit-convert, now schedule). confirm-to-act (owner) + anvil-live-e2e (anvil) still the gated levers."
+    },
+    {
+      "note": "anvil DOWN, agent cap exhausted. Courtesy-tail class SWEPT: found + fixed the last 3 (notes/feeds/places) via a shared helper, DRY'd the schedule fix onto it. That parse-tail vein is now exhausted (6 tools done). Remaining: confirm-to-act (owner) + anvil-live-e2e (anvil) — the two gated levers, unchanged."
     }
   ]
 }

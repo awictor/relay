@@ -25,6 +25,11 @@ describe("parseRemember", () => {
     expect(parseRemember('remember "I like oat milk".')).toBe("I like oat milk");
     expect(parseRemember("remember " + "x".repeat(400))!.length).toBe(300);
   });
+  it("strips a trailing courtesy so it isn't recited as part of the fact (courtesy-tail)", () => {
+    expect(parseRemember("remember I'm vegetarian please")).toBe("I'm vegetarian");
+    expect(parseRemember("remember my wifi is swordfish thanks")).toBe("my wifi is swordfish");
+    expect(parseRemember("note that I park in G pls")).toBe("I park in G");
+  });
   it("null for a non-remember message", () => {
     expect(parseRemember("what's the weather")).toBeNull();
   });

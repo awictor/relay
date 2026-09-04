@@ -6,6 +6,7 @@
 
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
 import { offsetForZoneAt } from "./profile.js";
+import { stripTrailingCourtesy } from "./text-clean.js";
 
 // once = fire + drop; daily = re-fire every day at hourMin; weekly = re-fire on the given weekdays at
 // hourMin ("every monday", "weekdays at 8"); interval = re-fire every intervalMs ("every 2 hours").
@@ -685,14 +686,10 @@ function cleanTask(raw: string, timeClause: string): string {
   let s = idx >= 0 ? raw.slice(0, idx) + " " + raw.slice(idx + timeClause.length) : raw;
   s = stripReminderPrefix(s);
   s = s.replace(/\s+/g, " ").replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, "").trim();
-  // Strip a TRAILING courtesy word so it doesn't get stored into the task + echoed back forever
-  // ("remind me to call mom at 5pm please" -> task "call mom", not "call mom please") — the courtesy is
-  // meta, not the errand (schedule-task-trailing-courtesy). ONLY please/pls/plz (rarely a task object),
-  // NOT "thanks"/"thank you" (which can legitimately BE the task — "remind me to say thanks"). Only when
-  // task text precedes it, so a bare-courtesy edge keeps the word. Re-trim exposed dangling punctuation.
-  const stripped = s.replace(/[\s,]*\b(?:please|pls|plz)\b\s*$/i, "").trim();
-  if (stripped) s = stripped;
-  return s.replace(/[\s,;:.\-]+$/g, "").trim();
+  // Strip a TRAILING courtesy so it isn't stored into the task + echoed back forever ("remind me to call
+  // mom at 5pm please" -> "call mom"). onlyPlease: keep "thanks" — a reminder "say thanks" is real
+  // (schedule-task-trailing-courtesy). Shared with notes/feeds/places (courtesy-tail bug class).
+  return stripTrailingCourtesy(s, { onlyPlease: true }).replace(/[\s,;:.\-]+$/g, "").trim();
 }
 
 // --- persistent store (JSON file, gitignored — like MemoryStore) ---

@@ -7,6 +7,8 @@
 // alert-runner.ts (seen-set + new-item keying + scheduler cadence) — this module only adds the source
 // resolution + parsing. Pure helpers; the network fetch is injected (guarded GET in prod, fake in tests).
 
+import { stripTrailingCourtesy } from "./text-clean.js";
+
 export type FeedKind = "rss" | "reddit" | "hn" | "youtube";
 export interface FeedSource { kind: FeedKind; url: string; label: string; }
 
@@ -184,7 +186,9 @@ export function feedItemDedupKey(it: FeedItem, titleKey: (s: string) => string):
 export function parseFollowCommand(text: string): { name: string; target: string } | null {
   const m = text.trim().match(/^\s*(?:follow|subscribe\s+to)\s+(.+?)\s*$/i);
   if (!m) return null;
-  let rest = m[1]!.trim();
+  // Drop a trailing courtesy so "follow r/programming please" doesn't target "r/programming please" /
+  // "follow HN thanks" doesn't become a garbage feed (courtesy-tail bug class).
+  let rest = stripTrailingCourtesy(m[1]!.trim());
   // Optional explicit name: "follow <name>: <target>". Only when the part after the colon looks like a
   // target (a URL, r/x, or HN/youtube cue) so "follow HN: rust" keeps HN as the source, not the name.
   const named = rest.match(/^([^:]{1,40}):\s*(\S.*)$/);

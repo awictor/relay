@@ -140,6 +140,10 @@ describe("parseFollowCommand", () => {
   it("parses an explicit name before a colon when the tail is a real target", () => {
     expect(parseFollowCommand("follow rust news: r/rust")).toEqual({ name: "rust news", target: "r/rust" });
   });
+  it("strips a trailing courtesy so it isn't part of the target (courtesy-tail)", () => {
+    expect(parseFollowCommand("follow r/programming please")).toEqual({ name: "r/programming", target: "r/programming" });
+    expect(parseFollowCommand("follow HN thanks")).toEqual({ name: "hacker news", target: "HN" });
+  });
   it("returns null when it isn't a follow command", () => {
     expect(parseFollowCommand("what's the weather")).toBeNull();
     expect(parseFollowCommand("following up on my order")).toBeNull();

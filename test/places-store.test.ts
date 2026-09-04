@@ -18,6 +18,10 @@ describe("parseSavePlace", () => {
     expect(parseSavePlace("remember my office is 1 Infinite Loop, Cupertino")).toEqual({ name: "office", address: "1 Infinite Loop, Cupertino" });
     expect(parseSavePlace("the gym is at 40 Fitness Way")).toEqual({ name: "gym", address: "40 Fitness Way" });
   });
+  it("strips a trailing courtesy so it doesn't break geocoding (courtesy-tail)", () => {
+    expect(parseSavePlace("save gym: Gold's on Main please")).toEqual({ name: "gym", address: "Gold's on Main" });
+    expect(parseSavePlace("my work is 500 5th Ave thanks")).toEqual({ name: "work", address: "500 5th Ave" });
+  });
   it("does NOT capture a normal status sentence", () => {
     expect(parseSavePlace("my day is great")).toBeNull();       // no place-shaped address
     expect(parseSavePlace("my flight is delayed")).toBeNull();

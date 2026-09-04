@@ -4,6 +4,7 @@
 // context like notes/profile, so the LLM substitutes the alias for its address when it calls
 // weather/find_nearby/directions. Small atomic + corrupt-safe JSON store (safe-store). Mirrors NotesStore.
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
+import { stripTrailingCourtesy } from "./text-clean.js";
 
 export interface Place {
   name: string;     // the alias, lowercased ("work", "gym", "mom's")
@@ -36,7 +37,9 @@ export function parseSavePlace(text: string): { name: string; address: string } 
   if (!m) m = t.match(/^\s*([\w' -]{1,30}?)\s+is\s+at\s+(.+)$/i);
   if (!m) return null;
   const name = normalizePlaceName(m[1]!);
-  let address = m[2]!.trim().replace(/^["']|["']$/g, "").replace(/[.;]\s*$/, "").trim().slice(0, MAX_ADDRESS_LEN);
+  // Drop a trailing courtesy so "save gym: Gold's on Main please" stores "Gold's on Main" — a "please"
+  // baked into the address breaks geocoding for "near me"/directions later (courtesy-tail bug class).
+  let address = stripTrailingCourtesy(m[2]!.trim().replace(/^["']|["']$/g, "").replace(/[.;]\s*$/, "").trim()).slice(0, MAX_ADDRESS_LEN);
   if (!name || name.split(/\s+/).length > 3) return null;   // alias must be short (work / the gym / mom's)
   // The address must look like a place, not a status/opinion — needs a digit (street number) OR >=2
   // words with a capital-ish token, and be long enough. Guards against "my day is great".
