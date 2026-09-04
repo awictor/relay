@@ -39,6 +39,12 @@ export interface DigestRunnerDeps {
   // recap member falls through to resolveRecipe (and reads as "no such recipe" if there's no such recipe).
   savedRecap?: (chatId: number) => string | null;
   maxMembers?: number; // safety bound on how many recipes one digest runs (default 10)
+  // Smart ordering (digest-smart-ordering): given a real member's output, record its value + report
+  // whether it CHANGED materially since the last run (a moved price, a new top story). When wired, the
+  // briefing floats changed members to the top with a ✦ marker so a daily reader sees what's different
+  // first. Optional; absent -> members stay in definition order (prior behavior). The store lives in the
+  // caller (index) so it's persisted + testable. Called once per REAL member, in member order.
+  memberChanged?: (chatId: number, digestName: string, member: string, body: string) => boolean;
   // Per-user profile context (product-loop) so a scheduled digest resolves the user's location.
   contextFor?: (chatId: number) => string;
 }
@@ -78,7 +84,7 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
   // STRUCTURAL, permanent dead end) | "failed" (transient — couldn't fetch this time / degraded). The
   // gone-vs-failed split is what lets an ALL-fail digest tell a transient outage ("couldn't build it
   // this time") apart from a truly-dead one (stay silent) — digest-all-fail-silent-noshow.
-  const built = await mapPool(members, DIGEST_CONCURRENCY, async (name): Promise<{ line: string; status: "real" | "gone" | "failed" }> => {
+  const built = await mapPool(members, DIGEST_CONCURRENCY, async (name): Promise<{ line: string; status: "real" | "gone" | "failed"; changed?: boolean }> => {
     // Reserved reading-list recap member (saved-page-digest-integration): fold recent saves in, no agent.
     // Nothing saved -> "gone" (an empty member, like a deleted recipe) so it doesn't count as content or a
     // transient failure — a digest of ONLY an empty reading list stays silent, same as an all-deleted one.
@@ -111,7 +117,8 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
         }
         // An error-shaped chain output ("the page returned a 404") is a soft failure, not content
         // (digest-error-as-content) — demote it so it's not shown as a real section + counts as failed.
-        return out && !looksLikeErrorReply(out) ? { line: `• ${name}: ${out}`, status: "real" } : { line: `• ${name}: (couldn't fetch)`, status: "failed" };
+        if (out && !looksLikeErrorReply(out)) { const changed = deps.memberChanged?.(digest.chatId, digest.name, name, out) ?? false; return { line: `• ${name}: ${out}`, status: "real", changed }; }
+        return { line: `• ${name}: (couldn't fetch)`, status: "failed" };
       }
       const res = await deps.runAgent(rec.task, { llm: deps.llm, context: deps.contextFor?.(digest.chatId) || undefined, ...deps.agentEnv?.(digest.chatId) }, []);
       // A degraded reply (agent ran out of steps / produced no answer, DEV-0176) is NOT briefing
@@ -123,7 +130,8 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
       // as a real briefing section (digest-error-as-content) — it reads as fact and miscounts toward "real"
       // content so the all-failed notice never fires. Demote it like a degraded reply.
       if (!body || looksLikeErrorReply(body)) return { line: `• ${name}: (couldn't fetch)`, status: "failed" };
-      return { line: `• ${name}: ${body}`, status: "real" };
+      const changed = deps.memberChanged?.(digest.chatId, digest.name, name, body) ?? false;
+      return { line: `• ${name}: ${body}`, status: "real", changed };
     } catch {
       return { line: `• ${name}: (couldn't fetch)`, status: "failed" };
     }
@@ -145,5 +153,16 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
     return null;
   }
   const title = `📋 ${digest.name}`;
+  // Smart ordering (digest-smart-ordering): when change-detection is wired, float members that CHANGED
+  // materially since last run to the top with a ✦ marker, so a daily reader sees what's different first.
+  // Stable within each group (preserves definition order among changed, and among unchanged). No-op when
+  // nothing changed or memberChanged isn't wired -> identical to the prior definition-order briefing.
+  if (deps.memberChanged && built.some((b) => b.changed)) {
+    const mark = (b: typeof built[number]) => (b.changed ? `✦ ${b.line.replace(/^• /, "")}` : b.line);
+    const changed = built.filter((b) => b.changed);
+    const rest = built.filter((b) => !b.changed);
+    const ordered = [...changed, ...rest];
+    return `${title} (✦ = changed since last time)\n${ordered.map(mark).join("\n")}`;
+  }
   return `${title}\n${built.map((b) => b.line).join("\n")}`;
 }

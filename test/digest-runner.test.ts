@@ -101,6 +101,28 @@ describe("runDigest", () => {
     expect(out).toContain("• weather: RESULT[get the weather]"); // real member carries the digest
   });
 
+  it("smart ordering floats a CHANGED member to the top with a ✦ marker (digest-smart-ordering)", async () => {
+    // memberChanged reports only "btc" as changed -> it should lead, marked ✦, others follow in order.
+    const out = await runDigest(digest(["weather", "hn", "btc"]), deps({
+      memberChanged: (_c, _d, member) => member === "btc",
+    })) as string;
+    expect(out).toMatch(/✦ = changed since last time/);
+    const lines = out.split("\n");
+    // first content line (after the title) is the changed btc member, marked
+    expect(lines[1]).toMatch(/^✦ btc:/);
+    expect(out).toMatch(/• weather:/); // unchanged members still present, un-marked
+    expect(out).toMatch(/• hn:/);
+  });
+
+  it("no reorder when nothing changed (identical to definition-order briefing)", async () => {
+    const out = await runDigest(digest(["weather", "hn"]), deps({
+      memberChanged: () => false,
+    })) as string;
+    expect(out).not.toMatch(/✦/);
+    const lines = out.split("\n");
+    expect(lines[1]).toMatch(/^• weather:/); // definition order preserved
+  });
+
   it("a chain member that STOPPED EARLY is flagged partial, not shown as a complete section (chain-partial-nonrun-paths)", async () => {
     const out = await runDigest(digest(["weather", "flow"]), deps({
       resolveRecipe: (_c: number, name: string) => name === "weather" ? { task: "get the weather" } : name === "flow" ? { task: "a >> b >> c" } : null,

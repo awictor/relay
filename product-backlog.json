@@ -3606,7 +3606,7 @@
       "title": "Digest richness: lead a briefing with what CHANGED / is urgent, not fixed member order",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A morning digest (\"weather, hn, btc, calendar\") always renders members in definition order. A daily-reliant user skims for whats DIFFERENT — a price that moved a lot, a weather alert, a new top story. Leading with the changed/urgent member (vs static order) makes the briefing scannable + is a real retention lever competitors lean on.",
       "how": "In digest-runner, after gathering member outputs, optionally reorder/flag: a member whose value moved materially vs last run (reuse the alert deadband + a per-digest last-value cache) floats up with a small marker; unchanged members follow. Gate behind a flag or make it the default with a subtle marker. Offline test the reorder + change-detect; live e2e a 2-member digest across two runs."
     }
@@ -5219,6 +5219,10 @@
     {
       "item": "date-business-days",
       "note": "date_math gained business-day math: \"3 business days from now\", \"5 working days after 2026-09-04\" -> steps forward skipping Sat/Sun (weekends only; public holidays flagged as not counted). Branch checked FIRST in runDateCalc so \"business\" isnt swallowed by the between/since/after or plain-N-days matchers. Parses an explicit from-date or defaults to today. +1 test (Thu+3bd=Tue, weekend-skip, plain-days unaffected). Tool desc + /help. 2304 green. call-tested: n/a (pure). 9th everyday improvement this session; last clearly-valuable keyless one (vein flagged thinning)."
+    },
+    {
+      "item": "digest-smart-ordering",
+      "note": "Digests now lead with what CHANGED: a member whose value moved materially since the last run floats to the top with a ✦ marker (\"✦ = changed since last time\" header), so a daily reader sees whats different first instead of fixed definition order. New src/lib/digest-change.ts: digestMemberChanged (numeric relative deadband default 1% via RELAY_DIGEST_CHANGE_PCT, else normalized-text compare; first run never ✦) + DigestChangeStore (per chat/digest/member last-value). Wired via new optional memberChanged dep in digest-runner (absent -> prior definition order, zero behavior change); in-memory store in index. +8 tests (lib change-detect/isolation/persist + runner reorder/no-reorder). LIVE e2e: 2-run digest, btc +9% -> floated ✦ to top, weather unchanged below. 2312 green. call-tested: TRUE. Net-new RETENTION feature (not a micro-tool) — first power-lens item in a while."
     }
   ],
   "audits": [

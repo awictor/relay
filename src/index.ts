@@ -34,6 +34,7 @@ import { makeScheduleRunner } from "./schedule-runner.js";
 import { RecipeStore, parseRecipeCommand, parseRunWithArgs, applySlots, hasSlots, slotsAmbiguous, slotNames, isChain, chainOverflow, MAX_CHAIN_STEPS } from "./lib/recipes.js";
 import { matchRecipe } from "./lib/task-suggest.js";
 import { DigestStore, parseDigestCommand } from "./lib/digests.js";
+import { DigestChangeStore } from "./lib/digest-change.js";
 import { runDigest, type DigestOutcome } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summarizeSeries, isQuietDeferrable } from "./lib/alerts.js";
 import { parseChartRequest, renderChart } from "./lib/chart.js";
@@ -128,6 +129,10 @@ const memory = new MemoryStore({
 const schedules = new ScheduleStore({ file: paths.schedules });
 const recipes = new RecipeStore({ file: paths.recipes });
 const digests = new DigestStore({ file: paths.digests });
+// Smart-ordering change detection (digest-smart-ordering): remembers each digest member's last value so
+// the runner can float changed members up. In-memory — losing it on restart just means one briefing
+// without ✦ markers (harmless), so no persistence file is warranted for a display nicety.
+const digestChanges = new DigestChangeStore();
 const alerts = new AlertStore({ file: paths.alerts });
 const profiles = new ProfileStore({ file: paths.profile });
 const notes = new NotesStore({ file: paths.notes });
@@ -171,6 +176,9 @@ const digestRunText = (chatId: number, name: string): Promise<DigestOutcome> => 
     // recap shows the most-recent saves, so stamp them recalled (saved-page-unread-nudge) — a page that
     // appears in the daily recap isn't "forgotten".
     savedRecap: (c) => { const list = saved.list(c); const recap = readingRecap(list); if (recap) saved.markRecalled(c, [...list].sort((a, b) => b.created - a.created).slice(0, 5).map((p) => p.url), Date.now()); return recap; },
+    // Smart ordering (digest-smart-ordering): float members that changed since last run to the top with a
+    // ✦ marker. The DigestChangeStore remembers each member's last value + reports material change.
+    memberChanged: (c, dn, member, body) => digestChanges.changed(c, dn, member, body),
     // A chained-recipe member runs as a sequential workflow, not a literal task (digest-chain-member-literal).
     // Return the STRUCTURED result so the digest flags a chain that stopped early instead of showing its
     // partial output as a complete section (chain-partial-nonrun-paths).
