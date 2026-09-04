@@ -188,6 +188,28 @@ describe("handler — inline-button callbacks", () => {
     expect(sent[sent.length - 1]!.text).toMatch(/2\. LAX→EWR/);
   });
 
+  it("picking by TEXT ('open the 2nd', 'the last one') resends that list item (open-nth-result)", async () => {
+    const { handle, sent } = harness({
+      handleCommand: () => null,
+      runAgentFn: async () => ({ reply: "1. LAX→JFK $220\n2. LAX→EWR $260\n3. LAX→BUR $275", steps: 1, tools: [] }),
+    });
+    await handle({ chatId: 1, from: "u", text: "cheapest flights", messageId: 1 } as InboundMessage);
+    await handle({ chatId: 1, from: "u", text: "open the 2nd", messageId: 2 } as InboundMessage);
+    expect(sent[sent.length - 1]!.text).toMatch(/2\. LAX→EWR/);
+    await handle({ chatId: 1, from: "u", text: "the last one", messageId: 3 } as InboundMessage);
+    expect(sent[sent.length - 1]!.text).toMatch(/3\. LAX→BUR/);
+  });
+
+  it("picking an out-of-range index by text gives an honest count, not a wrong item", async () => {
+    const { handle, sent } = harness({
+      handleCommand: () => null,
+      runAgentFn: async () => ({ reply: "1. only\n2. two", steps: 1, tools: [] }),
+    });
+    await handle({ chatId: 1, from: "u", text: "list", messageId: 1 } as InboundMessage);
+    await handle({ chatId: 1, from: "u", text: "open the 5th", messageId: 2 } as InboundMessage);
+    expect(sent[sent.length - 1]!.text).toMatch(/only have 2 items/i);
+  });
+
   it("a pick on an item with a mid-text URL appends a 🔗 link line", async () => {
     const { handle, sent } = harness({
       runAgentFn: async () => ({ reply: "1. Cheap flight https://k.com/a to JFK\n2. Other option", steps: 1, tools: [] }),

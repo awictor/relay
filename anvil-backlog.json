@@ -140,7 +140,7 @@
       "title": "\"open the 2nd result\" — act on a numbered item from the last read_list/results",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "After read_list gives a numbered list, a user naturally says \"open #2\" / \"more on the third one\" — but the rows arent addressable; the agent must re-find the link. Making the last list indexable (like the inline pick buttons for search results) closes the list->act loop.",
       "how": "Cache the last read_list/extract_list rows per chat (incl. any url/link field); route \"open/show the Nth\" to browse/scrape that rows link. Reuse the existing result-picker cache pattern (inline-result-picker). Depends partly on session carryover for the smoothest flow but works standalone via the cached link."
     }
@@ -201,6 +201,10 @@
     {
       "item": "read-structured-current",
       "note": "read_list shipped: extracts structured rows from the CURRENT browsed session (post-filter/sort/search results), not a fresh URL — the finish to the interactive form arc. Reuses readCurrent(session) + extractListResult (dedup, cap) + the CSV path (add a spreadsheet ask -> list.csv). New agent tool read_list(fields,limit) + dispatch (needs prior browse; honest nothing-matched hint to try wait_for). No new backend method (reuses readCurrent). +3 dispatch tests (rows from current session; CSV on request; no-browse errors). LIVE e2e: browse quotes.toscrape -> readCurrent -> real Gemini extracted 10 rows (8 distinct authors) from the session. 2212 green. call-tested: TRUE. Completes browse->set_field->wait_for->read_list: filter a site + get structured rows/CSV back."
+    },
+    {
+      "item": "open-nth-result",
+      "note": "open-nth-result shipped: after a numbered list, a user can now TEXT \"open the 2nd\" / \"#3\" / \"number 4\" / \"the last one\" (not just tap the 1/2/3 button) and get that item + its link resent from the cached pickLists — no agent re-run. New parsePickIndex parser (digits, ordinals, number-words, #N, verb-gated + whole-message so a real task like \"3 day forecast\"/\"open example.com\" isnt hijacked; last->final item). Wired in handler after the more/link drilldown block, reusing the pick-tap resend logic + pickLists cache. Out-of-range -> honest count. +5 tests (10 parser + handler text-pick + out-of-range). /help updated. 2217 green. call-tested: n/a (pure logic + handler, no anvil path)."
     }
   ],
   "probes": [

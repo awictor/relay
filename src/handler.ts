@@ -7,7 +7,7 @@ import type { InboundMessage } from "./telegram.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
 import { runAgent, type AgentDeps } from "./agent.js";
 import { formatReply, formatReplyParts } from "./lib/format-reply.js";
-import { isMoreRequest, isLinkRequest, extractLinks, chunkFrom, deliveredLen } from "./lib/last-result.js";
+import { isMoreRequest, isLinkRequest, extractLinks, chunkFrom, deliveredLen, parsePickIndex } from "./lib/last-result.js";
 import { formatTurnLog } from "./lib/turn-log.js";
 import { friendlyError } from "./lib/failure.js";
 import { splitScheduleCommand } from "./lib/schedule.js";
@@ -1792,6 +1792,23 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         const links = linkSource ? extractLinks(linkSource) : [];
         if (links.length) { await deps.sendMessage(msg.chatId, links.join("\n")); return; }
         if (cached) { await deps.sendMessage(msg.chatId, "No links in that last answer."); return; }
+      }
+      // Pick an item from the last numbered list BY TEXT (open-nth-result): "open the 2nd", "#3",
+      // "the last one". The pick BUTTONS already do this on tap; this handles the users who TYPE it.
+      // Resends that one item + its link from the cached list (no agent re-run), mirroring the pick tap.
+      // Only fires when a list is cached AND the message parses as a slot ask, so a real task falls through.
+      {
+        const items = pickLists.get(msg.chatId);
+        const idx1 = items && items.length ? parsePickIndex(msg.text) : null;
+        if (items && items.length && idx1 !== null) {
+          const index = idx1 === -1 ? items.length - 1 : idx1 - 1; // -1 = "the last one"
+          const item = items[index];
+          if (!item) { await deps.sendMessage(msg.chatId, `I only have ${items.length} item${items.length === 1 ? "" : "s"} from that list — pick 1–${items.length}, or send the request again for a fresh list.`); return; }
+          const url = firstUrl(item.text);
+          const body = url && !item.text.trim().endsWith(url) ? `${item.text}\n\n🔗 ${url}` : item.text;
+          await deps.sendMessage(msg.chatId, `${index + 1}. ${body}`);
+          return;
+        }
       }
     }
 

@@ -120,6 +120,8 @@ Watch, then DO: add "then run <recipe>" to any watch — "watch jobs: new remote
 
 Watch a whole list at once: separate items with semicolons — "watch markets: btc price; eth price; gold price" — and I track them as one watchlist, sending a single update with only the ones that moved.
 
+Pick from a list: when I send a numbered list (flights, listings, results), tap a 1/2/3 button OR just text "open the 2nd" / "#3" / "the last one" and I'll pull it up with its link.
+
 See a watch's trend: "how has btc moved this week" or "btc trend" — I summarize the value from my logged checks (first→last, high/low), no re-fetch. Or "chart btc" / "graph my btc watch" for an actual line-chart image. Once a price watch has some history, each ping also tells you where it sits — "lowest in 30 days" or "near its high" — so you know if it's a good time.
 
 Pause without deleting: "snooze btc 3 days", "pause my morning digest" (until you resume it), or "snooze all" quiets an automation through travel or noise — say "resume btc" to turn it back on. The setup stays intact; nothing fires while paused.
