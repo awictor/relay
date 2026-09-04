@@ -125,6 +125,24 @@
       "status": "done",
       "why": "click/set_field/site_search use fixed sleeps (600-1500ms). A slow SPA filter or lazy result grid can render AFTER that, so read() captures a stale/empty page and the agent answers wrong. A wait-for-selector closes the race.",
       "how": "Add anvil waitFor(sessionId, selector|text, timeoutMs) that polls in-page (evaluate querySelector / body.innerText.includes) until present or timeout; expose as a wait_for tool the agent calls after an action before read. Live e2e on a page that loads content after a delay."
+    },
+    {
+      "id": "persist-browse-session-across-turns",
+      "title": "Keep a browse session alive across messages so a follow-up continues on the same page",
+      "impact": "high",
+      "effort": "L",
+      "status": "todo",
+      "why": "Every runAgent releases the session at the end (agent.ts:1926), so after \"open the flights page and filter to nonstop\" a follow-up \"now sort by price\" starts a brand-new session + re-navigates — the user cant iterate on a live page the way they would with a human assistant. This is the core multi-turn interactive experience the competitor sells.",
+      "how": "Add an opt-in per-chat session carryover: when a turn ends with an OPEN interactive page (browse used, not just scrape), stash {sessionId, url, lastActivity} per chat instead of releasing; a follow-up within an idle TTL (e.g. 3-5 min) reuses it; a reaper releases idle sessions. Guard resource use (one live session per chat, hard idle cap) + never carry a cookie-authed session silently. Needs anvil session-keepalive verified. Unit-test the carryover/reap logic offline; live e2e a 2-message filter-then-sort."
+    },
+    {
+      "id": "open-nth-result",
+      "title": "\"open the 2nd result\" — act on a numbered item from the last read_list/results",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "After read_list gives a numbered list, a user naturally says \"open #2\" / \"more on the third one\" — but the rows arent addressable; the agent must re-find the link. Making the last list indexable (like the inline pick buttons for search results) closes the list->act loop.",
+      "how": "Cache the last read_list/extract_list rows per chat (incl. any url/link field); route \"open/show the Nth\" to browse/scrape that rows link. Reuse the existing result-picker cache pattern (inline-result-picker). Depends partly on session carryover for the smoothest flow but works standalone via the cached link."
     }
   ],
   "history": [
@@ -203,6 +221,9 @@
     },
     {
       "note": "Interactive form path now complete: browse + click + type + set_field (select/checkbox/radio) + site_search + read, all safety-guarded. Two gaps surfaced: (1) after a filtered/sorted interactive session the agent can only read() raw text — extract_list runs on a fresh URL, so structured rows from the CURRENT session (post-filter results) arent directly extractable. (2) No wait-for-selector/settle tool: click/set_field use fixed sleeps, so a slow AJAX result (SPA filter, lazy grid) may be read before it renders -> stale/empty read. Seeded both."
+    },
+    {
+      "note": "Interactive arc COMPLETE + reliable: browse + site_search + type + set_field (dropdown/checkbox/radio) + wait_for + read + read_list (structured rows/CSV from the current session), all safety-guarded + live-verified. Whole browse roadmap (depth: pagination/scroll/load-more/extract/CSV; breadth: search/fill/select/wait/structured-read) is thorough. Next frontier surfaced: the browse SESSION is released at the end of every runAgent (agent.ts:1926), so a follow-up message (\"now sort by price\", \"open the 2nd result\") re-navigates from scratch instead of continuing on the open page — a real multi-turn-interaction gap, but L (cross-message session lifecycle + idle-timeout + resource/security). Seeded it + a smaller list-index follow-up."
     }
   ]
 }
