@@ -149,12 +149,29 @@ export function parseUnitConvert(text: string): { amount: number; from: string; 
   // from/to allow "/" so a speed unit ("km/h", "mi/h") is captured whole (units-speed-convert). The "of
   // <ingredient>" group stays letters-only so "100 km/h to mph" doesn't misfire on the density path.
   const m = t.match(/(-?\d+(?:\.\d+)?)\s*°?\s*([a-z][a-z /]*?)\s+(?:of\s+([a-z ]+?)\s+)?(?:in ?to|into|to|in)\s+°?\s*([a-z][a-z /]*?)\s*$/i);
-  if (!m) return null;
-  const amount = parseFloat(m[1]!);
-  const from = m[2]!.trim(), to = m[4]!.trim();
-  const of = m[3]?.trim();
-  if (!from || !to) return null;
-  return { amount, from, to, ...(of ? { of } : {}) };
+  if (m) {
+    const amount = parseFloat(m[1]!);
+    const from = m[2]!.trim(), to = m[4]!.trim();
+    const of = m[3]?.trim();
+    if (from && to) return { amount, from, to, ...(of ? { of } : {}) };
+  }
+  // No explicit "to <unit>". For a bare SPEED query — "how fast is 50 knots", "50 knots", "100 km/h" —
+  // default the target to the sensible counterpart so a casual ask lands an answer instead of null
+  // (convert-speed-bare-query): imperial mph <-> metric km/h, and knots/m·s/ft·s -> mph. Only speed
+  // units get this fallback — a bare "5 kg" or "10 miles" is NOT a conversion request (no target) and
+  // still returns null, so unrelated messages don't get force-converted.
+  const bare = t.match(/(?:how\s+fast\s+is\s+)?(-?\d+(?:\.\d+)?)\s*([a-z][a-z /]*?)\s*$/i);
+  if (bare) {
+    const amount = parseFloat(bare[1]!);
+    const from = bare[2]!.trim();
+    const u = UNITS[normalizeUnit(from)];
+    if (u && u.dim === "speed") {
+      const SPEED_DEFAULT: Record<string, string> = { "km/h": "mph", mph: "km/h", "m/s": "km/h", knot: "mph", "ft/s": "mph" };
+      const to = SPEED_DEFAULT[u.label === "kn" ? "knot" : u.label] ?? "mph";
+      return { amount, from, to };
+    }
+  }
+  return null;
 }
 
 // Common cooking-ingredient densities in grams per milliliter (unit-convert-density). Lets a volume<->mass

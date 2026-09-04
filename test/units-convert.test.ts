@@ -148,3 +148,21 @@ describe("runConvert — speed end-to-end (units-speed-convert)", () => {
     expect(runConvert("convert 120 kph to mph please")).toMatch(/74\.56 mph/);
   });
 });
+
+describe("runConvert — bare speed query defaults its target (convert-speed-bare-query)", () => {
+  it("a speed with NO explicit target picks the sensible counterpart", () => {
+    expect(runConvert("how fast is 50 knots")).toMatch(/50 kn = 57\.54 mph/); // knots -> mph
+    expect(runConvert("50 knots")).toMatch(/57\.54 mph/);
+    expect(runConvert("100 km/h")).toMatch(/100 km\/h = 62\.14 mph/);          // metric -> mph
+    expect(runConvert("60 mph")).toMatch(/60 mph = 96\.56 km\/h/);             // imperial -> km/h
+    expect(runConvert("30 m/s")).toMatch(/= 108 km\/h/);                        // m/s -> km/h
+    expect(runConvert("how fast is 100 kph")).toMatch(/62\.14 mph/);
+  });
+  it("a bare NON-speed amount+unit is NOT force-converted (stays null)", () => {
+    // Only speed gets the no-target fallback — a length/mass/volume with no target is not a conversion
+    // request, so an unrelated message ("5 kg", "10 miles", "3 apples") still falls through to null.
+    for (const t of ["5 kg", "10 miles", "100 grams", "2 cups", "180C", "3 apples", "hello there"]) {
+      expect(runConvert(t)).toBeNull();
+    }
+  });
+});

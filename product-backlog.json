@@ -3479,9 +3479,27 @@
       "title": "Route a bare \"how fast is 50 knots\" / \"50 knots in mph\" naturally (no \"to\")",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Speed conversion now works for \"X to Y\" / \"X in Y\", but a natural \"how fast is 50 knots\" (no explicit target) returns null. A user asking casually gets a slow browse instead of a sensible default (knots->mph, m/s->km/h).",
       "how": "In parseUnitConvert, when only a source speed unit is given (no \"to/in <unit>\"), default the target to the user’s locale counterpart (knots/m·s -> mph or km/h). Keep it speed-only so ambiguous single-unit queries elsewhere don’t misfire. Add tests."
+    },
+    {
+      "id": "date-until-weekday",
+      "title": "date_math: \"how many days until next Friday\" / \"days until Monday\"",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "Probe: runDateCalc returns null for \"how many days until next Friday\" and \"days until Monday\" — a common casual date question (\"how long till the weekend\"). Falls to a slow agent turn or an invented answer instead of exact calendar math.",
+      "how": "In datecalc.ts, add a weekday-target branch to the until-parser: resolve \"next <weekday>\"/\"<weekday>\" to the next future date matching that weekday (0-6 days out; \"next\" skips to the following week if today matches). Reuse weekdayName. Add tests for each weekday + \"next\" semantics."
+    },
+    {
+      "id": "date-since",
+      "title": "date_math: \"days since <date>\" (elapsed, not remaining)",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "Probe: \"days since 2020-01-01\" returns null — the converse of \"days until\". Users ask both (\"how long since my last...\", \"days since launch\"). Currently only forward countdowns work.",
+      "how": "In datecalc.ts add a \"since/ago\" branch that computes elapsed days from a past date to today (positive count), mirroring the until-parser. Reject a future date (\"since\" a future date is nonsense — point them to \"until\"). Add tests."
     }
   ],
   "history": [
@@ -5028,6 +5046,10 @@
     {
       "item": "calc-natural-phrasing",
       "note": "calc.ts now handles 3 natural phrasings that used to ERROR: (1) \"20% tip on 47\" / \"18% gratuity on 200\" -> the tip AMOUNT (Y*X/100 = 9.40), matching the SYSTEM_PROMPT example (was \"I dont know tip\"); (2) scientific notation \"1e3\"/\"6.02e23\"/\"2.5e-4\" as a number (was unknown \"e\"; bare \"e\" still errors since no digits follow); (3) trailing factorial \"5!\"->120 with whole-number + 170-overflow guards (was \"Unexpected character !\"). Existing percent/mod/currency idioms unchanged. +4 tests, 2163 green."
+    },
+    {
+      "item": "convert-speed-bare-query",
+      "note": "A bare speed query with no explicit target now defaults to the sensible counterpart (convert-speed-bare-query): \"how fast is 50 knots\"/\"50 knots\"->57.54 mph, \"100 km/h\"->62.14 mph, \"60 mph\"->96.56 km/h, \"30 m/s\"->108 km/h. Added a no-target fallback in parseUnitConvert GATED to speed units only, so a bare \"5 kg\"/\"10 miles\"/\"3 apples\" still returns null (not force-converted) and unrelated messages fall through to the agent. +2 tests, 2165 green."
     }
   ],
   "audits": [
