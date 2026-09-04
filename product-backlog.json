@@ -3609,6 +3609,24 @@
       "status": "done",
       "why": "A morning digest (\"weather, hn, btc, calendar\") always renders members in definition order. A daily-reliant user skims for whats DIFFERENT — a price that moved a lot, a weather alert, a new top story. Leading with the changed/urgent member (vs static order) makes the briefing scannable + is a real retention lever competitors lean on.",
       "how": "In digest-runner, after gathering member outputs, optionally reorder/flag: a member whose value moved materially vs last run (reuse the alert deadband + a per-digest last-value cache) floats up with a small marker; unchanged members follow. Gate behind a flag or make it the default with a subtle marker. Offline test the reorder + change-detect; live e2e a 2-member digest across two runs."
+    },
+    {
+      "id": "digest-skip-unchanged",
+      "title": "Digest option: only send when SOMETHING changed (quiet mornings stay quiet)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "With change-detection now in place (digest-smart-ordering), a natural follow-on: a user can set a digest to ONLY ping when a member actually changed — a market watch that hasnt moved + no new stories shouldnt buzz the phone every morning. Reduces notification fatigue, a real retention lever.",
+      "how": "Reuse DigestChangeStore: add an opt-in per-digest \"only if changed\" flag (define syntax + store field). In digest-runner, when the flag is set and NO member changed (all first-run-seeded or within deadband), return a silent outcome (like null) for a SCHEDULED fire; /run still shows it. Offline test: unchanged -> silent, changed -> sends."
+    },
+    {
+      "id": "digest-change-summary",
+      "title": "Digest: one-line \"whats new\" summary header (what moved + by how much)",
+      "impact": "low",
+      "effort": "M",
+      "status": "todo",
+      "why": "Beyond floating changed members, a single lead line (\"btc +9%, 2 new stories\") lets a reader get the gist without reading the whole briefing.",
+      "how": "In digest-runner, when members changed, compute a compact delta summary (reuse firstNumber for the % move) + prepend as a header line. Offline test."
     }
   ],
   "history": [
