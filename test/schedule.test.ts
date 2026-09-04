@@ -885,6 +885,12 @@ describe("parseSnoozeCommand (snooze-automations)", () => {
     expect(parseSnoozeCommand("pause btc for 2 hours", NOW)).toEqual({ action: "pause", which: "btc", untilMs: NOW + 2 * HR });
     expect(parseSnoozeCommand("mute my morning digest 1 week", NOW)).toEqual({ action: "pause", which: "morning digest", untilMs: NOW + 7 * DAY });
   });
+  it("parses a WORD-quantity duration 'an hour' / 'a week' / 'a couple days' / 'a few hours' (snooze-word-duration)", () => {
+    expect(parseSnoozeCommand("snooze btc an hour", NOW)).toEqual({ action: "pause", which: "btc", untilMs: NOW + HR });
+    expect(parseSnoozeCommand("snooze btc for a week", NOW)).toEqual({ action: "pause", which: "btc", untilMs: NOW + 7 * DAY });
+    expect(parseSnoozeCommand("snooze btc a couple days", NOW)).toEqual({ action: "pause", which: "btc", untilMs: NOW + 2 * DAY });
+    expect(parseSnoozeCommand("pause btc a few hours", NOW)).toEqual({ action: "pause", which: "btc", untilMs: NOW + 3 * HR });
+  });
   it("parses an indefinite pause (no duration -> no untilMs)", () => {
     expect(parseSnoozeCommand("pause btc", NOW)).toEqual({ action: "pause", which: "btc" });
     expect(parseSnoozeCommand("snooze all", NOW)).toEqual({ action: "pause", which: "all" });

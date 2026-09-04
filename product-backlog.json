@@ -3401,6 +3401,15 @@
       "status": "todo",
       "why": "Every autonomously-reachable offline surface is worked out: reliability (delivery+persistence gating), 5 new capabilities, idiom-drift, message-copy, and now the lib-phrasing vein (10 real fixes, several silent-wrong-answer/data-integrity) all at 2114 green. anvil DOWN every run this session; subagent cap 200/200 blocks the real 3-lens AUDIT.",
       "how": "OWNER: (1) confirm-to-act product-UX decision. (2) start anvil for the overdue live e2e. (3) FRESH Claude session resets the cap for a real 3-lens AUDIT - the highest-leverage move to seed genuinely new directions. Until one, /product-loop returns clean."
+    },
+    {
+      "id": "snooze-until-date",
+      "title": "parseSnoozeCommand: support 'snooze X until <day/date>' (date-relative expiry)",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "'snooze btc until monday' / 'until tomorrow' / 'until the 15th' currently fold the clause into the name with no expiry (indefinite). A date-relative snooze is a natural phrasing; reuse parseDate to compute untilMs.",
+      "how": "After the duration match fails, try a 'until <date-phrase>' match; parse the phrase with the existing parseDate (future-preferring) -> untilMs = start-of-that-day. Strip the clause off the name. Reject a past date. +test."
     }
   ],
   "history": [
@@ -4827,6 +4836,10 @@
     {
       "item": "chart-noun-first",
       "note": "phrasing gap: parseChartRequest only took verb-first ('chart btc'), so noun-first 'btc chart' / 'my weight graph' returned null. Added a noun-first pattern (name + trailing chart/graph/plot) with a trailing-window carve-out ('eth chart this week'). Verb-first + text-trend-null-passthrough intact. +1 test. 2114 green. This closes the lib-phrasing probe class - alerts (k/m suffix, below/above/hits robust) + chart were the last two; both now covered."
+    },
+    {
+      "item": "snooze-word-duration",
+      "note": "phrasing gap in parseSnoozeCommand: the duration match was digit-only, so 'snooze btc for a week' / 'an hour' / 'a couple days' left the quantity in the NAME ('btc for a week') with NO expiry -> an INDEFINITE pause on a phrasing that means a bounded one (user's alert silently frozen forever). Added word-quantity support (a/an->1, a couple->2, a few->3). Digit durations + zero-guard + indefinite 'pause btc' intact. +1 test. 2115 green. chain-steps probed clean."
     }
   ],
   "audits": [
@@ -5333,6 +5346,11 @@
       "lens": "chart/alerts phrasing probe (vein closed)",
       "surfaced": "chart missed noun-first 'btc chart' (fixed). alerts parseAlertCommand robust (50k/100k/3k suffixes, below/above/under/hits/reaches, weather-cond, watchlist, then-run; colon-less 'alert me when...' null is BY DESIGN - alerts need a name). The lib-phrasing vein is now SWEPT: 10 real fixes total across calc/convert/unitprice/log(x2)/countdown/places/weather/chart + network-msg, then clean across directions/translate/geocode/scores/fun/alerts. Genuinely exhausted.",
       "seeded": "owner-levers-remain-final"
+    },
+    {
+      "lens": "snooze/chain phrasing probe",
+      "surfaced": "parseChainSteps clean (>> split, 'then' correctly not split). parseSnoozeCommand dropped WORD-quantity durations ('an hour'/'a week'/'a couple days') -> indefinite pause instead of bounded (real: alert frozen forever on a common phrasing). Fixed. 'until <date>' relative snooze still unsupported (bigger, date-relative - seeded). 11 lib-phrasing fixes now.",
+      "seeded": "snooze-until-date"
     }
   ]
 }

@@ -173,11 +173,17 @@ export function parseSnoozeCommand(text: string, now: number): { action: "pause"
   const pause = t.match(/^\s*(?:snooze|pause|mute)\s+(?:my\s+)?(.+?)\s*$/i);
   if (!pause) return null;
   let rest = pause[1]!.trim();
-  // A trailing duration: "for 3 days" / "3 days" / "2 hours" / "1 week" / "90 min". Strip it off the name.
-  const dur = rest.match(/(?:\s+for)?\s+(\d+)\s*(min(?:ute)?s?|hours?|hrs?|days?|weeks?|wks?)\s*$/i);
+  // A trailing duration: "for 3 days" / "3 days" / "2 hours" / "1 week" / "90 min", OR a WORD quantity
+  // "an hour" / "a week" / "a couple days" / "a few hours" (snooze-word-duration): the digit-only match
+  // left "btc for a week" as the NAME with no expiry — an indefinite pause on a phrasing that means a
+  // bounded one. Word quantities map a->1, couple->2, few->3.
+  const dur = rest.match(/(?:\s+for)?\s+(\d+)\s*(min(?:ute)?s?|hours?|hrs?|days?|weeks?|wks?)\s*$/i)
+    || rest.match(/(?:\s+for)?\s+(a|an|a\s+couple(?:\s+of)?|a\s+few)\s+(min(?:ute)?s?|hours?|hrs?|days?|weeks?|wks?)\s*$/i);
   let untilMs: number | undefined;
   if (dur) {
-    const n = parseInt(dur[1]!, 10);
+    const WORD_N: Record<string, number> = { a: 1, an: 1, "a couple": 2, "a couple of": 2, "a few": 3 };
+    const rawN = dur[1]!.toLowerCase().replace(/\s+/g, " ");
+    const n = /^\d+$/.test(rawN) ? parseInt(rawN, 10) : (WORD_N[rawN] ?? 0);
     // Always STRIP the duration clause off the name (even when n===0) so "snooze btc for 0 hours" doesn't
     // leave "btc 0 hours" as the name — and a zero/negative duration is a no-op, NOT an indefinite pause
     // (snooze-zero-duration-guard): a fat-fingered "snooze btc 0 days" must not silently freeze btc
