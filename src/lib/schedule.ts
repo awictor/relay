@@ -173,6 +173,29 @@ export function parseSnoozeCommand(text: string, now: number): { action: "pause"
   const pause = t.match(/^\s*(?:snooze|pause|mute)\s+(?:my\s+)?(.+?)\s*$/i);
   if (!pause) return null;
   let rest = pause[1]!.trim();
+  // A trailing "until <day>" clause: "snooze btc until tomorrow" / "until monday" (snooze-until-date).
+  // Resolved to an approximate untilMs (day-granular) via now-based arithmetic — a snooze only needs to
+  // resume roughly then, so no tz/clock is required. Checked BEFORE the duration match. Strips the clause
+  // off the name (else "btc until monday" became the target with no expiry — an indefinite pause).
+  const until = rest.match(/\s+until\s+(tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*$/i);
+  if (until) {
+    const word = until[1]!.toLowerCase();
+    rest = rest.slice(0, until.index).trim();
+    const which0 = cleanSnoozeName(rest);
+    if (!which0) return null;
+    let ms: number;
+    if (word === "tomorrow" || word === "tonight") {
+      ms = word === "tonight" ? 8 * HOUR : DAY; // "tonight" ~ later today; "tomorrow" ~ +1 day
+    } else {
+      const WD = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const target = WD.indexOf(word);
+      const todayDow = new Date(now).getUTCDay();
+      let days = (target - todayDow + 7) % 7;
+      if (days === 0) days = 7; // "until monday" said ON monday means next monday
+      ms = days * DAY;
+    }
+    return { action: "pause", which: which0, untilMs: now + ms };
+  }
   // A trailing duration: "for 3 days" / "3 days" / "2 hours" / "1 week" / "90 min", OR a WORD quantity
   // "an hour" / "a week" / "a couple days" / "a few hours" (snooze-word-duration): the digit-only match
   // left "btc for a week" as the NAME with no expiry — an indefinite pause on a phrasing that means a

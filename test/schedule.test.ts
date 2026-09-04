@@ -891,6 +891,13 @@ describe("parseSnoozeCommand (snooze-automations)", () => {
     expect(parseSnoozeCommand("snooze btc a couple days", NOW)).toEqual({ action: "pause", which: "btc", untilMs: NOW + 2 * DAY });
     expect(parseSnoozeCommand("pause btc a few hours", NOW)).toEqual({ action: "pause", which: "btc", untilMs: NOW + 3 * HR });
   });
+  it("parses an 'until <day>' snooze (snooze-until-date)", () => {
+    const wed = Date.UTC(2026, 8, 2, 12, 0, 0); // a Wednesday (dow 3)
+    expect(parseSnoozeCommand("snooze btc until tomorrow", wed)).toEqual({ action: "pause", which: "btc", untilMs: wed + DAY });
+    expect(parseSnoozeCommand("snooze btc until friday", wed)).toEqual({ action: "pause", which: "btc", untilMs: wed + 2 * DAY });
+    expect(parseSnoozeCommand("snooze btc until wednesday", wed)).toEqual({ action: "pause", which: "btc", untilMs: wed + 7 * DAY }); // same day -> next week
+    expect(parseSnoozeCommand("snooze btc until monday", wed)).toEqual({ action: "pause", which: "btc", untilMs: wed + 5 * DAY });
+  });
   it("parses an indefinite pause (no duration -> no untilMs)", () => {
     expect(parseSnoozeCommand("pause btc", NOW)).toEqual({ action: "pause", which: "btc" });
     expect(parseSnoozeCommand("snooze all", NOW)).toEqual({ action: "pause", which: "all" });

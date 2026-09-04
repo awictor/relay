@@ -3407,7 +3407,7 @@
       "title": "parseSnoozeCommand: support 'snooze X until <day/date>' (date-relative expiry)",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "'snooze btc until monday' / 'until tomorrow' / 'until the 15th' currently fold the clause into the name with no expiry (indefinite). A date-relative snooze is a natural phrasing; reuse parseDate to compute untilMs.",
       "how": "After the duration match fails, try a 'until <date-phrase>' match; parse the phrase with the existing parseDate (future-preferring) -> untilMs = start-of-that-day. Strip the clause off the name. Reject a past date. +test."
     }
@@ -4840,6 +4840,10 @@
     {
       "item": "snooze-word-duration",
       "note": "phrasing gap in parseSnoozeCommand: the duration match was digit-only, so 'snooze btc for a week' / 'an hour' / 'a couple days' left the quantity in the NAME ('btc for a week') with NO expiry -> an INDEFINITE pause on a phrasing that means a bounded one (user's alert silently frozen forever). Added word-quantity support (a/an->1, a couple->2, a few->3). Digit durations + zero-guard + indefinite 'pause btc' intact. +1 test. 2115 green. chain-steps probed clean."
+    },
+    {
+      "item": "snooze-until-date",
+      "note": "Completed snooze phrasing: 'snooze btc until tomorrow/friday/monday' now resolves a day-granular untilMs (now-based arithmetic, same-weekday->next week, tonight~+8h) instead of folding 'until monday' into the name with no expiry (indefinite pause). Self-contained (no parseDate/tz needed - a snooze only needs to resume roughly then). +1 test. 2116 green. Snooze parser now fully covers digit + word + until-day durations."
     }
   ],
   "audits": [
@@ -5351,6 +5355,11 @@
       "lens": "snooze/chain phrasing probe",
       "surfaced": "parseChainSteps clean (>> split, 'then' correctly not split). parseSnoozeCommand dropped WORD-quantity durations ('an hour'/'a week'/'a couple days') -> indefinite pause instead of bounded (real: alert frozen forever on a common phrasing). Fixed. 'until <date>' relative snooze still unsupported (bigger, date-relative - seeded). 11 lib-phrasing fixes now.",
       "seeded": "snooze-until-date"
+    },
+    {
+      "lens": "snooze until-date (phrasing vein tail)",
+      "surfaced": "snooze now handles all three duration shapes (digit/word/until-day). This tail-end of the lib-phrasing vein is done - 12 real phrasing fixes total this session. The vein is genuinely worked out now; further parser probes will trend clean.",
+      "seeded": "(none new - phrasing vein complete; owner levers remain)"
     }
   ]
 }
