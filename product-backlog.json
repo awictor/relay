@@ -4882,6 +4882,10 @@
     {
       "item": "phrasing-vein-clean-pass",
       "note": "Clean pass on youtube-id + news parsing - no code change (green tree, 2123). The lib-phrasing+setter vein produced 16 real user-facing fixes/additions this session (calc/convert/unitprice/log x2/countdown/places/weather/network-msg/chart/snooze x2/setlocation/citreply/units-pref/meal) then went clean. Not manufacturing a change; vein worked out."
+    },
+    {
+      "item": "readlater-recall-more",
+      "note": "phrasing gap: parseSavedRecall missed common recall phrasings - bare 'my saved pages' (only 'my reading list' matched), 'recall'/'pull up my saved ... on X', and 'bookmark' as a save synonym ('what did I bookmark', 'my bookmarks about rust'). All -> null (user couldn't get back what they saved). Added the recall/pull-up/get verbs + bookmark synonym + bare 'my saved [pages]' + 'on X' topic. +1 test. 2124 green. read-it-later read side now matches the way people actually ask."
     }
   ],
   "audits": [
@@ -5422,6 +5426,11 @@
     {
       "lens": "youtube/news phrasing probe (clean)",
       "surfaced": "parseYouTubeId robust (watch/youtu.be/shorts/embed/m. + tail params + surrounding text all extract). parseHeadlines + parseNutrition are feed/response-body parsers (not user text); their user-facing side is LLM arg-extraction, robust. NO user-text-parser gap this pass. The phrasing/setter vein (16 real fixes this session) is now genuinely worked out - remaining parsers are body-parsers or already-covered."
+    },
+    {
+      "lens": "readlater recall phrasing probe",
+      "surfaced": "parseSavedRecall missed bare 'my saved pages', 'recall/pull up', and 'bookmark' synonym - fixed. This is the read side of the read-it-later feature (capture worked, but recall phrasings were narrow). 17 phrasing/setter fixes+additions this session. Vein still yielding on the read-back paths.",
+      "seeded": "(read-it-later recall covered; owner levers remain)"
     }
   ]
 }

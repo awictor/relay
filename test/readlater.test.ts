@@ -33,6 +33,13 @@ describe("parseSavedRecall", () => {
     expect(parseSavedRecall("search my saved for tariffs")).toEqual({ topic: "tariffs" });
     expect(parseSavedRecall("/saved rust")).toEqual({ topic: "rust" });
   });
+  it("handles more natural recall phrasings: bare 'my saved pages', 'recall'/'pull up', 'bookmark', 'on X' (readlater-recall-more)", () => {
+    expect(parseSavedRecall("my saved pages")).toEqual({ topic: "" });
+    expect(parseSavedRecall("recall my saved articles on AI")).toEqual({ topic: "AI" });
+    expect(parseSavedRecall("what did I bookmark")).toEqual({ topic: "" });
+    expect(parseSavedRecall("my bookmarks about rust")).toEqual({ topic: "rust" });
+    expect(parseSavedRecall("pull up my saved links on climate")).toEqual({ topic: "climate" });
+  });
   it("is null for non-recall chatter", () => {
     expect(parseSavedRecall("what's the weather")).toBeNull();
     expect(parseSavedRecall("save this https://ex.com")).toBeNull();

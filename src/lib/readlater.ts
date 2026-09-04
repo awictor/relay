@@ -47,13 +47,16 @@ export function parseSavedRecall(text: string): { topic: string } | null {
   // "/saved [topic]" explicit command.
   let m = t.match(/^\s*\/saved\b\s*(.*)$/i);
   if (m) return { topic: cleanTopic(m[1]!) };
-  // "what did I save (about X)" / "what have I saved (about X)".
-  m = t.match(/^\s*what\s+(?:did|have)\s+i\s+save[d]?\b(?:\s+about\s+(.+?)|\s+on\s+(.+?))?\s*\??\s*$/i);
-  if (m) return { topic: cleanTopic(m[1] ?? m[2] ?? "") };
-  // "show/list my saved [pages/articles] (about X)" / "my reading list (about X)".
-  m = t.match(/^\s*(?:show|list)\s+(?:me\s+)?my\s+(?:saved|reading\s+list|bookmarks?)\b(?:\s+(?:pages?|articles?|links?))?(?:\s+about\s+(.+?))?\s*\??\s*$/i);
+  // "what did I save/bookmark (about/on X)" / "what have I saved/bookmarked (about X)". "bookmark" is a
+  // common synonym for save (readlater-recall-more).
+  m = t.match(/^\s*what\s+(?:did|have)\s+i\s+(?:save[d]?|bookmark(?:ed)?)\b(?:\s+(?:about|on)\s+(.+?))?\s*\??\s*$/i);
   if (m) return { topic: cleanTopic(m[1] ?? "") };
-  m = t.match(/^\s*my\s+reading\s+list\b(?:\s+about\s+(.+?))?\s*\??\s*$/i);
+  // "show/list/recall my saved [pages/articles] (about/on X)" / "my reading list (about X)". Adds the
+  // "recall" verb + a bare "my saved pages/articles" (no "reading list" needed) + an "on X" topic.
+  m = t.match(/^\s*(?:show|list|recall|pull\s+up|get)\s+(?:me\s+)?my\s+(?:saved|reading\s+list|bookmarks?|bookmarked)\b(?:\s+(?:pages?|articles?|links?))?(?:\s+(?:about|on)\s+(.+?))?\s*\??\s*$/i);
+  if (m) return { topic: cleanTopic(m[1] ?? "") };
+  // A bare "my saved [pages/articles/links]" / "my bookmarks" (about/on X) — no leading verb.
+  m = t.match(/^\s*my\s+(?:saved(?:\s+(?:pages?|articles?|links?))?|reading\s+list|bookmarks?)\b(?:\s+(?:about|on)\s+(.+?))?\s*\??\s*$/i);
   if (m) return { topic: cleanTopic(m[1] ?? "") };
   // "search my saved for X" / "find in my saved X".
   m = t.match(/^\s*(?:search|find\s+in)\s+my\s+saved\b(?:\s+(?:for|about)\s+(.+?))?\s*\??\s*$/i);
