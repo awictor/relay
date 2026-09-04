@@ -159,6 +159,11 @@ describe("parseRunCommand", () => {
     expect(parseRunCommand("run recipe btc")).toBe("btc");
     // a recipe literally named "recipe X" is not addressable via the keyword form — acceptable edge.
   });
+  it("strips a leading my/the + a trailing courtesy so the recipe lookup gets the bare name (run-command-name-tail)", () => {
+    expect(parseRunCommand("run my morning digest")).toBe("morning digest");
+    expect(parseRunCommand("run btc please")).toBe("btc");
+    expect(parseRunCommand("run the daily report thanks")).toBe("daily report");
+  });
   it("returns null for non-run text", () => {
     expect(parseRunCommand("running late")).toBeNull(); // "run" needs a space after it
     expect(parseRunCommand("what is /run")).toBeNull();

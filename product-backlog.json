@@ -4907,6 +4907,10 @@
     {
       "item": "alert-edit-name-connector-bleed",
       "note": "parseAlertEdit name extraction bled connector/filler words: 'edit btc to fire above 60k' -> name 'btc to', 'make btc fire when it drops below 40000' -> 'btc fire when it', 'change my btc alert' kept 'my'. The wrong name means the edit targets a non-existent alert (no-op) or the wrong one. Fixed: strip a trailing connector tail (to/fire/so/it/fires/when/that/should) + leading my/the off the captured name -> clean 'btc'. +3 tests (incl. a create-not-edit null guard). 2130 green."
+    },
+    {
+      "item": "run-command-name-tail",
+      "note": "parseRunCommand didn't strip a leading my/the or a trailing courtesy: 'run my morning digest' -> 'my morning digest', 'run btc please' -> 'btc please' — neither matches a saved recipe, so a re-run silently fails ('no recipe by that name'). Added stripTrailingCourtesy + leading my/the strip. Slot-arg form ('run flow with item=milk') preserved for parseRunWithArgs downstream. +1 test. 2131 green."
     }
   ],
   "audits": [
@@ -5467,6 +5471,11 @@
       "lens": "alert-edit phrasing probe",
       "surfaced": "parseAlertEdit leaked connector words into the alert name (edit targeted the wrong/nonexistent alert). Fixed. This is the retune path for existing price alerts - a mis-parsed name = silent no-op on a change the user asked for. 20 vein fixes total. Alert create + edit now both clean.",
       "seeded": "(alert edit clean; owner levers remain)"
+    },
+    {
+      "lens": "recipe-run phrasing probe",
+      "surfaced": "parseRunCommand leaked my/the + courtesy into the recipe name -> re-run of a saved recipe silently failed. Fixed. This completes the recipe CRUD (save/run/edit-via-alert). 21 vein fixes. The verbatim-name parsers (run/edit/forget) all needed the same my/the/courtesy tail cleanup that the create parsers got earlier.",
+      "seeded": "(recipe run clean; owner levers remain)"
     }
   ]
 }

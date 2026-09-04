@@ -79,11 +79,15 @@ export function parseScheduleThat(text: string): { clause: string } | null {
  * "recipe" keyword (DEV-0130: explicit recipe intent so a same-named digest can't shadow it) is
  * stripped from BOTH the slash and natural forms. Returns the name or null. */
 export function parseRunCommand(text: string): string | null {
-  const t = text.trim();
+  // Drop a trailing courtesy ("run btc please" -> "btc") + a leading my/the ("run my morning digest" ->
+  // "morning digest") so the recipe lookup gets the bare name, not "btc please"/"my morning digest" which
+  // match no saved recipe (run-command-name-tail).
+  const t = stripTrailingCourtesy(text.trim());
+  const clean = (s: string) => normalizeName(s.replace(/^\s*(?:my|the)\s+/i, ""));
   const slash = t.match(/^\/run\s+(?:recipe\s+)?(.+)$/i);
-  if (slash) return normalizeName(slash[1]!);
+  if (slash) return clean(slash[1]!) || null;
   const nat = t.match(/^run\s+(?:recipe\s+)?(.+)$/i);
-  if (nat) return normalizeName(nat[1]!);
+  if (nat) return clean(nat[1]!) || null;
   return null;
 }
 
