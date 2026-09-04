@@ -4943,6 +4943,10 @@
     {
       "item": "anvil-live-safety-verify",
       "note": "With anvil up, live-verified the dangerous-action safety on the real pipe: isDangerousAction correctly flags 'Buy Now'/'submit payment' (true) vs 'search box' (false), and end-to-end runAgent('...place an order') REFUSED cleanly ('I can't place orders ... do it yourself') without attempting a committing click - the guard + system-prompt boundary hold live, not just in unit tests. No committing action reached anvil. call-tested: true (safety path). No code change."
+    },
+    {
+      "item": "anvil-live-session-lifecycle",
+      "note": "Live-verified multi-step session lifecycle against real Chrome: createSession -> navigate(example.com) -> readCurrent (SAME session reused, title+content correct) -> releaseSession, 446ms, EXIT 0. The session-reuse + clean-release invariant (unit-tested this session) holds live. 4th distinct live check now green: core errand, harder errands (HN scrape/extract), safety-refusal, session-lifecycle. No code change."
     }
   ],
   "audits": [
@@ -5546,6 +5550,11 @@
       "lens": "live safety-boundary probe",
       "surfaced": "The read-only/no-commit product boundary is verified LIVE: the agent declines a 'place an order' request rather than driving a real committing click, and the dangerous-action classifier is correct on money/commit verbs. This is the trust-critical guarantee (Relay never buys/pays/commits on its own) proven against the real browser pipe. Only remaining lever: confirm-to-act (owner) - which would ADD an optional confirm step, orthogonal to this hard refusal.",
       "seeded": "(safety verified live; confirm-to-act owner-gated)"
+    },
+    {
+      "lens": "live session-lifecycle probe",
+      "surfaced": "anvil session create/navigate/read-reuse/release verified live (446ms) - the browser-state invariant holds against real Chrome, not just the mock backend. Across 4 live checks this session the whole pipe (fetch, act, safety, session mgmt) is proven. Autonomous + live-verification work is complete; confirm-to-act (owner product-UX) is the only substantive lever left.",
+      "seeded": "(pipe fully live-verified; confirm-to-act owner-gated)"
     }
   ]
 }
