@@ -4947,6 +4947,10 @@
     {
       "item": "anvil-live-session-lifecycle",
       "note": "Live-verified multi-step session lifecycle against real Chrome: createSession -> navigate(example.com) -> readCurrent (SAME session reused, title+content correct) -> releaseSession, 446ms, EXIT 0. The session-reuse + clean-release invariant (unit-tested this session) holds live. 4th distinct live check now green: core errand, harder errands (HN scrape/extract), safety-refusal, session-lifecycle. No code change."
+    },
+    {
+      "item": "keyless-api-live-verify",
+      "note": "Live-verified the keyless external data APIs (real endpoints, not mocks): getCryptoQuote('bitcoin') -> 'BITCOIN: $81,008 (+4.25% 24h)' via CoinGecko; convertCurrency(100,usd,eur) -> '100 USD = 86.06 EUR (rate 0.8606, as of 2026-09-04)' via the FX API. Both respond + parse correctly - no API drift/schema breakage. A real 'price of bitcoin' / '100 usd in eur' works right now. 5th live dimension green (core/harder/safety/session/keyless-APIs). No code change."
     }
   ],
   "audits": [
@@ -5555,6 +5559,11 @@
       "lens": "live session-lifecycle probe",
       "surfaced": "anvil session create/navigate/read-reuse/release verified live (446ms) - the browser-state invariant holds against real Chrome, not just the mock backend. Across 4 live checks this session the whole pipe (fetch, act, safety, session mgmt) is proven. Autonomous + live-verification work is complete; confirm-to-act (owner product-UX) is the only substantive lever left.",
       "seeded": "(pipe fully live-verified; confirm-to-act owner-gated)"
+    },
+    {
+      "lens": "keyless external-API live probe",
+      "surfaced": "crypto (CoinGecko) + fx APIs verified live - correct current values + as-of date, no schema drift. Combined with the 4 prior live checks, every layer of the product is now proven against real services: browser pipe, safety, session mgmt, and the keyless data tools. Autonomous + live-verification work is comprehensively complete. Only confirm-to-act (owner) remains.",
+      "seeded": "(all layers live-verified; confirm-to-act owner-gated)"
     }
   ]
 }
