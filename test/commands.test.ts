@@ -78,6 +78,36 @@ describe("handleCommand", () => {
     expect(handleCommand("who made you")).toMatch(/free to use/i);
     expect(handleCommand("is my data safe")).toMatch(/shared or sold/i);
   });
+  it("answers cost / identity / app meta questions too (widened META_RE)", () => {
+    expect(handleCommand("how much do you cost")).toMatch(/free to use/i);
+    expect(handleCommand("how much is this")).toMatch(/free to use/i);
+    expect(handleCommand("are you chatgpt")).toMatch(/AI bot/i);
+    expect(handleCommand("are you claude")).toMatch(/AI bot/i);
+    expect(handleCommand("do you have an app")).toMatch(/free to use/i);
+    // a real cost errand still runs
+    expect(handleCommand("how much does a tesla cost")).toBeNull();
+    expect(handleCommand("how much is 100 usd in eur")).toBeNull();
+  });
+  it("routes an 'examples / what else' ask to the intro card (onboarding-examples)", () => {
+    expect(handleCommand("examples")).toMatch(/I'm Relay/);
+    expect(handleCommand("show me examples")).toMatch(/I'm Relay/);
+    expect(handleCommand("give me an example")).toMatch(/I'm Relay/);
+    expect(handleCommand("what else can you do")).toMatch(/I'm Relay/);
+    expect(handleCommand("what should I ask you")).toMatch(/I'm Relay/);
+    // a real "examples of X" errand is NOT hijacked
+    expect(handleCommand("give me examples of python decorators")).toBeNull();
+    expect(handleCommand("what should I ask my doctor about")).toBeNull();
+  });
+  it("answers a bare acknowledgment warmly instead of running a browse turn (onboarding-ack)", () => {
+    expect(handleCommand("thanks")).toMatch(/Anytime/i);
+    expect(handleCommand("thank you so much")).toMatch(/Anytime/i);
+    expect(handleCommand("ok thanks")).toMatch(/Anytime/i);
+    expect(handleCommand("cool")).toMatch(/Anytime/i);
+    expect(handleCommand("that's cool")).toMatch(/Anytime/i);
+    // "thanks" followed by a real task still runs
+    expect(handleCommand("thanks now tell me the weather")).toBeNull();
+    expect(handleCommand("cool places near me")).toBeNull();
+  });
   it("answers a can't-do capability probe honestly + pivots (capability-probe-answers)", () => {
     expect(handleCommand("can you book a flight")).toMatch(/can't do that one/i);
     expect(handleCommand("can you send a text to my mom")).toMatch(/what I CAN do/i);

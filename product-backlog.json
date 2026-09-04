@@ -3272,9 +3272,18 @@
       "title": "Improve the FIRST-RUN / help / discovery experience (new-user lens, a real product-value move not a bug hunt)",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Reliability + parsing are now deeply swept (delivery + persistence gated, courtesy-tail across 15 parsers, dispatch robust). The higher-value lever that does NOT need Alex is DISCOVERABILITY: a new texter can't tell what Relay does. Audit README/start/help copy + the first-message experience - does the bot surface its best errands (save a page, follow a feed, set a reminder, watch a price, translate, where-to-watch) so a user finds them in the first 10 min?",
       "how": "Read the /start + /help + empty-message + first-message copy in handler.ts + commands.ts; if the capability surface isn't discoverable, improve the copy/onboarding (a concise 'try these' with real examples grouped by job). Offline-testable: assert the help/start reply names the key tool categories. This is the last high-value NON-owner-gated lever before confirm-to-act / anvil."
+    },
+    {
+      "id": "probe-help-discoverability-in-replies",
+      "title": "Surface the RIGHT next-capability hint contextually after a relevant answer (not just in /help)",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "Onboarding copy covers the cold start, but mid-session discovery is weak: after a user does X, they rarely learn about the adjacent capability (got a price -> could 'watch that'; got a fact -> could 'save that'; asked weather -> could set a morning digest). Some tap-to-act buttons exist (actButtons); audit whether the highest-value adjacencies are actually offered, without nagging.",
+      "how": "Read the post-answer button/nudge logic in handler.ts (canOfferAutomation/actButtons/pickButtons + save-nudge); find a high-value answer type that offers NO next-step hint and add one (gated, once, non-spammy). Offline-testable via the handler harness. If adjacencies are already well-covered, say so + pivot to another lens."
     }
   ],
   "history": [
@@ -4613,6 +4622,10 @@
     {
       "item": "unread-nudge-persist-hedge",
       "note": "Swept every store-mutation confirmation for a missing failed-write hedge. Nearly all already hedge (contacts/places/recipes/digests/alerts/facts/lists/saved-pages all check saved/lastSaveOk). ONE gap: unreadNudgeToggle confirmed 'Done'/'turned off' without checking schedules.lastSaveOk(), so a failed persist of the weekly reading-list nudge silently reverted on restart while the user was told it stuck. Hedged both on+off directions. Verified lastSaveOk flips false on write failure via sandbox probe; index.ts is the composition root (deps built inline, no unit seam) so no new unit test - the hedge mirrors ~15 tested siblings + full suite green (2054)."
+    },
+    {
+      "item": "onboarding-examples-ack-meta",
+      "note": "Probed the first-run/discovery copy. START/HELP/META/PROBE/SITE already cover most openers well. Closed 3 real gaps where a new user's message fell through to a slow floundering agent turn: (1) 'examples'/'what else can you do'/'what should I ask' -> routed to the START card (which IS the grouped examples list); (2) a bare ack 'thanks'/'cool'/'ok thanks' -> a warm one-line ACK + next-errand invite instead of a browse of the word 'thanks'; (3) widened META_RE for cost/identity/app openers ('how much do you cost', 'are you chatgpt/claude', 'do you have an app'). All anchored + word-capped so real errands ('examples of python decorators', 'how much does a tesla cost', 'cool places near me') still reach the agent. +3 tests. 2057 green."
     }
   ],
   "audits": [
@@ -5006,6 +5019,11 @@
       "lens": "inline persistence-hedge sweep (agent cap 200/200)",
       "surfaced": "The failed-write-hedge pattern is applied almost everywhere (15+ sites in handler/index check saved or lastSaveOk). Only unreadNudgeToggle missed it. The persistence reliability class is now essentially complete alongside the delivery class. Remaining offline surface is well-hardened; diminishing returns on further reliability probes.",
       "seeded": "probe-first-run-onboarding-copy"
+    },
+    {
+      "lens": "inline onboarding-copy probe (agent cap 200/200)",
+      "surfaced": "Discovery copy is now strong: greeting, capability, meta/trust, cost/identity, can't-do probe, site-support, examples, and ack all get an instant canned reply instead of a wasted first browse. The new-user first-10-min surface is well-covered. Remaining non-owner offline levers are largely exhausted - reliability (delivery+persistence), parsing (courtesy x15), dispatch, onboarding all swept.",
+      "seeded": "probe-help-discoverability-in-replies"
     }
   ]
 }

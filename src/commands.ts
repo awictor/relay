@@ -169,7 +169,7 @@ Text me a task to try it — or /help for what I can do.`;
 // real errand) still reaches the agent.
 // "free" only in a trust context ("is this free", "is it free to use", "are you free to use") — NOT
 // a bare "are you free (right now)" which is a real availability ask, not a privacy/cost question.
-const META_RE = /^(?:(?:are|r)\s+(?:you|u)\s+(?:a\s+)?(?:real|human|person|bot|ai|robot)|is\s+(?:this|it)\s+free|(?:is\s+it|are\s+you)\s+free\s+to\s+use|is\s+this\s+(?:safe|a\s+(?:bot|scam|person))|do\s+(?:you|u)\s+(?:save|store|keep|sell|share|record)\s+(?:my\s+)?(?:messages?|data|chats?|info)|who\s+(?:made|built|created|owns)\s+(?:you|this)|are\s+(?:you|u)\s+safe|is\s+my\s+data\s+safe)[\s\w']*\??$/i;
+const META_RE = /^(?:(?:are|r)\s+(?:you|u)\s+(?:a\s+)?(?:real|human|person|bot|ai|robot|chat\s?gpt|gpt|claude|gemini|an?\s+llm)|is\s+(?:this|it)\s+free|(?:is\s+it|are\s+you)\s+free\s+to\s+use|how\s+much\s+(?:do(?:es)?\s+(?:you|this|it)\s+cost|is\s+(?:this|it))|(?:do\s+(?:you|u)|is\s+there)\s+(?:have\s+)?an?\s+app|is\s+this\s+(?:safe|a\s+(?:bot|scam|person))|do\s+(?:you|u)\s+(?:save|store|keep|sell|share|record)\s+(?:my\s+)?(?:messages?|data|chats?|info)|who\s+(?:made|built|created|owns)\s+(?:you|this)|are\s+(?:you|u)\s+safe|is\s+my\s+data\s+safe)[\s\w']*\??$/i;
 
 // A boundary-probe: "can you book a flight / send a text / call them / check my email / buy this?".
 // These are things Relay CAN'T do (it doesn't act, pay, place calls, or log into your accounts) —
@@ -195,6 +195,17 @@ const SITE = `I can read public pages on most sites and pull data from them. I c
 // performs ("can you read Reuters" is a real read errand, not a support question) (audit 19 B#4).
 const SITE_RE = /^(?:can|could|do|does|will|would)\s+(?:you|u|this|relay|it)\s+(?:please\s+)?(?:work with|work on|support|handle|use)\s+[\w][\w'. -]*\??$/i;
 
+// An explicit "examples / what else can you do / what should I ask" — a new user who's read the greeting
+// and wants concrete things to try. Falling through ran it as a slow browse and wasted the moment; the
+// START card already IS a grouped list of real examples, so route these straight to it (onboarding-examples).
+const EXAMPLES_RE = /^(?:(?:show|give)\s+(?:me\s+)?(?:some\s+|an?\s+)?examples?|examples?|what\s+else\s+can\s+(?:you|u)\s+do|what\s+should\s+i\s+(?:ask|say|try)(?:\s+you)?|what\s+can\s+i\s+ask(?:\s+you)?|(?:some\s+)?ideas)[!.?]*$/i;
+
+// A bare acknowledgment ("thanks", "cool", "nice", "ok thanks") — the natural close after an answer.
+// It has no task in it, so running it as a browser turn is wrong (a slow floundering search of "thanks");
+// a short warm ack keeps the conversation human + invites the next errand (onboarding-ack).
+const ACK = `Anytime! 🙌 Text me whenever you need something — a lookup, a reminder, a price to watch, whatever comes up.`;
+const ACK_RE = /^(?:(?:ok(?:ay)?|alright|great|awesome|perfect|cool|nice|sweet|lovely|amazing|excellent)\s+)?(?:thanks?|thank\s+you|thx|ty|tysm|cheers|much\s+appreciated|appreciate\s+it)(?:\s+(?:so\s+much|a\s+lot|mate|friend|relay|buddy))?[!.]*$|^(?:cool|nice|sweet|awesome|great|perfect|excellent|amazing|that'?s\s+(?:cool|nice|great|awesome|helpful|perfect))[!.]*$/i;
+
 /** Returns a canned reply for /start, /help, a bare greeting/capability question, a meta/trust
  * question, or a can't-do capability probe; else null. */
 export function handleCommand(text: string): string | null {
@@ -209,6 +220,11 @@ export function handleCommand(text: string): string | null {
   // Greet a new user who opened with "hi" / "what can you do?" instead of the /start they don't know.
   // Keep it short (<= 6 words) so a longer sentence that merely starts with "how do you" is a real task.
   if (t.split(/\s+/).length <= 6 && (GREETING_RE.test(t) || CAPABILITY_RE.test(t))) return START;
+  // "examples" / "what else can you do" / "what should I ask" -> the START card IS the grouped examples
+  // list (onboarding-examples). Bounded so "give me examples of Python decorators" (a real ask) runs.
+  if (t.split(/\s+/).length <= 7 && EXAMPLES_RE.test(t)) return START;
+  // A bare "thanks" / "cool" close -> a warm ack, not a wasted browse turn (onboarding-ack).
+  if (t.split(/\s+/).length <= 5 && ACK_RE.test(t)) return ACK;
   // Meta/trust question -> honest fixed reply (bounded length so a real errand isn't swallowed).
   if (t.split(/\s+/).length <= 8 && META_RE.test(t)) return META;
   // Can't-do capability probe -> honest reply + pivot to what it CAN do.
