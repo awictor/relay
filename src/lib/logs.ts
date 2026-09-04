@@ -34,6 +34,15 @@ export function parseLogCommand(text: string): { tag: string; value: number; uni
     const tag = normalizeTag(money[2]!);
     if (tag) return { tag, value: num(money[1]!), unit: "$" };
   }
+  // Value-FIRST: "log 3 coffees" / "track 2000 steps" / "record 5 miles" — the number leads, the noun is
+  // the tag (quick-log-value-first). A very natural quick-log phrasing that the tag-first form below missed,
+  // so counting habits (coffees/steps/miles/glasses) silently fell to null. Checked before the tag-first
+  // form; only matches when a NUMBER immediately follows the verb, so "log weight 182" still takes tag-first.
+  const valFirst = t.match(new RegExp(`^\\s*(?:log|track|record)\\s+${NUM}\\s+([a-z][\\w -]*?)\\s*$`, "i"));
+  if (valFirst) {
+    const tag = normalizeTag(valFirst[2]!);
+    if (tag) return { tag, value: num(valFirst[1]!) };
+  }
   // Generic: "log <tag> <value> [unit]" / "track <tag> <value>" — tag is a word(s), value a number.
   const gen = t.match(new RegExp(`^\\s*(?:log|track|record)\\s+(?:my\\s+)?([a-z][\\w -]*?)\\s+${NUM}\\s*([a-z$%°]+)?\\s*$`, "i"));
   if (gen) {

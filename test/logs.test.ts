@@ -16,6 +16,13 @@ describe("parseLogCommand", () => {
     expect(parseLogCommand("log my weight 182 lbs")).toEqual({ tag: "weight", value: 182, unit: "lbs" });
     expect(parseLogCommand("track mood 7")).toEqual({ tag: "mood", value: 7 });
   });
+  it("parses the value-first form 'log 3 coffees' / 'track 2000 steps' (quick-log-value-first)", () => {
+    expect(parseLogCommand("log 3 coffees")).toEqual({ tag: "coffees", value: 3 });
+    expect(parseLogCommand("track 2000 steps")).toEqual({ tag: "steps", value: 2000 });
+    expect(parseLogCommand("record 5 miles")).toEqual({ tag: "miles", value: 5 });
+    // tag-first still wins when a word (not a number) follows the verb
+    expect(parseLogCommand("log weight 182")).toEqual({ tag: "weight", value: 182 });
+  });
   it("parses a money form 'spent $X on <thing>' -> tag=thing, unit=$", () => {
     expect(parseLogCommand("spent $14 on lunch")).toEqual({ tag: "lunch", value: 14, unit: "$" });
     expect(parseLogCommand("paid 9 for parking")).toEqual({ tag: "parking", value: 9, unit: "$" });

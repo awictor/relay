@@ -3383,6 +3383,15 @@
       "status": "todo",
       "why": "Probing individual lib parsers with real user phrasings keeps surfacing genuine dead-ends (calc %-off, convert density, unitprice pack) — a live class distinct from the swept idiom/message veins. Remaining libs to phrase-probe: logs (parseLogCommand/parseLogQuery variants), countdown, geocode/places phrasings, scores team-name forms, qr payload types.",
       "how": "tsx-probe each remaining lib with 4-5 common real phrasings; where a plausible user phrasing returns null but SHOULD parse, widen the parser + add a test. One lib per iteration; stop when a full pass finds no real dead-end."
+    },
+    {
+      "id": "quick-log-count-query",
+      "title": "parseLogQuery: handle non-spend COUNT queries ('how much coffee this week', 'how many steps')",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "parseLogQuery routes 'how much did I SPEND on X' to a sum + '<tag> trend' to a trend, but a bare 'how much coffee this week' / 'how many beers did I have' (a count sum over a non-money tag) returns null -> the user can log 'log 3 coffees' but can't ask it back naturally.",
+      "how": "Add a count-sum branch: 'how much/many <tag> [window]' (no spend verb) -> { tag, mode:'sum', sinceMs }. Distinguish from the spend-sum path (which tags by the 'on <thing>' object). Widen + test. Keep 'my <tag> trend' as trend."
     }
   ],
   "history": [
@@ -4781,6 +4790,10 @@
     {
       "item": "unitprice-pack-phrasing",
       "note": "REAL parse gaps in unit-price compare (found probing unitprice.ts): 'which is better value 6 pack $5 or 12 pack $9' -> null (the lead-strip required 'the better value', not the common 'better value'), and '6-pack $5' (hyphenated) -> null (qty regex couldn't cross the hyphen). Both common shopping phrasings dead-ended to the model's forbidden mental math. Fixed: made 'the' optional in the value/deal lead-strip + normalize 'N-pack' hyphen to a space before parsing. +1 test (both forms). 2107 green. Note: pack unit renders as '6pack' (cosmetic label nit, math + winner correct) - left as-is."
+    },
+    {
+      "item": "quick-log-value-first",
+      "note": "phrasing gap in quick-log: parseLogCommand only took tag-FIRST ('log weight 182'), so the very natural value-first counting phrasing 'log 3 coffees' / 'track 2000 steps' / 'record 5 miles' returned null -> the daily-habit hook (the loop's strongest retention feature) silently dead-ended. Added a value-first form (number immediately after verb -> value + noun tag), checked before tag-first so 'log weight 182' still parses tag-first. +1 test. 2108 green. ('drank 2 beers' still null - non-log/track/record verb, out of the tool's deliberate anchor.)"
     }
   ],
   "audits": [
@@ -5253,6 +5266,11 @@
       "lens": "unit-price compare probe",
       "surfaced": "Probed unitprice.ts parse coverage: found two real phrasing gaps ('which is better value <N> pack', hyphenated 'N-pack') that fell to null. Fixed. The core per-unit math + winner selection is correct across mass/volume/count. A cosmetic 'per 1'/'6pack' label nit remains but the comparison is accurate.",
       "seeded": "probe-remaining-lib-phrasings"
+    },
+    {
+      "lens": "quick-log phrasing probe",
+      "surfaced": "parseLogCommand missed value-first counting ('log 3 coffees') - fixed. parseLogQuery missed 'how much coffee this week' (non-spend count query) + bare 'how many X did I have' but those need a count-query mode distinct from the spend-sum path (bigger change, seeded). The lib-phrasing vein continues to yield real dead-ends.",
+      "seeded": "quick-log-count-query"
     }
   ]
 }
