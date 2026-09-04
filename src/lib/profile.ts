@@ -103,6 +103,24 @@ export function parseSetLocation(text: string, atMs?: number): { location: strin
   return out;
 }
 
+/** Parse a standalone UNITS-preference command (units-preference-setter), or null. "use metric",
+ * "switch to imperial", "show me celsius", "in fahrenheit", "give me temps in C". Distinct from
+ * parseSetLocation's bundled "(metric)" clause — this lets a user who already set their city change
+ * units alone. celsius/°C/metric -> metric; fahrenheit/°F/imperial -> imperial. Exported for tests. */
+export function parseUnitsPreference(text: string): "metric" | "imperial" | null {
+  const t = text.trim().toLowerCase();
+  // Must read like a preference-setting command (a verb/among-cue), not a passing mention, so a normal
+  // "what's 180C in F" (a convert) or "it's celsius outside" isn't hijacked into a preference change.
+  if (!/\b(use|switch\s+to|change\s+to|set\s+(?:my\s+)?units?\s+to|prefer|show\s+(?:me\s+)?(?:temps?|temperatures?|weather|everything)?\s*(?:in)?|give\s+me\s+(?:temps?|everything)?\s*(?:in)?|units?\s*[:=]|in)\b/.test(t)) return null;
+  // The unit word must be the tail-ish target, not buried in a number ("180c to f" is a conversion).
+  if (/\d\s*°?\s*[cf]\b/.test(t)) return null; // has a numeric temperature -> a conversion, not a pref
+  const metric = /\b(metric|celsius|centigrade|°?c\b|kilometers?|kilometres?|km|kph|kmh)\b/.test(t);
+  const imperial = /\b(imperial|fahrenheit|°?f\b|miles?|mph|freedom\s+units?)\b/.test(t);
+  if (metric && !imperial) return "metric";
+  if (imperial && !metric) return "imperial";
+  return null; // ambiguous or neither
+}
+
 // A location-dependent errand: the answer changes with WHERE the user is, so with no saved location
 // Relay would ask the city every time. Used to offer a one-time "save your city?" capture on the first
 // such ask (first-location-capture). Deliberately specific so a generic task isn't intercepted.

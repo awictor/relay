@@ -128,6 +128,10 @@ export interface HandlerDeps {
   // visible, not silently wrong on every weather/reminder. profileClear forgets it. Both optional.
   profileView?: (chatId: number) => string | null; // human-readable summary, or null if nothing set
   profileClear?: (chatId: number) => { had: boolean; saved: boolean }; // had: a profile existed; saved: the clear persisted (delete-persist-hedge)
+  // Standalone units preference (units-preference-setter): "use metric" / "switch to fahrenheit" changes
+  // the stored units WITHOUT re-setting the city. Returns the new units + persist status, or null if the
+  // message isn't a units-pref command. Optional.
+  setUnits?: (chatId: number, text: string) => { units: "metric" | "imperial"; saved: boolean } | null;
   // First-run location capture (first-location-capture): hasLocation tells the handler whether this
   // chat has a saved home location; captureLocation parses a bare "which city?" reply + stores it
   // (returns the saved location, or null if the reply isn't a place). When both are present, the first
@@ -897,6 +901,16 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
 
     // "set my location" / "/setlocation X" / "i'm in X" -> store home location (+ optional units) so
     // "weather" / "near me" resolve without asking. Detected before the agent so it isn't run as a task.
+    // Standalone units preference ("use metric" / "switch to fahrenheit") — checked BEFORE setLocation so
+    // a bare units command isn't misread as a place (units-preference-setter).
+    if (deps.setUnits) {
+      const u = deps.setUnits(msg.chatId, msg.text);
+      if (u) {
+        if (u.saved === false) { await deps.sendMessage(msg.chatId, `Switched to ${u.units} for now, but I couldn't save it to disk — it may revert if I restart. Try again in a moment.`); return; }
+        await deps.sendMessage(msg.chatId, `Got it — I'll show ${u.units} units (temps, distances) from now on.`);
+        return;
+      }
+    }
     if (deps.setLocation) {
       const set = deps.setLocation(msg.chatId, msg.text);
       if (set) {

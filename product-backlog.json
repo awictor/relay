@@ -3425,7 +3425,7 @@
       "title": "Probe units-preference ('use metric'/'switch to celsius') + profile-clear phrasings",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Location capture is now clean both ways. The sibling profile setters - a units preference ('use metric', 'switch to fahrenheit', 'show me celsius') and profile clear ('forget my location', 'reset my profile') - haven't been phrase-probed; a missed phrasing silently ignores the preference.",
       "how": "Find where units-pref + profileClear are parsed (profile.ts / handler); probe natural phrasings; widen any that miss + test. Likely the last setter sub-surface."
     }
@@ -4870,6 +4870,10 @@
     {
       "item": "citreply-leadin-and-courtesy",
       "note": "parseCityReply (first-run 'which city?' reply) resolved tz correctly but stored a DIRTY location label: 'Denver please'->'Denver please', 'the city is Paris'->'...', 'here in Chicago'->'...' - the courtesy/filler got saved + echoed as the place name (tz was right via substring city-match, but the displayed home location read wrong). Widened the lead-in strip (the city is / here in / city:) + added a trailing-courtesy strip. 'Austin, TX' comma preserved. +1 test. 2118 green. First-run-critical path (this is the onboarding location capture)."
+    },
+    {
+      "item": "units-preference-setter",
+      "note": "NEW capability + real gap: there was NO standalone units-preference setter — units could ONLY be set bundled with a location ('Austin (metric)'). A user who already set their city couldn't change units alone; 'use metric'/'switch to fahrenheit' fell to the agent (which can't persist a pref) or did nothing. Added parseUnitsPreference (use/switch-to/show-me/prefer + metric|celsius|°C / imperial|fahrenheit|°F; guards a conversion '180C to F'->null + ambiguous 'km not miles'->null) + a setUnits handler dep (checked before setLocation) + index wiring (persists to ProfileStore, hedges a failed write) + HELP. profileClear is /profile clear|reset|forget (exact slash, fine). +4 tests. 2122 green."
     }
   ],
   "audits": [
@@ -5396,6 +5400,11 @@
       "lens": "setter/capture-reply phrasing probe",
       "surfaced": "parseCityReply stored dirty labels ('Denver please') - fixed. parseSetLocation was fixed last run. The location-capture path (both the direct setter + the first-run reply) is now clean. 14 lib-phrasing fixes total. Units-preference parse + profileClear not yet probed - seeded.",
       "seeded": "probe-units-pref-and-clear"
+    },
+    {
+      "lens": "units-pref + profile-clear probe",
+      "surfaced": "Found a genuine capability gap: no standalone units setter (only location-bundled). Built parseUnitsPreference + setUnits wiring. profileClear is slash-only + adequate. The setter class is now complete: location (both ways) + units all covered. 15 fixes/additions in the phrasing+setter vein. Vein genuinely worked out now.",
+      "seeded": "(setter class complete; owner levers remain)"
     }
   ]
 }

@@ -35,7 +35,7 @@ import { DigestStore, parseDigestCommand } from "./lib/digests.js";
 import { runDigest, type DigestOutcome } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summarizeSeries, isQuietDeferrable } from "./lib/alerts.js";
 import { parseChartRequest, renderChart } from "./lib/chart.js";
-import { ProfileStore, parseSetLocation, parseCityReply } from "./lib/profile.js";
+import { ProfileStore, parseSetLocation, parseCityReply, parseUnitsPreference } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { SavedStore, parseSavePage, parseSavedRecall, hostLabel, readingRecap, isUnreadSavedRequest, formatUnreadNudge, parseUnreadNudgeToggle } from "./lib/readlater.js";
 import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
@@ -344,6 +344,9 @@ const handle = createHandler({
   // saved: whether the clear reached disk (delete-persist-hedge) — a failed write brings the saved
   // location/tz back on restart, so the handler hedges. saved is moot when there was nothing to clear.
   profileClear: (chatId) => { const had = profiles.clear(chatId); return { had, saved: !had || profiles.lastSaveOk() }; },
+  // Standalone units preference (units-preference-setter): "use metric" / "switch to fahrenheit" updates
+  // the stored units without re-setting the city. null when it isn't a units-pref command.
+  setUnits: (chatId, text) => { const u = parseUnitsPreference(text); if (!u) return null; profiles.set(chatId, { units: u }); return { units: u, saved: profiles.lastSaveOk() }; },
   // Long-term memory (remember-facts-store): parse+store "remember X", forget matching facts, list them.
   rememberFact: (chatId, text) => { const f = parseRemember(text); if (!f) return null; const r = notes.add(chatId, f, Date.now()); return { fact: f, evicted: r.evicted, saved: r.saved }; },
   forgetFact: (chatId, text) => {

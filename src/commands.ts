@@ -112,7 +112,7 @@ Tap, don't type: when I ping you about a watch, briefing, or scheduled task, I a
 
 See everything at once: /dashboard rolls up all your reminders, watches, digests, and recipes in one view — what fires next, what each watch last saw, and what's paused.
 
-Set your location: "/setlocation Austin, TX" (or just "I'm in London") so "weather" and "near me" work without repeating the city. I use metric or imperial based on the place (°C for Paris, °F for the US); add "(metric)" or "(imperial)" to force one, and "UTC-5" so daily reminders fire at YOUR local time. /profile shows what's stored; "/profile clear" forgets it.
+Set your location: "/setlocation Austin, TX" (or just "I'm in London") so "weather" and "near me" work without repeating the city. I use metric or imperial based on the place (°C for Paris, °F for the US); add "(metric)" or "(imperial)" to force one — or just say "use metric" / "switch to fahrenheit" anytime — and "UTC-5" so daily reminders fire at YOUR local time. /profile shows what's stored; "/profile clear" forgets it.
 
 Save named places: "my work is 500 5th Ave", "save gym: Gold's on Main" — then "weather at the gym", "coffee near work", "directions to work" all resolve without retyping the address. "what places do you have" lists them; "forget my work address" removes one.
 

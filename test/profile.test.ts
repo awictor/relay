@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply, inferTzFromLocation, inferZoneFromLocation, offsetForZoneAt } from "../src/lib/profile.js";
+import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply, parseUnitsPreference, inferTzFromLocation, inferZoneFromLocation, offsetForZoneAt } from "../src/lib/profile.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -274,6 +274,24 @@ describe("needsLocationContext (first-location-capture)", () => {
     for (const t of ["top HN story", "price of bitcoin", "who won the game", "summarize this link", "remind me to stretch"]) {
       expect(needsLocationContext(t), t).toBe(false);
     }
+  });
+});
+
+describe("parseUnitsPreference (units-preference-setter)", () => {
+  it("parses a standalone units-preference command", () => {
+    expect(parseUnitsPreference("use metric")).toBe("metric");
+    expect(parseUnitsPreference("switch to imperial")).toBe("imperial");
+    expect(parseUnitsPreference("show me celsius")).toBe("metric");
+    expect(parseUnitsPreference("in fahrenheit")).toBe("imperial");
+    expect(parseUnitsPreference("set my units to metric")).toBe("metric");
+    expect(parseUnitsPreference("give me temps in C")).toBe("metric");
+    expect(parseUnitsPreference("use fahrenheit")).toBe("imperial");
+  });
+  it("does NOT hijack a conversion or a passing mention", () => {
+    expect(parseUnitsPreference("180C to F")).toBeNull();          // a conversion, not a pref
+    expect(parseUnitsPreference("what's the weather")).toBeNull();
+    expect(parseUnitsPreference("it's freezing outside")).toBeNull();
+    expect(parseUnitsPreference("show me km not miles")).toBeNull(); // ambiguous (both) -> no change
   });
 });
 

@@ -596,6 +596,22 @@ describe("createHandler", () => {
     expect(sent[0]!.text).not.toMatch(/I'll use Paris for/); // must NOT falsely confirm it's stored
   });
 
+  it("a standalone units preference is applied, no agent (units-preference-setter)", async () => {
+    let agentCalled = false;
+    const { handle, sent } = harness({
+      setUnits: (_id, t) => (/metric/i.test(t) ? { units: "metric", saved: true } : null),
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("use metric", 5));
+    expect(agentCalled).toBe(false);
+    expect(sent[0]!.text).toMatch(/metric units/i);
+  });
+  it("a failed units-preference write is hedged, not falsely confirmed", async () => {
+    const { handle, sent } = harness({ setUnits: () => ({ units: "imperial", saved: false }) });
+    await handle(msg("switch to fahrenheit", 5));
+    expect(sent[0]!.text).toMatch(/couldn't save it to disk/i);
+  });
+
   it("/profile shows the stored profile, no agent (profile-view-reset)", async () => {
     let agentCalled = false;
     const { handle, sent } = harness({
