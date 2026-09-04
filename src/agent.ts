@@ -17,6 +17,7 @@ import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { runHolidays } from "./lib/holidays.js";
 import { runBmi, formatBmi } from "./lib/bmi.js";
+import { runOnThisDay } from "./lib/onthisday.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
 import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
@@ -348,6 +349,15 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "get_on_this_day",
+    description: "Notable events that happened ON THIS DAY in history (no key, instant, cited). Use this — NOT web_search — for \"what happened on this day?\", \"anything happen on July 4 in history?\", \"on this day\". Pass the user's request verbatim; if they name a date (\"July 4\", \"12/25\") I use it, else today. Returns a short list of events newest-first.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The user's request verbatim, e.g. \"what happened on this day\" or \"on this day July 4\"." } },
+      required: ["request"],
+    },
+  },
+  {
     name: "get_fact",
     description: "Look up a quick factual answer from Wikipedia (no key, instant, cited). Use this — NOT web_search/scrape — for \"who is X\", \"what is X\", \"how tall/big/old is X\", \"when was X\", \"tell me about X\" general-knowledge questions. Returns a one-paragraph summary + a source link. Pass the ENTITY or topic, not the whole sentence (\"CEO of OpenAI\" not \"hey who's the ceo of openai again\"). Falls back — if it can't find or the term is ambiguous, use web_search.",
     parameters: {
@@ -591,6 +601,7 @@ Tools:
 - "get_scores" (request): sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight" AND upcoming games "when do the Lakers play next"/"next Arsenal game"/"upcoming NFL". Pass the request verbatim (keep their "next"/"when do they play" wording). Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
 - "define" (word): a word's definition, pronunciation, and synonyms. Use this — NOT web_search/scrape — for "what does X mean"/"define X"/"synonyms for X"/"how do you spell X". English words only; pass the single word.
 - "get_fact" (query): a quick cited Wikipedia summary. Use this — NOT web_search — for "who is X"/"what is X"/"how tall/old/big is X"/"tell me about X" general-knowledge asks. Pass the ENTITY (not the whole sentence). Falls back to web_search on a miss/ambiguous term.
+- "get_on_this_day" (request): notable historical events on a day. Use for "what happened on this day?"/"on this day July 4". Uses today unless the request names a date.
 - "get_nutrition" (food): calories + macros from USDA. Use this — NOT web_search, NEVER guess — for "calories in X"/"protein in X"/"carbs in X"/"is X healthy". Per-100g for the closest match; say "not sure" on a miss instead of inventing numbers.
 - "where_to_watch" (title): where a movie/show streams/rents/buys. Use this — NOT web_search, NEVER claim a service from memory — for "where can I watch X"/"is X on Netflix". Returns a JustWatch per-region link (the source of truth). For a rating/plot use get_fact.
 - "recall" (query): search what I told this user BEFORE (my past answers) — use for "that restaurant you found", "the flights from last week", "resend the X"; returns past answers + how long ago. NOT for facts the user told me about themselves.
@@ -692,6 +703,9 @@ export interface BrowserBackend {
   // Optional: a quick Wikipedia fact (wikipedia-fast-fact). Absent -> the get_fact tool reports it's
   // unavailable. Returns {fact:null} on a miss, or {fact:null,disambiguation:true} for an ambiguous term.
   getFact?(query: string): Promise<{ fact: import("./lib/wikifact.js").WikiFact | null; disambiguation?: boolean }>;
+  // "On this day" in history (on-this-day-tool). `today` is the user's local {month,day}. Optional;
+  // absent -> the get_on_this_day tool reports it's unavailable. Returns a formatted list or null.
+  getOnThisDay?(request: string, today: { month: number; day: number }): Promise<string | null>;
   // Optional: a food's per-100g calories + macros (nutrition-lookup). Absent -> the get_nutrition tool
   // reports it's unavailable. Returns null on no match / fetch failure (caller says "not sure").
   getNutrition?(food: string): Promise<import("./lib/nutrition.js").Nutrition | null>;
@@ -863,6 +877,7 @@ const defaultBackend: BrowserBackend = {
   getCrypto: (coin) => cryptoFetch(coin, defaultFetchText),
   defineWord: (word) => dictFetch(word, defaultFetchText),
   getFact: (query) => factFetch(query, defaultFetchText),
+  getOnThisDay: (request, today) => runOnThisDay(request, today, defaultFetchText),
   getNutrition: (food) => nutritionFetch(food, defaultFetchText),
   getScores: (query) => scoresFetch(query, defaultFetchText),
   getNextGame: (query, nowMs) => nextGameFetch(query, nowMs, defaultFetchText),
@@ -1404,6 +1419,22 @@ export async function runAgent(
           push("get_nutrition", `${formatNutrition(n)}\n\nReport this to the user. Note the matched food name (so a mismatch is visible) + that figures are per 100g; if they asked about a specific portion, scale it + say you did.`);
         } catch (e) {
           push("get_nutrition", `ERROR looking up nutrition: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "get_on_this_day") {
+        if (!backend.getOnThisDay) { push("get_on_this_day", "ERROR: on-this-day isn't available; try web_search."); continue; }
+        const request = String(call.args.request ?? "").trim();
+        // Local today {month,day} from nowMs+tz (so "on this day" uses the user's date), like date_math.
+        const local = new Date((deps.nowMs ?? Date.now()) + (deps.tzOffsetMin ?? 0) * 60_000);
+        const today = { month: local.getUTCMonth() + 1, day: local.getUTCDate() };
+        try {
+          const answer = await backend.getOnThisDay(request, today);
+          if (!answer) { push("get_on_this_day", "Couldn't fetch on-this-day events (source didn't answer). Try again shortly or web_search."); continue; }
+          push("get_on_this_day", `${answer}\n\nRelay a few of these to the user (keep the years).`);
+        } catch (e) {
+          push("get_on_this_day", `ERROR: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

@@ -3537,6 +3537,15 @@
       "owner_gated": true,
       "why": "6+ iterations shipped genuine but diminishing keyless-tool polish (speed/calc/date/hash/binary/morse). The 3-agent AUDIT that would surface higher-impact work cannot run — the subagent cap has been 200/200 for this entire session, forcing inline single-surface probes that only find more micro-tools. The real high-value levers (confirm-to-act multi-step chains [owner-gated], live-anvil browsing depth + reliability, richer proactive digests) need either owner sign-off or a live-anvil e2e loop, not another offline converter.",
       "how": "Owner action: (a) start a FRESH Claude session so the 3 parallel AUDIT agents can run (cap resets per session) and surface reliability/power-lens work across the agent loop + scheduler + anvil paths; or (b) point the loop at a specific lever (e.g. authorize confirm-to-act multi-step chains, or a live-anvil browse-depth improvement). Until then the loop can only mine low-impact tools."
+    },
+    {
+      "id": "number-base-convert",
+      "title": "Number-base conversion: \"255 in binary/hex/octal\", \"0xFF to decimal\"",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "encode_decode does hex of TEXT (\"hex encode hi\"), not NUMBER bases (\"255 in binary\", \"0xFF in decimal\", \"convert 42 to octal\") — a common dev/learning ask that currently falls to calc (errors) or a slow browse.",
+      "how": "Add a small number-base branch (new lib or extend convert_units): parse a number in dec/hex(0x)/bin(0b)/oct + a target base, output the converted value. Pure, keyless. Tool or fold into calculate. Tests."
     }
   ],
   "history": [
@@ -5115,6 +5124,10 @@
     {
       "item": "bmi-tool",
       "note": "New get_bmi tool (new-user lens): \"what is my BMI at 5’10 160lb\" / \"BMI 70kg 1.75m\" — a common everyday health ask calc.ts choked on (\"I dont know bmi\"). src/lib/bmi.ts: parseHeightM (feet-inches 5’10″/5 ft 10 in/6 foot, cm, m, bare inches; guards a trailing weight from being read as inches), parseWeightKg (lb/kg/stone+lb), runBmi (exact, WHO category, sanity-bounded), formatBmi (not-a-diagnosis caveat). Tool + dispatch (pure, no backend) + SYSTEM_PROMPT + /help. +10 tests (height/weight/run/format + 2 dispatch). Caught+fixed a real parse bug mid-build: “6 foot 200 lb” read 200 as inches -> BMI 1.9; now inches only captured when 0-11 + unit/apostrophe form. 2269 green. call-tested: n/a (pure lib, exhaustively probed)."
+    },
+    {
+      "item": "on-this-day-tool",
+      "note": "New get_on_this_day tool (new-user lens): \"what happened on this day?\", \"on this day July 4\" — a delightful everyday ask with no home. Keyless Wikimedia On-This-Day feed. src/lib/onthisday.ts: parseOnThisDay (newest-first, url, drops bad rows), parseMonthDay (explicit July 4 / 4 July / 12-25, else today), formatOnThisDay, runOnThisDay with injected fetch. Tool + dispatch (local today from nowMs+tz) + BrowserBackend.getOnThisDay + SYSTEM_PROMPT + /help. +9 tests. LIVE e2e vs real API: July 4 (2024 UK election..1976 Entebbe) + today 9/2, cited + newest-first. 2278 green. call-tested: TRUE. Third non-browse everyday errand this session (holidays, BMI, on-this-day) via the tool-inventory-vs-real-asks method."
     }
   ],
   "audits": [
@@ -5768,6 +5781,11 @@
       "lens": "new-user everyday-errand (inline; subagent cap 200/200)",
       "surfaced": "Inventoried the ~55 tools vs common asks. All the usual (weather/crypto/units/define/time/date/tip/nearby/flight/package/meals/sun/air/nutrition/translate/scores/news) covered — but \"is it a holiday / next public holiday / holidays in <country>\" had NO tool (date_math only knows a few US holidays by NAME for date arithmetic). Built get_holidays (keyless).",
       "seeded": "holidays-tool shipped this iteration"
+    },
+    {
+      "lens": "new-user everyday-errand (inline; cap 200/200)",
+      "surfaced": "Continued inventory: \"on this day in history\" + number-base convert both had no tool. Built on-this-day (keyless Wikimedia). Number-base convert (255 in binary/hex/octal) seeded as the next candidate.",
+      "seeded": "on-this-day shipped; number-base convert queued as a low-effort follow"
     }
   ]
 }

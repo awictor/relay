@@ -72,6 +72,7 @@ const HELP = `Relay — what I can do:
 • Dates: "how many days until Christmas", "what day is July 4 2026", "how old if born 1990-05-06", "days between two dates" → exact calendar math, instantly.
 • Holidays: "is today a holiday?", "when's the next public holiday?", "holidays this year in the UK" → the real public/bank holiday list for a country (defaults to the US), instantly.
 • BMI: "what's my BMI at 5'10 and 160 lb", "BMI for 70 kg 1.75 m" → the number + category, either units (a rough screen, not a diagnosis).
+• On this day: "what happened on this day?", "anything happen on July 4 in history?" → a few notable historical events (with years + a source), instantly.
 • Countdowns: "countdown to my flight Dec 20", "countdown to vacation on 2026-07-01" → I save it and ping you as it nears (a week out, the day before, the morning of), not just a one-time answer.
 • Sports scores: "did the Lakers win?", "Man City score", "NBA scores tonight" → today's scores + status, instantly (NBA/NFL/MLB/NHL/NCAA + major soccer).
 • News: "what's the news?", "top headlines", "news about AI" → today's top headlines, instantly.
