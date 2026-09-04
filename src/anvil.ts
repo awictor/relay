@@ -769,6 +769,21 @@ export async function screenshot(url: string, fullPage = false): Promise<Uint8Ar
   }
 }
 
+/** Screenshot the CURRENT page of an ALREADY-OPEN session — no navigate, no new session, no release
+ * (screenshot-current-session). Lets the user SEE the live state of a carried browse session (applied
+ * filters, current results) mid-thread so they can direct the next step, instead of re-navigating a fresh
+ * URL (which would lose that state). The caller owns the session lifecycle. `fullPage` as in screenshot(). */
+export async function screenshotCurrent(sessionId: string, fullPage = false): Promise<Uint8Array> {
+  const q = `?sessionId=${encodeURIComponent(sessionId)}${fullPage ? "&fullPage=true" : ""}`;
+  const r = await fetch(`${BASE}/v1/screenshot${q}`, {
+    method: "GET",
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(fullPage ? 35000 : 20000),
+  });
+  if (!r.ok) throw new Error(`anvil screenshot failed: ${r.status}`);
+  return new Uint8Array(await r.arrayBuffer());
+}
+
 /** Render a URL to PDF: create a session, navigate, POST /v1/pdf, release. SSRF-guarded like
  * scrape. Returns the raw PDF bytes (for Telegram sendDocument). */
 export async function pdf(url: string): Promise<Uint8Array> {

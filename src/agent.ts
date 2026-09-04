@@ -512,8 +512,8 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "screenshot",
-    description: "Capture a web page as an IMAGE and send it to the user. Use when the user wants to SEE a page (\"show me\", \"screenshot\", \"what does X look like\") rather than read its text. Set fullPage:true when the user wants the WHOLE/ENTIRE/FULL page or a long article captured top-to-bottom (not just the visible fold). After calling this, still call reply with a short caption.",
-    parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to capture" }, fullPage: { type: "boolean", description: "Capture the whole scrollable page top-to-bottom instead of just the viewport fold. Default false." } }, required: ["url"] },
+    description: "Capture a web page as an IMAGE and send it to the user. Use when the user wants to SEE a page (\"show me\", \"screenshot\", \"what does X look like\") rather than read its text. Pass a url to capture that page; OMIT the url to capture the CURRENT page you already have open (after browse/filter/scroll) so the user sees the live state you're iterating on. Set fullPage:true for the WHOLE/ENTIRE page top-to-bottom. After calling this, still call reply with a short caption.",
+    parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to capture. Omit to screenshot the current open browse session's page." }, fullPage: { type: "boolean", description: "Capture the whole scrollable page top-to-bottom instead of just the viewport fold. Default false." } } },
   },
   {
     name: "pdf",
@@ -629,6 +629,9 @@ export interface BrowserBackend {
   // Optional: capture a URL as image bytes (DEV-0027). When absent, the screenshot tool
   // reports it can't take pictures rather than failing hard.
   screenshot?(url: string, fullPage?: boolean): Promise<Uint8Array>;
+  // Screenshot the CURRENT open browse session's page (screenshot-current-session) — no navigate/release.
+  // Optional; when absent the screenshot tool always re-navigates a url.
+  screenshotCurrent?(sessionId: string, fullPage?: boolean): Promise<Uint8Array>;
   // Optional: render a URL to PDF bytes (DEV-0032). Absent -> pdf tool reports unavailable.
   pdf?(url: string): Promise<Uint8Array>;
   // Optional: render a QR code for a payload to PNG bytes (qr-code-tool). Absent -> make_qr reports
@@ -849,6 +852,7 @@ const defaultBackend: BrowserBackend = {
   fetchJson: (url) => defaultFetchJson(url),
   extractStructured: (url) => anvil.extractStructured(url),
   screenshot: (url, fullPage) => anvil.screenshot(url, fullPage),
+  screenshotCurrent: (sessionId, fullPage) => anvil.screenshotCurrent(sessionId, fullPage),
   pdf: (url) => anvil.pdf(url),
 };
 
@@ -1059,11 +1063,22 @@ export async function runAgent(
       }
 
       if (call.name === "screenshot") {
-        const url = String(call.args.url ?? "");
+        const url = String(call.args.url ?? "").trim();
+        const fullPage = call.args.fullPage === true;
+        // No url + an open browse session -> shoot the CURRENT page (screenshot-current-session), so the
+        // user sees the live filtered/scrolled state we're iterating on instead of a fresh re-navigate.
+        if (!url && sessionId && backend.screenshotCurrent) {
+          try {
+            photo = await backend.screenshotCurrent(sessionId, fullPage);
+            push("screenshot", `Captured a ${fullPage ? "full-page" : "viewport"} screenshot of the current page (${photo.length} bytes). It will be sent to the user; now call reply with a short caption.`);
+          } catch (e) {
+            push("screenshot", `ERROR capturing the current page: ${e instanceof Error ? e.message : String(e)}`);
+          }
+          continue;
+        }
         const safe = isUrlSafe(url);
         if (!safe.safe) { push("screenshot", `ERROR: refused (${safe.reason}).`); continue; }
         if (!backend.screenshot) { push("screenshot", "ERROR: screenshots aren't available."); continue; }
-        const fullPage = call.args.fullPage === true;
         try {
           photo = await backend.screenshot(url, fullPage);
           push("screenshot", `Captured a ${fullPage ? "full-page" : "viewport"} screenshot of ${url} (${photo.length} bytes). It will be sent to the user; now call reply with a short caption.`);

@@ -149,7 +149,7 @@
       "title": "Screenshot the CURRENT carried browse session (not a fresh URL) so the user can see mid-thread state",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "With cross-turn continuity, the agent holds a filtered/scrolled live page — but screenshot(url) opens a NEW session + re-navigates, so the user cant SEE the state theyre iterating on (the applied filters, the current results). Seeing it is how a texting user directs the next step (\"click the 2nd one\").",
       "how": "Add a screenshotCurrent(sessionId) anvil helper (GET /v1/screenshot?sessionId=... on the OPEN session, no navigate) + route the screenshot tool to it when a browse session is open + no url given. Live e2e: browse+filter, screenshot current, assert bytes reflect the post-filter page."
     },
@@ -227,6 +227,10 @@
     {
       "item": "persist-browse-session-across-turns",
       "note": "Multi-turn browse continuity shipped (opt-in RELAY_BROWSE_CONTINUITY, default OFF). runAgent gained resumeSessionId (seed this run from a carried session) + keepSessionOpen (dont release at end; hand back openSessionId). New BrowseSessionStore (src/lib/browse-session.ts): one OPEN session per chat, lazy idle-reaped (BROWSE_IDLE_MS default 3min, no timers), releases on replace/idle/drop. Handler carries openSessionId between turns when the flag+releaser are wired: turn 2 resumes turn 1s page so \"now sort by price\" continues where it left off; a turn that stops browsing drops+releases; /reset releases. index wires releaseBrowseSession only when flag on. .env.example documented. Default OFF = byte-identical single-turn behavior (2217 baseline unchanged). +15 tests (8 store + 4 agent resume/keep + 3 handler carry). LIVE e2e on real anvil: set window marker + url on a session turn 1, resumed same session turn 2 -> marker+url survived (state persists across turns). 2232 green. call-tested: TRUE."
+    },
+    {
+      "item": "screenshot-current-session",
+      "note": "screenshot can now capture the CURRENT open browse session instead of only re-navigating a fresh URL: OMIT the url + a session is open -> new anvil screenshotCurrent(sessionId,fullPage) shoots the live page (no navigate/release), so with continuity on the user SEES the filtered/scrolled state theyre iterating on. New anvil helper + BrowserBackend.screenshotCurrent + dispatch routing (no-url + open session -> current; else the url path) + tool schema (url now optional) + SYSTEM_PROMPT. +2 dispatch tests. LIVE e2e: navigate + mutate the live page (simulated filter) + screenshotCurrent -> 10.6KB capture of the mutated page, no re-nav. 2234 green. call-tested: TRUE."
     }
   ],
   "probes": [

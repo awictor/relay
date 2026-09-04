@@ -35,6 +35,7 @@ function recordingBackend() {
     discoverLinks: async (url) => { hits.push(`discoverLinks:${url}`); return ["https://x.com/a"]; },
     fetchJson: async (url) => { hits.push(`fetchJson:${url}`); return { status: 200, contentType: "application/json", text: "{}" }; },
     screenshot: async (url, fullPage) => { hits.push(`screenshot:${url}${fullPage ? ":full" : ""}`); return new Uint8Array([1, 2, 3]); },
+    screenshotCurrent: async (_id, fullPage) => { hits.push(`screenshotCurrent${fullPage ? ":full" : ""}`); return new Uint8Array([9, 9]); },
     pdf: async (url) => { hits.push(`pdf:${url}`); return new Uint8Array([4, 5, 6, 7]); },
   };
   return { b, hits };
@@ -787,6 +788,29 @@ describe("runAgent dispatch", () => {
     const r = await runAgent("screenshot the whole page x", { llm, backend: b });
     expect(hits).toContain("screenshot:https://x.com/p:full"); // fullPage threaded through
     expect(r.photo).toBeInstanceOf(Uint8Array);
+  });
+
+  it("screenshot with NO url + an open session shoots the CURRENT page (screenshot-current-session)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://shop.example.com" } } as ToolCall }, // opens a session
+      { toolCall: { name: "screenshot", args: {} } as ToolCall },                                // no url -> current
+      { toolCall: { name: "reply", args: { text: "here's the current view" } } as ToolCall },
+    ]);
+    const r = await runAgent("filter then show me", { llm, backend: b });
+    expect(hits).toContain("screenshotCurrent");         // shot the open session, not a re-navigate
+    expect(hits.some((h) => h.startsWith("screenshot:"))).toBe(false);
+    expect(r.photo).toEqual(new Uint8Array([9, 9]));
+  });
+
+  it("screenshot with no url AND no open session still needs a url (no current-session shortcut)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "screenshot", args: {} } as ToolCall }, // no session open yet
+      { toolCall: { name: "reply", args: { text: "asked for a url" } } as ToolCall },
+    ]);
+    await runAgent("screenshot", { llm, backend: b });
+    expect(hits).not.toContain("screenshotCurrent"); // no open session -> falls to the url path (refused: empty)
   });
 
   it("make_qr -> backend.makeQr, returns the QR photo bytes (qr-code-tool)", async () => {
