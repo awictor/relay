@@ -55,6 +55,12 @@ describe("parseFollowUp (contact-followup-nudge)", () => {
     expect(parseFollowUp("nudge me to get back to mom next week")).toEqual({ name: "mom", when: "next week" });
     expect(parseFollowUp("check in with dave's next Monday")).toEqual({ name: "dave", when: "next Monday" });
   });
+  it("strips a trailing courtesy so the WHEN clause parses (courtesy-tail)", () => {
+    // "...in 3 days please" must not carry "please" into the when clause — that fails the schedule
+    // parser and dead-ends a valid follow-up as "unparsed".
+    expect(parseFollowUp("follow up with Sarah in 3 days please")).toEqual({ name: "sarah", when: "in 3 days" });
+    expect(parseFollowUp("remind me to reply to my landlord tomorrow thanks")).toEqual({ name: "landlord", when: "tomorrow" });
+  });
   it("null without the follow-up verb or without a time clause", () => {
     expect(parseFollowUp("remind me to buy milk tomorrow")).toBeNull(); // not a follow-up verb
     expect(parseFollowUp("follow up with Sarah")).toBeNull();           // no when

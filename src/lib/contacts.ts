@@ -6,6 +6,7 @@
 // Distinct from the deferred login/autofill VAULT (credentials): this is just a name -> email/phone book,
 // and it's the natural feeder for a future confirm-to-send. Relay still never SENDS — it drafts.
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
+import { stripTrailingCourtesy } from "./text-clean.js";
 
 export interface Contact { name: string; email?: string; phone?: string; created: number; }
 interface ChatContacts { chatId: number; contacts: Contact[] }
@@ -70,7 +71,10 @@ export function parseSaveContact(text: string): SaveContact | null {
  * Returns { name, when } — `when` is the raw time phrase (parsed downstream by the schedule parser). The
  * "reply to / get back to / follow up with" verb is required so a plain reminder isn't hijacked. */
 export function parseFollowUp(text: string): { name: string; when: string } | null {
-  const t = text.trim();
+  // Drop a trailing courtesy so "follow up with Sarah in 3 days please" yields when="in 3 days", not
+  // "in 3 days please" — the latter fails the schedule parser -> a valid follow-up dead-ends "unparsed"
+  // (courtesy-tail bug class; the WHEN clause sits at the tail, exactly where the courtesy lands).
+  const t = stripTrailingCourtesy(text.trim());
   // <lead> <contact> <when>. The when clause is a trailing time phrase (in N days / tomorrow / on Friday
   // / next week / at 3pm). Capture the contact between the verb and the when.
   const m = t.match(

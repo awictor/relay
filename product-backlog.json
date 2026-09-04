@@ -4492,6 +4492,10 @@
     {
       "id": "courtesy-tail-alerts-lists",
       "note": "Extended the courtesy-tail sweep to the last 2 verbatim parsers I'd missed: alerts (watch task + watchlist members) + lists (list-name target). Both now use the shared stripTrailingCourtesy. 'grocery list please' -> 'grocery' (was silently adding to a wrong list). +2 tests, 2034 green. Courtesy-tail class now covers 8 tools: datecalc, unit-convert, schedule, notes, feeds, places, alerts, lists."
+    },
+    {
+      "item": "courtesy-tail-followup",
+      "note": "parseFollowUp (9th verbatim parser) strips trailing please/thanks via shared stripTrailingCourtesy so the WHEN clause ('in 3 days please') parses instead of dead-ending a valid contact follow-up as 'unparsed'. +1 test."
     }
   ],
   "audits": [
