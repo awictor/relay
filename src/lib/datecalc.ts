@@ -170,6 +170,20 @@ export function runDateCalc(raw: string, today: Ymd): string | null {
     return `${formatDate(a)} → ${formatDate(b)} is ${plural(days, "day")}${weeks} apart.`;
   }
 
+  // "days since X" / "how many days since X" / "how long since X" / "X was how long ago" — elapsed
+  // days from a PAST date to today (the converse of "until") (date-since). A future date is nonsense for
+  // "since" — point the user at "until" instead of returning a negative count.
+  m = q.match(/(?:how\s+(?:many|long)\s+)?(?:days?|weeks?|time)\s+(?:since|after)\s+(.+)$/) || q.match(/(?:how\s+long\s+)since\s+(.+)$/);
+  if (m) {
+    const target = parseDate(m[1]!, today, false) ?? parseTrailingDate(m[1]!, today);
+    if (!target) return null;
+    const days = daysBetween(target, today); // today - target
+    if (days === 0) return `${formatDate(target)} is today.`;
+    if (days < 0) return `${formatDate(target)} is still ${plural(-days, "day")} away — ask "days until" for that.`;
+    const weeks = q.includes("week") ? ` (${(days / 7).toFixed(1)} weeks)` : "";
+    return `${plural(days, "day")}${weeks} since ${formatDate(target)}.`;
+  }
+
   // "how many days until X" / "days till X" / "how long until X" / "days until my birthday 2026-..."
   m = q.match(/(?:how\s+(?:many|long)\s+)?(?:days?|weeks?|time)\s+(?:until|till|to|before)\s+(.+)$/) || q.match(/(?:how\s+long\s+)(?:until|till|to)\s+(.+)$/);
   if (m) {

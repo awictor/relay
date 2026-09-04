@@ -103,4 +103,16 @@ describe("runDateCalc", () => {
     expect(parseDate("launch", TODAY, true)).toBeNull();
     expect(parseDate("something", TODAY, true)).toBeNull();
   });
+
+  it("'days since <past date>' gives elapsed days; a future date redirects to 'until' (date-since)", () => {
+    // TODAY = 2026-09-03.
+    expect(runDateCalc("days since 2020-01-01", TODAY)).toMatch(/^2437 days since Wednesday, January 1, 2020\./);
+    expect(runDateCalc("how many days since 2026-01-01", TODAY)).toMatch(/^245 days since/);
+    expect(runDateCalc("how long since July 4", TODAY)).toMatch(/^61 days since Saturday, July 4, 2026/);
+    expect(runDateCalc("weeks since 2026-08-01", TODAY)).toMatch(/33 days \(4\.7 weeks\) since/);
+    expect(runDateCalc("days since my anniversary on 1990-05-06", TODAY)).toMatch(/since Sunday, May 6, 1990/);
+    // a future date isn't "since" — nudge to "until" rather than a negative count
+    expect(runDateCalc("days since 2027-01-01", TODAY)).toMatch(/still \d+ days away — ask "days until"/);
+    expect(runDateCalc("days since", TODAY)).toBeNull();   // no date -> not this tool
+  });
 });

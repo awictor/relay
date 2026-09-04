@@ -3497,9 +3497,27 @@
       "title": "date_math: \"days since <date>\" (elapsed, not remaining)",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Probe: \"days since 2020-01-01\" returns null — the converse of \"days until\". Users ask both (\"how long since my last...\", \"days since launch\"). Currently only forward countdowns work.",
       "how": "In datecalc.ts add a \"since/ago\" branch that computes elapsed days from a past date to today (positive count), mirroring the until-parser. Reject a future date (\"since\" a future date is nonsense — point them to \"until\"). Add tests."
+    },
+    {
+      "id": "encode-hash-rot13",
+      "title": "encode_decode: add sha256/md5 hashing + rot13 (common asks beyond base64/hex/url/jwt)",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "encoding.ts supports base64/base64url/url/hex/jwt only. \"sha256 of hello\", \"md5 of X\", \"rot13 this\" are common developer/puzzle asks that currently fall to a slow agent turn (or a hallucinated hash — dangerous, since a wrong hash looks right). Node crypto gives exact hashes with no key.",
+      "how": "Add codecs sha256/sha1/md5 (encode-only, via node:crypto createHash) + rot13 (encode=decode, pure) to EncOp + parseEncodingRequest keyword matching + runEncoding. Guard: hashing is one-way, so \"decode sha256\" -> friendly refusal. Tests for each. Update the tool description."
+    },
+    {
+      "id": "encode-binary-text",
+      "title": "encode_decode: text<->binary + text<->decimal codepoints",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "\"binary of A\", \"hello in binary\", \"decode this binary 01001000...\" is a common learning/puzzle ask with no home — falls to a slow browse. Deterministic + keyless.",
+      "how": "Add a binary codec (encode: each char -> 8-bit; decode: 8-bit groups -> chars) to encoding.ts, mirroring hex. Tolerate spaces between bytes on decode. Tests + tool-description mention."
     }
   ],
   "history": [
@@ -5054,6 +5072,10 @@
     {
       "item": "date-until-weekday",
       "note": "\"how many days until next Friday\" / \"days until Monday\" / \"how long until sunday\" now resolve to the next matching weekday (date-until-weekday) instead of null. parseDate gained a weekday-target branch (full names + abbrevs sun/mon/tue/wed/thu/fri/sat, optional next/this/coming) -> nearest FUTURE date (a bare weekday on its own day = next week, never today). Gated to real weekday words so \"may\"/\"launch\"/junk still return null. +2 tests, 2167 green. Fills a common casual date question that fell to a slow browse."
+    },
+    {
+      "item": "date-since",
+      "note": "\"days since <date>\" / \"how long since July 4\" / \"weeks since 2026-08-01\" now give elapsed days (the converse of \"until\"), was null. runDateCalc gained a since/after branch computing today-target; a FUTURE date honestly redirects (\"still N days away — ask days until\") rather than a negative count; reuses parseTrailingDate so \"days since my anniversary on 1990-05-06\" works. +1 test, 2168 green."
     }
   ],
   "audits": [
