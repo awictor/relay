@@ -3158,6 +3158,15 @@
       "status": "done",
       "why": "runDateCalc's days-until branch passed the whole tail to parseDate, so a LABELED date ('my birthday on 2025-06-20', 'the deadline is July 4', 'my trip on X') failed to parse -> null -> the question fell through to a slow, non-deterministic agent run for math the tool should nail instantly.",
       "how": "When the whole phrase doesn't parse, peel a trailing date token (up to 4 words, stripping a leading on/is/for/by/the) and parse that, dropping the label. Plain 'days until Christmas' + bare-date + no-date->null all unchanged."
+    },
+    {
+      "id": "unit-convert-trailing-please",
+      "title": "'convert 100 kg to lbs please' failed — 'please' glued to the target unit",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "parseUnitConvert didn't strip a trailing politeness word/punctuation, so 'to lbs please' parsed to target unit 'lbs please' -> unknown unit -> the conversion returned null and a common polite phrasing silently failed (fell to a slow agent guess).",
+      "how": "Strip a trailing please/thanks/thx/pls + trailing ?.! before matching (alongside the existing leading-'convert' strip). Regressions (180C to F, 5ft11 to cm, cross-dim null) unchanged."
     }
   ],
   "history": [
@@ -4440,6 +4449,10 @@
     {
       "id": "datecalc-labeled-until",
       "note": "After 5 clean sweeps I'd dismissed this as niche, but it's a real gap: a deterministic-tool question ('how many days until my birthday on <date>') returned null and fell to a slow agent guess because the label broke parseDate. Added parseTrailingDate: peel a trailing date off a labeled days-until phrase. +1 test, 2023 green. (So the vein wasn't fully dry — a labeled-input class the pure-value probes missed.)"
+    },
+    {
+      "id": "unit-convert-trailing-please",
+      "note": "Continued the labeled/phrased-input audit (last run's lesson). Probed parseUnitConvert: 'convert 100 kg to lbs please' -> to='lbs please' -> null -> slow agent. Added a trailing please/thanks/punct strip. +2 tests, 2024 green. Same class as datecalc-labeled-until: the core value parsing is swept, but natural politeness/label tails around it still broke tools."
     }
   ],
   "audits": [
@@ -4781,6 +4794,9 @@
     },
     {
       "note": "anvil DOWN, agent cap exhausted. Re-probed runDateCalc with LABELED inputs (not just bare values) -> found days-until dropped labeled dates to null/slow-agent. Fixed. Lesson: the remaining offline bugs are in LABELED/phrased inputs, not the core value parsing (which is swept). confirm-to-act (owner) + anvil-live-e2e (anvil) still the gated levers."
+    },
+    {
+      "note": "anvil DOWN, agent cap exhausted. Labeled/phrased-input sweep continues to pay: unit-convert dropped a trailing 'please' into the unit. Fixed. The productive residual audit is politeness/label tails on the parse tools (compose recipient labels, alert phrasings next). confirm-to-act (owner) + anvil-live-e2e (anvil) still gated."
     }
   ]
 }

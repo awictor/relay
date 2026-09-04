@@ -101,7 +101,10 @@ export function convertUnit(amount: number, from: string, to: string): { value: 
  *   "180C to F", "convert 10 miles to km", "5 ft 11 in in cm", "2 cups of flour in grams", "3 lb in kg".
  * A compound imperial length ("5 ft 11 in") is summed. "of <thing>" is ignored. Exported for tests. */
 export function parseUnitConvert(text: string): { amount: number; from: string; to: string } | null {
-  const t = text.trim().replace(/^convert\s+/i, "");
+  // Strip a leading "convert" + a trailing politeness/punctuation ("... to lbs please" / "... in cm?"):
+  // otherwise the trailing word became part of the target unit ("lbs please") and the conversion failed
+  // on an unknown unit (unit-convert-trailing-please).
+  const t = text.trim().replace(/^convert\s+/i, "").replace(/\s+(?:please|thanks|thx|pls)\s*$/i, "").replace(/[?.!]+$/g, "").trim();
   // Compound feet+inches: "5 ft 11 in" / "5'11\"" / "5 foot 11" -> total inches.
   const compound = t.match(/(\d+(?:\.\d+)?)\s*(?:ft|foot|feet|')\s*(\d+(?:\.\d+)?)\s*(?:in|inch(?:es)?|")?\s+(?:in|into|to)\s+([a-z]+)/i);
   if (compound) {

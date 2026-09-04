@@ -62,6 +62,13 @@ describe("parseUnitConvert", () => {
   it("sums a compound feet+inches height into inches", () => {
     expect(parseUnitConvert("5 ft 11 in in cm")).toEqual({ amount: 71, from: "in", to: "cm" });
   });
+  it("strips a trailing 'please'/'thanks'/punctuation so it isn't glued to the target unit (unit-convert-trailing-please)", () => {
+    // "to lbs please" used to parse to="lbs please" -> unknown unit -> conversion failed.
+    expect(parseUnitConvert("convert 100 kg to lbs please")).toEqual({ amount: 100, from: "kg", to: "lbs" });
+    expect(parseUnitConvert("10 miles in km thanks")).toEqual({ amount: 10, from: "miles", to: "km" });
+    expect(parseUnitConvert("convert 5km to miles pls")).toEqual({ amount: 5, from: "km", to: "miles" });
+    expect(parseUnitConvert("180C to F?")).toEqual({ amount: 180, from: "C", to: "F" });
+  });
   it("returns null for a non-conversion", () => {
     expect(parseUnitConvert("what's the weather")).toBeNull();
   });
@@ -73,6 +80,7 @@ describe("runConvert (parse + convert + format)", () => {
     expect(runConvert("2 cups of flour in grams")).toBeNull(); // cups->grams is volume->mass, can't
     expect(runConvert("2 cups in ml")).toMatch(/= 473\.2 ml/);
     expect(runConvert("5 ft 11 in in cm")).toMatch(/= 180\.3 cm/);
+    expect(runConvert("convert 100 kg to lbs please")).toMatch(/100 kg = 220\.5 lb/); // trailing 'please' no longer breaks it
   });
   it("null on unknown / cross-type / non-conversion", () => {
     expect(runConvert("3 kg to miles")).toBeNull();
