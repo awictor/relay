@@ -212,7 +212,7 @@
       "title": "Surface a browse-depth example in the START first-touch card (not just /help)",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The killer differentiator (deep multi-page/filtered errands, structured lists) is only in the deep /help list; a new user's first-10-min START card leads with simple lookups, so they never learn Relay can do the competitor-grade errands. One vivid example in START raises discovery.",
       "how": "Add one line to the START card (src/commands.ts) like '• Bigger: find the 10 cheapest listings across a few pages and send them as a spreadsheet'. Keep START short; swap in, don't bloat. Update the START copy test if it asserts structure."
     },
@@ -318,6 +318,10 @@
     {
       "item": "watch-extract-row-set",
       "note": "Made the URL-keyed dedup actually ENGAGE on real feed watches: a feed/new-items watch now nudges the agent (via injected context) to return items ONE per line WITH each items direct LINK. Without links the shipped feedItemKey URL-keying had nothing to key on (titles reword -> flap); with them, a listing/job watch keys by URL so reworded titles dont false-fire + same-title-different-URL stay distinct. Tight high-leverage slice of the L: reused the existing extractListItems+feedItemKey pipeline (no risky live-path refactor), just ensured the reply carries the URLs the keying needs. +1 alert-runner test (feed watch gets the link nudge, plain watch doesnt). 2244 green. LIVE e2e: real agent feed reply -> 11 items all with links -> feedItemKey produced u: URL keys (two same-author items correctly collapsed). call-tested: TRUE."
+    },
+    {
+      "item": "start-card-surface-depth",
+      "note": "START first-touch card now surfaces the browse-depth differentiator: added \"the 20 newest listings on <site> as a spreadsheet — I page/scroll past screen one and hand back a clean list\" under Bigger stuff. Previously only the deep /help mentioned multi-page/structured errands, so a new user never learned the competitor-grade capability. +1 START assertion. 2244 green. call-tested: n/a (copy)."
     }
   ],
   "probes": [

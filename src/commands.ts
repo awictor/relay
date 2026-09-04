@@ -33,6 +33,7 @@ Remember & remind:
 Bigger stuff (send a link or name a site):
 • "compare the price across these 3 links" · "summarize this video: <link>"
 • "find the 5 cheapest flights to Lisbon and get back to me"
+• "the 20 newest listings on <site> as a spreadsheet" — I page/scroll past screen one and hand back a clean list
 
 📍 Tap the paperclip → Location once and "weather", "near me", and directions just work.
 

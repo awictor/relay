@@ -43,6 +43,9 @@ describe("handleCommand", () => {
     expect(start.toLowerCase()).toMatch(/remind me/);
     // The location unlock is surfaced in onboarding (not buried in /help).
     expect(start.toLowerCase()).toMatch(/location/);
+    // The browse-depth differentiator (multi-page listings -> a list/spreadsheet) is surfaced in the
+    // first-touch card, not only in the deep /help (start-card-surface-depth).
+    expect(start.toLowerCase()).toMatch(/newest listings|cheapest across|page.*screen one|spreadsheet/);
   });
 
   it("passes normal messages through (null)", () => {
