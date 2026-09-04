@@ -113,7 +113,9 @@ export function isUrlSafe(urlString: string): { safe: boolean; reason?: string }
     return { safe: false, reason: `Blocked numeric IP encoding: ${hostname}` };
   }
 
-  const BLOCKED_PORTS = [22, 23, 25, 465, 587, 2379, 3306, 3389, 4369, 5432, 5433, 6379, 6380, 6381, 8500, 9200, 9201, 9300, 11211, 15672, 27017, 27018];
+  // DEV-0461 (mcp-forge): + container/orchestrator control-plane daemons (Docker 2375/2376, etcd 2380,
+  // k8s API 6443, kubelet 10250/10255) — never a legitimate public API target. App ports stay allowed.
+  const BLOCKED_PORTS = [22, 23, 25, 465, 587, 2375, 2376, 2379, 2380, 3306, 3389, 4369, 5432, 5433, 6379, 6380, 6381, 6443, 8500, 9200, 9201, 9300, 10250, 10255, 11211, 15672, 27017, 27018];
   if (parsed.port && !["80", "443", ""].includes(parsed.port)) {
     const port = parseInt(parsed.port);
     if (port < 1024 && port !== 80 && port !== 443) {
