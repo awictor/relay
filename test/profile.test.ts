@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply, parseUnitsPreference, parseReplyStyle, replyStyleSummary, inferTzFromLocation, inferZoneFromLocation, offsetForZoneAt } from "../src/lib/profile.js";
+import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply, parseUnitsPreference, parseReplyStyle, replyStyleSummary, parseInlineLocationErrand, inferTzFromLocation, inferZoneFromLocation, offsetForZoneAt } from "../src/lib/profile.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -350,6 +350,24 @@ describe("replyStyleSummary (reply-style-menu-discoverability)", () => {
     expect(s).toContain("detailed");
     expect(s).toContain("emoji on");
     expect(s).toContain("imperial");
+  });
+});
+
+describe("parseInlineLocationErrand (save-city-cta-on-agent-weather)", () => {
+  it("extracts a known city from an inline weather/time errand + infers tz", () => {
+    expect(parseInlineLocationErrand("weather in Denver")).toEqual({ location: "Denver", tzOffsetMin: -420 });
+    expect(parseInlineLocationErrand("forecast for London")).toEqual({ location: "London", tzOffsetMin: 0 });
+    expect(parseInlineLocationErrand("time in Tokyo right now")).toEqual({ location: "Tokyo", tzOffsetMin: 540 });
+    expect(parseInlineLocationErrand("temperature in Berlin please")).toEqual({ location: "Berlin", tzOffsetMin: 60 });
+  });
+  it("resolves a region-qualified place via the tail", () => {
+    expect(parseInlineLocationErrand("what's the weather in Paris, TX")).toEqual({ location: "Paris, TX", tzOffsetMin: -360 });
+  });
+  it("returns null when there's no inline place, no errand keyword, or an unknown place", () => {
+    expect(parseInlineLocationErrand("weather")).toBeNull();          // no inline place -> ask-for-city path
+    expect(parseInlineLocationErrand("coffee near me")).toBeNull();   // near me has no named place
+    expect(parseInlineLocationErrand("weather in Smallville")).toBeNull(); // unknown place -> no offer (don't mis-save)
+    expect(parseInlineLocationErrand("what does serendipity mean")).toBeNull(); // not a location errand
   });
 });
 

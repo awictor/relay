@@ -3705,9 +3705,18 @@
       "title": "When a user names a city inline (\"weather in Denver\") with no saved profile, offer to save it as home",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "first-location-capture only triggers on a location errand with NO city in the message (weather / near me). A user who types the city inline (\"weather in Denver\", \"time in Tokyo\") answers fine but is never offered to SAVE Denver as home — so tomorrows bare \"weather\" asks again. Detecting the inline city + offering a one-tap save closes the loop for the most common phrasing.",
       "how": "After an agent weather/location answer where the message contained an explicit place + the chat has no saved location, append a one-time (respect locationAsked) \"want me to save <place> as your home? y/n\" or a tap button; on yes, store it. Reuse the place extraction already in the agent context. Offline test: inline-city weather offers save once, decline sticks."
+    },
+    {
+      "id": "save-city-cta-tap-button",
+      "title": "Make the save-inline-city offer a one-tap YES button on button channels",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "The inline-city save offer (save-city-cta-on-agent-weather) is text-only (\"reply yes\"). On Telegram a one-tap YES/No button converts far better than asking the user to type — mirrors the existing confirm/act button infra. Small polish that lifts the save-rate on the primary channel.",
+      "how": "On a button channel, attach a YES/dismiss inline keyboard to the save offer (reuse confirmButtons or a new callback kind); on tap YES, run the same captureLocation(place) save. Text yes still works for console. Offline test: tap saves, dismiss clears."
     }
   ],
   "history": [
@@ -5358,6 +5367,10 @@
     {
       "item": "post-onboarding-set-city-prompt",
       "note": "First-location capture now fires AT MOST ONCE per chat. The one-time save offer existed, but on a DECLINE (a user who replies with a fresh task / \"never mind\" instead of a city) the pending state just dropped with nothing recorded — so the NEXT weather/near-me errand re-asked \"which city?\", the exact nag the capture is meant to avoid. Added a locationAsked Set: set when we ask, checked alongside the existing hasLocation/pendingLocation guards so a declined chat is never re-prompted (they can still /setlocation whenever they want). A successful save is moot (theyll have a location). +1 test (decline -> later errand does NOT re-ask). 2358 green. call-tested: offline (handler routing)."
+    },
+    {
+      "item": "save-city-cta-on-agent-weather",
+      "note": "Closed the location-capture loop for the MOST COMMON phrasing: a user who names the city inline (\"weather in Denver\", \"time in Tokyo\", \"forecast for Paris, TX\"). first-location-capture only fired when the message had NO city, so inline-city users answered fine but were never offered to save home -> tomorrows bare \"weather\" re-asked. New pure parseInlineLocationErrand(text) extracts the place from a weather/time/sunset errand + only returns it when it resolves to a KNOWN city (inferTz != null) so we never mis-save a typo/ambiguous place. Handler: the ask-for-city branch now SKIPS when a city is named inline (message reaches the agent), then after a clean weather/time answer with no saved home it offers ONCE (shares the locationAsked guard so no double-nag) \"save Denver as your home?\"; a \"yes\"/\"sure\" next turn stores it via captureLocation, anything else declines + routes normally. +6 tests (4 parse incl. region-tail + unknown-place null, 3 handler: inline answers+offer+yes-saves, decline stores nothing, offer fires once). 2364 green. call-tested: offline (parse + handler routing)."
     }
   ],
   "audits": [

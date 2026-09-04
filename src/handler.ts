@@ -17,7 +17,7 @@ import { splitScheduleCommand } from "./lib/schedule.js";
 import { repeatedTaskNudge, recurringCta } from "./lib/task-suggest.js";
 import { formatUtcOffset } from "./lib/profile.js";
 import { isRecallRequest } from "./lib/notes.js";
-import { needsLocationContext } from "./lib/profile.js";
+import { needsLocationContext, parseInlineLocationErrand } from "./lib/profile.js";
 import { isBackgroundErrand, stripDispatchPhrasing, BACKGROUND_MAX_STEPS } from "./lib/background.js";
 import { isAnswerRecall, relativeAge } from "./lib/answer-log.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./lib/recipes.js";
@@ -441,6 +441,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   // mind" instead of a city) gets re-asked on every later weather/near-me errand — the nag the one-time
   // capture is meant to avoid. Set when we ask; a successful save is moot (they'll have a location then).
   const locationAsked = new Set<number>();
+  // A city the user named INLINE ("weather in Denver") that we offered to save as home (save-city-cta-on-
+  // agent-weather). Keyed by chat; a "yes"/"save it" on the NEXT message stores it. Cleared on use or on
+  // any non-affirmative reply (so a later "yes" to something else isn't misread as a save).
+  const pendingSaveCity = new Map<number, string>();
   // A reminder the user asked for WITHOUT a time ("remind me to call mom") — we ask "when?" and stash the
   // bare to-do here so the reply ("at 3pm") re-runs it as a full schedule instead of losing the task
   // (reminder-no-time-ask). Keyed by chat; the stored string is the extracted task ("call mom").
@@ -928,6 +932,24 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       // Not a time — abandon the pending reminder and let this message route normally.
     }
 
+    // Save-inline-city confirmation (save-city-cta-on-agent-weather): we offered to save a city the user
+    // named inline; a "yes"/"save it"/"sure" now stores it via captureLocation (which parses the city +
+    // infers tz). Any other reply declines — drop the pending offer + route the message normally.
+    if (deps.captureLocation && pendingSaveCity.has(msg.chatId)) {
+      const place = pendingSaveCity.get(msg.chatId)!;
+      pendingSaveCity.delete(msg.chatId);
+      if (/^\s*(?:yes|yep|yeah|yea|sure|ok(?:ay)?|please|save(?:\s+it)?|do\s+it|y)\b[\s!.]*$/i.test(msg.text)) {
+        const saved = deps.captureLocation(msg.chatId, place);
+        if (saved) {
+          const note = saved.saved === false ? " (heads up: I couldn't save it to disk, so I may ask again after a restart)" : " (Change it anytime with /setlocation.)";
+          await deps.sendMessage(msg.chatId, `Saved ${saved.location} as your home.${note}`);
+          return;
+        }
+        // captureLocation couldn't parse the stored place (shouldn't happen — it resolved on offer) — fall through.
+      }
+      // Not an affirmative -> declined; fall through so THIS message routes normally.
+    }
+
     if (deps.captureLocation && pendingLocation.has(msg.chatId)) {
       const errand = pendingLocation.get(msg.chatId)!;
       const saved = deps.captureLocation(msg.chatId, msg.text);
@@ -1059,7 +1081,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // agent ask every time (and leaving tz unset, which mis-times reminders). Next message is the reply,
     // handled above. Only when the deps are wired + nothing else already owns this message shape.
     if (deps.hasLocation && deps.captureLocation && !deps.hasLocation(msg.chatId)
-        && !pendingLocation.has(msg.chatId) && !locationAsked.has(msg.chatId) && needsLocationContext(msg.text)) {
+        && !pendingLocation.has(msg.chatId) && !locationAsked.has(msg.chatId) && needsLocationContext(msg.text)
+        // A message that NAMES the city inline ("weather in Denver") already has what it needs — let it
+        // reach the agent + get the save-offer afterward (save-city-cta-on-agent-weather), don't ask.
+        && !parseInlineLocationErrand(msg.text, deps.now())) {
       pendingLocation.set(msg.chatId, msg.text);
       locationAsked.add(msg.chatId); // ask ONCE per chat; a decline must not re-nag on the next errand
       const ask = "What city are you in? Tap the button to share your location, or type a city (add \"UTC-5\" and I'll get your reminder times right too). I'll save it so I don't have to ask again.";
@@ -2051,6 +2076,19 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       if (briefened && !briefHinted.has(msg.chatId)) {
         briefHinted.add(msg.chatId);
         out += "\n\n(Kept it brief — say \"more\" for the full answer.)";
+      }
+      // Save-inline-city offer (save-city-cta-on-agent-weather): the user named a city inline ("weather in
+      // Denver") and has NO saved home — offer ONCE to save it so tomorrow's bare "weather" just works.
+      // Respects locationAsked (shared with the ask-for-city path) so a chat is never nagged twice about
+      // location. Clean text weather/time answers only; a "yes" on the next turn saves it (branch above).
+      if (deps.hasLocation && deps.captureLocation && !deps.hasLocation(msg.chatId) && !locationAsked.has(msg.chatId)
+          && !degraded && !photo && !doc) {
+        const inline = parseInlineLocationErrand(msg.text, deps.now());
+        if (inline) {
+          locationAsked.add(msg.chatId);            // one location prompt per chat, ever
+          pendingSaveCity.set(msg.chatId, inline.location);
+          out += `\n\n(Want me to save ${inline.location} as your home? Reply "yes" and I won't ask the city next time.)`;
+        }
       }
       // If the agent produced a binary (screenshot image or PDF), send it first with the reply as
       // caption, then the text if the caption overflowed. Falls back to text-only when nothing was

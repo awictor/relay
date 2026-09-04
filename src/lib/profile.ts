@@ -155,6 +155,27 @@ export function replyStyleSummary(p: Profile | undefined): string {
   return `Answers: ${length}, ${emoji}, ${units}.\nChange anytime: say "keep it brief" / "more detail", "no emoji" / "use emoji", or "use metric" / "use imperial".`;
 }
 
+/** Extract an INLINE place from a location-shaped errand that named the city itself — "weather in Denver",
+ * "forecast for London", "time in Tokyo", "what's the weather in Paris, TX". Returns the place + its
+ * inferred tz offset, or null when there's no location errand keyword, no "in/for/at <place>" tail, or the
+ * tail doesn't resolve to a KNOWN city (so we never offer to save a bogus/ambiguous place). Deliberately
+ * conservative: it gates the one-time "save <place> as home?" offer (save-city-cta-on-agent-weather), so a
+ * false positive would nag with a wrong place — better to miss than mis-save. `atMs` -> DST-correct tz. */
+export function parseInlineLocationErrand(text: string, atMs?: number): { location: string; tzOffsetMin?: number } | null {
+  const t = text.trim();
+  // Must be a weather/time/location errand that carries an "in/for/at <place>" tail. "near me" has no
+  // inline place (that's the ask-for-city path), so it's intentionally excluded here.
+  const m = t.match(/\b(?:weather|forecast|temperature|temp|climate|sunset|sunrise|time|what time|current time|local time)\b[\s\S]*?\b(?:in|for|at)\s+([A-Za-z][\w'.,\- ]{1,40}?)\s*[?!.]*$/i);
+  if (!m) return null;
+  let place = m[1]!.trim().replace(/[,\s]+$/, "").replace(/\b(right now|now|today|tomorrow|tonight|please|currently)\b\s*$/i, "").replace(/[,\s]+$/, "").trim();
+  if (!place || place.split(/\s+/).length > 4) return null; // a place is a few words, not a sentence tail
+  // Only offer when the place resolves to a KNOWN city (high confidence it's a real place, not a typo /
+  // a common word). inferTzFromLocation returns null for an unknown place -> no offer (miss, don't mis-save).
+  const off = inferTzFromLocation(place, atMs);
+  if (off === null) return null;
+  return { location: place, tzOffsetMin: off };
+}
+
 // A location-dependent errand: the answer changes with WHERE the user is, so with no saved location
 // Relay would ask the city every time. Used to offer a one-time "save your city?" capture on the first
 // such ask (first-location-capture). Deliberately specific so a generic task isn't intercepted.

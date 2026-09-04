@@ -1594,6 +1594,33 @@ describe("first-run location capture (first-location-capture)", () => {
     await handle(msg("weather tomorrow", 5));                 // 2nd location errand — must NOT re-nag
     expect(sent.filter((m) => /what city/i.test(m.text)).length).toBe(asksAfterDecline); // no new ask
   });
+
+  it("an INLINE city ('weather in Denver') answers, then offers to save it; 'yes' stores it (save-city-cta-on-agent-weather)", async () => {
+    const { handle, sent, agentRan, city } = locHarness(false);
+    await handle(msg("weather in Denver", 5));
+    expect(agentRan()).toBe("weather in Denver");             // answered inline, NOT asked "which city?"
+    expect(sent.some((m) => /what city are you in/i.test(m.text))).toBe(false);
+    expect(sent.some((m) => /save Denver as your home/i.test(m.text))).toBe(true); // offered once
+    await handle(msg("yes", 5));
+    expect(city()).toEqual({ location: "Denver", tzOffsetMin: -420 }); // saved via captureLocation
+    expect(sent.some((m) => /Saved Denver as your home/i.test(m.text))).toBe(true);
+  });
+
+  it("declining the inline-city save ('no thanks') stores nothing + routes the message normally", async () => {
+    const { handle, agentRan, city } = locHarness(false);
+    await handle(msg("weather in Denver", 5));
+    await handle(msg("no thanks, top HN story", 5));
+    expect(city()).toBeNull();                                // not saved
+    expect(agentRan()).toBe("no thanks, top HN story");       // the decline message ran normally
+  });
+
+  it("the inline-city offer fires at most once per chat (shares the location-ask guard)", async () => {
+    const { handle, sent } = locHarness(false);
+    await handle(msg("weather in Denver", 5));
+    await handle(msg("no", 5));                               // decline
+    await handle(msg("weather in Boston", 5));                // another inline city — must NOT re-offer
+    expect(sent.filter((m) => /save .* as your home/i.test(m.text)).length).toBe(1);
+  });
 });
 
 describe("background errands (async-background-errands)", () => {
