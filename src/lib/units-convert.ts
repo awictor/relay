@@ -5,7 +5,7 @@
 // DETERMINISTIC converter over fixed factor tables (no network, no LLM), mirroring convert_currency.
 // Pure parse + convert helpers exported + unit-tested.
 
-type Dim = "length" | "mass" | "volume" | "temperature" | "data";
+type Dim = "length" | "mass" | "volume" | "temperature" | "data" | "speed";
 interface Unit { dim: Dim; toBase: number; base?: boolean; label: string; }
 
 // Each unit maps to a base (length=meter, mass=gram, volume=milliliter) by a multiply factor. Temperature
@@ -46,6 +46,14 @@ const UNITS: Record<string, Unit> = {
   gb: { dim: "data", toBase: 1024 ** 3, label: "GB" }, gigabyte: { dim: "data", toBase: 1024 ** 3, label: "GB" }, gigabytes: { dim: "data", toBase: 1024 ** 3, label: "GB" },
   tb: { dim: "data", toBase: 1024 ** 4, label: "TB" }, terabyte: { dim: "data", toBase: 1024 ** 4, label: "TB" }, terabytes: { dim: "data", toBase: 1024 ** 4, label: "TB" },
   pb: { dim: "data", toBase: 1024 ** 5, label: "PB" }, petabyte: { dim: "data", toBase: 1024 ** 5, label: "PB" },
+  // speed (base: meter/second). "100 km/h to mph", "60 mph to kph", "how fast is 50 knots" is a daily
+  // travel/driving errand that fell to a slow model-memory browse (units-speed-convert). The "/" and
+  // "per" forms ("km/h", "km per h", "mi/h") are canonicalized in normalizeUnit so a bare token matches.
+  "m/s": { dim: "speed", toBase: 1, base: true, label: "m/s" }, mps: { dim: "speed", toBase: 1, label: "m/s" },
+  "km/h": { dim: "speed", toBase: 1000 / 3600, label: "km/h" }, kmh: { dim: "speed", toBase: 1000 / 3600, label: "km/h" }, kph: { dim: "speed", toBase: 1000 / 3600, label: "km/h" },
+  "mi/h": { dim: "speed", toBase: 1609.344 / 3600, label: "mph" }, mph: { dim: "speed", toBase: 1609.344 / 3600, label: "mph" },
+  "ft/s": { dim: "speed", toBase: 0.3048, label: "ft/s" }, fps: { dim: "speed", toBase: 0.3048, label: "ft/s" },
+  knot: { dim: "speed", toBase: 1852 / 3600, label: "kn" }, knots: { dim: "speed", toBase: 1852 / 3600, label: "kn" }, kn: { dim: "speed", toBase: 1852 / 3600, label: "kn" }, kt: { dim: "speed", toBase: 1852 / 3600, label: "kn" },
 };
 // Temperature units (affine). Handled outside the factor table.
 const TEMP = new Set(["c", "celsius", "centigrade", "f", "fahrenheit", "k", "kelvin"]);
@@ -57,6 +65,21 @@ export function normalizeUnit(raw: string): string {
   const TEMP_ALIAS: Record<string, string> = { "°c": "c", celsius: "c", centigrade: "c", "°f": "f", fahrenheit: "f", kelvin: "k" };
   const alias = TEMP_ALIAS[u];
   if (alias) return alias;
+  // Speed spellings collapse to a canonical UNITS key (units-speed-convert): "km per hour", "kilometres
+  // per hour", "km/hr", "kmph" -> "km/h"; "miles per hour", "mi/hr" -> "mph"; "meters per second" -> "m/s";
+  // "feet per second" -> "ft/s"; "nautical miles per hour" -> "knot". Done before the UNITS lookup so a
+  // bare token (any of these forms) matches the speed factor table.
+  const sp = u
+    .replace(/\bper\b/g, "/").replace(/\s*\/\s*/g, "/")           // "km per hour" -> "km/hour"; trim around "/"
+    .replace(/\/(?:hr|hour|hours|h)\b/, "/h").replace(/\/(?:sec|second|seconds|s)\b/, "/s"); // canonical denominators
+  const SPEED_ALIAS: Record<string, string> = {
+    "kilometer/h": "km/h", "kilometre/h": "km/h", "kilometers/h": "km/h", "kilometres/h": "km/h", "kmph": "km/h",
+    "mile/h": "mph", "miles/h": "mph", "mi/h": "mph", "mileph": "mph",
+    "meter/s": "m/s", "metre/s": "m/s", "meters/s": "m/s", "metres/s": "m/s",
+    "foot/s": "ft/s", "feet/s": "ft/s", "nautical mile/h": "knot", "nautical miles/h": "knot",
+  };
+  if (SPEED_ALIAS[sp]) return SPEED_ALIAS[sp];
+  if (sp in UNITS) return sp; // "km/h", "mi/h", "m/s", "ft/s" land here directly
   if (u in UNITS || TEMP.has(u)) return u;
   // singularize ("inches"->"inche"? no — try dropping trailing s)
   if (u.endsWith("s") && (u.slice(0, -1) in UNITS)) return u.slice(0, -1);
@@ -123,7 +146,9 @@ export function parseUnitConvert(text: string): { amount: number; from: string; 
   // Standard: "<amount> <from> [of <ingredient>] (to|in|into) <to>". Temp allows a °/no-space form
   // ("180C to F"). The "of <ingredient>" is CAPTURED (not just skipped) so a volume<->mass cooking
   // conversion can pick the right density ("2 cups of flour in grams") (unit-convert-density).
-  const m = t.match(/(-?\d+(?:\.\d+)?)\s*°?\s*([a-z][a-z ]*?)\s+(?:of\s+([a-z ]+?)\s+)?(?:in ?to|into|to|in)\s+°?\s*([a-z][a-z ]*?)\s*$/i);
+  // from/to allow "/" so a speed unit ("km/h", "mi/h") is captured whole (units-speed-convert). The "of
+  // <ingredient>" group stays letters-only so "100 km/h to mph" doesn't misfire on the density path.
+  const m = t.match(/(-?\d+(?:\.\d+)?)\s*°?\s*([a-z][a-z /]*?)\s+(?:of\s+([a-z ]+?)\s+)?(?:in ?to|into|to|in)\s+°?\s*([a-z][a-z /]*?)\s*$/i);
   if (!m) return null;
   const amount = parseFloat(m[1]!);
   const from = m[2]!.trim(), to = m[4]!.trim();

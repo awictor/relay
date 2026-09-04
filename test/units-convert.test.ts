@@ -109,3 +109,42 @@ describe("runConvert (parse + convert + format)", () => {
     expect(runConvert("hello there")).toBeNull();
   });
 });
+
+describe("convertUnit — speed (units-speed-convert)", () => {
+  it("converts across mph / km/h / m/s / knots / ft/s exactly", () => {
+    expect(convertUnit(100, "km/h", "mph")!.value).toBeCloseTo(62.1371, 3);
+    expect(convertUnit(60, "mph", "km/h")!.value).toBeCloseTo(96.5606, 3);
+    expect(convertUnit(30, "m/s", "km/h")!.value).toBeCloseTo(108, 6);
+    expect(convertUnit(60, "mph", "ft/s")!.value).toBeCloseTo(88, 4);   // the classic 60mph = 88ft/s
+    expect(convertUnit(50, "knots", "mph")!.value).toBeCloseTo(57.539, 2);
+    expect(convertUnit(100, "km/h", "knots")!.value).toBeCloseTo(53.9957, 3);
+  });
+  it("normalizes the spoken/slashed spellings to a km/h-equivalent speed unit", () => {
+    // The spelled-out / "per" forms collapse to the canonical "km/h" key; "kph"/"kmh" are their own
+    // aliases in the table (same factor + "km/h" label), so they stay themselves — either way every
+    // one is a speed unit that converts to mph.
+    for (const a of ["km/h", "km per hour", "kilometers per hour", "kmph"]) expect(normalizeUnit(a)).toBe("km/h");
+    for (const a of ["kph", "kmh", "km/h", "kmph"]) expect(convertUnit(100, a, "mph")!.value).toBeCloseTo(62.1371, 2);
+    for (const a of ["mph", "mi/h", "miles per hour", "mi/hr"]) expect(normalizeUnit(a)).toBe("mph");
+    expect(normalizeUnit("m/s")).toBe("m/s");
+    expect(normalizeUnit("meters per second")).toBe("m/s");
+    expect(normalizeUnit("feet per second")).toBe("ft/s");
+    for (const a of ["knot", "knots", "kn", "kt"]) expect(convertUnit(50, a, "mph")!.value).toBeCloseTo(57.539, 2); // all are speed
+  });
+  it("speed can't cross into a length/other dim", () => {
+    expect(convertUnit(100, "km/h", "km")).toBeNull();   // speed vs length
+    expect(convertUnit(100, "km/h", "kg")).toBeNull();
+  });
+});
+
+describe("runConvert — speed end-to-end (units-speed-convert)", () => {
+  it("answers the everyday speed errands instead of returning null", () => {
+    expect(runConvert("100 km/h to mph")).toMatch(/100 km\/h = 62\.14 mph/);
+    expect(runConvert("100 kph to mph")).toMatch(/62\.14 mph/);
+    expect(runConvert("60 mph to kph")).toMatch(/60 mph = 96\.56 km\/h/);
+    expect(runConvert("100 kilometers per hour to mph")).toMatch(/62\.14 mph/);
+    expect(runConvert("50 knots to mph")).toMatch(/57\.54 mph/);
+    expect(runConvert("30 m/s to km/h")).toMatch(/= 108 km\/h/);
+    expect(runConvert("convert 120 kph to mph please")).toMatch(/74\.56 mph/);
+  });
+});

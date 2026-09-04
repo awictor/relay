@@ -196,7 +196,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "convert_units",
-    description: "Convert between units of measure EXACTLY (no key, instant) — temperature, length, weight/mass, volume, cooking. Use this — NOT mental math or web_search — for \"180C to F\", \"5 foot 11 in cm\", \"2 cups of flour in grams\", \"10 miles in km\", \"3 lb in kg\". NOT for currency (use convert_currency). Pass the user's request verbatim.",
+    description: "Convert between units of measure EXACTLY (no key, instant) — temperature, length, weight/mass, volume, cooking, data size, and SPEED. Use this — NOT mental math or web_search — for \"180C to F\", \"5 foot 11 in cm\", \"2 cups of flour in grams\", \"10 miles in km\", \"3 lb in kg\", \"100 km/h to mph\", \"50 knots to mph\". NOT for currency (use convert_currency). Pass the user's request verbatim.",
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The conversion verbatim, e.g. \"180C to F\" or \"2 cups in ml\"." } },
@@ -540,7 +540,7 @@ Rules:
 - The user is on a phone. In "reply", write a short plain-text answer — never paste raw JSON. If you extracted/compared data, summarize it in a line or two (e.g. "A is $10, B is $20"). No markdown tables.
 - If something needs a login or a paid/irreversible action, call "reply" and say so plainly. Never invent data you didn't retrieve.
 - ANSWER DIRECTLY (call "reply" with NO tool first) when the answer is deterministic and needs no live data: a TRIVIAL one-step sum ("20% tip on $47" = $9.40), date/time math, and stable common knowledge ("capital of France"). Don't open a browser or search for these — it just adds 10-30s.
-- Use "convert_units" (NOT mental math) for any unit/measure conversion — temperature, length, weight, volume, cooking ("180C to F", "5 foot 11 in cm", "2 cups in grams", "10 miles in km"). Guessing these from memory is silently wrong.
+- Use "convert_units" (NOT mental math) for any unit/measure conversion — temperature, length, weight, volume, cooking, data size, speed ("180C to F", "5 foot 11 in cm", "2 cups in grams", "10 miles in km", "100 km/h to mph", "50 knots to mph"). Guessing these from memory is silently wrong.
 - Use "calculate" (NOT mental math) for anything BEYOND a trivial one-step sum: chained math, splitting a bill, multi-step tips/percentages, or a loan payment — mental math on those is silently wrong. e.g. "$127.50 split 3 ways after 20% tip" -> calculate "(127.50*1.2)/3"; "monthly payment on a $30k loan at 6% for 5 years" -> calculate "loanpayment(30000, 6, 5)".
 - Use OTHER tools when the answer is time-sensitive or uncertain: live prices, exchange rates that move (use "convert_currency" for FX), news, weather, anything "current"/"today"/"now". When unsure whether a fact is stable, verify with a tool rather than guess.
 - OPERATE ON PASTED TEXT DIRECTLY (call "reply" with NO tool): when the user's message CONTAINS the text to work on — "summarize this: <text>", "make this shorter", "proofread/fix the grammar", "tl;dr", "rewrite this as …", "translate this to Spanish" — just do it on the text they gave you. Never web_search or scrape for text that's already in the message; that only adds delay and risks answering about a different thing.

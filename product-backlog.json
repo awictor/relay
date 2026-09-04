@@ -3464,6 +3464,24 @@
       "status": "done",
       "why": "The feature ships (text + button YES/NO, default-OFF) but is undocumented - an operator who enables RELAY_CONFIRM_TO_ACT + their users won't discover it. A one-line /help mention (only when enabled) + a README note closes the discovery gap.",
       "how": "In commands.ts HELP, conditionally append a confirm-to-act line when confirmToActEnabled(); add a README bullet under the acting/safety section. Small, default-OFF-safe. Multi-step act chains remain a separate owner-gated item (bigger safety surface)."
+    },
+    {
+      "id": "calc-natural-phrasing",
+      "title": "calc handles natural phrasing: \"20% tip on 47\", scientific notation \"1e3\", factorial \"5!\"",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "Probe found calc(\"20% tip on 47\") errors with \"I don’t know tip\", \"1e3+1\" errors on \"e\", and \"5!\" errors on \"!\". A texting user asking \"20% tip on 47\" gets an error instead of 9.40 (or falls to a slow agent). The tip/split path may be handled elsewhere, but bare calc chokes.",
+      "how": "In calc.ts normalizeExpr: strip/interpret \"X% tip on Y\" -> Y*X/100 (or route to the tip handler), accept 1e3 scientific-notation number tokens in tokenize, and support trailing ! as factorial. Verify against the existing tip-split path so there’s no double-handling. Add tests."
+    },
+    {
+      "id": "convert-speed-bare-query",
+      "title": "Route a bare \"how fast is 50 knots\" / \"50 knots in mph\" naturally (no \"to\")",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "Speed conversion now works for \"X to Y\" / \"X in Y\", but a natural \"how fast is 50 knots\" (no explicit target) returns null. A user asking casually gets a slow browse instead of a sensible default (knots->mph, m/s->km/h).",
+      "how": "In parseUnitConvert, when only a source speed unit is given (no \"to/in <unit>\"), default the target to the user’s locale counterpart (knots/m·s -> mph or km/h). Keep it speed-only so ambiguous single-unit queries elsewhere don’t misfire. Add tests."
     }
   ],
   "history": [
@@ -5002,6 +5020,10 @@
     {
       "item": "confirm-to-act-help-doc",
       "note": "/help + README now mention approve-to-act — but ONLY when RELAY_CONFIRM_TO_ACT is on (line appended to HELP at call time so the env flag reads live; absent by default). Closes the discovery gap: an operator who enables the feature now has their users learn it exists + how to approve (tap ✅ Yes / reply yes; no/timeout discards). README gained a default-OFF opt-in paragraph under the safety section. +1 test (asserts absent-by-default, present-when-on, both /help and bare help). 2155 green."
+    },
+    {
+      "item": "units-speed-convert",
+      "note": "Added a SPEED dimension to the unit converter (base m/s): mph, km/h (+kph/kmh/kmph/\"km per hour\"), m/s, ft/s, knots (kn/kt). normalizeUnit now canonicalizes the slashed + spoken forms (\"km per hour\"->km/h, \"miles per hour\"->mph, \"feet per second\"->ft/s) and the parser char-class allows \"/\" so a speed unit is captured whole. \"100 km/h to mph\"->62.14, \"60 mph\"->96.56 km/h, \"60 mph\"->88 ft/s, \"50 knots\"->57.54 mph — all exact; cross-dim (speed->length) still null. Tool description + SYSTEM_PROMPT + /help updated so the LLM routes speed queries here (not web_search). +4 tests, 2159 green. Fixes a daily travel errand that used to fall to a slow agent browse."
     }
   ],
   "audits": [
@@ -5640,6 +5662,11 @@
       "lens": "confirm-to-act inline buttons",
       "surfaced": "A texting user now TAPS Yes/No on a committing-action prompt (the natural mobile UX) instead of typing - via the existing callback infra, button-tap routed through the same execute path as text (no logic fork). editReplyMarkup retires the buttons on tap so a stale re-tap can't re-fire. The confirm-to-act feature is now UX-complete on Telegram. Remaining followups (/help mention, multi-step chains) are minor/owner-gated.",
       "seeded": "confirm-to-act-help-doc"
+    },
+    {
+      "lens": "inline probe (subagent cap 200/200 — ran offline edge-probes on pure keyless tools instead of 3 agents)",
+      "surfaced": "Probed calc + unit conversions for wrong/missing answers. Found: SPEED conversion entirely unsupported — runConvert returned null for every mph/km/h/knots/m·s query (\"100 km/h to mph\", \"60 mph to kph\"), a daily travel/driving errand that fell through to a slow floundering agent browse instead of an instant exact answer. calc + length/mass/volume/temp/data all correct.",
+      "seeded": "units-speed-convert (built this iteration)"
     }
   ]
 }
