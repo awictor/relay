@@ -16,6 +16,24 @@ describe("handleCommand", () => {
     expect(handleCommand("  /start extra args")).toMatch(/I'm Relay/);
   });
 
+  it("/help mentions approve-to-act ONLY when the flag is on, default OFF (confirm-to-act-help-doc)", () => {
+    const prev = process.env.RELAY_CONFIRM_TO_ACT;
+    try {
+      delete process.env.RELAY_CONFIRM_TO_ACT;
+      expect(handleCommand("/help")).not.toMatch(/[Aa]pprove-to-act/); // default OFF -> absent
+      expect(handleCommand("help")).not.toMatch(/[Aa]pprove-to-act/);  // bare word too
+      process.env.RELAY_CONFIRM_TO_ACT = "1";
+      const on = handleCommand("/help")!;
+      expect(on).toMatch(/Approve-to-act/);          // flag on -> line present
+      expect(on).toMatch(/tap ✅ Yes/);              // names the approval gesture
+      expect(on).toMatch(/what I can do/);           // still the full HELP body
+      expect(handleCommand("help")).toMatch(/Approve-to-act/); // bare word gets it too
+    } finally {
+      if (prev === undefined) delete process.env.RELAY_CONFIRM_TO_ACT;
+      else process.env.RELAY_CONFIRM_TO_ACT = prev;
+    }
+  });
+
   it("/start leads with everyday errands + the 'just ask' framing, not a scraper pitch (onboarding-copy-life-assistant)", () => {
     const start = handleCommand("/start")!;
     // The plain-English framing appears before any power/scraper example.

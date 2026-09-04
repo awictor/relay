@@ -72,6 +72,12 @@ pages by default; you can **authorize specific sites** by configuring host-scope
 hosts you've authorized (names only), and the dangerous-action guard still blocks committing clicks.
 See [SECURITY.md](SECURITY.md).
 
+**Approve-to-act (opt-in, default OFF).** Set `RELAY_CONFIRM_TO_ACT=1` to let Relay perform a
+committing click (buy / submit / send) — but only after the user approves it. Instead of refusing, it
+STOPS, replies with a preview naming the exact click + host, and waits; the click runs only when the
+user taps **✅ Yes** (or replies "yes"). "No" or a timeout (2 min) discards it. With the flag off
+(the default), committing clicks are hard-refused as before. See [SECURITY.md](SECURITY.md).
+
 **Commands**: `/help` `/start` `/reset` (clear chat) `/status` (health) `/sites` (authorized hosts)
 `/setlocation` `/profile` `/dashboard` · `/schedules` `/cancel` · `/recipes` `/run` `/forget` ·
 `/digests` `/forget-digest` · `/alerts` `/forget-alert` · `/contacts` `/templates`.

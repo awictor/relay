@@ -3461,7 +3461,7 @@
       "title": "Document confirm-to-act in /help + README (gated on the flag being on)",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The feature ships (text + button YES/NO, default-OFF) but is undocumented - an operator who enables RELAY_CONFIRM_TO_ACT + their users won't discover it. A one-line /help mention (only when enabled) + a README note closes the discovery gap.",
       "how": "In commands.ts HELP, conditionally append a confirm-to-act line when confirmToActEnabled(); add a README bullet under the acting/safety section. Small, default-OFF-safe. Multi-step act chains remain a separate owner-gated item (bigger safety surface)."
     }
@@ -4998,6 +4998,10 @@
     {
       "item": "confirm-to-act-inline-buttons",
       "note": "Added Telegram inline YES/NO buttons to the confirm-to-act prompt (reusing callbacks.ts): new 'confirm' callback kind (bare cy/cn opcodes, round-trip) + confirmButtons() (✅ Yes / ✋ No row); handler attaches them to the preview (highest-priority keyboard, overrides pick/act CTAs) + a confirm-tap in handleCallback runs the SAME stashed-click logic as the text gate (yes->confirmAction, no->discard, expired/consumed->honest note, editReplyMarkup retires buttons so a re-tap can't double-fire). Text YES/NO still works for a buttonless channel (console). +5 tests. 2154 green. Default-OFF unchanged (confirmButtons only render when a pendingAction exists, which only happens when the flag's on)."
+    },
+    {
+      "item": "confirm-to-act-help-doc",
+      "note": "/help + README now mention approve-to-act — but ONLY when RELAY_CONFIRM_TO_ACT is on (line appended to HELP at call time so the env flag reads live; absent by default). Closes the discovery gap: an operator who enables the feature now has their users learn it exists + how to approve (tap ✅ Yes / reply yes; no/timeout discards). README gained a default-OFF opt-in paragraph under the safety section. +1 test (asserts absent-by-default, present-when-on, both /help and bare help). 2155 green."
     }
   ],
   "audits": [

@@ -1,6 +1,19 @@
 // Slash-command handling. Pure function so it's unit-testable without Telegram.
 // Returns a reply string for a recognized command, or null to pass the message
 // through to the agent.
+import { confirmToActEnabled } from "./lib/confirm-action.js";
+
+// When the operator has opted into confirm-to-act (RELAY_CONFIRM_TO_ACT), /help gains one line so
+// users discover it — the ONLY way the read-only bot ever clicks a committing button, and only after
+// they tap/type YES. Off by default, so the line is absent unless the operator turned the feature on
+// (confirm-to-act-help-doc). We append it to HELP at call time (not baked into the constant) so the
+// env flag is read live — matching how the agent/handler gate the feature.
+const CONFIRM_HELP_LINE =
+  "\n\nApprove-to-act (this instance has it on): if a task needs a committing click (buy, submit, send), " +
+  "I'll STOP and show you exactly what I'd click + where, then wait — I only do it after you tap ✅ Yes " +
+  "(or reply \"yes\"). Reply \"no\" (or ignore it) and nothing happens. I never click without that.";
+const withConfirmHelp = (help: string): string =>
+  confirmToActEnabled() ? help + CONFIRM_HELP_LINE : help;
 
 const START = `👋 I'm Relay. Text me like you'd text a helpful friend — plain English, no commands to learn. I'll look things up on the web and text you back.
 
@@ -216,10 +229,10 @@ export function handleCommand(text: string): string | null {
   // Telegram commands can carry a bot suffix, e.g. /help@relaybot
   const cmd = t.split(/\s+/)[0]?.split("@")[0];
   if (cmd === "/start") return START;
-  if (cmd === "/help" || cmd === "/menu" || cmd === "/commands") return HELP;
+  if (cmd === "/help" || cmd === "/menu" || cmd === "/commands") return withConfirmHelp(HELP);
   // Bare "help" / "menu" / "commands" / "?" (no slash) — a new user asking for the list without
   // knowing the slash syntax. Whole-message only so "help me plan X" (a real task) still runs.
-  if (/^(?:help|menu|commands|\?+)$/i.test(t)) return HELP;
+  if (/^(?:help|menu|commands|\?+)$/i.test(t)) return withConfirmHelp(HELP);
   // Greet a new user who opened with "hi" / "what can you do?" instead of the /start they don't know.
   // Keep it short (<= 6 words) so a longer sentence that merely starts with "how do you" is a real task.
   if (t.split(/\s+/).length <= 6 && (GREETING_RE.test(t) || CAPABILITY_RE.test(t))) return START;
