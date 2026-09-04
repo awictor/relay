@@ -12,7 +12,9 @@ export interface PriceOption { qty: number; unit: string; price: number; base: n
 // Parse one "<qty><unit> for $<price>" / "$<price> for <qty><unit>" / "$<price> / <qty><unit>" option.
 // Returns {qty, unit, price} or null. `unit` may be empty (a bare count like "12 for $6").
 function parseOption(s: string): { qty: number; unit: string; price: number } | null {
-  const t = s.trim().replace(/[,]/g, "");
+  // Normalize a "6-pack"/"12-pack" hyphen to a space so the qty+unit split reads it (unitprice-hyphen-pack):
+  // the grocery/retail phrasing "6-pack $5" otherwise failed the qty regex + fell to the model's mental math.
+  const t = s.trim().replace(/[,]/g, "").replace(/(\d)\s*-\s*(pack|pk|ct|count|pc|pcs|piece|pieces)\b/gi, "$1 $2");
   const priceRe = /\$?\s*(\d+(?:\.\d+)?)/;
   // Form A: "<qty><unit> for/at/@ $<price>"  e.g. "500g for $4", "12 oz @ 3.99", "1.2kg at $9"
   let m = t.match(/^(\d+(?:\.\d+)?)\s*([a-z ]*?)\s*(?:for|at|@|=|is|costs?)\s*\$?\s*(\d+(?:\.\d+)?)$/i);
@@ -39,7 +41,7 @@ export function parseUnitPrice(text: string): Array<{ qty: number; unit: string;
   // the "," option separator below splits "$1,299 for 3" into "$1" + "299 for 3" — both unparseable — so
   // a bulk/electronics compare with a 4-digit price silently fell to the model's mental math.
   const t = text.trim().replace(/[?.!]+$/, "").replace(/(?<=\d),(?=\d{3}(?:\D|$))/g, "")
-    .replace(/^\s*(which(?:'s| is)?\s+(?:cheaper|the better (?:buy|deal|value))|better (?:buy|deal|value)|best (?:buy|deal|value)|cheaper|compare)\b[:,]?\s*/i, "");
+    .replace(/^\s*(which(?:'s| is)?\s+(?:cheaper|(?:the\s+)?better (?:buy|deal|value)|(?:the\s+)?best (?:buy|deal|value))|better (?:buy|deal|value)|best (?:buy|deal|value)|cheaper|compare)\b[:,]?\s*/i, "");
   const parts = t.split(/\s+(?:or|vs\.?|versus)\s+|\s*[;,]\s*/i).map((p) => p.trim()).filter(Boolean);
   if (parts.length < 2) return null;
   const opts = parts.map(parseOption);

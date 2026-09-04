@@ -3374,6 +3374,15 @@
       "status": "done",
       "why": "The friendlyError find shows user-facing message copy is a live probe surface (not just parsing/logic). Other message paths may be vague or wrong: empty-search-result phrasing, per-chat rate-limit message, schedule/list cap-hit copy, the various 'couldn't tell what you meant' clarifiers - do they name the actual problem + a next step?",
       "how": "Probe each canned user-message path (grep push()/sendMessage string literals + the tool clarify branches); where a message is vague, misleading, or lacks a next step, sharpen it + assert in a test. One surface per iteration."
+    },
+    {
+      "id": "probe-remaining-lib-phrasings",
+      "title": "Continue probing pure-lib parsers for common phrasings that fall to null (the productive vein)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "Probing individual lib parsers with real user phrasings keeps surfacing genuine dead-ends (calc %-off, convert density, unitprice pack) — a live class distinct from the swept idiom/message veins. Remaining libs to phrase-probe: logs (parseLogCommand/parseLogQuery variants), countdown, geocode/places phrasings, scores team-name forms, qr payload types.",
+      "how": "tsx-probe each remaining lib with 4-5 common real phrasings; where a plausible user phrasing returns null but SHOULD parse, widen the parser + add a test. One lib per iteration; stop when a full pass finds no real dead-end."
     }
   ],
   "history": [
@@ -4768,6 +4777,10 @@
     {
       "item": "web-search-empty-next-step",
       "note": "Swept user-facing message copy. Nearly all empty-result/clarify messages already name the problem + a next step well (get_scores coverage list, define spelling hint, meal_ideas retry, all the 'no place given' clarifiers). ONE thin spot: web_search's empty result was a bare 'No results for X' with no guidance -> the model could dead-end or invent instead of broadening. Sharpened to instruct broaden-keywords / admit-not-found / don't-invent. +1 dispatch test. 2106 green. The message-copy surface is otherwise clean; friendlyError (prev run) was the one real bug in this class."
+    },
+    {
+      "item": "unitprice-pack-phrasing",
+      "note": "REAL parse gaps in unit-price compare (found probing unitprice.ts): 'which is better value 6 pack $5 or 12 pack $9' -> null (the lead-strip required 'the better value', not the common 'better value'), and '6-pack $5' (hyphenated) -> null (qty regex couldn't cross the hyphen). Both common shopping phrasings dead-ended to the model's forbidden mental math. Fixed: made 'the' optional in the value/deal lead-strip + normalize 'N-pack' hyphen to a space before parsing. +1 test (both forms). 2107 green. Note: pack unit renders as '6pack' (cosmetic label nit, math + winner correct) - left as-is."
     }
   ],
   "audits": [
@@ -5235,6 +5248,11 @@
       "lens": "user-message copy sweep",
       "surfaced": "Probed canned empty-result + clarify messages across the tool set. Well-crafted overall (name problem + next step); only web_search's empty message was a bare dead-end, now sharpened. Combined with the friendlyError fix, the error/edge-messaging class is swept. No further vague/misleading message found.",
       "seeded": "(none — message class swept; owner levers remain)"
+    },
+    {
+      "lens": "unit-price compare probe",
+      "surfaced": "Probed unitprice.ts parse coverage: found two real phrasing gaps ('which is better value <N> pack', hyphenated 'N-pack') that fell to null. Fixed. The core per-unit math + winner selection is correct across mass/volume/count. A cosmetic 'per 1'/'6pack' label nit remains but the comparison is accurate.",
+      "seeded": "probe-remaining-lib-phrasings"
     }
   ]
 }

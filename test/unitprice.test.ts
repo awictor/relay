@@ -29,6 +29,14 @@ describe("parseUnitPrice", () => {
   it("still needs a connector when the price isn't $-marked (a bare '12 rolls 6' is ambiguous)", () => {
     expect(parseUnitPrice("12 rolls 6 vs 8 rolls 4")).toBeNull(); // 6/4 could be a second qty, not a price
   });
+  it("parses 'N pack' incl. hyphenated + a 'which is better value' lead (unitprice-hyphen-pack)", () => {
+    expect(parseUnitPrice("which is better value 6 pack $5 or 12 pack $9")).toEqual([
+      { qty: 6, unit: "pack", price: 5 }, { qty: 12, unit: "pack", price: 9 },
+    ]);
+    expect(parseUnitPrice("6-pack $5 or 12-pack $9")).toEqual([
+      { qty: 6, unit: "pack", price: 5 }, { qty: 12, unit: "pack", price: 9 },
+    ]);
+  });
   it("null when it isn't a compare (fewer than 2 parseable options)", () => {
     expect(parseUnitPrice("500g for $4")).toBeNull();
     expect(parseUnitPrice("what's the weather or the news")).toBeNull();
