@@ -27,8 +27,9 @@ export function parseMealRequest(text: string): { kind: "ingredient"; ingredient
   // A named dish: "recipe for X", "how (do|to) (i)? make X", "how to cook X".
   const dish = t.match(/\b(?:recipe (?:for|of)|how (?:do i|to) (?:make|cook|prepare))\s+(.+?)\s*[?.!]*$/i);
   if (dish) return { kind: "dish", name: dish[1]!.replace(/^(?:a|an|some)\s+/i, "").trim() };
-  // Ingredient-based: "what can I make/cook with X", "meal/dinner/recipe(s) with X", "ideas with X".
-  const ing = t.match(/\b(?:make|cook|do)\s+with\s+(.+?)\s*[?.!]*$|\b(?:meals?|dinner|lunch|recipes?|dishes?|ideas?)\s+(?:with|using|from)\s+(.+?)\s*[?.!]*$/i);
+  // Ingredient-based: "what can I make/cook with X", "meal/dinner/recipe(s) with X", "ideas with X",
+  // "something with X" (meal-something-with-ingredient — a very common ask that fell to null).
+  const ing = t.match(/\b(?:make|cook|do)\s+with\s+(.+?)\s*[?.!]*$|\b(?:meals?|dinner|lunch|recipes?|dishes?|ideas?|something|anything)\s+(?:with|using|from|out of)\s+(.+?)\s*[?.!]*$/i);
   if (ing) {
     const raw = (ing[1] ?? ing[2] ?? "").trim();
     // TheMealDB filters by ONE ingredient; take the first salient one ("chicken and rice" -> "chicken").
@@ -36,7 +37,7 @@ export function parseMealRequest(text: string): { kind: "ingredient"; ingredient
     if (first) return { kind: "ingredient", ingredient: first };
   }
   // Generic "dinner ideas" / "what should I cook" / "random meal" -> a random suggestion.
-  if (/\b(?:dinner|lunch|breakfast|meal|something)\s+(?:ideas?|to (?:eat|cook|make))\b|\bwhat should i (?:cook|eat|make)\b|\brandom (?:meal|recipe|dish)\b|\bmeal ideas?\b/i.test(t)) {
+  if (/\b(?:dinner|lunch|breakfast|meal|something)\s+(?:ideas?|to (?:eat|cook|make))\b|\bwhat should i (?:cook|eat|make)\b|\bwhat'?s (?:for|good for) (?:dinner|lunch|breakfast)\b|\brandom (?:meal|recipe|dish)\b|\bmeal ideas?\b/i.test(t)) {
     return { kind: "random" };
   }
   return null;

@@ -13,6 +13,10 @@ describe("parseMealRequest", () => {
     expect(parseMealRequest("what can I make with chicken and rice")).toEqual({ kind: "ingredient", ingredient: "chicken" });
     expect(parseMealRequest("dinner ideas with salmon")).toEqual({ kind: "ingredient", ingredient: "salmon" });
   });
+  it("ingredient: 'something/anything with X' (meal-something-with-ingredient)", () => {
+    expect(parseMealRequest("something with rice and beans")).toEqual({ kind: "ingredient", ingredient: "rice" });
+    expect(parseMealRequest("anything with tofu")).toEqual({ kind: "ingredient", ingredient: "tofu" });
+  });
   it("dish: 'recipe for X' / 'how do I make X'", () => {
     expect(parseMealRequest("recipe for carbonara")).toEqual({ kind: "dish", name: "carbonara" });
     expect(parseMealRequest("how do I make lasagna")).toEqual({ kind: "dish", name: "lasagna" });
@@ -21,6 +25,8 @@ describe("parseMealRequest", () => {
     expect(parseMealRequest("dinner ideas")).toEqual({ kind: "random" });
     expect(parseMealRequest("what should I cook")).toEqual({ kind: "random" });
     expect(parseMealRequest("random meal")).toEqual({ kind: "random" });
+    expect(parseMealRequest("what's for dinner")).toEqual({ kind: "random" });
+    expect(parseMealRequest("what's good for lunch")).toEqual({ kind: "random" });
   });
   it("returns null for a non-food message", () => {
     expect(parseMealRequest("what's the weather")).toBeNull();

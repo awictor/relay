@@ -4874,6 +4874,10 @@
     {
       "item": "units-preference-setter",
       "note": "NEW capability + real gap: there was NO standalone units-preference setter — units could ONLY be set bundled with a location ('Austin (metric)'). A user who already set their city couldn't change units alone; 'use metric'/'switch to fahrenheit' fell to the agent (which can't persist a pref) or did nothing. Added parseUnitsPreference (use/switch-to/show-me/prefer + metric|celsius|°C / imperial|fahrenheit|°F; guards a conversion '180C to F'->null + ambiguous 'km not miles'->null) + a setUnits handler dep (checked before setLocation) + index wiring (persists to ProfileStore, hedges a failed write) + HELP. profileClear is /profile clear|reset|forget (exact slash, fine). +4 tests. 2122 green."
+    },
+    {
+      "item": "meal-something-with-ingredient",
+      "note": "phrasing gap: parseMealRequest missed 'something/anything with X' (a very common ingredient ask) -> null, and 'what's for dinner' (only 'dinner ideas' matched) -> null. Added 'something|anything with|using|from|out of X' to the ingredient branch + 'what's for/good for dinner|lunch|breakfast' to the random branch. First-salient-ingredient split intact ('rice and beans'->rice). +1 test. 2123 green. Confirmed parseNutrition takes an API body (not user text) - the user-facing nutrition parse is agent.ts arg-extraction, robust."
     }
   ],
   "audits": [
@@ -5405,6 +5409,11 @@
       "lens": "units-pref + profile-clear probe",
       "surfaced": "Found a genuine capability gap: no standalone units setter (only location-bundled). Built parseUnitsPreference + setUnits wiring. profileClear is slash-only + adequate. The setter class is now complete: location (both ways) + units all covered. 15 fixes/additions in the phrasing+setter vein. Vein genuinely worked out now.",
       "seeded": "(setter class complete; owner levers remain)"
+    },
+    {
+      "lens": "meal/nutrition phrasing probe",
+      "surfaced": "parseMealRequest missed 'something with X' + 'what's for dinner' - fixed. parseNutrition is a response-body parser (not user text). 16 phrasing/setter fixes+additions total. Remaining unprobed user-text parsers are thin; this vein is near its end.",
+      "seeded": "(vein near end; owner levers remain)"
     }
   ]
 }
