@@ -21,6 +21,15 @@ describe("detectFlight", () => {
     expect(detectFlight("when does DL215 land")).toMatchObject({ iata: "DL215" });
     expect(detectFlight("status of B6 622")).toMatchObject({ iata: "B6622", airlineCode: "B6" }); // letter+digit airline
   });
+  it("treats 'where('s)' and 'track(ing)' as flight cues (flight-cue-where-track)", () => {
+    expect(detectFlight("where's UA83")).toMatchObject({ iata: "UA83", number: "83" });
+    expect(detectFlight("where is UA83")).toMatchObject({ iata: "UA83" });
+    expect(detectFlight("track BA2490")).toMatchObject({ iata: "BA2490" });
+    expect(detectFlight("tracking DL215")).toMatchObject({ iata: "DL215" });
+    // a cue with NO flight-shaped token is still null (cue alone isn't a flight)
+    expect(detectFlight("where's the nearest ATM")).toBeNull();
+    expect(detectFlight("track my order")).toBeNull();
+  });
   it("does NOT fire on a bare number, prose, or a no-cue mid-sentence match", () => {
     expect(detectFlight("what's 20% of 100")).toBeNull();
     expect(detectFlight("the meeting is at 3")).toBeNull();

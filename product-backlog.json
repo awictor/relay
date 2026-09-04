@@ -3140,6 +3140,15 @@
       "status": "done",
       "why": "buildIcs emitted content lines unbounded, but RFC-5545 caps a line at 75 octets; a long SUMMARY/DESCRIPTION/LOCATION (e.g. 'add this event with its details to my calendar') made a 200-char line that Apple Calendar + some Outlook importers reject or truncate — the add-to-calendar artifact silently failed to import.",
       "how": "Added foldIcsLine: fold each content line at 75 UTF-8 octets with a leading-space continuation (measured by byte, iterating code points so a multi-byte char isn't split), applied to every line in buildIcs. Reversible (unfold recovers the value); short lines untouched."
+    },
+    {
+      "id": "flight-cue-where-track",
+      "title": "'where's UA83' / 'track BA2490' weren't detected as flight asks",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "detectFlight required a flight cue word (flight/land/gate/status/...) but 'where('s)' and 'track(ing)' — the two most natural flight-status phrasings — weren't cues, so 'where's UA83' and 'track BA2490' fell through to a flaky web_search instead of the keyless flight lookup.",
+      "how": "Added where('s)/where is + track(ing) to the cue list. A parcel tracking number (1Z...) can't match FLIGHT_RE's 2-char+<=4-digit shape, so 'track' with a flight-shaped token is a flight; a cue with no such token still returns null."
     }
   ],
   "history": [
@@ -4414,6 +4423,10 @@
     {
       "id": "status-surface-gated-levers",
       "note": "CONVERGENCE run: probed 3 more fresh surfaces (directions routeMode/wantsTransit + parseOsrm, calendar already fixed last run, QR parseQrRequest) — all sound (transit correctly gated before driving; QR/directions clean). No new medium found; the offline self-audit has hit diminishing returns after the recent parse-fix run. Instead of shipping filler, brought STATUS.md current (~2021 tests) + added a 'Product-loop status: converged' section surfacing the two remaining high-value levers to the owner: confirm-to-act (product decision) + anvil-live-e2e (needs anvil up). Doc-only, 2021 green."
+    },
+    {
+      "id": "flight-cue-where-track",
+      "note": "Self-audit (anvil DOWN): probed flight detect/parse. parseAdsbdbRoute + parseAdsbLive clean. detectFlight missed 'where's UA83' + 'track BA2490' — the cue gate lacked where/track (the most natural flight phrasings), so they web_searched instead of the keyless lookup. Added the cues; guarded (a cue with no flight-shaped token = null, parcel numbers can't match the designator shape). +1 test, 2022 green. (Last run's sweep was clean; this one found a real medium — the offline vein isn't fully dry.)"
     }
   ],
   "audits": [
@@ -4746,6 +4759,9 @@
     },
     {
       "note": "CONVERGED. anvil DOWN. Directions + QR probes clean (no bug); calendar was last run's find. Rather than mine low filler, updated STATUS.md to flag the two gated levers for Alex. Backlog = confirm-to-act (owner) + anvil-live-e2e (anvil). Honest state: the loop has swept the reachable medium+ surface; the next real progress needs the owner (confirm-to-act decision) or anvil started (live e2e). Future runs: if anvil up, do the e2e; else a fresh-surface probe, accepting most will now be clean."
+    },
+    {
+      "note": "anvil DOWN -> live e2e still blocked. Self-audit found flight-cue-where-track (natural flight asks not detected) — a real medium, so the vein isn't exhausted. confirm-to-act (owner) + anvil-live-e2e (anvil) remain the gated high-value levers (surfaced in STATUS.md last run)."
     }
   ]
 }

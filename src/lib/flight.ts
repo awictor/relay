@@ -28,7 +28,10 @@ export function detectFlight(raw: string): FlightRef | null {
   const number = m[2]!;
   // Gate on a flight cue so "AA100" is read as a flight only in a flight context — EXCEPT when the whole
   // message basically IS the designator (a bare "AA100" / "flight AA100"), which is unambiguous.
-  const hasCue = /\b(flight|flights|fly|flying|gate|terminal|land|landing|lands|depart|departs|departure|arrive|arrives|arrival|takeoff|take off|on\s?time|delayed|delay|status|inbound|airborne|in\s+the\s+air|tail\s?number)\b/i.test(text);
+  // Cues include "where('s)" + "track(ing)" (flight-cue-where-track): "where's UA83" / "track BA2490" are
+  // the most natural flight-status asks and had no cue, so they fell to a flaky web_search. A parcel
+  // tracking number (1Z…) can't match FLIGHT_RE's 2-char+<=4-digit shape, so "track" here is a flight.
+  const hasCue = /\b(flight|flights|fly|flying|gate|terminal|land|landing|lands|depart|departs|departure|arrive|arrives|arrival|takeoff|take off|on\s?time|delayed|delay|status|inbound|airborne|in\s+the\s+air|tail\s?number|where'?s?|track|tracking)\b/i.test(text);
   const bareish = text.replace(/\bflight\b/i, "").replace(FLIGHT_RE, "").replace(/[^\p{L}\p{N}]/gu, "").length === 0;
   if (!hasCue && !bareish) return null;
   return { iata: `${airlineCode}${number}`, airlineCode, number };
