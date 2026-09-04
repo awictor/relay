@@ -452,6 +452,31 @@ describe("makeScheduleRunner.tick", () => {
     expect(notices).toHaveLength(2); // still just the two — no repeat
   });
 
+  it("a FAILED gone-notice send re-fires next tick instead of being swallowed forever (proactive-notice-send-fail)", async () => {
+    const clock = { t: NOW };
+    let sendOk = false;
+    const attempts: string[] = [];
+    const { store, runner } = harness(clock, {
+      digestRun: async () => null, // digest members all gone -> gone-notice path
+      send: async (_c, text) => { attempts.push(text); return sendOk; },
+      goneNotice: (_s, _what, name) => `⚠️ "${name}" digest stopped.`,
+    });
+    store.add(1, { kind: "daily", task: "digest:morning", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    await runner.tick();
+    expect(attempts).toHaveLength(1); // tried once, send failed
+    // Next day it's due again — because the failed send never marked goneNotified, the notice RETRIES.
+    sendOk = true;
+    clock.t = NOW + 25 * 3_600_000;
+    for (const s of store.list(1)) store.deferTo(s.id, clock.t - 1);
+    await runner.tick();
+    expect(attempts).toHaveLength(2);   // retried and this time delivered
+    // A THIRD due fire does NOT repeat — the successful send finally marked it one-shot.
+    clock.t += 25 * 3_600_000;
+    for (const s of store.list(1)) store.deferTo(s.id, clock.t - 1);
+    await runner.tick();
+    expect(attempts).toHaveLength(2);
+  });
+
   it("a digest whose sources ALL fail stays silent per fire, then escalates a receipt at the streak (digest-all-failed-bypasses-gate)", async () => {
     const clock = { t: NOW };
     const sent: string[] = [];
@@ -1167,6 +1192,25 @@ describe("makeScheduleRunner anti-spam cap (m8 pobs-2)", () => {
     deadEth = false;
     for (let i = 0; i < 4; i++) { const s = store.list(1)[0]!; store.deferTo(s.id, clock.t - 1); await runner.tick(); clock.t += 25 * 3_600_000; }
     expect(notices).toHaveLength(1); // no repeat — eth read fine after recovery
+  });
+
+  it("a FAILED dead-member receipt keeps the streak so it retries next check (proactive-notice-send-fail)", async () => {
+    const clock = { t: NOW };
+    let sendOk = false;
+    const attempts: Array<{ member: string }> = [];
+    const { store, runner } = harness(clock, {
+      send: async () => sendOk, // receipt send fails until flipped
+      alertCheck: async () => ({ message: null, commit: () => {}, deadMembers: ["eth"] }), // eth always dead
+      deadMemberNotice: (_c, _alert, member) => { attempts.push({ member }); return `⚠️ "${member}" keeps failing`; },
+    });
+    store.add(1, { kind: "daily", task: "alert:markets", dueMs: NOW - 1, hourMin: "09:00" }, NOW);
+    // 3 straight dead checks trip the receipt, but its send FAILS -> streak must NOT reset.
+    for (let i = 0; i < 3; i++) { const s = store.list(1)[0]!; store.deferTo(s.id, clock.t - 1); await runner.tick(); clock.t += 25 * 3_600_000; }
+    expect(attempts).toHaveLength(1); // tried once at the threshold, send failed
+    // Next check: because the streak wasn't reset, it's still at threshold -> retries immediately (delivers now).
+    sendOk = true;
+    const s = store.list(1)[0]!; store.deferTo(s.id, clock.t - 1); await runner.tick(); clock.t += 25 * 3_600_000;
+    expect(attempts).toHaveLength(2); // retried on the very next check, not after another full N-streak
   });
 
   it("a chatty alert burning the hourly budget no longer starves the user's daily briefing (chatty-watch-starves-daily)", async () => {

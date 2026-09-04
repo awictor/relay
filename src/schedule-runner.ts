@@ -204,8 +204,12 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     if (!deps.goneNotice || s.kind === "once" || goneNotified.has(s.id) || overCap(s.chatId, deps.now())) return;
     const msg = deps.goneNotice(s, what, name);
     if (!msg) return;
-    goneNotified.add(s.id);
-    try { await deps.send(s.chatId, msg); noteSend(s.chatId, deps.now()); } catch (e) { deps.onError?.(e); }
+    // Mark it sent ONLY after the send actually lands (proactive-notice-send-fail): a failed send must
+    // leave goneNotified UNSET so the one-time "your <digest> went empty" heads-up re-fires next tick —
+    // otherwise a single 429/network blip permanently swallows the only explanation for the silence.
+    try {
+      if ((await deps.send(s.chatId, msg)) !== false) { goneNotified.add(s.id); noteSend(s.chatId, deps.now()); }
+    } catch (e) { deps.onError?.(e); }
   }
 
   // Track per-member unreadable streaks for a watchlist check + fire a one-time receipt for any member
@@ -228,8 +232,12 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       memberFailStreak.set(key, streak);
       if (streak >= FAIL_STREAK_NOTIFY && !overCap(s.chatId, deps.now())) {
         const notice = deps.deadMemberNotice(s.chatId, alertName, label);
-        if (notice) { try { await deps.send(s.chatId, notice); noteSend(s.chatId, deps.now()); } catch (e) { deps.onError?.(e); } }
-        memberFailStreak.set(key, 0); // re-notify only after another N consecutive fails
+        // Reset the streak (suppressing re-notify for another N checks) ONLY if the receipt was delivered
+        // (proactive-notice-send-fail): a failed send must keep the streak at/over threshold so the
+        // dead-member heads-up retries next check instead of being silently lost for another N cycles.
+        let receiptDelivered = true;
+        if (notice) { try { receiptDelivered = (await deps.send(s.chatId, notice)) !== false; if (receiptDelivered) noteSend(s.chatId, deps.now()); } catch (e) { deps.onError?.(e); receiptDelivered = false; } }
+        if (receiptDelivered) memberFailStreak.set(key, 0); // re-notify only after another N consecutive fails
       }
     }
   }

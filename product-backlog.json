@@ -3254,9 +3254,18 @@
       "title": "Audit PROACTIVE (scheduler/alert/digest) sends for the same artifact/text delivery-gating + a chart in a scheduled digest",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Inbound (user-initiated) delivery is now gated everywhere. The proactive side - schedule-runner/alert-runner/digest firing - sends unprompted; if a scheduled reminder or a digest's chart PNG fails to send, does it mark the task complete/advance anyway (losing that fire), and can a digest even include an artifact? Same reliability class, the side the user CAN'T retry.",
       "how": "Read schedule-runner.ts/alert-runner.ts/digest send paths; confirm each gates completion/advance on send success (deps.send boolean) incl. any sendPhoto in a digest; add a test for any ungated proactive artifact/text send."
+    },
+    {
+      "id": "probe-store-persistence-hedges",
+      "title": "Audit that every store's failed-write (lastSaveOk=false) is surfaced to the user where it changes what they were told",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "Delivery (send) is now gated inbound + proactive. The sibling reliability class is PERSISTENCE: every store exposes lastSaveOk(), but only some callers hedge a failed write to the user (list add, memory). A save that silently fails after a 'saved/added/scheduled' confirmation means the item vanishes on restart while the user was told it stuck - the same trust break, on the disk side.",
+      "how": "grep lastSaveOk() usages + each store mutation caller (contacts, places, recipes, digests, alerts, saved-pages); where a success confirmation follows a mutation whose lastSaveOk isn't checked, hedge the message. One store per iteration; add a test."
     }
   ],
   "history": [
@@ -4587,6 +4596,10 @@
     {
       "item": "artifact-send-fail-fallback",
       "note": "Applied the artifact-send-fail-swallowed fix to the 3 OTHER sites where the artifact IS the sole deliverable: chart-it PNG (chartWatch), csv list-export (sendDocument), and log-query chart PNG (logQuery). Each now checks the boolean the senders return and falls back to a text summary/list on failure, so a dropped upload no longer leaves the user in SILENCE. (Inbound photo-to-action already gates its memory write on the TEXT send, photo is supplementary - left as-is.) +2 tests (chart fallback, csv fallback). 2052 green."
+    },
+    {
+      "item": "proactive-notice-send-fail",
+      "note": "Two proactive one-time notices in schedule-runner marked themselves done regardless of send success: noteGone (digest/recipe went-empty heads-up) added goneNotified BEFORE the send, and handleDeadMembers reset the member fail-streak AFTER an ungated send. A single 429/network blip permanently swallowed the ONLY explanation for a suddenly-silent briefing / a dead watchlist member. Both now gate the done-marker on deps.send !== false, so a failed notice retries next tick/check instead of being lost. The core fire/complete/alert-commit paths were already delivery-gated; no proactive PHOTO path exists (digests text-only). +2 tests. 2054 green."
     }
   ],
   "audits": [
@@ -4970,6 +4983,11 @@
       "lens": "inline artifact-send-site sweep (agent cap 200/200)",
       "surfaced": "All sendPhoto/sendDocument sites now handle a failed send: agent-reply path gates memory (prev iter), and the 3 artifact-is-deliverable sites (chart, csv-export, log-chart) fall back to text. The inbound photo/doc DESCRIBE paths gate their memory on the text send already. The artifact-delivery reliability class is now swept end-to-end.",
       "seeded": "probe-scheduler-proactive-delivery"
+    },
+    {
+      "lens": "inline proactive-delivery sweep (agent cap 200/200)",
+      "surfaced": "schedule-runner's MAIN paths (reminder echo, alert commit, digest/recipe complete) already gate advance/complete on the deps.send boolean + guard the timeout race - solid. The gap was the two SECONDARY one-time notices (gone-notice, dead-member receipt) that self-marked-done before/without checking the send. Fixed. Alert/digest are text-only so no proactive artifact-send class exists. Proactive delivery reliability now swept.",
+      "seeded": "probe-store-persistence-hedges"
     }
   ]
 }
