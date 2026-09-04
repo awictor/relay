@@ -3524,9 +3524,19 @@
       "title": "encode_decode: Morse code (text <-> morse)",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "\"morse code SOS\", \"decode ... -.-.\" is a common fun/learning ask with no home. Rounds out the codec set. Genuinely low impact - flagged as the last micro-tool before the loop should seek higher-value work.",
       "how": "Add a morse codec to encoding.ts: A-Z/0-9 <-> dot/dash table, space-separated letters, \"/\" between words on encode; tolerant split on decode. Tests + tool-desc mention."
+    },
+    {
+      "id": "loop-needs-fresh-session-or-owner",
+      "title": "OWNER/SESSION: keyless-tool surface is well-covered — higher-value work needs a fresh session (AUDIT cap reset) or owner input",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "owner_gated": true,
+      "why": "6+ iterations shipped genuine but diminishing keyless-tool polish (speed/calc/date/hash/binary/morse). The 3-agent AUDIT that would surface higher-impact work cannot run — the subagent cap has been 200/200 for this entire session, forcing inline single-surface probes that only find more micro-tools. The real high-value levers (confirm-to-act multi-step chains [owner-gated], live-anvil browsing depth + reliability, richer proactive digests) need either owner sign-off or a live-anvil e2e loop, not another offline converter.",
+      "how": "Owner action: (a) start a FRESH Claude session so the 3 parallel AUDIT agents can run (cap resets per session) and surface reliability/power-lens work across the agent loop + scheduler + anvil paths; or (b) point the loop at a specific lever (e.g. authorize confirm-to-act multi-step chains, or a live-anvil browse-depth improvement). Until then the loop can only mine low-impact tools."
     }
   ],
   "history": [
@@ -5093,6 +5103,10 @@
     {
       "item": "encode-binary-text",
       "note": "encode_decode gained a binary codec: \"hello in binary\"/\"binary of A\" -> 8-bit bytes; \"decode this binary 0100...\"/bare 0/1 payload -> text (op inferred from payload shape, spaced or unspaced, multi-byte UTF-8 round-trips). Rejects non-8-bit input. Payload extracted from either phrasing (before \"in binary\" or after the keyword). Tool description + /help updated. +4 tests, 2177 green."
+    },
+    {
+      "item": "encode-morse",
+      "note": "encode_decode gained Morse: \"morse code SOS\"->\"... --- ...\", \"decode morse ... --- ...\"->sos; A-Z/0-9/punctuation, letters space-separated + words on \"/\", tolerant decode, round-trips, friendly errors on un-encodable char / invalid morse. Op inferred from dot-dash payload. Tool desc + /help updated. +4 tests, 2181 green. This was the LAST queued micro-tool."
     }
   ],
   "audits": [

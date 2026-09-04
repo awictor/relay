@@ -7,8 +7,8 @@
 import { createHash } from "node:crypto";
 
 export type EncOp =
-  | { op: "encode"; codec: "base64" | "base64url" | "url" | "hex" | "rot13" | "binary" }
-  | { op: "decode"; codec: "base64" | "base64url" | "url" | "hex" | "jwt" | "rot13" | "binary" }
+  | { op: "encode"; codec: "base64" | "base64url" | "url" | "hex" | "rot13" | "binary" | "morse" }
+  | { op: "decode"; codec: "base64" | "base64url" | "url" | "hex" | "jwt" | "rot13" | "binary" | "morse" }
   // Hashing is ONE-WAY (encode-hash-rot13): sha256/sha1/md5 produce a hex digest; there is no decode.
   | { op: "encode"; codec: "sha256" | "sha1" | "md5" };
 
@@ -30,7 +30,28 @@ export function parseEncodingRequest(text: string): (EncOp & { text: string }) |
   const raw = String(text ?? "");
   const t = raw.trim();
   const lower = t.toLowerCase();
-  if (!/\b(base64url|base64|b64|url[- ]?encode|url[- ]?decode|urlencode|urldecode|hex|jwt|sha-?256|sha-?1|md5|hash|rot-?13|binary|encode|decode)\b/.test(lower)) return null;
+  if (!/\b(base64url|base64|b64|url[- ]?encode|url[- ]?decode|urlencode|urldecode|hex|jwt|sha-?256|sha-?1|md5|hash|rot-?13|binary|morse|encode|decode)\b/.test(lower)) return null;
+
+  // Morse: "morse code SOS" / "SOS in morse" / "decode morse ... -.-." — text <-> morse. Payload on
+  // either side of the keyword, like binary. Decode inferred when the payload is only dots/dashes/spaces
+  // (encode-morse). Handled here so the generic codec path stays untouched.
+  if (/\bmorse\b/.test(lower) && !/\b(base64|b64|hex|url|jwt|sha|md5|rot|binary)/.test(lower)) {
+    let payload = "";
+    const before = raw.match(/^(.*?)\s+(?:in|to|as|into)\s+morse\b/i);
+    if (before && before[1]!.trim()) payload = before[1]!.trim();
+    else {
+      const colon = raw.indexOf(":");
+      const after = colon >= 0 ? raw.slice(colon + 1) : raw;
+      payload = after.replace(/^\s*(?:please\s+)?(?:can\s+you\s+)?/i, "");
+      let prev = "";
+      while (prev !== payload) { prev = payload; payload = payload.replace(/^\s*(?:decode|encode|convert|the|this|that|a|of|to|from|in|into|as|text|letters|words|code|morse)\b[\s:]*/i, ""); }
+    }
+    payload = payload.trim().replace(/^["'`]|["'`]$/g, "").trim();
+    if (!payload) return null;
+    const looksMorse = /^[.\-/\s]+$/.test(payload) && /[.\-]/.test(payload);
+    const wantsDecode = looksMorse || /\bto\s+(?:text|letters|words|english)\b/i.test(lower);
+    return { op: wantsDecode ? "decode" : "encode", codec: "morse", text: payload } as EncOp & { text: string };
+  }
 
   // Decode a JWT — "decode this jwt <token>" / "what's in this jwt <token>". Payload only, no verify.
   const jwt = t.match(/\b(?:jwt|token)\b[\s:]*([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*)/);
@@ -134,11 +155,13 @@ export function runEncoding(req: EncOp & { text: string }): string {
       case "hex": return Buffer.from(text, "utf8").toString("hex");
       case "rot13": return rot13(text);
       case "binary": return [...Buffer.from(text, "utf8")].map((b) => b.toString(2).padStart(8, "0")).join(" ");
+      case "morse": return toMorse(text);
     }
   }
   // decode
   switch (codec) {
     case "rot13": return rot13(text); // rot13 is its own inverse
+    case "morse": return fromMorse(text);
     case "binary": {
       const bits = text.replace(/[^01]/g, "");
       if (!bits || bits.length % 8 !== 0) throw new Error("That isn't valid binary (need 8-bit bytes, e.g. 01001000 01101001).");
@@ -175,6 +198,42 @@ export function runEncoding(req: EncOp & { text: string }): string {
   // Unreachable in practice (hash codecs handled above; every other codec has a case) — satisfies the
   // exhaustiveness check now that the codec union is wider.
   throw new Error(`I can't ${op} with ${codec}.`);
+}
+
+// Morse code table (encode-morse): A-Z, 0-9, and a few common punctuation. Letters space-separated,
+// words separated by "/" on encode; decode tolerates any whitespace between letters + "/" or multiple
+// spaces between words.
+const MORSE: Record<string, string> = {
+  a: ".-", b: "-...", c: "-.-.", d: "-..", e: ".", f: "..-.", g: "--.", h: "....", i: "..", j: ".---",
+  k: "-.-", l: ".-..", m: "--", n: "-.", o: "---", p: ".--.", q: "--.-", r: ".-.", s: "...", t: "-",
+  u: "..-", v: "...-", w: ".--", x: "-..-", y: "-.--", z: "--..",
+  "0": "-----", "1": ".----", "2": "..---", "3": "...--", "4": "....-", "5": ".....",
+  "6": "-....", "7": "--...", "8": "---..", "9": "----.",
+  ".": ".-.-.-", ",": "--..--", "?": "..--..", "'": ".----.", "!": "-.-.--", "/": "-..-.",
+  "(": "-.--.", ")": "-.--.-", "&": ".-...", ":": "---...", ";": "-.-.-.", "=": "-...-",
+  "+": ".-.-.", "-": "-....-", "_": "..--.-", '"': ".-..-.", "@": ".--.-.", " ": "/",
+};
+const MORSE_REV: Record<string, string> = Object.fromEntries(Object.entries(MORSE).map(([k, v]) => [v, k]));
+
+function toMorse(s: string): string {
+  const out: string[] = [];
+  for (const ch of s.toLowerCase()) {
+    if (ch === " ") { out.push("/"); continue; }
+    const code = MORSE[ch];
+    if (code === undefined) throw new Error(`I can't Morse-encode "${ch}" (letters, digits, and basic punctuation only).`);
+    out.push(code);
+  }
+  return out.join(" ");
+}
+function fromMorse(s: string): string {
+  // Words split on "/" (or 3+ spaces); letters split on whitespace.
+  const words = s.trim().split(/\s*\/\s*|\s{3,}/);
+  const decoded = words.map((w) => w.trim().split(/\s+/).filter(Boolean).map((sym) => {
+    const ch = MORSE_REV[sym];
+    if (ch === undefined) throw new Error(`"${sym}" isn't valid Morse.`);
+    return ch;
+  }).join(""));
+  return decoded.join(" ");
 }
 
 // ROT13: shift each ASCII letter by 13 (its own inverse). Non-letters pass through. Pure.

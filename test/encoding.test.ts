@@ -126,3 +126,25 @@ describe("binary <-> text (encode-binary-text)", () => {
     expect(() => runEncoding(p)).toThrow(/valid binary/);
   });
 });
+
+describe("morse code (encode-morse)", () => {
+  const run = (t: string) => { const p = parseEncodingRequest(t); return p ? runEncoding(p) : null; };
+  it("encodes text to morse from either phrasing, words split on '/'", () => {
+    expect(run("morse code SOS")).toBe("... --- ...");
+    expect(run("SOS in morse")).toBe("... --- ...");
+    expect(run("morse hello world")).toBe(".... . .-.. .-.. --- / .-- --- .-. .-.. -..");
+    expect(run("morse of 123")).toBe(".---- ..--- ...--");
+  });
+  it("decodes morse to text, inferring op from the dot/dash payload", () => {
+    expect(run("decode morse ... --- ...")).toBe("sos");
+    expect(run("decode this morse: .... .. / -- --- --")).toBe("hi mom");
+  });
+  it("round-trips", () => {
+    const enc = run("hello in morse")!;
+    expect(run(`decode morse ${enc}`)).toBe("hello");
+  });
+  it("errors on an un-encodable char and invalid morse", () => {
+    expect(() => runEncoding(parseEncodingRequest("morse of ~")!)).toThrow(/can't Morse-encode/);
+    expect(() => runEncoding(parseEncodingRequest("decode morse ........")!)).toThrow(/isn't valid Morse/);
+  });
+});
