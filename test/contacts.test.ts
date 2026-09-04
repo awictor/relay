@@ -25,6 +25,12 @@ describe("parseSaveContact", () => {
   it("parses '<name>'s email is <email>'", () => {
     expect(parseSaveContact("my boss's email is boss@co.com")).toEqual({ name: "boss", email: "boss@co.com" });
   });
+  it("keeps a name's stem 's' — 'boss email X' is 'boss', not 'bos' (save-contact-stem-s)", () => {
+    // Regression: a bare 's?' possessive ate the final s of a name ending in s.
+    expect(parseSaveContact("boss email b@co.com")).toEqual({ name: "boss", email: "b@co.com" });
+    expect(parseSaveContact("chris's phone 5551234")).toEqual({ name: "chris", phone: "5551234" });
+    expect(parseSaveContact("save boss email b@co.com")).toEqual({ name: "boss", email: "b@co.com" });
+  });
   it("parses 'save contact <name> <value>'", () => {
     expect(parseSaveContact("save contact Sam sam@x.com")).toEqual({ name: "sam", email: "sam@x.com" });
     expect(parseSaveContact("add contact mom 5550001111")).toEqual({ name: "mom", phone: "5550001111" });

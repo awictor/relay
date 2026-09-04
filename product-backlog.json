@@ -4919,6 +4919,10 @@
     {
       "item": "list-export-courtesy-tail",
       "note": "parseListExport leaked a trailing courtesy: 'export my grocery list please' -> list 'grocery list please' (wrong/empty list exported). parseListCommand got this fix early; the EXPORT path had missed it. Added stripTrailingCourtesy; 'as csv'/'as a spreadsheet' tails still handled. +1 test. 2133 green."
+    },
+    {
+      "item": "save-contact-stem-s",
+      "note": "REAL name-corruption bug: parseSaveContact's subject regex used a bare optional 's?' meant for a possessive, but the non-greedy name capture let it eat the STEM 's' of a name ending in s — 'boss email b@co.com' saved the contact as 'bos', 'chris ...' as 'chri'. A later 'text boss' then couldn't find the contact (saved under the wrong name). Fixed: possessive is now (?:['']s)? (apostrophe-s only); normalizeContactName still strips a real \"'s\". +1 test. 2134 green. Not a courtesy-tail - a stem-truncation from a greedy-optional interaction."
     }
   ],
   "audits": [
@@ -5494,6 +5498,11 @@
       "lens": "list-export courtesy (tail sweep)",
       "surfaced": "parseListExport was the last courtesy-tail leak among the list ops (command path was fixed early, export missed). Fixed. 23 vein fixes. The courtesy-tail + name-tail classes are now swept across the full CRUD surface (create/read/update/run/forget/export/snooze) for every store.",
       "seeded": "(courtesy/name-tail fully swept; owner levers remain)"
+    },
+    {
+      "lens": "save-contact stem-s probe",
+      "surfaced": "parseSaveContact truncated names ending in s ('boss'->'bos') via a bare 's?' possessive + non-greedy capture - a real contact-lost bug. Fixed. parseSavePlace probed clean. 24 vein fixes; this one a genuine data-corruption (contact saved under wrong name), found only by probing a name that ends in s.",
+      "seeded": "(save parsers clean; owner levers remain)"
     }
   ]
 }

@@ -45,7 +45,10 @@ export function parseSaveContact(text: string): SaveContact | null {
   if (!email && !phone) return null;
 
   // "<subject>'s (number|email|phone|cell|mobile) is/are/: <value>" — subject is the contact name.
-  let m = t.match(/^\s*(?:save\s+|add\s+|remember\s+)?(?:contact\s+)?(.+?)['']?s?\s+(?:number|phone|cell|mobile|email|e-?mail|address)\s*(?:is|are|:|=|as)?\s*/i);
+  // NOTE: the possessive is (?:['']s)? — an apostrophe-s only. A bare `s?` here wrongly ate the stem "s"
+  // of a name ending in s ("boss email ..." -> "bos"); normalizeContactName still strips a real "'s"
+  // (save-contact-stem-s).
+  let m = t.match(/^\s*(?:save\s+|add\s+|remember\s+)?(?:contact\s+)?(.+?)(?:['']s)?\s+(?:number|phone|cell|mobile|email|e-?mail|address)\s*(?:is|are|:|=|as)?\s*/i);
   if (m && m[1]) {
     const name = normalizeContactName(m[1]);
     if (name && !isValueWord(name)) return { name, ...(email ? { email } : {}), ...(phone ? { phone } : {}) };
