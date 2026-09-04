@@ -4923,6 +4923,10 @@
     {
       "item": "save-contact-stem-s",
       "note": "REAL name-corruption bug: parseSaveContact's subject regex used a bare optional 's?' meant for a possessive, but the non-greedy name capture let it eat the STEM 's' of a name ending in s — 'boss email b@co.com' saved the contact as 'bos', 'chris ...' as 'chri'. A later 'text boss' then couldn't find the contact (saved under the wrong name). Fixed: possessive is now (?:['']s)? (apostrophe-s only); normalizeContactName still strips a real \"'s\". +1 test. 2134 green. Not a courtesy-tail - a stem-truncation from a greedy-optional interaction."
+    },
+    {
+      "item": "compose-resolve-clean-pass",
+      "note": "Clean probe of the compose recipient-resolution path - resolveContact/ContactStore.get normalize + match names correctly (incl. names ending in s, now that save is fixed). No code change (green tree, 2134). Confirms the boss->bos bug was save-only, not resolve."
     }
   ],
   "audits": [
@@ -5503,6 +5507,10 @@
       "lens": "save-contact stem-s probe",
       "surfaced": "parseSaveContact truncated names ending in s ('boss'->'bos') via a bare 's?' possessive + non-greedy capture - a real contact-lost bug. Fixed. parseSavePlace probed clean. 24 vein fixes; this one a genuine data-corruption (contact saved under wrong name), found only by probing a name that ends in s.",
       "seeded": "(save parsers clean; owner levers remain)"
+    },
+    {
+      "lens": "compose resolve-contact probe (clean)",
+      "surfaced": "Verified the compose recipient path is clean: 'to' resolves via resolveContact -> ContactStore.get(normalizeContactName(q)), which correctly matches 'boss'/'my boss'/\"boss's\"/'Boss' to a stored 'boss'. No truncation on the RESOLVE side (only the SAVE parser had the stem-s bug, fixed last run). Compose is LLM-arg driven + store-resolved, not a fragile text parser. NO code change."
     }
   ]
 }
