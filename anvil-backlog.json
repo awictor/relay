@@ -194,7 +194,7 @@
       "title": "Save an interactive browse+filter as a re-runnable/daily recipe",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The interactive tools (browse->site_search->set_field->read_list) do a rich errand once, but a user cant SAVE 'filter the jobs board to remote react and list new ones' as a /run recipe or a morning digest member — so the depth only helps ad-hoc, not on the retention flywheel.",
       "how": "Confirm a multi-tool interactive task survives the recipe save/replay path (recipes run via runAgent, which now has the tools) + the chain runner; add a test that a saved recipe whose task is an interactive browse+filter re-runs cleanly. Mostly verification + any gaps found; document in /help."
     },
@@ -292,6 +292,10 @@
     {
       "item": "watch-structured-new-items",
       "note": "Core shipped (the high-leverage slice): feedItemKey now keys a listing/job item by its URL when the line carries one, instead of the reworded title. Kills the three list-watch failure modes: a reworded title with the same URL no longer reads as new (FLAP), two same-titled items at different URLs stay distinct (DUP-swallow), a re-titled same-URL item stays seen (phantom-new). URL normalized (drop scheme/trailing-slash/#frag + volatile utm_/ref/fbclid/gclid params) so campaign-tag drift doesnt false-fire. No-URL items (RSS/HN titles) keep the exact prior title-normalization behavior -> zero regression. Pure change to the shared helper used by both the agent-feed + follow-feed watch paths. +1 test (flap/dup/tracking/fallback). 2242 green. call-tested: n/a (pure lib, offline-verified via probe+tests). Remainder (gather via scrape_pages/extract_list for the row SET, not just per-line keys) reseeded as watch-extract-row-set."
+    },
+    {
+      "item": "save-interactive-recipe",
+      "note": "Verified + documented that an interactive browse+filter errand saves as a re-runnable recipe. A recipe task is one string run through runAgent, which holds ONE browse session across its steps (browse->site_search->set_field->read_list), so a saved interactive task replays like any other recipe with no special handling — confirmed by reading the /run path (handler rewrites msg.text to the saved task -> agent) + a new handler test (an interactive job-board recipe reaches the agent verbatim) + a LIVE e2e (real runAgent+anvil ran \"open quotes.toscrape.com and list the first 5 authors\" -> used extract_list, answered with real authors, no degrade). /help now shows an interactive recipe example (save jobs: on <board> filter to remote react + list newest). +1 test, 2243 green. call-tested: TRUE. Retention flywheel now covers interactive errands, not just one-shot lookups."
     }
   ],
   "probes": [

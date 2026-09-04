@@ -76,6 +76,18 @@ describe("handler — recipe routing", () => {
     expect(agentTexts).toEqual(["check the price of bitcoin"]); // rewritten to the saved task
   });
 
+  it("an INTERACTIVE browse+filter recipe re-runs cleanly through the agent (save-interactive-recipe)", async () => {
+    const task = "on jobs.example.com, filter to remote react roles and list the 10 newest with title + link";
+    const { handle, agentTexts } = harness({
+      recipeResolve: (_c, t) => /^\/run jobs/.test(t) ? { name: "jobs", task } : null,
+    });
+    await handle(msg("/run jobs"));
+    // The multi-tool interactive task (site_search/set_field/read_list live in the agent) is handed to
+    // the agent verbatim — a single runAgent call holds one browse session across its steps, so the saved
+    // interactive errand replays like any other recipe, no special handling.
+    expect(agentTexts).toEqual([task]);
+  });
+
   it("/run unknown reports no recipe, no agent", async () => {
     const { handle, sent, agentTexts } = harness({ recipeResolve: () => null });
     await handle(msg("/run nope"));
