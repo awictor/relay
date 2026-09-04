@@ -131,7 +131,7 @@
       "title": "Keep a browse session alive across messages so a follow-up continues on the same page",
       "impact": "high",
       "effort": "L",
-      "status": "todo",
+      "status": "done",
       "why": "Every runAgent releases the session at the end (agent.ts:1926), so after \"open the flights page and filter to nonstop\" a follow-up \"now sort by price\" starts a brand-new session + re-navigates — the user cant iterate on a live page the way they would with a human assistant. This is the core multi-turn interactive experience the competitor sells.",
       "how": "Add an opt-in per-chat session carryover: when a turn ends with an OPEN interactive page (browse used, not just scrape), stash {sessionId, url, lastActivity} per chat instead of releasing; a follow-up within an idle TTL (e.g. 3-5 min) reuses it; a reaper releases idle sessions. Guard resource use (one live session per chat, hard idle cap) + never carry a cookie-authed session silently. Needs anvil session-keepalive verified. Unit-test the carryover/reap logic offline; live e2e a 2-message filter-then-sort."
     },
@@ -143,6 +143,24 @@
       "status": "done",
       "why": "After read_list gives a numbered list, a user naturally says \"open #2\" / \"more on the third one\" — but the rows arent addressable; the agent must re-find the link. Making the last list indexable (like the inline pick buttons for search results) closes the list->act loop.",
       "how": "Cache the last read_list/extract_list rows per chat (incl. any url/link field); route \"open/show the Nth\" to browse/scrape that rows link. Reuse the existing result-picker cache pattern (inline-result-picker). Depends partly on session carryover for the smoothest flow but works standalone via the cached link."
+    },
+    {
+      "id": "screenshot-current-session",
+      "title": "Screenshot the CURRENT carried browse session (not a fresh URL) so the user can see mid-thread state",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "With cross-turn continuity, the agent holds a filtered/scrolled live page — but screenshot(url) opens a NEW session + re-navigates, so the user cant SEE the state theyre iterating on (the applied filters, the current results). Seeing it is how a texting user directs the next step (\"click the 2nd one\").",
+      "how": "Add a screenshotCurrent(sessionId) anvil helper (GET /v1/screenshot?sessionId=... on the OPEN session, no navigate) + route the screenshot tool to it when a browse session is open + no url given. Live e2e: browse+filter, screenshot current, assert bytes reflect the post-filter page."
+    },
+    {
+      "id": "session-status-surface",
+      "title": "Let the user know a page is being held (\"still on the flights page — say sort/open/done\")",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "With continuity ON, a session is silently held for a few minutes. A texting user has no signal that a follow-up will continue vs start fresh, and no easy way to say \"drop it\". A light touch — a one-line hint after an interactive turn + a \"done/close/nevermind\" to release — makes the held state legible.",
+      "how": "When a turn returns openSessionId (flag on), append a short hint to the reply (once per held thread). Add a \"done\"/\"close the page\"/\"nevermind\" intent that drops the carried session. Handler-only + gated on the flag; unit-test the hint-once + drop-intent."
     }
   ],
   "history": [
@@ -205,6 +223,10 @@
     {
       "item": "open-nth-result",
       "note": "open-nth-result shipped: after a numbered list, a user can now TEXT \"open the 2nd\" / \"#3\" / \"number 4\" / \"the last one\" (not just tap the 1/2/3 button) and get that item + its link resent from the cached pickLists — no agent re-run. New parsePickIndex parser (digits, ordinals, number-words, #N, verb-gated + whole-message so a real task like \"3 day forecast\"/\"open example.com\" isnt hijacked; last->final item). Wired in handler after the more/link drilldown block, reusing the pick-tap resend logic + pickLists cache. Out-of-range -> honest count. +5 tests (10 parser + handler text-pick + out-of-range). /help updated. 2217 green. call-tested: n/a (pure logic + handler, no anvil path)."
+    },
+    {
+      "item": "persist-browse-session-across-turns",
+      "note": "Multi-turn browse continuity shipped (opt-in RELAY_BROWSE_CONTINUITY, default OFF). runAgent gained resumeSessionId (seed this run from a carried session) + keepSessionOpen (dont release at end; hand back openSessionId). New BrowseSessionStore (src/lib/browse-session.ts): one OPEN session per chat, lazy idle-reaped (BROWSE_IDLE_MS default 3min, no timers), releases on replace/idle/drop. Handler carries openSessionId between turns when the flag+releaser are wired: turn 2 resumes turn 1s page so \"now sort by price\" continues where it left off; a turn that stops browsing drops+releases; /reset releases. index wires releaseBrowseSession only when flag on. .env.example documented. Default OFF = byte-identical single-turn behavior (2217 baseline unchanged). +15 tests (8 store + 4 agent resume/keep + 3 handler carry). LIVE e2e on real anvil: set window marker + url on a session turn 1, resumed same session turn 2 -> marker+url survived (state persists across turns). 2232 green. call-tested: TRUE."
     }
   ],
   "probes": [
@@ -228,6 +250,9 @@
     },
     {
       "note": "Interactive arc COMPLETE + reliable: browse + site_search + type + set_field (dropdown/checkbox/radio) + wait_for + read + read_list (structured rows/CSV from the current session), all safety-guarded + live-verified. Whole browse roadmap (depth: pagination/scroll/load-more/extract/CSV; breadth: search/fill/select/wait/structured-read) is thorough. Next frontier surfaced: the browse SESSION is released at the end of every runAgent (agent.ts:1926), so a follow-up message (\"now sort by price\", \"open the 2nd result\") re-navigates from scratch instead of continuing on the open page — a real multi-turn-interaction gap, but L (cross-message session lifecycle + idle-timeout + resource/security). Seeded it + a smaller list-index follow-up."
+    },
+    {
+      "note": "Multi-turn browse continuity DONE (opt-in) — the interactive arc is now end-to-end: open a page, filter/sort/search/fill, wait, read structured rows/CSV, AND keep iterating across messages on the same live page. Whole browse roadmap (depth + breadth + continuity) complete. Next frontier: (1) confirm-to-act multi-step chains stay OWNER-GATED (a committing sequence needs sign-off). (2) With continuity live, the natural add is letting the user SEE the live page mid-thread (a screenshot of the current carried session) so they can direct the next step — currently screenshot re-navigates a fresh URL. Seeded that + a session-status surface."
     }
   ]
 }

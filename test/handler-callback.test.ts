@@ -376,3 +376,70 @@ describe("confirm-to-act button taps (confirm-to-act)", () => {
     expect(sent.some((s) => /no longer active/i.test(s.text))).toBe(true);
   });
 });
+
+describe("multi-turn browse continuity (persist-browse-session-across-turns)", () => {
+  const mkMsg = (text: string, chatId = 1, messageId = 1): InboundMessage => ({ chatId, from: "u", text, messageId } as InboundMessage);
+
+  it("carries an open session across turns (flag ON): turn 2 resumes turn 1's session", async () => {
+    const prev = process.env.RELAY_BROWSE_CONTINUITY;
+    process.env.RELAY_BROWSE_CONTINUITY = "1";
+    try {
+      const resumed: Array<string | undefined> = [];
+      const released: string[] = [];
+      let turn = 0;
+      const { handle } = harness({
+        handleCommand: () => null,
+        releaseBrowseSession: (sid) => { released.push(sid); },
+        runAgentFn: async (_text, d) => {
+          resumed.push((d as { resumeSessionId?: string }).resumeSessionId);
+          turn++;
+          return { reply: `t${turn}`, steps: 1, tools: ["browse"], openSessionId: "sess-X" }; // keeps a session open
+        },
+      });
+      await handle(mkMsg("open the flights page", 1, 1)); // turn 1 opens sess-X
+      await handle(mkMsg("now sort by price", 1, 2));      // turn 2 should resume sess-X
+      expect(resumed[0]).toBeUndefined();                  // turn 1 had nothing to resume
+      expect(resumed[1]).toBe("sess-X");                   // turn 2 resumed the carried session
+      expect(released).toEqual([]);                        // same session kept, nothing released mid-thread
+    } finally {
+      if (prev === undefined) delete process.env.RELAY_BROWSE_CONTINUITY; else process.env.RELAY_BROWSE_CONTINUITY = prev;
+    }
+  });
+
+  it("flag OFF (default): no resume passed, session not carried", async () => {
+    const prev = process.env.RELAY_BROWSE_CONTINUITY;
+    delete process.env.RELAY_BROWSE_CONTINUITY;
+    try {
+      const resumed: Array<string | undefined> = [];
+      const { handle } = harness({
+        handleCommand: () => null,
+        releaseBrowseSession: () => {},
+        runAgentFn: async (_text, d) => { resumed.push((d as { resumeSessionId?: string }).resumeSessionId); return { reply: "x", steps: 1, tools: ["browse"], openSessionId: "sess-Y" }; },
+      });
+      await handle(mkMsg("browse a page", 1, 1));
+      await handle(mkMsg("again", 1, 2));
+      expect(resumed).toEqual([undefined, undefined]);     // continuity inert without the flag
+    } finally {
+      if (prev === undefined) delete process.env.RELAY_BROWSE_CONTINUITY; else process.env.RELAY_BROWSE_CONTINUITY = prev;
+    }
+  });
+
+  it("a turn that stops browsing drops the carried session (flag ON)", async () => {
+    const prev = process.env.RELAY_BROWSE_CONTINUITY;
+    process.env.RELAY_BROWSE_CONTINUITY = "1";
+    try {
+      const released: string[] = [];
+      let turn = 0;
+      const { handle } = harness({
+        handleCommand: () => null,
+        releaseBrowseSession: (sid) => { released.push(sid); },
+        runAgentFn: async () => { turn++; return turn === 1 ? { reply: "opened", steps: 1, tools: ["browse"], openSessionId: "sess-Z" } : { reply: "plain answer", steps: 1, tools: [] }; },
+      });
+      await handle(mkMsg("open a page", 1, 1)); // carries sess-Z
+      await handle(mkMsg("what's 2+2", 1, 2));   // no browse -> drop + release sess-Z
+      expect(released).toContain("sess-Z");
+    } finally {
+      if (prev === undefined) delete process.env.RELAY_BROWSE_CONTINUITY; else process.env.RELAY_BROWSE_CONTINUITY = prev;
+    }
+  });
+});

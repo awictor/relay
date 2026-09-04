@@ -919,4 +919,47 @@ describe("runAgent multi-step flows", () => {
     expect(out.doc!.length).toBe(4);
     expect(out.reply).toBe("Done.");
   });
+
+  describe("browse session continuity (persist-browse-session-across-turns)", () => {
+    it("resumeSessionId reuses the carried session — no createSession, acts on it", async () => {
+      const { b, hits } = recordingBackend();
+      const llm = new ScriptLLM([
+        { toolCall: { name: "browse", args: { url: "https://shop.example.com" } } as ToolCall },
+        { toolCall: { name: "reply", args: { text: "on it" } } as ToolCall },
+      ]);
+      const out = await runAgent("sort by price", { llm, backend: b, resumeSessionId: "carried-1", keepSessionOpen: true });
+      expect(hits).not.toContain("createSession");        // reused the carried session, didn't open a new one
+      expect(hits).toContain("navigate:https://shop.example.com");
+      expect(out.openSessionId).toBe("carried-1");         // carried the SAME session forward
+    });
+
+    it("keepSessionOpen returns openSessionId and does NOT release", async () => {
+      const { b, hits } = recordingBackend();
+      const llm = new ScriptLLM([
+        { toolCall: { name: "browse", args: { url: "https://shop.example.com" } } as ToolCall },
+        { toolCall: { name: "reply", args: { text: "kept" } } as ToolCall },
+      ]);
+      const out = await runAgent("open the shop", { llm, backend: b, keepSessionOpen: true });
+      expect(out.openSessionId).toBe("s1");                // handed back for the next turn
+      expect(hits).not.toContain("releaseSession");        // handler owns lifecycle now
+    });
+
+    it("without keepSessionOpen, a browse session is released as before (no openSessionId)", async () => {
+      const { b, hits } = recordingBackend();
+      const llm = new ScriptLLM([
+        { toolCall: { name: "browse", args: { url: "https://shop.example.com" } } as ToolCall },
+        { toolCall: { name: "reply", args: { text: "done" } } as ToolCall },
+      ]);
+      const out = await runAgent("open the shop", { llm, backend: b });
+      expect(out.openSessionId).toBeUndefined();
+      expect(hits).toContain("releaseSession");            // default single-turn cleanup
+    });
+
+    it("a turn that never browses returns no openSessionId even with keepSessionOpen", async () => {
+      const { b } = recordingBackend();
+      const llm = new ScriptLLM([{ toolCall: { name: "reply", args: { text: "hi" } } as ToolCall }]);
+      const out = await runAgent("hello", { llm, backend: b, keepSessionOpen: true });
+      expect(out.openSessionId).toBeUndefined();           // nothing open to carry
+    });
+  });
 });

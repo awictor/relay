@@ -6,6 +6,7 @@ import { selectChannel, type Channel } from "./channel.js";
 import { downloadFile, registerCommands, type InboundMessage } from "./telegram.js";
 import { anvilLive, createSession, navigate, click, releaseSession } from "./anvil.js";
 import { confirmToActEnabled } from "./lib/confirm-action.js";
+import { browseContinuityEnabled } from "./lib/browse-session.js";
 import { GeminiClient, ClaudeClient, resolveProvider } from "./llm.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
 import { checkRateLimit, redactText } from "./safety.js";
@@ -579,6 +580,10 @@ const handle = createHandler({
       finally { if (sid) await releaseSession(sid).catch(() => {}); }
     },
   } : {}),
+  // Multi-turn browse continuity (persist-browse-session-across-turns, opt-in): give the handler a way to
+  // release a carried browse session. Only wired when RELAY_BROWSE_CONTINUITY is on; then the handler
+  // keeps an interactive session open across messages + reaps it on idle. Off -> undefined -> inert.
+  ...(browseContinuityEnabled() ? { releaseBrowseSession: (sid: string) => releaseSession(sid).catch(() => {}) } : {}),
   weatherCoords: (chatId) => profiles.freshCoords(chatId, Date.now()),
   weatherUnits: (chatId) => profiles.get(chatId)?.units,
   captureLocation: (chatId, text) => {

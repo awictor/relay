@@ -8,6 +8,7 @@ import type { LLMMessage, LLMClient } from "./llm.js";
 import { runAgent, type AgentDeps } from "./agent.js";
 import { formatReply, formatReplyParts } from "./lib/format-reply.js";
 import { isMoreRequest, isLinkRequest, extractLinks, chunkFrom, deliveredLen, parsePickIndex } from "./lib/last-result.js";
+import { BrowseSessionStore, browseContinuityEnabled } from "./lib/browse-session.js";
 import { formatTurnLog } from "./lib/turn-log.js";
 import { friendlyError } from "./lib/failure.js";
 import { splitScheduleCommand } from "./lib/schedule.js";
@@ -352,11 +353,16 @@ export interface HandlerDeps {
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (h: unknown) => void;
   // Optional override so tests don't hit the real agent loop.
-  runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; docName?: string; degraded?: boolean; pendingAction?: { selector: string; label: string; url: string } }>;
+  runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; docName?: string; degraded?: boolean; pendingAction?: { selector: string; label: string; url: string }; openSessionId?: string }>;
   // Confirm-to-act (confirm-to-act, opt-in): execute a single user-approved committing click. Given the
   // stashed {url, selector}, open a fresh anvil session, navigate, click, release. Returns whether it ran.
   // Optional; absent -> the flow is inert (the agent still hard-refuses). Bound to no chat (stateless).
   confirmAction?: (a: { url: string; selector: string }) => Promise<{ ok: boolean; error?: string }>;
+  // Multi-turn browse continuity (persist-browse-session-across-turns, opt-in): release a carried browse
+  // session anvil-side. When wired (+ RELAY_BROWSE_CONTINUITY on), the handler keeps an interactive
+  // session open across messages so a follow-up continues on the same page; this releases it on idle /
+  // replacement / reset. Absent -> continuity is inert (each turn owns + releases its own session as before).
+  releaseBrowseSession?: (sessionId: string) => Promise<void> | void;
   // Background errands (async-background-errands): when true, a large "get back to me" task is ACKed
   // immediately and run DETACHED (off the per-chat chain) with a raised step budget, then delivered
   // unprompted — instead of blocking the reply and truncating at the normal step cap. Absent/false ->
@@ -436,6 +442,15 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   // Confirm-to-act (opt-in): per-chat stashed committing click awaiting a YES. In-memory + TTL-checked;
   // never persisted (a committing action must not survive a restart to fire later).
   const confirmPending = new Map<number, { selector: string; label: string; url: string; createdMs: number }>();
+  // Multi-turn browse continuity (persist-browse-session-across-turns, opt-in): carries one OPEN browse
+  // session per chat between messages, idle-reaped. Only active when the flag is on AND a releaser is
+  // wired; otherwise get() returns undefined + nothing is carried, so behavior is unchanged (each turn
+  // owns its own session). Reuses deps.now for testable time.
+  const browseContinuity = browseContinuityEnabled() && !!deps.releaseBrowseSession;
+  const browseSessions = new BrowseSessionStore(
+    (sid) => deps.releaseBrowseSession?.(sid),
+    () => deps.now(),
+  );
   const handle = ((msg: InboundMessage): Promise<void> => {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -915,6 +930,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     }
     if (first === "/reset" || first === "/clear") {
       const had = deps.memoryClear(msg.chatId);
+      if (browseContinuity) browseSessions.drop(msg.chatId); // starting fresh -> release any carried browse tab
       await deps.sendMessage(msg.chatId, had ? "Cleared our conversation — starting fresh." : "Nothing to clear — we've got no history yet.");
       return;
     }
@@ -1881,8 +1897,16 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         ? `The user is replying to this message I just sent them: "${cachedPing.full.slice(0, 600)}". Answer their follow-up in that context.`
         : "";
       const context = [profileCtx, pingCtx].filter(Boolean).join(" ") || undefined;
-      const { reply, steps, tools, photo, doc, docName, degraded, pendingAction } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, weatherCoords: deps.weatherCoords?.(msg.chatId), weatherUnits: deps.weatherUnits?.(msg.chatId), ...(deps.recallAnswers ? { recall: (q: string) => deps.recallAnswers!(msg.chatId, q) } : {}), ...(deps.resolveContact ? { resolveContact: (n: string) => deps.resolveContact!(msg.chatId, n) } : {}) }, history);
+      // Multi-turn browse continuity (persist-browse-session-across-turns): resume a session the last
+      // turn left open (if fresh) + ask the agent to keep it open, so "now sort by price" continues on
+      // the same page. Only when the flag's on + a releaser is wired; else both are undefined + it's
+      // single-turn as before.
+      const resumeSessionId = browseContinuity ? browseSessions.get(msg.chatId) : undefined;
+      const { reply, steps, tools, photo, doc, docName, degraded, pendingAction, openSessionId } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, weatherCoords: deps.weatherCoords?.(msg.chatId), weatherUnits: deps.weatherUnits?.(msg.chatId), ...(deps.recallAnswers ? { recall: (q: string) => deps.recallAnswers!(msg.chatId, q) } : {}), ...(deps.resolveContact ? { resolveContact: (n: string) => deps.resolveContact!(msg.chatId, n) } : {}), ...(browseContinuity ? { keepSessionOpen: true, ...(resumeSessionId ? { resumeSessionId } : {}) } : {}) }, history);
       clearProgress();
+      // Carry the session forward if the agent kept one open this turn; else drop any stale carry (the
+      // turn didn't use the browser, so a previously-open page is done). Idle sessions are reaped inside.
+      if (browseContinuity) { if (openSessionId) browseSessions.set(msg.chatId, openSessionId); else browseSessions.drop(msg.chatId); }
       // Confirm-to-act (opt-in): the agent proposed a committing click + returned it. Stash it so a YES on
       // the NEXT message runs exactly that click. Only when confirmAction is wired (else the flow is inert).
       if (pendingAction && deps.confirmAction) confirmPending.set(msg.chatId, { ...pendingAction, createdMs: deps.now() });

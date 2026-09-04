@@ -46,7 +46,7 @@ const HELP = `Relay — what I can do:
 • Compare across pages: "compare the price of X across these links" → a side-by-side. Add "as a CSV" and I'll send a spreadsheet file you can keep.
 • Find then fetch: "find newest listings for <thing>" → I open the search page, grab the results, and read them.
 • Search inside a site: "search <store/site> for <thing>" → I use the site's own search box and read the results back.
-• Filter then list: "on <site>, filter by X and give me the results" → I set the dropdowns/checkboxes, wait for the results to load, and hand back a clean list (or a CSV).
+• Filter then list: "on <site>, filter by X and give me the results" → I set the dropdowns/checkboxes, wait for the results to load, and hand back a clean list (or a CSV). If the operator enabled it, I keep the page open so a follow-up ("now sort by price") continues right where we left off.
 • Go deeper than page one: "the 20 newest listings", "cheapest across a few pages", "what's new on <scrolling feed>" → I follow pagination or scroll a feed to gather more than the first screen, and can hand back a clean list (title + price + link per item) instead of a wall of text — add "as a CSV" and I'll send it as a spreadsheet file.
 • See a page: "screenshot the top of Hacker News", or "screenshot the whole page" for the full top-to-bottom capture → I send you an image of it.
 • Save a page: "save this as a PDF: <link>" → I send you a PDF document.

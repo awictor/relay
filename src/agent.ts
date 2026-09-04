@@ -890,6 +890,14 @@ export interface AgentDeps {
   // synchronous run would truncate. Optional; absent/<=0 -> the RELAY_MAX_STEPS default. Clamped to a
   // ceiling in runAgent so a runaway task can't loop forever.
   maxSteps?: number;
+  // Multi-turn browse continuity (persist-browse-session-across-turns): reuse an interactive browse
+  // session the PREVIOUS turn left open, so "now sort by price" continues on the same page instead of
+  // re-navigating. `resumeSessionId` seeds this run's session; `keepSessionOpen` (set by the handler when
+  // it's carrying the session per-chat) tells runAgent NOT to release a still-open session at the end —
+  // the handler owns its lifecycle + idle reaping. When keepSessionOpen is false/absent, behavior is
+  // unchanged (own the session, release on finish). The final `openSessionId` is returned below.
+  resumeSessionId?: string;
+  keepSessionOpen?: boolean;
 }
 
 // Hard ceiling on a single run's steps regardless of override — a runaway agent can't loop forever.
@@ -914,7 +922,7 @@ export async function runAgent(
   userText: string,
   deps: AgentDeps,
   history: LLMMessage[] = []
-): Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; docName?: string; degraded?: boolean; pendingAction?: { selector: string; label: string; url: string } }> {
+): Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; docName?: string; degraded?: boolean; pendingAction?: { selector: string; label: string; url: string }; openSessionId?: string }> {
   const backend: BrowserBackend = deps.backend ?? {
     ...defaultBackend,
     ...(deps.scrapeFn ? { scrape: deps.scrapeFn } : {}),
@@ -937,7 +945,10 @@ export async function runAgent(
     { role: "user", content: userText },
   ];
 
-  let sessionId: string | null = null; // persistent browse session, if opened
+  // Seed from a carried-over session when the handler passes one (persist-browse-session-across-turns),
+  // so browse/click/set_field/read act on the page the last turn left open. A resumed session that anvil
+  // has since reaped just fails the first action + the model re-browses — no special handling needed.
+  let sessionId: string | null = deps.resumeSessionId ?? null; // persistent browse session, if opened
   let lastUrl = ""; // the most recently navigated page — the target a confirm-to-act click acts on
   let pendingAction: { selector: string; label: string; url: string } | null = null; // confirm-to-act stash
   const push = (name: string, content: string) => messages.push({ role: "tool", name, content });
@@ -1913,7 +1924,10 @@ export async function runAgent(
       push(call.name, `ERROR: unknown tool "${call.name}".`);
     }
 
-    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed, photo, doc, docName, degraded, ...(pendingAction ? { pendingAction } : {}) };
+    // When the handler asked to keep the session (keepSessionOpen) AND a browse session is open, hand its
+    // id back so the handler can carry it to the next turn; otherwise the finally releases it as before.
+    const openSessionId = deps.keepSessionOpen && sessionId ? sessionId : undefined;
+    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed, photo, doc, docName, degraded, ...(pendingAction ? { pendingAction } : {}), ...(openSessionId ? { openSessionId } : {}) };
 
     // Ran out of the step budget without a final answer — a soft failure. Ask for a best-effort reply;
     // whether or not the model produces text, this path is degraded (never a clean value for an alert).
@@ -1921,9 +1935,14 @@ export async function runAgent(
       [...messages, { role: "user", content: "Step budget reached. Reply now with your best answer using what you have." }],
       []
     );
-    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: stepLimit, tools: toolsUsed, photo, doc, docName, degraded: true };
+    return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: stepLimit, tools: toolsUsed, photo, doc, docName, degraded: true, ...(openSessionId ? { openSessionId } : {}) };
   } finally {
-    if (sessionId) await backend.releaseSession(sessionId).catch(() => {});
+    // Release the session UNLESS the handler is carrying it across turns (keepSessionOpen) and it's still
+    // open — then the handler owns release + idle reaping. A session opened THIS turn but not kept (flag
+    // off) is released as before, so default single-turn behavior + resource cleanup is unchanged. If we
+    // resumed a session and it wasn't kept, we still release it (the errand finished / flag turned off).
+    const keep = deps.keepSessionOpen && sessionId;
+    if (sessionId && !keep) await backend.releaseSession(sessionId).catch(() => {});
   }
 }
 
