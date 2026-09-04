@@ -46,7 +46,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "get_holidays", "get_bmi", "get_on_this_day", "convert_base", "convert_roman", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "read_list", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "wait_for", "where_am_i", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "get_holidays", "get_bmi", "get_on_this_day", "convert_base", "convert_roman", "text_stats", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "read_list", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "wait_for", "where_am_i", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
     );
   });
 
@@ -797,6 +797,17 @@ describe("runAgent dispatch", () => {
     const out = await runAgent("next uk holiday", { llm, backend: b, nowMs: 1_756_800_000_000, tzOffsetMin: 0 });
     expect(hits).toContain("getHolidays:next holiday|UK|2025-09-02"); // request + country + local YMD from nowMs
     expect(out.reply).toBe("next up: X");
+  });
+
+  it("text_stats counts/reverses/checks pure, reaches reply (text-stats)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "text_stats", args: { request: "word count of the quick brown fox" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "4 words" } } as ToolCall },
+    ]);
+    const out = await runAgent("count the words", { llm, backend: b });
+    expect(out.reply).toBe("4 words");
+    expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
   });
 
   it("convert_roman converts both directions, pure, reaches reply (roman-numerals)", async () => {

@@ -19,6 +19,7 @@ import { runHolidays } from "./lib/holidays.js";
 import { runBmi, formatBmi } from "./lib/bmi.js";
 import { runNumberBase, formatNumberBase } from "./lib/numbase.js";
 import { runRoman } from "./lib/roman.js";
+import { runTextStats } from "./lib/textstats.js";
 import { runOnThisDay } from "./lib/onthisday.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
@@ -275,6 +276,15 @@ export const TOOLS: ToolSpec[] = [
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The compare question verbatim, e.g. \"500g for $4 or 1.2kg for $9\"." } },
+      required: ["request"],
+    },
+  },
+  {
+    name: "text_stats",
+    description: "Quick text utilities EXACTLY (no key): word count, character count, reverse a string, or palindrome check. Use this — NOT mental counting — for \"word count of <text>\", \"how many characters in <text>\", \"reverse this: <text>\", \"is <X> a palindrome\". Pass the user's request verbatim (it carries the text).",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The request verbatim incl. the text, e.g. \"word count of the quick brown fox\" or \"reverse this: hello\"." } },
       required: ["request"],
     },
   },
@@ -618,6 +628,7 @@ Tools:
 - "get_bmi" (request): compute BMI from a height + weight (either units). Use for "what's my BMI at 5'10 160lb" / "BMI 70kg 1.75m". NOT calculate.
 - "convert_base" (request): integer base conversion (dec/hex/binary/octal). Use for "255 in binary", "0xFF to decimal", "42 to octal". NOT calculate (base-10) or encode_decode (text hex).
 - "convert_roman" (request): Roman numerals both directions (1–3999). Use for "42 in roman numerals", "MMXXIV to a number".
+- "text_stats" (request): word/character count, reverse, or palindrome check. Use for "word count of X", "how many characters in X", "reverse this: X", "is X a palindrome".
 - "get_news" (topic?): today's top news headlines, or about a topic. Use this — NOT web_search — for "what's the news"/"top headlines"/"news about X"/"latest on Y". Omit topic for general top stories.
 - "get_fun" (request): a joke, fun fact, or trivia question. Use this — NOT web_search or your own memory — for "tell me a joke"/"fun fact"/"trivia"/"quiz me". Pass the request verbatim; I pick joke/fact/trivia.
 - "get_scores" (request): sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight" AND upcoming games "when do the Lakers play next"/"next Arsenal game"/"upcoming NFL". Pass the request verbatim (keep their "next"/"when do they play" wording). Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
@@ -1575,6 +1586,14 @@ export async function runAgent(
         } catch (e) {
           push("calculate", `Couldn't compute "${expr}": ${e instanceof Error ? e.message : String(e)}. Ask the user to restate it, or answer a trivial one yourself.`);
         }
+        continue;
+      }
+
+      if (call.name === "text_stats") {
+        const request = String(call.args.request ?? "").trim();
+        const r = runTextStats(request);
+        if (!r) { push("text_stats", `Couldn't tell what to measure in "${request}". Ask for word count / character count / reverse / palindrome + the text.`); continue; }
+        push("text_stats", `${r} Report this to the user.`);
         continue;
       }
 
