@@ -3308,9 +3308,18 @@
       "title": "Find the next genuinely-missing everyday capability (offline/free, like the password tool)",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The password-generator find proves there ARE still real capability gaps (not just bugs) reachable offline. Other common text-a-bot asks may lack a tool: a countdown/stopwatch timer, a tip/split already covered by calculate?, a 'roll a name/lorem/uuid', unit-of-time 'how long until 5pm', a percentage/discount helper, base64/url encode-decode, color hex<->name. Audit the tool set vs common asks + build the highest-value missing one.",
       "how": "List current TOOLS; brainstorm 8-10 common phone-assistant asks; for each check if a tool/parser handles it (probe); build the highest impact-per-effort genuinely-missing one with a lib+tool+dispatch+prompt+test, same pattern as password. One per iteration."
+    },
+    {
+      "id": "capability-gap-time-until",
+      "title": "Add 'how long until <time today>' countdown (time-of-day, tz-aware) — the one remaining common gap found",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "datecalc handles days-until-a-DATE but returns null for 'how long until 5pm' / 'minutes until midnight' — a very common quick ask. It needs the chat's tz (already in profile) + now, then formats h/m remaining. get_time/date_math both miss it.",
+      "how": "Add a parse+compute in datecalc or a small time-until helper: detect 'how long/how many minutes until <clock time>', resolve against the chat's tzOffset + nowMs (both already threaded to the agent env), handle 'tomorrow' rollover when the time already passed today. Wire into date_math or get_time dispatch (they already receive tz+now). Unit-test with injected now/tz. One iteration."
     }
   ],
   "history": [
@@ -4665,6 +4674,10 @@
     {
       "item": "password-generator-tool",
       "note": "NEW capability (not a probe): generate_password tool. 'generate a strong password' / 'a 24-char password no symbols' / 'a passphrase' / '6-digit PIN' was a common everyday text-a-bot ask with NO tool — fell to a slow browse OR the LLM inventing a non-random (unsafe) string for a credential. New src/lib/password.ts: parsePasswordRequest (length/symbols/digits/PIN/passphrase, recall+reset guarded so 'what's my password' doesn't hijack) + generateSecret (crypto.randomInt injected, guarantees one char/class, Fisher-Yates shuffle, no-lookalike alphabet, inline word list for passphrases) + formatSecret (copy span, 'I don't store it'). Wired: TOOLS entry + dispatch (crypto RNG, never Math.random for a credential) + prompt menu + HELP/START discoverability + sorted dispatch-test list. +16 tests (password.test 15 + dispatch 1). 2077 green."
+    },
+    {
+      "item": "encode-decode-tool",
+      "note": "2nd capability-gap build: encode_decode tool. base64/base64url/URL/hex encode-decode + JWT payload read was a common dev/utility text-a-bot ask with no tool (fell to a slow browse or the LLM hand-computing an encoding - wrong on base64 padding + multi-byte UTF-8). New src/lib/encoding.ts: parseEncodingRequest (codec + verbatim payload, colon or last-keyword delimited, JWT segment capture) + runEncoding (Node Buffer/URI codecs, round-trip validity check rejects garbage base64/hex, JWT payload-only never verifies sig) + formatEncoding (copy span + JWT sig-not-verified note). Wired: TOOLS + dispatch + prompt + HELP + sorted test list. +14 tests (encoding 13 + dispatch 1). 2091 green. Also confirmed: percentages/discount already handled by calc; 'how long until 5pm' (time-of-day countdown) is a real remaining gap but needs tz+clock (heavier)."
     }
   ],
   "audits": [
@@ -5083,6 +5096,11 @@
       "lens": "capability-gap build (broke the dry streak)",
       "surfaced": "After 3 clean bug-probe runs, shifted from hunting bugs to shipping product value. Tool inventory review found a real everyday gap: no password/passphrase generator despite it being a top text-a-bot ask. Built it offline+free with crypto RNG. This is genuine user-noticeable value, not a hardening tweak.",
       "seeded": "probe-more-capability-gaps"
+    },
+    {
+      "lens": "capability-gap build #2",
+      "surfaced": "Tool-set vs common-asks review: base64/encode-decode was the top missing dev/utility capability (offline, free, pairs with QR/save-page). Built it. Remaining candidate gaps noted: time-of-day countdown ('how long until 5pm' - needs tz), UUID generator (low value), stopwatch/timer (needs persistent proactive fire). The capability-gap vein has ~1-2 more S/M items then is largely tapped.",
+      "seeded": "capability-gap-time-until OR uuid"
     }
   ]
 }

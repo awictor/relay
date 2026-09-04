@@ -41,6 +41,7 @@ const HELP = `Relay — what I can do:
 • Crypto + stock prices: "price of bitcoin", "what's ETH at", "AAPL price" → live price + 24h change, instantly.
 • Flip / roll / pick: "flip a coin", "roll a d20", "random number 1-100", "pick one: tacos or sushi" → a genuinely random answer.
 • Strong passwords: "generate a strong password", "a 24-character password no symbols", "a passphrase", "6-digit PIN" → a cryptographically-random secret you copy into your password manager. I don't store it.
+• Encode / decode: "base64 encode X", "decode this base64 ...", "url-encode ...", "hex decode ...", "decode this JWT ..." → exact conversion, instantly (I read a JWT's payload but don't verify its signature).
 • Convert currency: "how much is 200 USD in EUR" → I use the live rate, instantly.
 • Convert units: "180C to F", "5 foot 11 in cm", "2 cups of flour in grams", "10 miles in km" → exact, instantly.
 • Better buy: "which is cheaper, 500g for $4 or 1.2kg for $9?" → I compare price-per-unit and name the winner.

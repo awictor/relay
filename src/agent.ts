@@ -36,6 +36,7 @@ import { renderQr, parseQrRequest } from "./lib/qr.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
 import { parsePasswordRequest, generateSecret, formatSecret } from "./lib/password.js";
 import { randomInt as cryptoRandomInt } from "node:crypto";
+import { parseEncodingRequest, runEncoding, formatEncoding } from "./lib/encoding.js";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { detectFlight, getFlight as fetchFlight, formatFlight } from "./lib/flight.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -152,6 +153,15 @@ export const TOOLS: ToolSpec[] = [
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The user's password ask, e.g. \"strong 20 char password\", \"passphrase\", \"password no symbols\", \"6 digit pin\"." } },
+      required: ["request"],
+    },
+  },
+  {
+    name: "encode_decode",
+    description: "Encode or decode text: base64 / base64url / URL-encoding / hex, or read a JWT's payload. Use for \"base64 encode X\", \"decode this base64 ...\", \"url encode ...\", \"hex decode ...\", \"decode this jwt ...\". Exact + deterministic (don't compute an encoding yourself — it's error-prone). Pass the user's request verbatim (it carries the codec + the payload). For JWT it reads the payload only, never verifies the signature.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The user's encode/decode ask incl. the payload, e.g. \"base64 encode hello\", \"decode this base64: aGk=\", \"decode this jwt eyJ...\"." } },
       required: ["request"],
     },
   },
@@ -509,6 +519,7 @@ Tools:
 - "get_flight" (flight): flight route + live position by number. Use this — NOT web_search — for "is AA100 on time"/"where's UA83"/"when does DL215 land". Returns airline + from→to + airborne-now + a tracker link; it CAN'T get scheduled gate/on-time — report honestly, don't invent a gate/delay.
 - "random" (request): flip a coin / roll dice / random number / pick from options. Use this — NEVER invent a "random" value yourself — for "flip a coin", "roll a d20", "random number 1-100", "pick one: X or Y".
 - "generate_password" (request): a cryptographically-strong random password/passphrase/PIN. Use this — NEVER make up a password yourself — for "generate a password", "strong 24-char password", "a passphrase", "6-digit pin". Relay never stores it.
+- "encode_decode" (request): base64/base64url/URL/hex encode-or-decode, or read a JWT payload. Use this — NEVER compute an encoding yourself — for "base64 encode X", "decode this base64 ...", "url encode ...", "decode this jwt ...".
 - "get_crypto" (coin): current crypto price + 24h change. Use this — NOT get_quote/web_search — for "price of bitcoin"/"what's ETH at"/"BTC price"/"how's doge doing". Pass the ticker or name (btc, eth, sol, doge).
 - "get_quote" (symbol): latest stock/equity price. Use this — NOT web_search/scrape — for any "what's Tesla at"/"AAPL price"/"how's NVDA doing" question; it's instant. Pass the ticker (AAPL, TSLA); non-US add a market suffix (VOD.UK).
 - "get_weather" (place?, when?): current weather, today's high/low, per-hour rain timing, + up to a 7-day forecast. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location. Pass "when" with the user's words for a day OR time-of-day ("tomorrow", "this weekend", "Saturday", "this afternoon", "tonight", "at 3pm", "later today") so the RIGHT window is reported, not just today's max.
@@ -1078,6 +1089,17 @@ export async function runAgent(
         const secret = generateSecret(req, (n) => cryptoRandomInt(n));
         // Return the FORMATTED reply verbatim: the model must relay this exact secret, not invent its own.
         push("generate_password", `${formatSecret(req, secret)}\n\n[Send this EXACT text to the user — do NOT alter, regenerate, or paraphrase the secret.]`);
+        continue;
+      }
+
+      if (call.name === "encode_decode") {
+        const req = parseEncodingRequest(String(call.args.request ?? ""));
+        if (!req) { push("encode_decode", "Couldn't tell what to encode/decode — ask for a codec + the text (e.g. \"base64 encode hello\", \"decode this base64: ...\", \"url encode ...\", \"decode this jwt ...\")."); continue; }
+        try {
+          push("encode_decode", `${formatEncoding(req, runEncoding(req))}\n\n[Relay the EXACT result to the user.]`);
+        } catch (e) {
+          push("encode_decode", `ERROR: ${e instanceof Error ? e.message : String(e)}`);
+        }
         continue;
       }
 

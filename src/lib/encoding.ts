@@ -1,0 +1,120 @@
+// Encode/decode helper (encode-decode-tool): "base64 encode hello", "decode this base64 aGVsbG8=",
+// "url-encode my query", "what's this JWT payload" are common developer/utility text-a-bot asks with no
+// tool — they fell to a slow browse or the LLM hand-computing an encoding (often WRONG, especially for
+// base64 padding / multi-byte UTF-8). This does it exactly + deterministically. Pure (no I/O); the codecs
+// are Node Buffer / global encodeURIComponent. Pairs with make_qr / save_page. Exported for tests.
+
+export type EncOp =
+  | { op: "encode"; codec: "base64" | "base64url" | "url" | "hex" }
+  | { op: "decode"; codec: "base64" | "base64url" | "url" | "hex" | "jwt" };
+
+/**
+ * Parse an encode/decode request into {op, codec, text}, or null if it isn't one. Handles:
+ *   "base64 encode hello world"      -> encode base64
+ *   "decode this base64: aGVsbG8="   -> decode base64
+ *   "url encode a b&c"               -> encode url
+ *   "hex encode hi" / "decode hex 6869"
+ *   "decode this jwt <token>"        -> decode jwt (payload only; never verifies a signature)
+ * The verb (encode/decode) + a codec word are required so ordinary chat isn't hijacked. The PAYLOAD is
+ * everything after the codec/colon, taken verbatim (an encoding is whitespace/case-sensitive). Exported.
+ */
+export function parseEncodingRequest(text: string): (EncOp & { text: string }) | null {
+  const raw = String(text ?? "");
+  const t = raw.trim();
+  const lower = t.toLowerCase();
+  if (!/\b(base64url|base64|b64|url[- ]?encode|url[- ]?decode|urlencode|urldecode|hex|jwt|encode|decode)\b/.test(lower)) return null;
+
+  // Decode a JWT — "decode this jwt <token>" / "what's in this jwt <token>". Payload only, no verify.
+  const jwt = t.match(/\b(?:jwt|token)\b[\s:]*([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*)/);
+  if (jwt && /\b(decode|read|what'?s|whats|inside|payload)\b/i.test(lower)) return { op: "decode", codec: "jwt", text: jwt[1]! };
+
+  const isDecode = /\bdecode|decrypt|unescape|from\s+(?:base64|hex)\b/i.test(lower) && !/\bencode\b/i.test(lower);
+  const op: "encode" | "decode" = isDecode ? "decode" : "encode";
+
+  // codec: base64url before base64; url; hex. Default base64 when only encode/decode is named.
+  const codec: EncOp["codec"] =
+    /\bbase64url\b/.test(lower) ? "base64url"
+    : /\b(base64|b64)\b/.test(lower) ? "base64"
+    : /\burl\b/.test(lower) ? "url"
+    : /\bhex\b/.test(lower) ? "hex"
+    : "base64";
+
+  // Payload = text after the LAST codec/verb keyword or a colon. An encoding is exact, so we take it
+  // verbatim (only trimming surrounding whitespace + a wrapping pair of quotes/backticks).
+  const payload = extractPayload(raw, lower);
+  if (!payload) return null;
+  return { op, codec, text: payload } as EncOp & { text: string };
+}
+
+// Everything after a colon, else after the last recognized keyword. Trims surrounding quotes/backticks.
+function extractPayload(raw: string, lower: string): string {
+  const colon = raw.indexOf(":");
+  let body: string;
+  if (colon >= 0 && colon < raw.length - 1) {
+    body = raw.slice(colon + 1);
+  } else {
+    // find the last keyword occurrence in the lowercased string, take the rest of the RAW string after it.
+    const kw = [...lower.matchAll(/\b(base64url|base64|b64|urlencode|urldecode|url|hex|jwt|encode|decode|encoded|decoded)\b/g)];
+    const last = kw[kw.length - 1];
+    body = last ? raw.slice(last.index! + last[0].length) : "";
+  }
+  return body.trim().replace(/^["'`]|["'`]$/g, "").trim();
+}
+
+/**
+ * Run the encode/decode. Deterministic + pure. Returns the result string, or throws a friendly Error the
+ * tool surfaces (bad base64/hex/jwt). Uses Node Buffer + global URI codecs. Exported for tests.
+ */
+export function runEncoding(req: EncOp & { text: string }): string {
+  const { op, codec, text } = req;
+  if (op === "encode") {
+    switch (codec) {
+      case "base64": return Buffer.from(text, "utf8").toString("base64");
+      case "base64url": return Buffer.from(text, "utf8").toString("base64url");
+      case "url": return encodeURIComponent(text);
+      case "hex": return Buffer.from(text, "utf8").toString("hex");
+    }
+  }
+  // decode
+  switch (codec) {
+    case "base64":
+    case "base64url": {
+      const out = Buffer.from(text, codec === "base64url" ? "base64url" : "base64").toString("utf8");
+      // Reject garbage: re-encoding must round-trip (Buffer is lenient + would silently drop bad chars).
+      const reenc = Buffer.from(out, "utf8").toString(codec === "base64url" ? "base64url" : "base64");
+      if (!roughlyEqualB64(reenc, text)) throw new Error(`That doesn't look like valid ${codec}.`);
+      return out;
+    }
+    case "url":
+      try { return decodeURIComponent(text.replace(/\+/g, " ")); }
+      catch { throw new Error("That isn't valid URL-encoded text (a stray % or bad %XX)."); }
+    case "hex": {
+      const clean = text.replace(/\s+/g, "");
+      if (!/^[0-9a-fA-F]*$/.test(clean) || clean.length % 2 !== 0) throw new Error("That isn't valid hex (need pairs of 0-9/a-f).");
+      return Buffer.from(clean, "hex").toString("utf8");
+    }
+    case "jwt": {
+      const parts = text.split(".");
+      if (parts.length < 2) throw new Error("That isn't a JWT (need header.payload.signature).");
+      let payload: string;
+      try { payload = Buffer.from(parts[1]!, "base64url").toString("utf8"); }
+      catch { throw new Error("Couldn't decode the JWT payload."); }
+      try { return JSON.stringify(JSON.parse(payload), null, 2); }
+      catch { return payload; } // not JSON — return raw
+    }
+  }
+}
+
+// base64 comparison ignoring padding + url/standard alphabet differences (so a decode-validity check
+// doesn't false-negative on a caller that dropped "=" padding or used the url alphabet).
+function roughlyEqualB64(a: string, b: string): boolean {
+  const norm = (s: string) => s.replace(/=+$/, "").replace(/-/g, "+").replace(/_/g, "/");
+  return norm(a) === norm(b);
+}
+
+/** The user-facing reply: the result in a copy-friendly code span + a one-line label. Exported. */
+export function formatEncoding(req: EncOp & { text: string }, result: string): string {
+  const label = req.op === "encode" ? `${req.codec} encoded` : `${req.codec === "jwt" ? "JWT payload" : req.codec + " decoded"}`;
+  const note = req.codec === "jwt" ? "\n\n(Payload only — I don't verify the signature, so don't trust it as authentic on my say-so.)" : "";
+  return `${label}:\n\n\`${result}\`${note}`;
+}
