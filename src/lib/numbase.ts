@@ -15,12 +15,22 @@ const BASE_WORDS: Record<string, number> = {
 /** Parse a target base name/number from text -> 2/8/10/16, or null. Exported. */
 export function parseTargetBase(text: string): number | null {
   const t = text.toLowerCase();
-  for (const [word, base] of Object.entries(BASE_WORDS)) {
-    if (new RegExp(`\\b${word.replace(" ", "\\s+")}\\b`).test(t)) return base;
-  }
-  const m = t.match(/\bbase\s*(\d{1,2})\b/);
-  if (m) { const b = +m[1]!; if ([2, 8, 10, 16].includes(b)) return b; }
-  return null;
+  // Prefer the base named AFTER a "to"/"in"/"into"/"as" — that's the TARGET, even when another base word
+  // appears earlier as the SOURCE ("1010 binary TO decimal": target is decimal, not the leading binary)
+  // (numbase-adjacent-source-base). Fall back to a first-match scan when there's no directional cue.
+  const after = t.match(/\b(?:to|in|into|as)\s+(.*)$/);
+  const scan = (s: string): number | null => {
+    let best: { base: number; idx: number } | null = null;
+    for (const [word, base] of Object.entries(BASE_WORDS)) {
+      const mm = s.match(new RegExp(`\\b${word.replace(" ", "\\s+")}\\b`));
+      if (mm && (best === null || mm.index! < best.idx)) best = { base, idx: mm.index! };
+    }
+    const bm = s.match(/\bbase\s*(\d{1,2})\b/);
+    if (bm && [2, 8, 10, 16].includes(+bm[1]!) && (best === null || bm.index! < best.idx)) best = { base: +bm[1]!, idx: bm.index! };
+    return best ? best.base : null;
+  };
+  if (after) { const b = scan(after[1]!); if (b !== null) return b; }
+  return scan(t);
 }
 
 /** Parse the source integer + its base from a token: 0x-prefixed hex, 0b binary, 0o/0-prefixed octal, or
@@ -33,6 +43,20 @@ export function parseSourceNumber(text: string): { value: number; base: number }
   if (m) return { value: parseInt(m[1]!, 2), base: 2 };
   m = t.match(/\b0o([0-7]+)\b/);
   if (m) return { value: parseInt(m[1]!, 8), base: 8 };
+  // A base word IMMEDIATELY AFTER the number ("1010 binary to decimal", "FF hex to dec", "52 octal") names
+  // its SOURCE base — the number is IN that base, not decimal (numbase-adjacent-source-base). This must be
+  // checked BEFORE the plain-decimal fallback, or "1010 binary" was read as decimal-1010 and converted the
+  // wrong way. A base word after "in"/"to" ("255 in binary") is the TARGET and is NOT adjacent, so it's
+  // excluded by requiring the word to directly follow the digits (optional whitespace only).
+  const adj = t.match(/\b([0-9a-f]+)\s*(hex(?:adecimal)?|binary|bin|octal|oct)\b/);
+  if (adj && !/\b(?:in|to|into|as)\s+$/.test(t.slice(0, adj.index))) {
+    const word = adj[2]!;
+    const base = word.startsWith("hex") ? 16 : word.startsWith("bin") ? 2 : 8;
+    const digits = adj[1]!;
+    if (new RegExp(`^[0-${base === 2 ? 1 : base === 8 ? 7 : "9a-f"}]+$`, "i").test(digits)) {
+      return { value: parseInt(digits, base), base };
+    }
+  }
   // "FF in hex" / "1010 in binary" — a bare token whose SOURCE base is named alongside it.
   const srcHex = /\bhex(?:adecimal)?\b/.test(t), srcBin = /\bbinary\b|\bbin\b/.test(t), srcOct = /\boctal\b|\boct\b/.test(t);
   // A plain decimal integer (the common "255 in binary" case — 255 is decimal).

@@ -5448,6 +5448,10 @@
     {
       "item": "world-clock-implicit-home (found via inline audit)",
       "note": "Time-zone convert now anchors to the users OWN zone when no from-zone is named — \"whats 9am in Tokyo\", \"convert 3pm to London\", \"9am my time in London\", \"3pm here in Paris\" all previously fell through parseWorldClock (only \"9am PT in London\" with an explicit from parsed) to a slow/guessy agent turn. Added: a convHome parse branch (implicit from=\"\"), resolveZone treats \"\"/\"my time\"/\"here\"/\"local\" as the caller home offset (dstExact), runWorldClock takes homeOffsetMin (threaded from deps.tzOffsetMin in the get_time dispatch) + labels it \"your time (UTC-x)\". Returns null when no home offset is known (cant anchor -> agent asks). Explicit-from + bare-now paths unchanged. +5 tests (3 parse implicit-from, 2 run: home-anchored convert + null-without-home). /help updated. 2389 green. call-tested: offline (parse+run probe: 9am PST -> 2am next-day Tokyo, my-time/here anchor, PT still explicit)."
+    },
+    {
+      "item": "numbase-adjacent-source-base (bug, found via inline audit)",
+      "note": "BUG FIX (wrong-answer): a base word ADJACENT after the number named the SOURCE base but was mis-read. \"1010 binary to decimal\" -> parseSourceNumber took 1010 as DECIMAL (plain-decimal branch ran before the source-base-named branches) AND parseTargetBase grabbed the leading \"binary\" as the TARGET, so it answered 1010 decimal = 0b1111110010 binary instead of 1010 binary = 10 decimal. Two fixes: (1) parseSourceNumber now detects a base word directly following the digits (\"1010 binary\", \"FF hex\", \"52 octal\") as the source base BEFORE the decimal fallback, digit-validated per base; excluded when preceded by in/to (that word is the target). (2) parseTargetBase prefers the base named AFTER to/in/into/as (the target) over an earlier source-base word, via an index-scan. 0x/0b-prefixed + \"255 in binary\" forms unchanged. +6 assertions across the 3 existing describe blocks. 2389 green. call-tested: offline (probe: 1010 binary->10 decimal, FF hex->binary, 52 octal->42; 255 in binary still 0b11111111)."
     }
   ],
   "audits": [
