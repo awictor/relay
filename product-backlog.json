@@ -5060,6 +5060,11 @@
       "lens": "inline voice+location probe (agent cap 200/200, real 3-lens AUDIT still blocked)",
       "surfaced": "Voice-note handling is solid. Location-pin coords-save was the last unhedged persistence ack - fixed. With this, the persistence-hedge class is truly complete (every store mutation that acks success now checks lastSaveOk). All autonomously-reachable offline surfaces are swept. NO non-owner-gated buildable item of real user value remains that I can find inline.",
       "seeded": "owner-decision-needed"
+    },
+    {
+      "lens": "inline compose/tracking probe (agent cap 200/200; real 3-lens AUDIT still blocked)",
+      "surfaced": "Probed 3 more user-facing surfaces this run: compose/draft (mailto/sms link encoding of &, #, newlines, commas - all correct; invalid recipient flagged not silently blanked), package-tracking carrier detect (courtesy-immune, number-pattern anchored), and re-confirmed voice/location from last run. All CLEAN. No bug, no manufactured change. The autonomously-reachable offline surface is exhausted; every probe now returns clean.",
+      "seeded": "(none - no actionable non-owner item found; owner-decision-needed remains the standing report)"
     }
   ]
 }
