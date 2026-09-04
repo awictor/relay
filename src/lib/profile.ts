@@ -145,6 +145,16 @@ export function parseReplyStyle(text: string): { verbosity?: "brief" | "detailed
   return out.verbosity !== undefined || out.emoji !== undefined ? out : null;
 }
 
+/** A human one-liner of the chat's CURRENT reply-style + units, INCLUDING defaults, plus the phrases to
+ * change each (reply-style-menu-discoverability). Shown in /profile so a user discovers these knobs exist
+ * — they were only buried in /help prose. `p` may be undefined (no profile yet) -> all-defaults line. */
+export function replyStyleSummary(p: Profile | undefined): string {
+  const length = p?.verbosity === "brief" ? "brief" : p?.verbosity === "detailed" ? "detailed" : "default length";
+  const emoji = p?.emoji === false ? "no emoji" : "emoji on";
+  const units = p?.units ? p.units : "auto units";
+  return `Answers: ${length}, ${emoji}, ${units}.\nChange anytime: say "keep it brief" / "more detail", "no emoji" / "use emoji", or "use metric" / "use imperial".`;
+}
+
 // A location-dependent errand: the answer changes with WHERE the user is, so with no saved location
 // Relay would ask the city every time. Used to offer a one-time "save your city?" capture on the first
 // such ask (first-location-capture). Deliberately specific so a generic task isn't intercepted.

@@ -687,6 +687,26 @@ describe("createHandler", () => {
     expect(sent[0]!.text).toMatch(/setlocation/i);
   });
 
+  it("/profile shows the reply-style + units line + change hints (reply-style-menu-discoverability)", async () => {
+    const { handle, sent } = harness({
+      profileView: () => "Home location is Paris",
+      replyStyleLine: () => "Answers: brief, no emoji, metric.\nChange anytime: say \"keep it brief\" / \"more detail\", \"no emoji\" / \"use emoji\", or \"use metric\" / \"use imperial\".",
+    });
+    await handle(msg("/profile", 5));
+    expect(sent[0]!.text).toMatch(/Answers: brief, no emoji, metric/);
+    expect(sent[0]!.text).toMatch(/keep it brief/);
+  });
+
+  it("/profile shows the style line even with NO saved location (style stands alone)", async () => {
+    const { handle, sent } = harness({
+      profileView: () => null,
+      replyStyleLine: () => "Answers: default length, emoji on, auto units.\nChange anytime: ...",
+    });
+    await handle(msg("/profile", 5));
+    expect(sent[0]!.text).toMatch(/No profile saved/i);
+    expect(sent[0]!.text).toMatch(/Answers: default length, emoji on, auto units/);
+  });
+
   it("/profile clear forgets it, no agent", async () => {
     let cleared = 0;
     const { handle, sent } = harness({ profileClear: () => { cleared++; return { had: true, saved: true }; } });

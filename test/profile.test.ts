@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply, parseUnitsPreference, parseReplyStyle, inferTzFromLocation, inferZoneFromLocation, offsetForZoneAt } from "../src/lib/profile.js";
+import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply, parseUnitsPreference, parseReplyStyle, replyStyleSummary, inferTzFromLocation, inferZoneFromLocation, offsetForZoneAt } from "../src/lib/profile.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -326,6 +326,30 @@ describe("parseReplyStyle (reply-style-preference)", () => {
     const reopened = new ProfileStore({ file });
     expect(reopened.get(7)?.verbosity).toBe("brief");
     expect(reopened.get(7)?.emoji).toBe(false);
+  });
+});
+
+describe("replyStyleSummary (reply-style-menu-discoverability)", () => {
+  it("shows all-defaults + change hints when no profile is set", () => {
+    const s = replyStyleSummary(undefined);
+    expect(s).toContain("default length");
+    expect(s).toContain("emoji on");
+    expect(s).toContain("auto units");
+    expect(s).toContain("keep it brief");
+    expect(s).toContain("no emoji");
+    expect(s).toContain("use metric");
+  });
+  it("reflects the stored preferences", () => {
+    const s = replyStyleSummary({ chatId: 1, verbosity: "brief", emoji: false, units: "metric" });
+    expect(s).toContain("brief");
+    expect(s).toContain("no emoji");
+    expect(s).toContain("metric");
+  });
+  it("shows detailed + emoji-on + imperial correctly", () => {
+    const s = replyStyleSummary({ chatId: 1, verbosity: "detailed", emoji: true, units: "imperial" });
+    expect(s).toContain("detailed");
+    expect(s).toContain("emoji on");
+    expect(s).toContain("imperial");
   });
 });
 

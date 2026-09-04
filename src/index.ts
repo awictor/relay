@@ -40,7 +40,7 @@ import { DigestChangeStore } from "./lib/digest-change.js";
 import { runDigest, type DigestOutcome } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summarizeSeries, isQuietDeferrable } from "./lib/alerts.js";
 import { parseChartRequest, renderChart } from "./lib/chart.js";
-import { ProfileStore, parseSetLocation, parseCityReply, parseUnitsPreference, parseReplyStyle } from "./lib/profile.js";
+import { ProfileStore, parseSetLocation, parseCityReply, parseUnitsPreference, parseReplyStyle, replyStyleSummary } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { SavedStore, parseSavePage, parseSavedRecall, hostLabel, readingRecap, isUnreadSavedRequest, formatUnreadNudge, parseUnreadNudgeToggle } from "./lib/readlater.js";
 import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
@@ -370,6 +370,8 @@ const handle = createHandler({
   replyVerbosity: (chatId) => profiles.get(chatId)?.verbosity,
   // No-emoji preference (verbosity-emoji-on-proactive): strip emoji from the inbound reply when set.
   replyEmoji: (chatId) => profiles.get(chatId)?.emoji,
+  // /profile discoverability (reply-style-menu-discoverability): show current style/units + change hints.
+  replyStyleLine: (chatId) => replyStyleSummary(profiles.get(chatId)),
 
   // /profile view + clear (product-loop): echo the stored profile so a wrong city/tz is visible.
   profileView: (chatId) => { const l = profiles.contextLine(chatId); return l ? l.charAt(0).toUpperCase() + l.slice(1) : null; },

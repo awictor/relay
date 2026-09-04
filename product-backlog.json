@@ -3678,9 +3678,18 @@
       "title": "Surface reply-style + units prefs in /profile + a settings summary so users discover them",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Relay now remembers brief/detailed + emoji + units + location, but a new user has no way to DISCOVER these knobs exist — theyre only in /help prose. A daily user who is mildly annoyed by verbosity/emoji wont know they can just say \"keep it brief\". Making /profile show current style + a one-line \"you can also say...\" hint converts a hidden feature into a used one.",
       "how": "Extend profileView (or add a settings block) to always show current verbosity/emoji state (even when default) + a short \"say keep it brief / no emoji / use metric to change\" line. Offline test: /profile output names the current style + the change hints."
+    },
+    {
+      "id": "onboarding-first-message-tour",
+      "title": "First-ever message / /start gives a concrete 3-example tour, not a generic greeting",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "A brand-new user texting Relay for the first time gets a generic capability blurb — they dont know what to actually TYPE. A first-run tour with 3 tappable concrete errands (\"whats the weather in <my city>\", \"top HN story\", \"remind me to X at 5pm\") converts a confused first 10 minutes into a successful first errand, the single biggest retention moment.",
+      "how": "Detect the first inbound message per chat (empty memory + no profile + not a slash command) OR /start; reply with a short, concrete example set (ideally inline-button tappable via existing pickButtons infra) instead of the generic greeting. Gate once per chat. Offline test: first msg gets the tour, second msg does not."
     }
   ],
   "history": [
@@ -5319,6 +5328,10 @@
     {
       "item": "verbosity-emoji-on-proactive",
       "note": "No-emoji preference now HONORED deterministically on both inbound replies AND proactive sends. profile.emoji===false already injected a soft context hint the free-tier LLM ignores; new src/lib/strip-emoji.ts (stripEmoji + hasEmoji) removes emoji for real — pictographic planes, flags, keycaps, ZWJ/skin-tone sequences, misc-technical clocks (⏰) + the ⏰/📋 proactive header glyphs — while PRESERVING useful symbols (°, %, $, €, ×, ±, text arrows → and en-dashes). Wired: handler replyEmoji dep strips the inbound shown body (incl. degraded partials); schedule-runner replyEmoji+stripEmoji deps strip sendText+cached fullText so a later \"more\" stays emoji-free. Whitespace left by removal is collapsed per-line; line structure of a digest is kept. Caught+fixed an under-strip (⏰ U+23F0 lives in Misc-Technical, outside the 2600-27BF block — added 231A-231B + 23E9-23FA) and an over-strip (text arrow U+2192 — dropped the 2190-21FF range). +11 tests (7 unit incl. symbol-preservation + arrow-safety + header glyphs, 2 handler, 2 runner). 2349 green. call-tested: offline (pure transform + handler/runner routing)."
+    },
+    {
+      "item": "reply-style-menu-discoverability",
+      "note": "/profile now SURFACES the reply-style + units knobs so a user discovers them (they were only buried in /help prose). New pure replyStyleSummary(p) in profile.ts renders the CURRENT state incl. defaults — \"Answers: default length, emoji on, auto units.\" — plus a change line (\"say keep it brief / more detail, no emoji / use emoji, use metric / use imperial\"). Shown on BOTH /profile branches (saved-location + no-profile), since style/units stand alone from location. Wired replyStyleLine handler dep -> replyStyleSummary(profiles.get()); /help answer-style line now points at /profile. +5 tests (3 summary: defaults/brief+noemoji+metric/detailed+emoji+imperial, 2 handler: line shown with + without a saved location). 2354 green. call-tested: offline (pure render + handler routing)."
     }
   ],
   "audits": [

@@ -138,6 +138,11 @@ export interface HandlerDeps {
   // Absent/undefined/true -> leave emoji alone. Applied to the shown body only; the cached full keeps the
   // original so "more" is consistent with what was shown (also stripped below).
   replyEmoji?: (chatId: number) => boolean | undefined;
+  // A human one-liner of the chat's CURRENT reply-style + units (reply-style-menu-discoverability), shown in
+  // /profile so a user discovers these knobs exist — including their DEFAULT state (e.g. "Answers: default
+  // length, emoji on, imperial units") plus a short "say 'keep it brief' / 'no emoji' / 'use metric'" hint.
+  // Optional; absent -> /profile omits the line (prior behavior).
+  replyStyleLine?: (chatId: number) => string;
   // The chat's tz offset (minutes east of UTC) for the agent's current-datetime line + reasoning
   // (inject-current-datetime). Optional; absent -> UTC (0).
   chatTzOffsetMin?: (chatId: number) => number | undefined;
@@ -987,9 +992,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         return;
       }
       const view = deps.profileView?.(msg.chatId) ?? null;
+      // Always append the current reply-style + units line so a user DISCOVERS these knobs (they're
+      // otherwise only in /help prose) — shown even with no saved location, since style/units stand alone.
+      const styleLine = deps.replyStyleLine ? `\n\n${deps.replyStyleLine(msg.chatId)}` : "";
       await deps.sendMessage(msg.chatId, view
-        ? `Your profile:\n${view}\n\nChange it with /setlocation, or "/profile clear" to forget it.`
-        : `No profile saved yet. Set one with "/setlocation Austin, TX" (add "UTC-5" for reminder timing, "(metric)" for units).`);
+        ? `Your profile:\n${view}\n\nChange it with /setlocation, or "/profile clear" to forget it.${styleLine}`
+        : `No profile saved yet. Set one with "/setlocation Austin, TX" (add "UTC-5" for reminder timing, "(metric)" for units).${styleLine}`);
       return;
     }
 
