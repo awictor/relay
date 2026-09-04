@@ -21,7 +21,7 @@ import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./l
 import { classifyConfirmReply, formatConfirmPrompt, CONFIRM_TTL_MS } from "./lib/confirm-action.js";
 import { getTemplate, templateCatalog, templateButtons } from "./lib/templates.js";
 import { photoNeedsAgent, photoIsQrScan } from "./lib/photo-intent.js";
-import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, tryButtons as buildTryButtons, actButtons, installButtons, TRY_EXAMPLES, type InlineKeyboard } from "./lib/callbacks.js";
+import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, tryButtons as buildTryButtons, actButtons, installButtons, confirmButtons, TRY_EXAMPLES, type InlineKeyboard } from "./lib/callbacks.js";
 import { parseResultList, firstUrl, type ResultItem } from "./lib/result-list.js";
 import { rowsToCsv } from "./lib/to-csv.js";
 import type { DigestOutcome } from "./digest-runner.js";
@@ -529,6 +529,25 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           : `watch ${watchSlug(task)}: ${task} when it changes`;
         await handleOne({ chatId, from: "tap", text: synthetic, messageId: 0 } as InboundMessage);
         return action.mode === "daily" ? "Every morning" : "Watching";
+      }
+      if (action.kind === "confirm") {
+        // Confirm-to-act (opt-in): a YES/NO button tap on a pending committing click. Same logic as the
+        // text YES/NO gate — run exactly the stashed click on yes, discard on no. A stale tap (expired /
+        // already consumed) gets an honest note. editReplyMarkup retires the buttons so a re-tap can't
+        // double-fire (callback-edit-terminal-actions).
+        const pend = confirmPending.get(chatId);
+        if (messageId) await deps.editReplyMarkup?.(chatId, messageId).catch(() => {});
+        if (!pend || !deps.confirmAction || deps.now() - pend.createdMs > CONFIRM_TTL_MS) {
+          confirmPending.delete(chatId);
+          await deps.sendMessage(chatId, "That confirmation's no longer active — ask me again and I'll re-offer it.");
+          return "Expired";
+        }
+        confirmPending.delete(chatId);
+        if (action.decision === "no") { await deps.sendMessage(chatId, "Okay — cancelled, didn't do anything."); return "Cancelled"; }
+        const r = await deps.confirmAction({ url: pend.url, selector: pend.selector });
+        const what = pend.label ? `"${pend.label}"` : "that";
+        await deps.sendMessage(chatId, r.ok ? `✅ Done — clicked ${what}.` : `Couldn't complete it: ${r.error ?? "the click failed"}. The page may have changed — try again.`);
+        return r.ok ? "Done" : "Failed";
       }
       if (action.kind === "install") {
         // Tap-to-install a starter automation (starter-automation-gallery): resolve the template + save
@@ -1885,7 +1904,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       // (with its link) instead of a retype. Text replies only (a photo/doc caption isn't a pickable
       // list) + not degraded (a partial answer's list is unreliable). Buttons cap at pickButtons' max.
       let replyKeyboard: InlineKeyboard | undefined;
-      if (!photo && !doc && !degraded) {
+      // Confirm-to-act (opt-in): if the agent proposed a committing click, attach YES/NO buttons to the
+      // preview so the user can tap instead of typing. Highest priority — a consent gate overrides the
+      // pick/act CTAs. The text YES/NO gate still works for a channel without buttons.
+      if (pendingAction && deps.confirmAction) {
+        replyKeyboard = confirmButtons();
+      } else if (!photo && !doc && !degraded) {
         const items = parseResultList(body);
         if (items.length >= 2) { pickLists.set(msg.chatId, items); replyKeyboard = pickButtons(items.length); }
         // Tap-to-watch (tap-to-watch-on-answers): on a clean answer that isn't a pick-list, offer one-tap

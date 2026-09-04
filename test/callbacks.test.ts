@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   encodeCallback, decodeCallback, alertButtons, digestButtons, recipeButtons, buttonsForTask, pickButtons,
-  tryButtons, actButtons, installButtons, TRY_EXAMPLES, CALLBACK_MAX_BYTES,
+  tryButtons, actButtons, installButtons, confirmButtons, TRY_EXAMPLES, CALLBACK_MAX_BYTES,
 } from "../src/lib/callbacks.js";
 
 describe("callback codec", () => {
@@ -112,6 +112,20 @@ describe("keyboard builders", () => {
     expect(daily).not.toContain("|");
     expect(decodeCallback(daily)).toEqual({ kind: "act", mode: "daily" });
     expect(decodeCallback(watch)).toEqual({ kind: "act", mode: "watch" });
+  });
+
+  it("confirm ops (confirm-to-act) are bare opcodes, round-trip yes/no (confirm-to-act)", () => {
+    const yes = encodeCallback({ kind: "confirm", decision: "yes" })!;
+    const no = encodeCallback({ kind: "confirm", decision: "no" })!;
+    expect(yes).not.toContain("|");
+    expect(decodeCallback(yes)).toEqual({ kind: "confirm", decision: "yes" });
+    expect(decodeCallback(no)).toEqual({ kind: "confirm", decision: "no" });
+  });
+  it("confirmButtons: a YES + NO row that decode to the right decision", () => {
+    const kb = confirmButtons()!;
+    expect(kb[0]!.map((b) => b.text)).toEqual(["✅ Yes, do it", "✋ No"]);
+    expect(decodeCallback(kb[0]![0]!.callback_data)).toEqual({ kind: "confirm", decision: "yes" });
+    expect(decodeCallback(kb[0]![1]!.callback_data)).toEqual({ kind: "confirm", decision: "no" });
   });
 
   it("actButtons: Every-morning by default, Watch-this only when watchable", () => {

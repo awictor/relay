@@ -3455,6 +3455,15 @@
       "status": "todo",
       "why": "Core flow ships (text YES/NO, default-OFF). Natural follow-ups now that acting works: (1) document it in /help + README when enabled; (2) on Telegram, offer inline YES/NO buttons (not just text) via the existing callback infra; (3) consider a multi-step act chain (login->add-to-cart->checkout) each gated — but that's a bigger safety surface, owner-gate again. All optional refinements, not blockers.",
       "how": "Small: add a /help line gated on the flag. Medium: reuse callbacks.ts to attach YES/NO inline buttons to the confirm prompt + route the tap through handleCallback to the same confirmAction. Large/owner-gated: multi-action chains. One per iteration; keep default-OFF."
+    },
+    {
+      "id": "confirm-to-act-help-doc",
+      "title": "Document confirm-to-act in /help + README (gated on the flag being on)",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "The feature ships (text + button YES/NO, default-OFF) but is undocumented - an operator who enables RELAY_CONFIRM_TO_ACT + their users won't discover it. A one-line /help mention (only when enabled) + a README note closes the discovery gap.",
+      "how": "In commands.ts HELP, conditionally append a confirm-to-act line when confirmToActEnabled(); add a README bullet under the acting/safety section. Small, default-OFF-safe. Multi-step act chains remain a separate owner-gated item (bigger safety surface)."
     }
   ],
   "history": [
@@ -4985,6 +4994,10 @@
     {
       "item": "confirm-to-act-wiring",
       "note": "WIRED confirm-to-act end-to-end (default-OFF opt-in, owner-approved). agent.ts: tracks lastUrl on browse; on a dangerous CLICK with RELAY_CONFIRM_TO_ACT on + a live session, stashes {selector,label,url}, returns a formatConfirmPrompt reply + pendingAction (instead of the flat refuse). handler.ts: stashes pendingAction post-run; a whole-message YES on the next turn runs deps.confirmAction (fresh anvil session: navigate->click->release) + acks '✅ Done', NO discards, TTL-expiry drops, anything-else falls through. index.ts: confirmAction dep wired ONLY when the flag is on (else undefined -> flow inert, agent hard-refuses as before). +4 handler tests (yes-runs/no-discards/other-falls-through/inert-when-unwired) + LIVE-verified the execute path (flag on, real anvil navigate+click OK). 2149 green. call-tested: true. Default-OFF = byte-identical behavior; the read-only boundary is unchanged unless an operator opts in. This closes the acting-gap: Relay can now DO (Instinct's core), under explicit per-action consent, without abandoning safety."
+    },
+    {
+      "item": "confirm-to-act-inline-buttons",
+      "note": "Added Telegram inline YES/NO buttons to the confirm-to-act prompt (reusing callbacks.ts): new 'confirm' callback kind (bare cy/cn opcodes, round-trip) + confirmButtons() (✅ Yes / ✋ No row); handler attaches them to the preview (highest-priority keyboard, overrides pick/act CTAs) + a confirm-tap in handleCallback runs the SAME stashed-click logic as the text gate (yes->confirmAction, no->discard, expired/consumed->honest note, editReplyMarkup retires buttons so a re-tap can't double-fire). Text YES/NO still works for a buttonless channel (console). +5 tests. 2154 green. Default-OFF unchanged (confirmButtons only render when a pendingAction exists, which only happens when the flag's on)."
     }
   ],
   "audits": [
@@ -5618,6 +5631,11 @@
       "lens": "confirm-to-act shipped (the acting gap)",
       "surfaced": "The one substantive coded feature left is DONE end-to-end + live-verified: opt-in one-shot approval turns Relay from reader into doer under per-action YES consent, default-OFF so the strict read-only boundary is untouched unless enabled. Both backlog items (core + wiring) closed. Relay now has a safe path to ACT - the core differentiator vs a pure read-only bot. No further owner-gated coded work outstanding.",
       "seeded": "confirm-to-act-followups"
+    },
+    {
+      "lens": "confirm-to-act inline buttons",
+      "surfaced": "A texting user now TAPS Yes/No on a committing-action prompt (the natural mobile UX) instead of typing - via the existing callback infra, button-tap routed through the same execute path as text (no logic fork). editReplyMarkup retires the buttons on tap so a stale re-tap can't re-fire. The confirm-to-act feature is now UX-complete on Telegram. Remaining followups (/help mention, multi-step chains) are minor/owner-gated.",
+      "seeded": "confirm-to-act-help-doc"
     }
   ]
 }

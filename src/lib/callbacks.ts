@@ -33,6 +33,7 @@ export type CallbackAction =
   // the callback_data stays tiny regardless of how long the task was. "daily" = every-morning schedule;
   // "watch" = a value/change watch.
   | { kind: "act"; mode: "daily" | "watch" }
+  | { kind: "confirm"; decision: "yes" | "no" } // confirm-to-act: tap YES/NO on a pending committing click
   // Install a starter automation from the /templates gallery with one tap (starter-automation-gallery).
   // Carries the template id (short + stable), which the handler resolves to a recipe + installs.
   | { kind: "install"; id: string };
@@ -54,6 +55,8 @@ const TRY_OP = "ty";
 const ACT_DAILY = "ad";
 const ACT_WATCH = "aw";
 const INSTALL_OP = "in";
+const CONFIRM_YES = "cy"; // confirm-to-act: bare opcodes (the pending action is stashed per-chat)
+const CONFIRM_NO = "cn";
 
 const utf8Len = (s: string): number => new TextEncoder().encode(s).length;
 
@@ -83,6 +86,8 @@ export function encodeCallback(a: CallbackAction): string | null {
     // act carries no payload (the task is resolved from the chat's cached last answer) — a bare opcode.
     : a.kind === "act"
     ? (a.mode === "daily" ? ACT_DAILY : ACT_WATCH)
+    : a.kind === "confirm"
+    ? (a.decision === "yes" ? CONFIRM_YES : CONFIRM_NO)
     : a.kind === "install"
     ? `${INSTALL_OP}|${a.id}`
     : (() => { const op = OP_FOR.get(`${a.kind}:${a.action}`); return op ? `${op}|${a.name}` : null; })();
@@ -98,6 +103,8 @@ export function decodeCallback(data: string | undefined | null): CallbackAction 
   // act ops are bare opcodes (no payload — task comes from the cached last answer).
   if (data === ACT_DAILY) return { kind: "act", mode: "daily" };
   if (data === ACT_WATCH) return { kind: "act", mode: "watch" };
+  if (data === CONFIRM_YES) return { kind: "confirm", decision: "yes" };
+  if (data === CONFIRM_NO) return { kind: "confirm", decision: "no" };
   const i = data.indexOf("|");
   if (i < 0) return null;
   const op = data.slice(0, i);
@@ -192,6 +199,16 @@ export function actButtons(offerWatch: boolean, offerDaily = true): InlineKeyboa
     if (watch) row.push({ text: "🔔 Watch this", callback_data: watch });
   }
   return row.length ? [row] : undefined;
+}
+
+/** YES / NO inline buttons for a confirm-to-act prompt (confirm-to-act): a texting user taps instead of
+ * typing yes/no. Bare opcodes — the pending click is stashed per-chat, so the tap only needs to say which
+ * way. A channel without buttons (console) ignores the keyboard + the text YES/NO still works. */
+export function confirmButtons(): InlineKeyboard | undefined {
+  const yes = encodeCallback({ kind: "confirm", decision: "yes" });
+  const no = encodeCallback({ kind: "confirm", decision: "no" });
+  if (!yes || !no) return undefined;
+  return [[{ text: "✅ Yes, do it", callback_data: yes }, { text: "✋ No", callback_data: no }]];
 }
 
 /** Buttons for the /templates starter-automation gallery (starter-automation-gallery): one button per

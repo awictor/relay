@@ -319,3 +319,38 @@ describe("handler — inline-button callbacks", () => {
     expect(acked[0]).toMatch(/Slow down/);
   });
 });
+
+describe("confirm-to-act button taps (confirm-to-act)", () => {
+  const msg = (text: string, chatId = 1): InboundMessage => ({ chatId, from: "u", text, messageId: 0 } as InboundMessage);
+  it("stash via a text turn (buttons attached), then a YES tap runs the click", async () => {
+    const clicks: Array<{ url: string; selector: string }> = [];
+    const edits: number[] = [];
+    const { handle, sent } = harness({
+      editReplyMarkup: async (_c, mid) => { edits.push(mid); },
+      confirmAction: async (a) => { clicks.push(a); return { ok: true }; },
+      runAgentFn: async () => ({ reply: "⚠️ click Buy? YES/NO", steps: 2, tools: ["browse"], pendingAction: { selector: "#buy", label: "Buy", url: "https://x.com/co" } }),
+    });
+    await handle(msg("buy it", 7));                     // agent previews -> stash + confirm buttons
+    expect(sent.some((s) => s.hasButtons && /YES\/NO/.test(s.text))).toBe(true);
+    await handle(tap(encodeCallback({ kind: "confirm", decision: "yes" })!, 7)); // tap YES
+    expect(clicks).toEqual([{ url: "https://x.com/co", selector: "#buy" }]);
+    expect(sent.some((s) => /Done — clicked "Buy"/.test(s.text))).toBe(true);
+  });
+  it("a NO tap discards without clicking", async () => {
+    const clicks: unknown[] = [];
+    const { handle, sent } = harness({
+      editReplyMarkup: async () => {},
+      confirmAction: async (a) => { clicks.push(a); return { ok: true }; },
+      runAgentFn: async () => ({ reply: "…YES/NO", steps: 1, tools: [], pendingAction: { selector: "#pay", label: "Pay", url: "https://x.com" } }),
+    });
+    await handle(msg("pay", 7));
+    await handle(tap(encodeCallback({ kind: "confirm", decision: "no" })!, 7));
+    expect(clicks).toHaveLength(0);
+    expect(sent.some((s) => /cancelled/i.test(s.text))).toBe(true);
+  });
+  it("a YES tap with nothing pending gives an honest 'no longer active' note", async () => {
+    const { handle, sent } = harness({ editReplyMarkup: async () => {}, confirmAction: async () => ({ ok: true }) });
+    await handle(tap(encodeCallback({ kind: "confirm", decision: "yes" })!, 7));
+    expect(sent.some((s) => /no longer active/i.test(s.text))).toBe(true);
+  });
+});
