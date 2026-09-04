@@ -172,6 +172,32 @@ describe("runAgent dispatch", () => {
     expect(hits.some((h) => h.startsWith("scrapeScroll:"))).toBe(false); // multi-page -> no scroll needed
   });
 
+  it("extract_list attaches a CSV doc when the user asks for a spreadsheet (extract-list-csv)", async () => {
+    const { b } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "extract_list", args: { url: "https://x.com/list", fields: ["title", "price"], maxPages: 2 } } as ToolCall },
+      { text: '[{"title":"A","price":"$1"},{"title":"B","price":"$2"}]' },
+      { toolCall: { name: "reply", args: { text: "here's your list" } } as ToolCall },
+    ]);
+    const r = await runAgent("the cheapest 5 on x as a csv", { llm, backend: b });
+    expect(r.doc).toBeInstanceOf(Uint8Array);
+    expect(r.docName).toBe("list.csv");
+    const csv = new TextDecoder().decode(r.doc!);
+    expect(csv).toMatch(/title.*price/i); // header row
+    expect(csv).toMatch(/A.*\$1/);        // a data row
+  });
+
+  it("extract_list does NOT attach a CSV when the user didn't ask for a file", async () => {
+    const { b } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "extract_list", args: { url: "https://x.com/list", fields: ["title"], maxPages: 2 } } as ToolCall },
+      { text: '[{"title":"A"}]' },
+      { toolCall: { name: "reply", args: { text: "listed" } } as ToolCall },
+    ]);
+    const r = await runAgent("show me the newest on x", { llm, backend: b });
+    expect(r.doc).toBeUndefined();
+  });
+
   it("extract_list maxPages=1 uses a single scrape, not the pager", async () => {
     const { b, hits } = recordingBackend();
     const llm = new ScriptLLM([

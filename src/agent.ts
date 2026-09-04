@@ -113,7 +113,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "extract_list",
-    description: "Extract a LIST of items as structured rows from a listing page, gathering across pages — follows pagination, and auto-falls back to scrolling an infinite-scroll feed when there's no next link. Use for \"the 5 cheapest\", \"20 newest listings\", \"top 30 <things> with price + link\" — when the user wants MANY items with the same fields each, not one page's prose. Returns a JSON ARRAY of objects keyed by `fields`, deduped, capped at `limit`. For ONE item's fields use extract; for comparing specific known URLs use compare.",
+    description: "Extract a LIST of items as structured rows from a listing page, gathering across pages — follows pagination, and auto-falls back to scrolling an infinite-scroll feed when there's no next link. Use for \"the 5 cheapest\", \"20 newest listings\", \"top 30 <things> with price + link\" — when the user wants MANY items with the same fields each, not one page's prose. Returns a JSON ARRAY of objects keyed by `fields`, deduped, capped at `limit`; if the user asks for a CSV/spreadsheet/file, the rows are attached as a downloadable CSV instead. For ONE item's fields use extract; for comparing specific known URLs use compare.",
     parameters: {
       type: "object",
       properties: {
@@ -1694,6 +1694,17 @@ export async function runAgent(
           }
           const { json, count } = await extractListResult(deps.llm, truncateForModel(text, 16000), fields, limit);
           const note = `Extracted ${count} item${count === 1 ? "" : "s"} from ${source} of ${srcTitle || url}.`;
+          // csv-export: a list of rows is a natural thing to KEEP, so when the user asked for a
+          // file/CSV/spreadsheet attach the rows as a CSV document (extract-list-csv), mirroring compare.
+          if (count > 0 && !doc && CSV_REQUEST_RE.test(userText)) {
+            const csv = rowsToCsv(JSON.parse(json) as Record<string, unknown>[]);
+            if (csv) {
+              doc = new TextEncoder().encode(csv);
+              docName = "list.csv";
+              push("extract_list", `${note} Attached a CSV (${count} rows). It will be sent to the user; call reply with a short summary.`);
+              continue;
+            }
+          }
           push("extract_list", count > 0 ? `${note}\n${json}\nReport these to the user.` : `${note} (nothing matched — tell the user honestly; the page may need a different URL or the items load another way.)`);
         } catch (e) {
           push("extract_list", `ERROR extracting list from ${url}: ${e instanceof Error ? e.message : String(e)}`);

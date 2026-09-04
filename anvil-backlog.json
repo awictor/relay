@@ -50,7 +50,7 @@
       "title": "Full-page PDF: \"save the whole article/thread as a PDF\" captures everything, not one print-page",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "not-needed",
       "why": "pdf() renders via anvil /v1/pdf; like screenshot before the fullPage fix, a long thread/article likely gets clipped to default print pagination. A user saving a long page expects the whole thing. Mirror the screenshot-fullpage win.",
       "how": "Check anvil /v1/pdf options (printBackground, preferCSSPageSize, scale, full-content). Thread a fullPage/complete flag through relay pdf(url,full) + the pdf tool dispatch when the user says whole/entire/full. Live e2e: full PDF byte size materially larger for a long page."
     },
@@ -68,9 +68,27 @@
       "title": "extract_list can hand back a CSV/spreadsheet file (like compare does)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "compare already offers \"as a CSV\" -> a spreadsheet file. extract_list returns a JSON array of rows the user often wants to KEEP (20 listings, prices). A CSV export is the natural save for a list, and the rows are already structured.",
       "how": "When the user says csv/spreadsheet/export, serialize the extract_list rows to CSV (reuse the compare CSV path / a shared rows-to-csv helper) and attach as a doc. Header = fields; one row per item. Unit test the CSV shape; live e2e optional."
+    },
+    {
+      "id": "load-more-button",
+      "title": "Click-driven \"Load more\" BUTTON support in the multi-page browse path",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "scrapePaged follows <a href> pagers and scrapeScroll handles scroll, but a <button>Load more</button>/<button>Show more</button> that fetches + appends items (very common on listings/job boards/product grids) is neither — the browse tools still get only the first batch.",
+      "how": "In scrapeScroll (or a variant), after each scroll also try clicking a visible button/anchor whose text matches load more|show more|see more (reuse the wants regex, in-page click via evaluate), wait for content to grow, repeat under the same cap+budget. Live e2e on a real load-more listing; assert item count grows past the first batch."
+    },
+    {
+      "id": "extract-list-dedup-multifield",
+      "title": "extract_list dedup should consider all fields, not just the first",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "extractListResult dedups by the first field's value only, so two distinct items that share a title (different price/date) collapse to one — a real listing (two tickets same event, different price) loses rows.",
+      "how": "Dedup by a composite key of ALL requested field values (JSON.stringify the normalized row) instead of just field[0]. Keep the all-null skip. Update the dedup unit test."
     }
   ],
   "history": [
@@ -97,6 +115,14 @@
     {
       "item": "extract-list-scroll-source",
       "note": "extract_list now gathers from an infinite-scroll feed, not just pagination: when scrapePaged finds no next link (pages===1) it auto-falls back to scrapeScroll(5) to expand the feed before row extraction. Closes the gap for scroll-loaded listings/job boards. Tool description + dispatch note (\"from scrolling (Nx)\") updated. +2 unit tests (fallback fires on pages===1; NOT when multi-page gathered). LIVE e2e: quotes.toscrape.com/scroll (no pager) -> pagination saw 1 page -> scroll 5x (10K chars) -> Gemini extracted 10 distinct {author,quote} rows. 2198 green. call-tested: TRUE."
+    },
+    {
+      "item": "pdf-fullpage",
+      "note": "NOT A GAP (verified, not built). Assumed pdf() clipped a long page like screenshot did, but anvil pdf() uses page.pdf({format}) which paginates the ENTIRE page across paper pages by default. Live probe: example.com -> 1 page/22KB, long Wikipedia -> 7 pages/676KB, whole content captured. No fix needed; avoided shipping filler. Marked not-needed."
+    },
+    {
+      "item": "extract-list-csv",
+      "note": "extract_list can now hand back its rows as a downloadable CSV (extract-list-csv): when the user says csv/spreadsheet/export, the extracted rows are serialized via the shared rowsToCsv (reused from compare) + attached as list.csv instead of pasted as JSON. Header=fields, one row per item. Tool description + /help updated. +2 unit tests (CSV attached on request; NOT attached otherwise). 2200 green. call-tested: false (offline unit; pure serialization of already-live-verified extraction)."
     }
   ],
   "probes": [
@@ -108,6 +134,9 @@
     },
     {
       "note": "Live e2e caught the arrow-label pagination miss (quotes.toscrape uses \"Next →\"); fixed in NEXT_PAGE_SCRIPT. Confirms the value of driving REAL sites, not just mock pages."
+    },
+    {
+      "note": "Browse-depth surface now thorough: pagination (link, arrow-suffixed), infinite-scroll, full-page screenshot, cross-page structured extraction (extract_list), CSV export. pdf-fullpage verified NON-issue (page.pdf paginates whole page already). Remaining depth gap surfaced: a click-driven <button>Load more</button> that fetches+appends items is NEITHER a link pager (NEXT_PAGE matches load-more only as <a href>) NOR scroll — a common listing pattern still yields page one. Seeded load-more-button. Also: extract_list dedups by FIRST field only, so two genuinely different items sharing a title collapse — minor, seeded as a refinement."
     }
   ]
 }
