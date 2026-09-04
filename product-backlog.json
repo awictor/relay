@@ -3263,9 +3263,18 @@
       "title": "Audit that every store's failed-write (lastSaveOk=false) is surfaced to the user where it changes what they were told",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Delivery (send) is now gated inbound + proactive. The sibling reliability class is PERSISTENCE: every store exposes lastSaveOk(), but only some callers hedge a failed write to the user (list add, memory). A save that silently fails after a 'saved/added/scheduled' confirmation means the item vanishes on restart while the user was told it stuck - the same trust break, on the disk side.",
       "how": "grep lastSaveOk() usages + each store mutation caller (contacts, places, recipes, digests, alerts, saved-pages); where a success confirmation follows a mutation whose lastSaveOk isn't checked, hedge the message. One store per iteration; add a test."
+    },
+    {
+      "id": "probe-first-run-onboarding-copy",
+      "title": "Improve the FIRST-RUN / help / discovery experience (new-user lens, a real product-value move not a bug hunt)",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "Reliability + parsing are now deeply swept (delivery + persistence gated, courtesy-tail across 15 parsers, dispatch robust). The higher-value lever that does NOT need Alex is DISCOVERABILITY: a new texter can't tell what Relay does. Audit README/start/help copy + the first-message experience - does the bot surface its best errands (save a page, follow a feed, set a reminder, watch a price, translate, where-to-watch) so a user finds them in the first 10 min?",
+      "how": "Read the /start + /help + empty-message + first-message copy in handler.ts + commands.ts; if the capability surface isn't discoverable, improve the copy/onboarding (a concise 'try these' with real examples grouped by job). Offline-testable: assert the help/start reply names the key tool categories. This is the last high-value NON-owner-gated lever before confirm-to-act / anvil."
     }
   ],
   "history": [
@@ -4600,6 +4609,10 @@
     {
       "item": "proactive-notice-send-fail",
       "note": "Two proactive one-time notices in schedule-runner marked themselves done regardless of send success: noteGone (digest/recipe went-empty heads-up) added goneNotified BEFORE the send, and handleDeadMembers reset the member fail-streak AFTER an ungated send. A single 429/network blip permanently swallowed the ONLY explanation for a suddenly-silent briefing / a dead watchlist member. Both now gate the done-marker on deps.send !== false, so a failed notice retries next tick/check instead of being lost. The core fire/complete/alert-commit paths were already delivery-gated; no proactive PHOTO path exists (digests text-only). +2 tests. 2054 green."
+    },
+    {
+      "item": "unread-nudge-persist-hedge",
+      "note": "Swept every store-mutation confirmation for a missing failed-write hedge. Nearly all already hedge (contacts/places/recipes/digests/alerts/facts/lists/saved-pages all check saved/lastSaveOk). ONE gap: unreadNudgeToggle confirmed 'Done'/'turned off' without checking schedules.lastSaveOk(), so a failed persist of the weekly reading-list nudge silently reverted on restart while the user was told it stuck. Hedged both on+off directions. Verified lastSaveOk flips false on write failure via sandbox probe; index.ts is the composition root (deps built inline, no unit seam) so no new unit test - the hedge mirrors ~15 tested siblings + full suite green (2054)."
     }
   ],
   "audits": [
@@ -4988,6 +5001,11 @@
       "lens": "inline proactive-delivery sweep (agent cap 200/200)",
       "surfaced": "schedule-runner's MAIN paths (reminder echo, alert commit, digest/recipe complete) already gate advance/complete on the deps.send boolean + guard the timeout race - solid. The gap was the two SECONDARY one-time notices (gone-notice, dead-member receipt) that self-marked-done before/without checking the send. Fixed. Alert/digest are text-only so no proactive artifact-send class exists. Proactive delivery reliability now swept.",
       "seeded": "probe-store-persistence-hedges"
+    },
+    {
+      "lens": "inline persistence-hedge sweep (agent cap 200/200)",
+      "surfaced": "The failed-write-hedge pattern is applied almost everywhere (15+ sites in handler/index check saved or lastSaveOk). Only unreadNudgeToggle missed it. The persistence reliability class is now essentially complete alongside the delivery class. Remaining offline surface is well-hardened; diminishing returns on further reliability probes.",
+      "seeded": "probe-first-run-onboarding-copy"
     }
   ]
 }

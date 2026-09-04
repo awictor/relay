@@ -852,12 +852,18 @@ const handle = createHandler({
     const t = parseUnreadNudgeToggle(text);
     if (!t) return null;
     schedules.removeByTask(chatId, "unread:reading-list");
-    if (!t.on) return "Okay, I've turned off your weekly reading-list nudges.";
+    // A failed disk write means the toggle silently reverts on restart while the user was told it stuck
+    // (delete-persist-hedge / lists-remove-atomic-write-failure) — hedge both directions on !lastSaveOk.
+    if (!t.on) {
+      const warn = schedules.lastSaveOk() ? "" : " (⚠️ but I couldn't save that to disk — the nudges may come back if I restart; try again in a moment.)";
+      return `Okay, I've turned off your weekly reading-list nudges.${warn}`;
+    }
     const p = parseScheduleFor("every monday at 9am", "unread:reading-list", Date.now(), profiles.offsetMin(chatId));
     if (!p) return "I couldn't set that up just now — try again.";
     const s = schedules.add(chatId, p, Date.now());
     if (!s) return "You have a lot of automations already — remove one and try again.";
-    return "Done — every Monday morning I'll remind you of saved pages you haven't gotten back to. Say \"stop reading list nudges\" to turn it off.";
+    const warn = schedules.lastSaveOk() ? "" : "\n\n⚠️ But I couldn't save that to disk — the nudge may be lost if I restart. Try again in a moment.";
+    return `Done — every Monday morning I'll remind you of saved pages you haven't gotten back to. Say "stop reading list nudges" to turn it off.${warn}`;
   },
   digestSchedule: (chatId, name, whenClause, now) => {
     const d = digests.get(chatId, name);
