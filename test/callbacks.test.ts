@@ -114,12 +114,19 @@ describe("keyboard builders", () => {
     expect(decodeCallback(watch)).toEqual({ kind: "act", mode: "watch" });
   });
 
-  it("actButtons: Every-morning always, Watch-this only when watchable", () => {
+  it("actButtons: Every-morning by default, Watch-this only when watchable", () => {
     const noWatch = actButtons(false)!;
     expect(noWatch[0]!.map((b) => b.text)).toEqual(["🔁 Every morning"]);
     const withWatch = actButtons(true)!;
     expect(withWatch[0]!.some((b) => /Watch this/.test(b.text))).toBe(true);
     expect(decodeCallback(withWatch[0]!.find((b) => /Watch/.test(b.text))!.callback_data)).toEqual({ kind: "act", mode: "watch" });
+  });
+
+  it("actButtons: suppresses the daily button on a static answer (act-daily-noise-on-static-answers)", () => {
+    // A definition/conversion has no meaningful "every morning" — offerDaily=false drops that button.
+    expect(actButtons(false, false)).toBeUndefined();       // nothing to offer -> no keyboard at all
+    const watchOnly = actButtons(true, false)!;
+    expect(watchOnly[0]!.map((b) => b.text)).toEqual(["🔔 Watch this"]); // watch kept, daily gone
   });
 
   it("install op carries the template id + round-trips (starter-automation-gallery)", () => {

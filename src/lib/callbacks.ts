@@ -177,10 +177,16 @@ export function tryButtons(): InlineKeyboard {
  * morning" (a daily schedule of the same task) + optionally "🔔 Watch this" when the answer is a
  * price/number worth watching for a change. No payload — the handler resolves the task from the chat's
  * cached last answer. `offerWatch` gates the watch button (a price/stock/number answer). */
-export function actButtons(offerWatch: boolean): InlineKeyboard | undefined {
+export function actButtons(offerWatch: boolean, offerDaily = true): InlineKeyboard | undefined {
   const row: InlineButton[] = [];
-  const daily = encodeCallback({ kind: "act", mode: "daily" });
-  if (daily) row.push({ text: "🔁 Every morning", callback_data: daily });
+  // "🔁 Every morning" only when a daily re-run is MEANINGFUL (tomorrow's answer differs). For a static
+  // one-shot answer (a definition, a unit conversion, date math) a daily repeat is nonsense, so the
+  // caller passes offerDaily=false and the button is suppressed — a pointless CTA trains users to ignore
+  // the buttons (act-daily-noise-on-static-answers).
+  if (offerDaily) {
+    const daily = encodeCallback({ kind: "act", mode: "daily" });
+    if (daily) row.push({ text: "🔁 Every morning", callback_data: daily });
+  }
   if (offerWatch) {
     const watch = encodeCallback({ kind: "act", mode: "watch" });
     if (watch) row.push({ text: "🔔 Watch this", callback_data: watch });

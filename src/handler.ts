@@ -61,6 +61,23 @@ export function answerIsWatchable(userText: string, reply: string): boolean {
   if (/[$€£]\s?\d/.test(both)) return true;
   return /\b(price|cost|worth|how much|in stock|back in stock|stock|rate)\b/i.test(userText) && /\d/.test(reply);
 }
+// True when the ASK is a static one-shot whose answer won't differ tomorrow (a definition, unit/currency
+// math, a date calc, a "what does X mean", nutrition facts, a QR) — so a "🔁 Every morning" button is
+// nonsense and should be suppressed (act-daily-noise-on-static-answers). Deliberately conservative: only
+// clearly-static shapes match; anything time-varying (news/weather/prices/scores/"today") stays daily-able.
+export function answerIsStaticOneShot(userText: string): boolean {
+  const t = String(userText ?? "").trim().toLowerCase();
+  // A timely cue means the answer DOES change day to day — never treat as static.
+  if (/\b(today|tonight|now|latest|current|this week|weather|forecast|news|headlines?|score|scores|price|cost|worth|stock|rate|traffic|open now)\b/.test(t)) return false;
+  return (
+    /\b(what\s+(?:does|is\s+the\s+meaning\s+of)|define|definition\s+of|synonyms?\s+for|antonyms?\s+for)\b/.test(t) || // define
+    /\bhow\s+(?:do\s+you|to)\s+say\b|\btranslate\b/.test(t) ||                                                        // translate
+    /\bconvert\b|\bhow\s+many\b.*\bin\b|\b\d+\s*(?:c|f|kg|lb|lbs|km|mi|miles|cups?|oz|ml|cm|ft|feet|inch|inches)\b/.test(t) || // unit convert
+    /\bhow\s+(?:many\s+days|old)\b|\bdays?\s+(?:until|between|till)\b|\bwhat\s+day\s+(?:is|was)\b/.test(t) ||          // date math
+    /\bcalories?\b|\bhow\s+much\s+(?:protein|carbs?|fat|sugar)\b|\bnutrition\b/.test(t) ||                            // nutrition
+    /\bqr\s+code\b|\bmake\s+a\s+qr\b/.test(t)                                                                          // QR
+  );
+}
 
 export interface HandlerDeps {
   llm: LLMClient;
@@ -1823,7 +1840,9 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         // to when schedule wiring exists + this task isn't already a command-shaped/automation message.
         else if (deps.answerCallback && deps.scheduleAdd && canOfferAutomation(msg.text)) {
           lastTask.set(msg.chatId, msg.text.trim());
-          replyKeyboard = actButtons(answerIsWatchable(msg.text, reply));
+          // Suppress the daily button on a static one-shot answer (a definition/conversion/date-math has
+          // no meaningful "every morning") so the CTA stays relevant (act-daily-noise-on-static-answers).
+          replyKeyboard = actButtons(answerIsWatchable(msg.text, reply), !answerIsStaticOneShot(msg.text));
         }
       }
       // Track whether the reply actually reached the user (inbound-send-fail-swallowed): sendMessage

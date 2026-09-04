@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createHandler, canOfferAutomation, answerIsWatchable, watchSlug, type HandlerDeps } from "../src/handler.js";
+import { createHandler, canOfferAutomation, answerIsWatchable, answerIsStaticOneShot, watchSlug, type HandlerDeps } from "../src/handler.js";
 import type { InboundMessage } from "../src/telegram.js";
 import type { LLMMessage } from "../src/llm.js";
 import { encodeCallback, TRY_EXAMPLES } from "../src/lib/callbacks.js";
@@ -243,6 +243,17 @@ describe("handler — inline-button callbacks", () => {
     expect(answerIsWatchable("top news", "Headlines: ...")).toBe(false);
     expect(watchSlug("price of bitcoin")).toBe("bitcoin");
     expect(watchSlug("AAPL stock price")).toBe("aapl");
+  });
+
+  it("answerIsStaticOneShot suppresses the daily CTA only on answers that won't change tomorrow", () => {
+    // Static one-shots -> no "every morning" button.
+    for (const t of ["what does escrow mean", "define obsequious", "convert 100 usd to eur", "180c to f", "how many days until christmas", "calories in a banana", "how do you say hello in spanish"]) {
+      expect(answerIsStaticOneShot(t), t).toBe(true);
+    }
+    // Time-varying asks -> keep the daily button.
+    for (const t of ["what's the weather", "top news", "price of bitcoin", "did the lakers win", "what's on the hacker news front page"]) {
+      expect(answerIsStaticOneShot(t), t).toBe(false);
+    }
   });
 
   it("a clean answer offers tap-to-watch buttons; tapping 'Every morning' schedules it (tap-to-watch-on-answers)", async () => {

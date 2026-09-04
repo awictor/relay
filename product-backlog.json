@@ -3281,9 +3281,18 @@
       "title": "Surface the RIGHT next-capability hint contextually after a relevant answer (not just in /help)",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Onboarding copy covers the cold start, but mid-session discovery is weak: after a user does X, they rarely learn about the adjacent capability (got a price -> could 'watch that'; got a fact -> could 'save that'; asked weather -> could set a morning digest). Some tap-to-act buttons exist (actButtons); audit whether the highest-value adjacencies are actually offered, without nagging.",
       "how": "Read the post-answer button/nudge logic in handler.ts (canOfferAutomation/actButtons/pickButtons + save-nudge); find a high-value answer type that offers NO next-step hint and add one (gated, once, non-spammy). Offline-testable via the handler harness. If adjacencies are already well-covered, say so + pivot to another lens."
+    },
+    {
+      "id": "reconsider-owner-gated-or-audit-fresh",
+      "title": "Next run: either a fresh 3-lens AUDIT (if subagent cap resets in a new session) or surface to Alex that the high-value levers are owner-gated",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "After ~10 iterations the autonomously-reachable offline surface (courtesy-tail x15, dispatch, multi-step flows, inbound+proactive delivery gating, persistence hedges, onboarding + mid-session discovery) is deeply swept with 2059 green tests. Continued single-surface probing yields diminishing returns. The two highest-value moves both need Alex (confirm-to-act product-UX decision; start anvil for the overdue live e2e).",
+      "how": "If a NEW session reset the subagent cap, run the real 3-lens parallel AUDIT for a fresh high-value seed. Otherwise do one more targeted inline probe (a surface not yet swept, e.g. voice-message handling, location-share flow, or the compose/draft path) and if it's clean, honestly report to Alex that confirm-to-act + anvil are the only value-adding moves left."
     }
   ],
   "history": [
@@ -4626,6 +4635,10 @@
     {
       "item": "onboarding-examples-ack-meta",
       "note": "Probed the first-run/discovery copy. START/HELP/META/PROBE/SITE already cover most openers well. Closed 3 real gaps where a new user's message fell through to a slow floundering agent turn: (1) 'examples'/'what else can you do'/'what should I ask' -> routed to the START card (which IS the grouped examples list); (2) a bare ack 'thanks'/'cool'/'ok thanks' -> a warm one-line ACK + next-errand invite instead of a browse of the word 'thanks'; (3) widened META_RE for cost/identity/app openers ('how much do you cost', 'are you chatgpt/claude', 'do you have an app'). All anchored + word-capped so real errands ('examples of python decorators', 'how much does a tesla cost', 'cool places near me') still reach the agent. +3 tests. 2057 green."
+    },
+    {
+      "item": "act-daily-noise-on-static-answers",
+      "note": "Mid-session discovery audit. The post-answer tap-to-act row offered '🔁 Every morning' on EVERY clean answer passing canOfferAutomation — including static one-shots (define/convert/date-math/nutrition/QR/translate) where a daily repeat is nonsense. A pointless CTA erodes trust + trains users to ignore the buttons. Added answerIsStaticOneShot (conservative: timely cues like today/news/weather/price keep the button; only clearly-static shapes suppress it) + an offerDaily param on actButtons. Watch-this stays gated as before. The text recurringCta already gated by content; this brings the BUTTON to parity. +3 tests. 2059 green."
     }
   ],
   "audits": [
@@ -5024,6 +5037,11 @@
       "lens": "inline onboarding-copy probe (agent cap 200/200)",
       "surfaced": "Discovery copy is now strong: greeting, capability, meta/trust, cost/identity, can't-do probe, site-support, examples, and ack all get an instant canned reply instead of a wasted first browse. The new-user first-10-min surface is well-covered. Remaining non-owner offline levers are largely exhausted - reliability (delivery+persistence), parsing (courtesy x15), dispatch, onboarding all swept.",
       "seeded": "probe-help-discoverability-in-replies"
+    },
+    {
+      "lens": "inline mid-session-discovery probe (agent cap 200/200)",
+      "surfaced": "The adjacency CTAs (recurringCta text tip, actButtons row, pickButtons, save-nudge on repeat, tap-to-watch) are mostly well-built + content-gated. The one real defect was the daily BUTTON firing on static answers where the text tip already knew better. Fixed to parity. Discovery surface now coherent. Non-owner offline levers (reliability, parsing, dispatch, onboarding, discovery) are deeply swept - genuinely diminishing returns.",
+      "seeded": "reconsider-owner-gated-or-audit-fresh"
     }
   ]
 }
