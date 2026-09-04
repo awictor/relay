@@ -4810,6 +4810,10 @@
     {
       "item": "weather-in-n-days",
       "note": "phrasing gap: weather resolveWhen had no 'in N days' branch, so 'weather in 3 days' / '2 days from now' / 'in a week' returned null -> the caller fell back to TODAY's weather for a future-day question (silently wrong day). Added an 'in N days'/'N days from now'/'in a week' branch returning [n]; out-of-window n still returns the index so formatWeatherWhen gives the honest 'beyond my N-day forecast' note (not today). scores resolveLeague probed clean (team+league forms all resolve). +1 test. 2113 green."
+    },
+    {
+      "item": "lib-phrasing-probe-clean-pass",
+      "note": "Full clean pass on directions/translate/geocode/scores/fun phrasings - no code change (green tree, 2113). The phrasing-coverage vein produced 9 real user-facing fixes over prior runs (calc %-off, convert density, network-msg, unitprice packs, log value-first, log count/plural, countdown lead, places atm->hospital, weather in-N-days) then went clean here. Not manufacturing a change; vein largely swept."
     }
   ],
   "audits": [
@@ -5307,6 +5311,10 @@
       "lens": "weather/scores phrasing probe",
       "surfaced": "scores resolveLeague solid (lakers/man city/chiefs/real madrid/arsenal all map). weather resolveWhen missed 'in N days' (fixed) - would show today for a future ask. weekday/weekend/tomorrow/day-after all correct. 9 real lib-phrasing fixes now. Remaining libs largely covered; next probe: geocode/directions place phrasings, translate lang-name forms.",
       "seeded": "probe-remaining-lib-phrasings (continue: geocode, translate lang forms)"
+    },
+    {
+      "lens": "directions/translate/geocode phrasing probe (clean)",
+      "surfaced": "Probed the remaining lib parsers: directions wantsTransit (train/subway/bus/public transit all -> transit; bike/walk/drive modes correct) + routeMode clean; translate targets incl. multi-word langs (mandarin, brazilian portuguese, simplified chinese, farsi) + 'how do you say/what is X in Y' cues all parse; parseNominatim geocode (valid->coords, empty/garbage->null) clean. NO dead-end found this pass. The lib-phrasing vein has yielded 9 real fixes and is now thinning - directions/translate/geocode/scores/fun all clean; the earlier hits were in calc/convert/unitprice/log/countdown/places/weather."
     }
   ]
 }
