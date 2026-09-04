@@ -52,13 +52,19 @@ export function parseSetLocation(text: string, atMs?: number): { location: strin
   // "I'm in X" / "I am in X" form is captured separately because it also matches ordinary chat
   // ("I'm in a meeting, remind me in 10 min") — for THAT form we require the tail to look like a
   // place, so a normal message isn't hijacked (reminder dropped + profile corrupted).
-  const explicit = t.match(/^\s*(?:\/setlocation|set\s+(?:my\s+)?location(?:\s+to)?|my\s+location\s+is)\s+(.+)$/i);
-  const bare = explicit ? null : t.match(/^\s*i(?:'m| am)\s+in\s+(.+)$/i);
+  // Explicit, low-ambiguity setters (setlocation-more-phrasings): "/setlocation", "set/update/change my
+  // location/city [to] X", "set my home city to X", "my location/city is X". All verb/possessive-anchored
+  // so they don't hijack chat.
+  const explicit = t.match(/^\s*(?:\/setlocation|(?:set|update|change)\s+(?:my\s+)?(?:home\s+)?(?:location|city|town)(?:\s+to)?|my\s+(?:location|city|town)\s+is)\s+(.+)$/i);
+  // "i live in X" / "i'm in X" / "i am in X" — the softer forms that also match ordinary chat, so they
+  // get the place-shape guard below.
+  const bare = explicit ? null : t.match(/^\s*i(?:'m| am)?\s+(?:live|living|based|located)?\s*in\s+(.+)$/i)
+    || (explicit ? null : t.match(/^\s*i(?:'m| am)\s+in\s+(.+)$/i));
   const m = explicit ?? bare;
   if (!m) return null;
   let loc = m[1]!.trim();
-  // Guard the bare "I'm in X" form: reject if the tail carries a task/scheduling clause or reads like
-  // a sentence rather than a place. A real place is short and has no comma-separated follow-on verb.
+  // Guard the bare "I'm in X" / "I live in X" forms: reject if the tail carries a task/scheduling clause or
+  // reads like a sentence rather than a place. A real place is short and has no comma-separated follow-on verb.
   if (bare) {
     const tail = loc.toLowerCase();
     // A place is short and free of task/scheduling words. Keep a comma OK ("Austin, TX") but reject a

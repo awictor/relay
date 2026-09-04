@@ -3410,6 +3410,15 @@
       "status": "done",
       "why": "'snooze btc until monday' / 'until tomorrow' / 'until the 15th' currently fold the clause into the name with no expiry (indefinite). A date-relative snooze is a natural phrasing; reuse parseDate to compute untilMs.",
       "how": "After the duration match fails, try a 'until <date-phrase>' match; parse the phrase with the existing parseDate (future-preferring) -> untilMs = start-of-that-day. Strip the clause off the name. Reject a past date. +test."
+    },
+    {
+      "id": "probe-remaining-setter-phrasings",
+      "title": "Probe the other profile/preference setters + capture-reply paths for missed phrasings",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "setLocation had 4 missed setter phrasings (just fixed). Sibling setters may too: units preference ('use metric'/'switch to celsius'), the first-run captureLocation reply (parseCityReply - does 'it's Austin'/'Austin' both work?), profile clear. A missed setter on a first-run-critical path silently degrades weather/near-me.",
+      "how": "probe parseCityReply (bare city, 'it's X', 'I'm in X'), any units-preference parse, profileClear phrasings; widen any that miss a natural phrasing + test. One surface per iteration."
     }
   ],
   "history": [
@@ -4844,6 +4853,10 @@
     {
       "item": "snooze-until-date",
       "note": "Completed snooze phrasing: 'snooze btc until tomorrow/friday/monday' now resolves a day-granular untilMs (now-based arithmetic, same-weekday->next week, tonight~+8h) instead of folding 'until monday' into the name with no expiry (indefinite pause). Self-contained (no parseDate/tz needed - a snooze only needs to resume roughly then). +1 test. 2116 green. Snooze parser now fully covers digit + word + until-day durations."
+    },
+    {
+      "item": "setlocation-more-phrasings",
+      "note": "phrasing gap: parseSetLocation covered '/setlocation', 'set my location to', 'my location is', 'I'm in X' — but NOT the common 'i live in X', 'my city is X', 'update/change my location to X', 'set my home city to X'. These dead-ended location capture (->agent turn or which-city loop) despite being low-ambiguity setters. Added them to the explicit form + 'i live in' to the guarded soft form (task/state tail still falls through: 'i live in a rush'->null, 'i live in trouble'->null). +1 test. 2117 green."
     }
   ],
   "audits": [
@@ -5360,6 +5373,11 @@
       "lens": "snooze until-date (phrasing vein tail)",
       "surfaced": "snooze now handles all three duration shapes (digit/word/until-day). This tail-end of the lib-phrasing vein is done - 12 real phrasing fixes total this session. The vein is genuinely worked out now; further parser probes will trend clean.",
       "seeded": "(none new - phrasing vein complete; owner levers remain)"
+    },
+    {
+      "lens": "set-location phrasing probe",
+      "surfaced": "parseSetLocation missed 'i live in'/'my city is'/'update/change my location'/'set my home city' - all natural, verb-anchored, low-ambiguity setters that fell through. Fixed with the place-shape guard preserved. 13 lib-phrasing fixes now. Location-set is a first-run-critical path (gates weather/near-me/directions), so a missed setter is higher-impact than most.",
+      "seeded": "probe-remaining-setter-phrasings"
     }
   ]
 }

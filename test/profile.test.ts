@@ -17,6 +17,16 @@ describe("parseSetLocation", () => {
     expect(parseSetLocation("I'm in Paris")).toEqual({ location: "Paris", tzOffsetMin: 60 });
     expect(parseSetLocation("my location is Berlin")).toEqual({ location: "Berlin", tzOffsetMin: 60 });
   });
+  it("parses more setters: 'i live in', 'my city is', 'update/change my location/city', 'set my home city' (setlocation-more-phrasings)", () => {
+    expect(parseSetLocation("i live in Austin", Date.UTC(2026,0,15))).toEqual({ location: "Austin", tzOffsetMin: -360 });
+    expect(parseSetLocation("my city is Denver", Date.UTC(2026,0,15))).toEqual({ location: "Denver", tzOffsetMin: -420 });
+    expect(parseSetLocation("update my location to Miami", Date.UTC(2026,0,15))).toEqual({ location: "Miami", tzOffsetMin: -300 });
+    expect(parseSetLocation("change my city to Dallas", Date.UTC(2026,0,15))).toEqual({ location: "Dallas", tzOffsetMin: -360 });
+    expect(parseSetLocation("set my home city to Portland", Date.UTC(2026,0,15))).toEqual({ location: "Portland", tzOffsetMin: -480 });
+    // 'i live in' gets the same place-shape guard as 'i'm in' — a task/state tail falls through
+    expect(parseSetLocation("i live in a rush, remind me in 10 min")).toBeNull();
+    expect(parseSetLocation("i live in trouble")).toBeNull();
+  });
   it("captures units in parens or 'in metric' (+infers tz)", () => {
     expect(parseSetLocation("/setlocation Denver (imperial)")).toEqual({ location: "Denver", units: "imperial", tzOffsetMin: -420 });
     expect(parseSetLocation("I'm in Tokyo in metric")).toEqual({ location: "Tokyo", units: "metric", tzOffsetMin: 540 });
