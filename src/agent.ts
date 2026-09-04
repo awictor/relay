@@ -17,6 +17,7 @@ import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { runHolidays } from "./lib/holidays.js";
 import { runBmi, formatBmi } from "./lib/bmi.js";
+import { runNumberBase, formatNumberBase } from "./lib/numbase.js";
 import { runOnThisDay } from "./lib/onthisday.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
@@ -273,6 +274,15 @@ export const TOOLS: ToolSpec[] = [
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The compare question verbatim, e.g. \"500g for $4 or 1.2kg for $9\"." } },
+      required: ["request"],
+    },
+  },
+  {
+    name: "convert_base",
+    description: "Convert an integer between number bases — decimal / hex / binary / octal — EXACTLY (no key). Use this — NOT calculate or encode_decode — for \"255 in binary\", \"0xFF to decimal\", \"convert 42 to octal\", \"0b1010 in hex\". Pass the request verbatim (it carries the number + target base). encode_decode's hex is for TEXT; this is for NUMBERS.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The base-conversion request verbatim, e.g. \"255 in binary\" or \"0xFF to decimal\"." } },
       required: ["request"],
     },
   },
@@ -596,6 +606,7 @@ Tools:
 - "translate" (request): translate text or a whole page into another language. Use for "translate X to Spanish"/"how do you say X in Japanese"/"read me this page in English: <url>". Pass the request verbatim.
 - "calculate" (expression): compute arithmetic/financial math EXACTLY. Use for chained math, bill-splits, tips, percentages, loan payments — anything past a trivial one-step sum (don't do it in your head, that's silently wrong). loanpayment(principal, annualRatePct, years) for a monthly payment.
 - "get_bmi" (request): compute BMI from a height + weight (either units). Use for "what's my BMI at 5'10 160lb" / "BMI 70kg 1.75m". NOT calculate.
+- "convert_base" (request): integer base conversion (dec/hex/binary/octal). Use for "255 in binary", "0xFF to decimal", "42 to octal". NOT calculate (base-10) or encode_decode (text hex).
 - "get_news" (topic?): today's top news headlines, or about a topic. Use this — NOT web_search — for "what's the news"/"top headlines"/"news about X"/"latest on Y". Omit topic for general top stories.
 - "get_fun" (request): a joke, fun fact, or trivia question. Use this — NOT web_search or your own memory — for "tell me a joke"/"fun fact"/"trivia"/"quiz me". Pass the request verbatim; I pick joke/fact/trivia.
 - "get_scores" (request): sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight" AND upcoming games "when do the Lakers play next"/"next Arsenal game"/"upcoming NFL". Pass the request verbatim (keep their "next"/"when do they play" wording). Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
@@ -1553,6 +1564,14 @@ export async function runAgent(
         } catch (e) {
           push("calculate", `Couldn't compute "${expr}": ${e instanceof Error ? e.message : String(e)}. Ask the user to restate it, or answer a trivial one yourself.`);
         }
+        continue;
+      }
+
+      if (call.name === "convert_base") {
+        const request = String(call.args.request ?? "").trim();
+        const r = runNumberBase(request);
+        if (!r) { push("convert_base", `Couldn't read a number + target base from "${request}". Ask for both (e.g. "255 in binary", "0xFF to decimal"). Bases: decimal/hex/binary/octal.`); continue; }
+        push("convert_base", `${formatNumberBase(r)} Report this exact result to the user.`);
         continue;
       }
 
