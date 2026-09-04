@@ -4762,6 +4762,9 @@
     },
     {
       "note": "anvil DOWN -> live e2e still blocked. Self-audit found flight-cue-where-track (natural flight asks not detected) — a real medium, so the vein isn't exhausted. confirm-to-act (owner) + anvil-live-e2e (anvil) remain the gated high-value levers (surfaced in STATUS.md last run)."
+    },
+    {
+      "note": "CLEAN SWEEP (anvil DOWN). Probed 3 fresh surfaces: scores (resolveLeague/wantsNextGame/filterByTeam/pickNextGame — sound; no-match filter guarded by teamMatchedAny in both scores + next-game callers), air-quality (aqiCategory EPA breakpoints + uvRisk + pollenRisk grains/m3 thresholds — all correct; my initial 1-5 pollen probe was a wrong-unit assumption), flight parsers (last run). Also verified NO .only/.skip/xit in the suite (2022 tests all enabled, real coverage). No bug found this run — the offline vein is near-dry. Not shipping filler. Standing asks unchanged: confirm-to-act (owner decision) + anvil-live-e2e (start anvil) — both in STATUS.md."
     }
   ]
 }
