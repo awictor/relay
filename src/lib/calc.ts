@@ -38,6 +38,19 @@ export function tokenize(input: string): Token[] {
   //   "20% of 50" -> "(20/100)*50" ; "50 + 20%" / "50 plus 20%" -> "50*(1+20/100)" ; "50 - 20%" off ->
   //   "50*(1-20/100)". A bare trailing "%" elsewhere means /100.
   let s = " " + input.toLowerCase() + " "; // pad so a leading/trailing operator-word matches
+  // Percent CHANGE from A to B (calc-percent-change): "50 to 75 percent change", "percent increase from
+  // 50 to 75", "% change 100 to 90" -> ((B-A)/A)*100. Rewritten FIRST (before the words are stripped) into
+  // a plain expression the evaluator handles; the "of"/"off" idioms below don't touch a change phrase.
+  // Requires the "change/increase/decrease/percent/%" cue AND an "A to B" pair, so a plain "50 to 75"
+  // (not a math request) isn't hijacked.
+  if (/(?:\bpercent(?:age)?\b|%)/.test(s) && /\b(change|increase|decrease|difference|more|less|up|down|from)\b/.test(s)) {
+    const m = s.match(/(-?\d+(?:\.\d+)?)\s*(?:to|->|→)\s*(-?\d+(?:\.\d+)?)/);
+    if (m) {
+      const a = m[1]!, b = m[2]!;
+      // Only when A != 0 (percent change off zero is undefined); leave it to error otherwise.
+      if (parseFloat(a) !== 0) return tokenize(`((${b}-${a})/${a})*100`); // re-tokenize the plain expr
+    }
+  }
   // "X% tip on Y" / "X% gratuity on Y" -> the TIP AMOUNT (Y * X/100), matching the SYSTEM_PROMPT's
   // "20% tip on $47 = $9.40" (calc-tip-idiom). Rewritten before the modulo/percent passes so the "%"
   // isn't misread as an operator. "tip"/"gratuity" are the only words the tokenizer would otherwise

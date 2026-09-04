@@ -136,4 +136,16 @@ describe("natural phrasing: tip idiom, scientific notation, factorial (calc-natu
     expect(calc("5 mod 2")).toBe(1);
     expect(calc("1,000 + 1")).toBe(1001);
   });
+  it("percent CHANGE from A to B (calc-percent-change)", () => {
+    expect(calc("50 to 75 percent change")).toBe(50);
+    expect(calc("what percent increase from 50 to 75")).toBe(50);
+    expect(calc("% change 100 to 90")).toBe(-10);
+    expect(calc("percent decrease from 200 to 150")).toBe(-25);
+    // "20% off 80" (final price) still works via the existing off-idiom, not the change path.
+    expect(calc("20% off 80")).toBe(64);
+    // a bare "A to B" with no percent/change cue is NOT hijacked (stays an error, not a silent number).
+    expect(() => calc("50 to 75")).toThrow();
+    // percent change off zero is undefined -> errors rather than dividing by zero.
+    expect(() => calc("0 to 50 percent change")).toThrow();
+  });
 });

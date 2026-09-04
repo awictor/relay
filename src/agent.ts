@@ -307,7 +307,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "calculate",
-    description: "Evaluate an arithmetic/financial expression EXACTLY (no key, instant). Use this — do NOT do the mental math yourself — for anything beyond a trivial one-step sum: chained math, splitting a bill, tips, percentages (\"20% of 47\", \"$127.50 split 3 ways +20% tip\"), or a loan payment (loanpayment(principal, annualRatePct, years)). Supports + - * / % ^, parens, sqrt/round/abs/min/max/pow/loanpayment. Pass the expression; I compute it deterministically.",
+    description: "Evaluate an arithmetic/financial expression EXACTLY (no key, instant). Use this — do NOT do the mental math yourself — for anything beyond a trivial one-step sum: chained math, splitting a bill, tips, percentages (\"20% of 47\", \"$127.50 split 3 ways +20% tip\"), or a loan payment (loanpayment(principal, annualRatePct, years)). Also does percent change (\"50 to 75 percent change\", \"percent increase from 50 to 75\") and \"20% off 80\". Supports + - * / % ^, parens, sqrt/round/abs/min/max/pow/loanpayment. Pass the expression; I compute it deterministically.",
     parameters: {
       type: "object",
       properties: { expression: { type: "string", description: "The math to compute, e.g. \"(127.50*1.2)/3\" or \"loanpayment(30000, 6, 5)\"." } },

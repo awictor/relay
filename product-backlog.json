@@ -3561,7 +3561,7 @@
       "title": "Percent change: \"50 to 75 is what % increase\", \"20% off 80\"",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "calc does \"20% of 50\" + tip, but not \"X to Y percent change\" or a clean \"% off\" final-price. Common shopping/finance ask.",
       "how": "Extend calc.ts normalizeExpr (or a small percent branch) for \"A to B percent change\" -> ((B-A)/A)*100 and \"N% off P\" -> P*(1-N/100). Tests. Verify no clash with existing % idioms."
     }
@@ -5154,6 +5154,10 @@
     {
       "item": "roman-numerals",
       "note": "New convert_roman tool: \"42 in roman numerals\"->XLII, \"MMXXIV to a number\"->2024, both directions 1-3999. src/lib/roman.ts: toRoman (range-guarded), fromRoman (round-trip validation rejects IIII/VV/IC), runRoman (free-text either direction + honest out-of-range/invalid). Tool + dispatch (pure) + SYSTEM_PROMPT + /help. +7 tests. 2293 green. call-tested: n/a (pure lib, probed incl. edge/invalid). 5th non-browse everyday errand this session (holidays, BMI, on-this-day, number-base, roman)."
+    },
+    {
+      "item": "percent-change",
+      "note": "calc now handles \"A to B percent change\" (\"50 to 75 percent change\", \"percent increase from 50 to 75\", \"% change 100 to 90\") -> ((B-A)/A)*100, rewritten first in tokenize before word-stripping, gated on a percent/change cue + an A-to-B pair so a bare \"50 to 75\" isnt hijacked; A=0 errors (undefined). \"20% off 80\" was ALREADY supported (=64) — surfaced in the calc tool desc + /help now. +1 test (change dirs + regressions + not-hijacked + zero-guard). 2294 green. call-tested: n/a (pure calc). 6th everyday-errand improvement this session."
     }
   ],
   "audits": [
