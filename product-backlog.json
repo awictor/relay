@@ -3506,7 +3506,7 @@
       "title": "encode_decode: add sha256/md5 hashing + rot13 (common asks beyond base64/hex/url/jwt)",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "encoding.ts supports base64/base64url/url/hex/jwt only. \"sha256 of hello\", \"md5 of X\", \"rot13 this\" are common developer/puzzle asks that currently fall to a slow agent turn (or a hallucinated hash — dangerous, since a wrong hash looks right). Node crypto gives exact hashes with no key.",
       "how": "Add codecs sha256/sha1/md5 (encode-only, via node:crypto createHash) + rot13 (encode=decode, pure) to EncOp + parseEncodingRequest keyword matching + runEncoding. Guard: hashing is one-way, so \"decode sha256\" -> friendly refusal. Tests for each. Update the tool description."
     },
@@ -5076,6 +5076,10 @@
     {
       "item": "date-since",
       "note": "\"days since <date>\" / \"how long since July 4\" / \"weeks since 2026-08-01\" now give elapsed days (the converse of \"until\"), was null. runDateCalc gained a since/after branch computing today-target; a FUTURE date honestly redirects (\"still N days away — ask days until\") rather than a negative count; reuses parseTrailingDate so \"days since my anniversary on 1990-05-06\" works. +1 test, 2168 green."
+    },
+    {
+      "item": "encode-hash-rot13",
+      "note": "encode_decode gained sha256/sha1/md5 hashing (node:crypto, exact hex digests — a hallucinated hash LOOKS right but is wrong, a real trust risk) + rot13 (its own inverse). Parser matches \"sha256 of X\", \"md5 hash of Y\", \"rot13 ...\"; hashing is one-way so \"reverse/decode this sha256\" gets a friendly refusal, not a fake answer. Verified vs known vectors (sha256(hello), md5(hello), sha1(abc)). Tool description + /help updated. +5 tests, 2173 green."
     }
   ],
   "audits": [

@@ -4,9 +4,17 @@
 // base64 padding / multi-byte UTF-8). This does it exactly + deterministically. Pure (no I/O); the codecs
 // are Node Buffer / global encodeURIComponent. Pairs with make_qr / save_page. Exported for tests.
 
+import { createHash } from "node:crypto";
+
 export type EncOp =
-  | { op: "encode"; codec: "base64" | "base64url" | "url" | "hex" }
-  | { op: "decode"; codec: "base64" | "base64url" | "url" | "hex" | "jwt" };
+  | { op: "encode"; codec: "base64" | "base64url" | "url" | "hex" | "rot13" }
+  | { op: "decode"; codec: "base64" | "base64url" | "url" | "hex" | "jwt" | "rot13" }
+  // Hashing is ONE-WAY (encode-hash-rot13): sha256/sha1/md5 produce a hex digest; there is no decode.
+  | { op: "encode"; codec: "sha256" | "sha1" | "md5" };
+
+// The one-way hash codecs — a "decode" request for these is nonsensical (a hash can't be reversed) and
+// gets a friendly refusal rather than a wrong answer.
+const HASH_CODECS = new Set(["sha256", "sha1", "md5"]);
 
 /**
  * Parse an encode/decode request into {op, codec, text}, or null if it isn't one. Handles:
@@ -22,19 +30,35 @@ export function parseEncodingRequest(text: string): (EncOp & { text: string }) |
   const raw = String(text ?? "");
   const t = raw.trim();
   const lower = t.toLowerCase();
-  if (!/\b(base64url|base64|b64|url[- ]?encode|url[- ]?decode|urlencode|urldecode|hex|jwt|encode|decode)\b/.test(lower)) return null;
+  if (!/\b(base64url|base64|b64|url[- ]?encode|url[- ]?decode|urlencode|urldecode|hex|jwt|sha-?256|sha-?1|md5|hash|rot-?13|encode|decode)\b/.test(lower)) return null;
 
   // Decode a JWT — "decode this jwt <token>" / "what's in this jwt <token>". Payload only, no verify.
   const jwt = t.match(/\b(?:jwt|token)\b[\s:]*([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*)/);
   if (jwt && /\b(decode|read|what'?s|whats|inside|payload)\b/i.test(lower)) return { op: "decode", codec: "jwt", text: jwt[1]! };
 
+  // A hash request ("sha256 of X", "md5 hash of Y", "hash this with sha1"). Hashing is one-way — always
+  // an "encode" op; a "decode/reverse a hash" ask is caught in runEncoding with a friendly refusal.
+  const hashCodec: "sha256" | "sha1" | "md5" | null =
+    /\bsha-?256\b/.test(lower) ? "sha256"
+    : /\bsha-?1\b/.test(lower) ? "sha1"
+    : /\bmd5\b/.test(lower) ? "md5"
+    : null;
+  if (hashCodec) {
+    const payload = extractPayload(raw, lower);
+    if (!payload) return null;
+    // "decode/reverse this sha256" is nonsense — mark it decode so runEncoding refuses honestly.
+    const wantsReverse = /\b(decode|reverse|crack|unhash)\b/i.test(lower);
+    return { op: wantsReverse ? "decode" : "encode", codec: hashCodec, text: payload } as EncOp & { text: string };
+  }
+
   const isDecode = /\bdecode|decrypt|unescape|from\s+(?:base64|hex)\b/i.test(lower) && !/\bencode\b/i.test(lower);
   const op: "encode" | "decode" = isDecode ? "decode" : "encode";
 
-  // codec: base64url before base64; url; hex. Default base64 when only encode/decode is named.
+  // codec: base64url before base64; url; hex; rot13. Default base64 when only encode/decode is named.
   const codec: EncOp["codec"] =
     /\bbase64url\b/.test(lower) ? "base64url"
     : /\b(base64|b64)\b/.test(lower) ? "base64"
+    : /\brot-?13\b/.test(lower) ? "rot13"
     : /\burl\b/.test(lower) ? "url"
     : /\bhex\b/.test(lower) ? "hex"
     : "base64";
@@ -54,7 +78,7 @@ function extractPayload(raw: string, lower: string): string {
     body = raw.slice(colon + 1);
   } else {
     // find the last keyword occurrence in the lowercased string, take the rest of the RAW string after it.
-    const kw = [...lower.matchAll(/\b(base64url|base64|b64|urlencode|urldecode|url|hex|jwt|encode|decode|encoded|decoded)\b/g)];
+    const kw = [...lower.matchAll(/\b(base64url|base64|b64|urlencode|urldecode|url|hex|jwt|sha-?256|sha-?1|md5|hash(?:ed)?|rot-?13|of|with|encode|decode|encoded|decoded)\b/g)];
     const last = kw[kw.length - 1];
     body = last ? raw.slice(last.index! + last[0].length) : "";
   }
@@ -67,16 +91,24 @@ function extractPayload(raw: string, lower: string): string {
  */
 export function runEncoding(req: EncOp & { text: string }): string {
   const { op, codec, text } = req;
+  // One-way hashes (encode-hash-rot13): no reverse. A "decode/reverse a hash" ask gets a friendly
+  // refusal instead of a made-up answer.
+  if (HASH_CODECS.has(codec)) {
+    if (op === "decode") throw new Error(`${codec} is a one-way hash — it can't be decoded or reversed. I can hash text FOR you, not un-hash it.`);
+    return createHash(codec).update(text, "utf8").digest("hex");
+  }
   if (op === "encode") {
     switch (codec) {
       case "base64": return Buffer.from(text, "utf8").toString("base64");
       case "base64url": return Buffer.from(text, "utf8").toString("base64url");
       case "url": return encodeURIComponent(text);
       case "hex": return Buffer.from(text, "utf8").toString("hex");
+      case "rot13": return rot13(text);
     }
   }
   // decode
   switch (codec) {
+    case "rot13": return rot13(text); // rot13 is its own inverse
     case "base64":
     case "base64url": {
       const out = Buffer.from(text, codec === "base64url" ? "base64url" : "base64").toString("utf8");
@@ -103,6 +135,17 @@ export function runEncoding(req: EncOp & { text: string }): string {
       catch { return payload; } // not JSON — return raw
     }
   }
+  // Unreachable in practice (hash codecs handled above; every other codec has a case) — satisfies the
+  // exhaustiveness check now that the codec union is wider.
+  throw new Error(`I can't ${op} with ${codec}.`);
+}
+
+// ROT13: shift each ASCII letter by 13 (its own inverse). Non-letters pass through. Pure.
+function rot13(s: string): string {
+  return s.replace(/[a-zA-Z]/g, (c) => {
+    const base = c <= "Z" ? 65 : 97;
+    return String.fromCharCode(((c.charCodeAt(0) - base + 13) % 26) + base);
+  });
 }
 
 // base64 comparison ignoring padding + url/standard alphabet differences (so a decode-validity check
@@ -114,7 +157,9 @@ function roughlyEqualB64(a: string, b: string): boolean {
 
 /** The user-facing reply: the result in a copy-friendly code span + a one-line label. Exported. */
 export function formatEncoding(req: EncOp & { text: string }, result: string): string {
-  const label = req.op === "encode" ? `${req.codec} encoded` : `${req.codec === "jwt" ? "JWT payload" : req.codec + " decoded"}`;
+  const label = HASH_CODECS.has(req.codec) ? `${req.codec} hash`
+    : req.op === "encode" ? `${req.codec} encoded`
+    : `${req.codec === "jwt" ? "JWT payload" : req.codec + " decoded"}`;
   const note = req.codec === "jwt" ? "\n\n(Payload only — I don't verify the signature, so don't trust it as authentic on my say-so.)" : "";
   return `${label}:\n\n\`${result}\`${note}`;
 }

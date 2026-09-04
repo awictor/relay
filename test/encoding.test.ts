@@ -72,3 +72,32 @@ describe("formatEncoding", () => {
     expect(out).toMatch(/don't verify the signature/i);
   });
 });
+
+describe("hashing + rot13 (encode-hash-rot13)", () => {
+  const run = (t: string) => { const p = parseEncodingRequest(t); return p ? runEncoding(p) : null; };
+  it("sha256/sha1/md5 match known vectors (deterministic, no guessing)", () => {
+    expect(run("sha256 of hello")).toBe("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+    expect(run("md5 of hello")).toBe("5d41402abc4b2a76b9719d911017c592");
+    expect(run("sha1 hash of abc")).toBe("a9993e364706816aba3e25717850c26c9cd0d89d");
+    expect(run("hash this with sha256: password")).toBe("5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8");
+  });
+  it("a request to reverse/decode a hash is refused, not faked", () => {
+    const p = parseEncodingRequest("reverse this sha256 abc123")!;
+    expect(p.op).toBe("decode");
+    expect(() => runEncoding(p)).toThrow(/one-way hash/);
+  });
+  it("rot13 encodes and round-trips (its own inverse)", () => {
+    expect(run("rot13 hello")).toBe("uryyb");
+    expect(run("rot13 encode Uryyb")).toBe("Hello");   // preserves case, non-letters
+    expect(run("decode rot13 Uryyb")).toBe("Hello");
+    expect(run("rot13 Hello, World! 123")).toBe("Uryyb, Jbeyq! 123");
+  });
+  it("formats a hash with a 'hash' label, not 'encoded'", () => {
+    const p = parseEncodingRequest("sha256 of hi")!;
+    expect(formatEncoding(p, runEncoding(p))).toMatch(/sha256 hash/i);
+  });
+  it("existing codecs still work (regression)", () => {
+    expect(run("base64 encode hello")).toBe("aGVsbG8=");
+    expect(run("decode hex 6869")).toBe("hi");
+  });
+});
