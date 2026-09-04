@@ -1819,10 +1819,14 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       // a channel returning void/undefined (console) counts as delivered, so older wiring is unaffected.
       let delivered = true;
       if (photo && deps.sendPhoto) {
-        await deps.sendPhoto(msg.chatId, photo, out.slice(0, 1024));
+        // Gate delivery on the artifact actually sending (artifact-send-fail-swallowed): a screenshot
+        // that 429s / is too large / fails the upload left the user with nothing while memory still
+        // recorded the turn as delivered, so the next turn's context claimed an answer never seen — the
+        // same silent-drop the text path already fixed, but the photo/doc branches skipped the check.
+        delivered = (await deps.sendPhoto(msg.chatId, photo, out.slice(0, 1024))) !== false;
         if (out.length > 1024) await deps.sendMessage(msg.chatId, out);
       } else if (doc && deps.sendDocument) {
-        await deps.sendDocument(msg.chatId, doc, docName ?? "page.pdf", out.slice(0, 1024));
+        delivered = (await deps.sendDocument(msg.chatId, doc, docName ?? "page.pdf", out.slice(0, 1024))) !== false;
         if (out.length > 1024) await deps.sendMessage(msg.chatId, out);
       } else {
         delivered = (await deps.sendMessage(msg.chatId, out, replyKeyboard)) !== false;

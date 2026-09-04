@@ -233,8 +233,11 @@ export async function downloadFile(fileId: string): Promise<{ bytes: Uint8Array;
 }
 
 /** Send a photo (raw image bytes) to a chat via multipart/form-data. Best-effort; logs on
- * failure. Uses FormData + Blob so we don't hand-roll the multipart boundary. Optional caption. */
-export async function sendPhoto(chatId: number, bytes: Uint8Array, caption?: string): Promise<void> {
+ * failure. Uses FormData + Blob so we don't hand-roll the multipart boundary. Optional caption.
+ * Returns true if it reached Telegram, false on any HTTP/network failure — so the handler can gate
+ * its "delivered" bookkeeping on the artifact actually sending (artifact-send-fail-swallowed), the
+ * same contract sendMessage already has. */
+export async function sendPhoto(chatId: number, bytes: Uint8Array, caption?: string): Promise<boolean> {
   if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
   try {
     const form = new FormData();
@@ -246,15 +249,18 @@ export async function sendPhoto(chatId: number, bytes: Uint8Array, caption?: str
       body: form, // fetch sets the multipart Content-Type + boundary itself
       signal: AbortSignal.timeout(20000),
     });
-    if (!r.ok) console.error("telegram sendPhoto failed:", r.status, (await r.text().catch(() => "")).slice(0, 200));
+    if (!r.ok) { console.error("telegram sendPhoto failed:", r.status, (await r.text().catch(() => "")).slice(0, 200)); return false; }
+    return true;
   } catch (e) {
     console.error("telegram sendPhoto error:", e instanceof Error ? e.message : String(e));
+    return false;
   }
 }
 
 /** Send a document (raw bytes, e.g. a PDF) to a chat via multipart/form-data. Best-effort;
- * logs on failure. Same FormData+Blob pattern as sendPhoto. Optional caption + filename. */
-export async function sendDocument(chatId: number, bytes: Uint8Array, filename = "document.pdf", caption?: string): Promise<void> {
+ * logs on failure. Same FormData+Blob pattern as sendPhoto. Optional caption + filename. Returns
+ * true on success, false on failure (see sendPhoto — the handler gates delivery on it). */
+export async function sendDocument(chatId: number, bytes: Uint8Array, filename = "document.pdf", caption?: string): Promise<boolean> {
   if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
   try {
     const form = new FormData();
@@ -266,9 +272,11 @@ export async function sendDocument(chatId: number, bytes: Uint8Array, filename =
       body: form, // fetch sets the multipart Content-Type + boundary itself
       signal: AbortSignal.timeout(30000),
     });
-    if (!r.ok) console.error("telegram sendDocument failed:", r.status, (await r.text().catch(() => "")).slice(0, 200));
+    if (!r.ok) { console.error("telegram sendDocument failed:", r.status, (await r.text().catch(() => "")).slice(0, 200)); return false; }
+    return true;
   } catch (e) {
     console.error("telegram sendDocument error:", e instanceof Error ? e.message : String(e));
+    return false;
   }
 }
 

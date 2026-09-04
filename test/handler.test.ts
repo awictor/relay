@@ -203,6 +203,59 @@ describe("createHandler — inbound send-failure (inbound-send-fail-swallowed)",
     await handle(msg("hi there friend", 7));
     expect(mem.get(7)).toHaveLength(2);
   });
+
+  it("a FAILED photo send does NOT write the turn to memory (artifact-send-fail-swallowed)", async () => {
+    // A screenshot that 429s / is too large left the user with nothing, yet the photo branch skipped the
+    // delivery check — memory recorded it as delivered, poisoning the next turn. Gate photo sends too.
+    const mem = new Map<number, LLMMessage[]>();
+    const recorded: Array<{ ok: boolean }> = [];
+    const { handle } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      sendPhoto: async () => false, // upload fails
+      recordTurn: (t) => { recorded.push({ ok: t.ok }); },
+      runAgentFn: async () => ({ reply: "here's the shot", steps: 2, tools: ["screenshot"], photo: new Uint8Array([1, 2, 3]) }),
+    });
+    await handle(msg("screenshot example.com", 7));
+    expect(mem.get(7)).toBeUndefined();                     // artifact never seen -> turn not persisted
+    expect(recorded[recorded.length - 1]!.ok).toBe(false);  // logged as a failed turn
+  });
+
+  it("a successful photo send writes the turn to memory", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    const { handle } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      sendPhoto: async () => true,
+      runAgentFn: async () => ({ reply: "here's the shot", steps: 2, tools: ["screenshot"], photo: new Uint8Array([1, 2, 3]) }),
+    });
+    await handle(msg("screenshot example.com", 7));
+    expect(mem.get(7)).toHaveLength(2);
+  });
+
+  it("a FAILED document send does NOT write the turn to memory (artifact-send-fail-swallowed)", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    const { handle } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      sendDocument: async () => false, // upload fails
+      runAgentFn: async () => ({ reply: "here's the pdf", steps: 2, tools: ["pdf"], doc: new Uint8Array([4, 5, 6, 7]), docName: "page.pdf" }),
+    });
+    await handle(msg("save example.com as pdf", 7));
+    expect(mem.get(7)).toBeUndefined();
+  });
+
+  it("a photo send returning void (console) counts as delivered", async () => {
+    const mem = new Map<number, LLMMessage[]>();
+    const { handle } = harness({
+      memoryGet: (id) => mem.get(id) ?? [],
+      memorySet: (id, h) => { mem.set(id, h); },
+      sendPhoto: async () => { /* void */ },
+      runAgentFn: async () => ({ reply: "shot", steps: 1, tools: ["screenshot"], photo: new Uint8Array([1]) }),
+    });
+    await handle(msg("screenshot example.com", 7));
+    expect(mem.get(7)).toHaveLength(2);
+  });
 });
 
 describe("createHandler", () => {

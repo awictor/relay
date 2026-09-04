@@ -3236,9 +3236,18 @@
       "title": "Probe handler.ts inbound-message + callback-button flows for state/delivery bugs",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "agent.ts core loop is now well-covered. The next untested user-facing surface is src/handler.ts: how an inbound message routes to agent vs a direct parser, how inline-button callbacks (Stop/snooze/gone) mutate state + strip buttons, and whether a photo/doc from the agent is actually forwarded to the channel. A bug here = the user taps a button and nothing happens, or an artifact never sends.",
       "how": "Read handler.ts dispatch + handleCallback; script inbound texts + callback payloads against a mock channel/backend; assert the right send/editReplyMarkup fires + state changes. Offline via injected deps."
+    },
+    {
+      "id": "probe-inbound-photo-doc-delivery",
+      "title": "Apply the same delivery-gating audit to the INBOUND photo/doc + chart/export send sites",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The agent-reply photo/doc path is now gated, but other sendPhoto/sendDocument call sites (inbound photo-to-action res.photo at ~689, chart-it PNG at ~922/1242, csv-export at ~1069) may still write memory as delivered on a failed artifact send - the same class, other entry points.",
+      "how": "Read each sendPhoto/sendDocument site in handler.ts; where a memory write or 'done' state follows an ungated artifact send, gate it on the boolean now returned. Add a test per fixed site."
     }
   ],
   "history": [
@@ -4561,6 +4570,10 @@
     {
       "item": "multistep-flow-invariants",
       "note": "Probed multi-step agent flows (browse->click->read->reply, double-browse, screenshot+budget-exhaust, screenshot+pdf+empty-reply) via ScriptLLM+recordingBackend. NO bug found - loop is robust: one session reused across steps + released once in finally, artifacts (photo/doc) survive to the return even when the step budget runs out before a reply. Codified these 4 user-facing invariants as regression tests (they had ZERO coverage; a refactor could silently drop the artifact or leak sessions). +4 tests, 2046 green."
+    },
+    {
+      "item": "artifact-send-fail-swallowed",
+      "note": "REAL BUG found+fixed probing handler.ts delivery. The text reply path gates memory-write on sendMessage's boolean (inbound-send-fail-swallowed), but the photo/doc branches did NOT: sendPhoto/sendDocument returned Promise<void> (swallowed failure) and the handler never checked. A screenshot/pdf that 429s/too-large/network-fails left the user with NOTHING while memory recorded the turn as delivered -> next turn's context claimed an answer never seen. Fixed: sendPhoto/sendDocument now return Promise<boolean>; handler gates `delivered` on them (=== false, so console's void still counts delivered). +5 handler tests + telegram return-type. 2050 green."
     }
   ],
   "audits": [
@@ -4934,6 +4947,11 @@
       "lens": "inline multi-step flow probe (agent cap 200/200)",
       "surfaced": "Session lifecycle + artifact carryover across chained tool calls are correct - single session, single release, photo/doc delivered even on the degraded budget-exhausted path. The gap was TEST coverage, not behavior. No message-window trimming exists mid-run (step limit caps growth) - fine at MAX_STEPS=8. Nothing to fix.",
       "seeded": "probe-handler-callback-flows"
+    },
+    {
+      "lens": "inline handler delivery probe (agent cap 200/200)",
+      "surfaced": "handler.ts routing + callback state looked sound, but the AGENT-ARTIFACT delivery path had the exact silent-drop bug the text path had already fixed - photo/doc sends weren't gated on success, so a failed upload poisoned memory. This is the highest-severity find in several iterations (user gets nothing + context lies). Fixed. Callback flows (Stop/snooze/gone button-strip) already covered by handler-callback.test.ts.",
+      "seeded": "probe-inbound-photo-doc-delivery"
     }
   ]
 }
