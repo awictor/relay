@@ -3389,7 +3389,7 @@
       "title": "parseLogQuery: handle non-spend COUNT queries ('how much coffee this week', 'how many steps')",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "parseLogQuery routes 'how much did I SPEND on X' to a sum + '<tag> trend' to a trend, but a bare 'how much coffee this week' / 'how many beers did I have' (a count sum over a non-money tag) returns null -> the user can log 'log 3 coffees' but can't ask it back naturally.",
       "how": "Add a count-sum branch: 'how much/many <tag> [window]' (no spend verb) -> { tag, mode:'sum', sinceMs }. Distinguish from the spend-sum path (which tags by the 'on <thing>' object). Widen + test. Keep 'my <tag> trend' as trend."
     }
@@ -4794,6 +4794,10 @@
     {
       "item": "quick-log-value-first",
       "note": "phrasing gap in quick-log: parseLogCommand only took tag-FIRST ('log weight 182'), so the very natural value-first counting phrasing 'log 3 coffees' / 'track 2000 steps' / 'record 5 miles' returned null -> the daily-habit hook (the loop's strongest retention feature) silently dead-ended. Added a value-first form (number immediately after verb -> value + noun tag), checked before tag-first so 'log weight 182' still parses tag-first. +1 test. 2108 green. ('drank 2 beers' still null - non-log/track/record verb, out of the tool's deliberate anchor.)"
+    },
+    {
+      "item": "quick-log-count-query-and-plural",
+      "note": "Closed the quick-log read/write symmetry (2 linked fixes): (1) parseLogQuery now handles non-spend COUNT sums 'how much coffee this week' / 'how many steps today' (was null; only spend-sum + trend existed) -> the read side of the value-first 'log 3 coffees' write. (2) normalizeTag now singularizes a trailing plural (coffees->coffee, steps->step, ies->y, ss/short-words left alone) so the WRITE tag and READ tag converge on ONE series — exact-match store otherwise split 'coffees' (logged) from 'coffee' (queried) + the count couldn't be read back. Updated 3 existing tag expectations to singular + added 2 tests (count-query, write/read convergence). 2110 green."
     }
   ],
   "audits": [
@@ -5271,6 +5275,11 @@
       "lens": "quick-log phrasing probe",
       "surfaced": "parseLogCommand missed value-first counting ('log 3 coffees') - fixed. parseLogQuery missed 'how much coffee this week' (non-spend count query) + bare 'how many X did I have' but those need a count-query mode distinct from the spend-sum path (bigger change, seeded). The lib-phrasing vein continues to yield real dead-ends.",
       "seeded": "quick-log-count-query"
+    },
+    {
+      "lens": "quick-log symmetry probe",
+      "surfaced": "The value-first log fix (prev run) exposed the read side: count queries unparsed + a singular/plural tag split between write and read. Both fixed; quick-log now round-trips ('log 3 coffees' then 'how much coffee this week'). The lib-phrasing vein remains productive - 6 real fixes now (calc/convert/network-msg/unitprice/log-value-first/log-count).",
+      "seeded": "probe-remaining-lib-phrasings (continue: countdown, geocode/places, scores team-forms, qr)"
     }
   ]
 }

@@ -17,9 +17,10 @@ describe("parseLogCommand", () => {
     expect(parseLogCommand("track mood 7")).toEqual({ tag: "mood", value: 7 });
   });
   it("parses the value-first form 'log 3 coffees' / 'track 2000 steps' (quick-log-value-first)", () => {
-    expect(parseLogCommand("log 3 coffees")).toEqual({ tag: "coffees", value: 3 });
-    expect(parseLogCommand("track 2000 steps")).toEqual({ tag: "steps", value: 2000 });
-    expect(parseLogCommand("record 5 miles")).toEqual({ tag: "miles", value: 5 });
+    // tag is singularized so the WRITE ("log 3 coffees") + READ ("how much coffee") converge (quick-log-tag-plural)
+    expect(parseLogCommand("log 3 coffees")).toEqual({ tag: "coffee", value: 3 });
+    expect(parseLogCommand("track 2000 steps")).toEqual({ tag: "step", value: 2000 });
+    expect(parseLogCommand("record 5 miles")).toEqual({ tag: "mile", value: 5 });
     // tag-first still wins when a word (not a number) follows the verb
     expect(parseLogCommand("log weight 182")).toEqual({ tag: "weight", value: 182 });
   });
@@ -32,7 +33,7 @@ describe("parseLogCommand", () => {
     expect(parseLogCommand("spent $1,250.50 on rent")).toEqual({ tag: "rent", value: 1250.5, unit: "$" });
     expect(parseLogCommand("i paid 30 for gas")).toEqual({ tag: "gas", value: 30, unit: "$" });
     expect(parseLogCommand("log salary 5,000")).toEqual({ tag: "salary", value: 5000 });
-    expect(parseLogCommand("log steps 10,000")).toEqual({ tag: "steps", value: 10000 });
+    expect(parseLogCommand("log steps 10,000")).toEqual({ tag: "step", value: 10000 }); // singularized (quick-log-tag-plural)
   });
   it("null when it isn't a log command", () => {
     expect(parseLogCommand("what's the weather")).toBeNull();
@@ -49,6 +50,15 @@ describe("parseLogQuery", () => {
   it("parses a trend query with a window", () => {
     expect(parseLogQuery("show my weight this month", NOW)).toEqual({ tag: "weight", mode: "trend", sinceMs: NOW - 30 * DAY });
     expect(parseLogQuery("my mood trend", NOW)).toEqual({ tag: "mood", mode: "trend" });
+  });
+  it("parses a non-spend COUNT sum ('how much coffee', 'how many steps') — the read side of value-first logging (quick-log-count-query)", () => {
+    expect(parseLogQuery("how much coffee this week", NOW)).toEqual({ tag: "coffee", mode: "sum", sinceMs: NOW - 7 * DAY });
+    expect(parseLogQuery("how many coffees have I had", NOW)).toEqual({ tag: "coffee", mode: "sum" }); // plural converges
+    expect(parseLogQuery("how many steps today", NOW)).toEqual({ tag: "step", mode: "sum", sinceMs: NOW - DAY });
+  });
+  it("write + read tags converge via singularization (quick-log-tag-plural)", () => {
+    // "log 3 coffees" stores tag "coffee"; "how much coffee" reads tag "coffee" — same series.
+    expect(parseLogCommand("log 3 coffees")!.tag).toBe(parseLogQuery("how much coffee this week", NOW)!.tag);
   });
   it("null when it isn't a log query", () => {
     expect(parseLogQuery("what's the weather", NOW)).toBeNull();

@@ -69,6 +69,14 @@ export function parseLogQuery(text: string, now: number): { tag: string; sinceMs
     const tag = normalizeTag(stripWindow(spend[1]!));
     if (tag) return { tag, mode: "sum", ...(windowMs !== undefined ? { sinceMs: now - windowMs } : {}) };
   }
+  // Count-sum: "how much coffee this week" / "how many coffees have I had" / "how many steps today" — a
+  // SUM over a NON-money tag, the read side of the value-first "log 3 coffees" write (quick-log-count-query).
+  // No spend verb (that's the branch above); tag is the noun after how-much/how-many. Window optional.
+  const count = t.match(/^\s*how\s+(?:much|many)\s+(.+?)\s*\??\s*$/i);
+  if (count) {
+    const tag = normalizeTag(stripWindow(count[1]!).replace(/\b(?:have\s+i\s+had|did\s+i\s+(?:have|do|log)|i've\s+had|so\s+far)\b/gi, "").trim());
+    if (tag) return { tag, mode: "sum", ...(windowMs !== undefined ? { sinceMs: now - windowMs } : {}) };
+  }
   // "show my weight [this month]" / "my mood trend" / "my weight history". Require either an explicit
   // "show my <tag>" opener OR a trailing trend/history/log/chart word — a bare "what's the weather" (no
   // show-my, no trend word) is NOT a log query (it'd wrongly tag "weather"). "show my <tag>" itself is
@@ -86,7 +94,17 @@ function stripWindow(s: string): string {
   return s.replace(/\b(this week|this month|this year|today|over time|so far|lately|recently|trend|history|chart|log)\b/gi, "").trim();
 }
 function normalizeTag(s: string): string {
-  return String(s ?? "").toLowerCase().replace(/^(?:my|the)\s+/i, "").replace(/[?.!,]+$/g, "").replace(/\s+/g, " ").trim().slice(0, MAX_TAG_LEN);
+  let t = String(s ?? "").toLowerCase().replace(/^(?:my|the)\s+/i, "").replace(/[?.!,]+$/g, "").replace(/\s+/g, " ").trim().slice(0, MAX_TAG_LEN);
+  // Singularize a trailing plural so the WRITE tag ("log 3 coffees" -> coffees) and the READ tag ("how
+  // much coffee" -> coffee) converge on ONE series (quick-log-tag-plural): an exact-match store otherwise
+  // splits them and the logged count can't be read back. "ss" (progress) + short words left alone; "ies"
+  // -> "y" (calories->calorie is odd but consistent both ways, which is what matters for matching).
+  const last = t.split(" ").pop() ?? "";
+  if (last.length > 3 && !last.endsWith("ss")) {
+    if (last.endsWith("ies")) t = t.slice(0, -3) + "y";
+    else if (last.endsWith("s")) t = t.slice(0, -1);
+  }
+  return t;
 }
 
 export class LogStore {
