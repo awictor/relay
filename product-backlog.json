@@ -3600,6 +3600,15 @@
       "status": "done",
       "why": "datecalc does \"+N days\" but not BUSINESS days — \"when will it arrive, 3 business days from now?\" / \"deadline 5 working days out\" is a common deadline/shipping ask that currently counts calendar days (wrong, includes weekends).",
       "how": "In datecalc.ts add a business-day branch: parse \"N business/working days from <date>\", step forward skipping Sat/Sun (holidays optional/out-of-scope). Reuse the existing date parse + weekday logic. Tests + /help. Note it excludes weekends only, not public holidays."
+    },
+    {
+      "id": "digest-smart-ordering",
+      "title": "Digest richness: lead a briefing with what CHANGED / is urgent, not fixed member order",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "A morning digest (\"weather, hn, btc, calendar\") always renders members in definition order. A daily-reliant user skims for whats DIFFERENT — a price that moved a lot, a weather alert, a new top story. Leading with the changed/urgent member (vs static order) makes the briefing scannable + is a real retention lever competitors lean on.",
+      "how": "In digest-runner, after gathering member outputs, optionally reorder/flag: a member whose value moved materially vs last run (reuse the alert deadband + a per-digest last-value cache) floats up with a small marker; unchanged members follow. Gate behind a flag or make it the default with a subtle marker. Offline test the reorder + change-detect; live e2e a 2-member digest across two runs."
     }
   ],
   "history": [
@@ -5883,6 +5892,11 @@
       "lens": "new-user everyday-errand (inline; cap 200/200)",
       "surfaced": "Everyday-tool surface now very thorough after 8 adds + the variadic-arity fix this session. Remaining candidates are nicher: business-day date math (\"3 business days from now\" — common for deadlines/delivery, genuinely useful), GPA average, recipe scaling. Seeded business-days as the last clearly-valuable one; flagging the keyless-everyday vein as thinning (nicher asks from here).",
       "seeded": "date-business-days"
+    },
+    {
+      "lens": "power/retention (inline; cap 200/200 blocks parallel agents)",
+      "surfaced": "Confirmed the everyday-tool, interactive-browse, AND inbound-voice (transcribeVoice wired) surfaces are all thorough. No net-new capability findable by single-surface inline probing that isnt a niche micro-tool. The genuinely-new directions (a 2nd channel, proactive intelligence, sharing) need the 3-lens AUDIT that cant run until the subagent cap resets. Seeded one concrete power item + kept the fresh-session marker.",
+      "seeded": "digest-smart-ordering + (owner) fresh-session-audit"
     }
   ]
 }
