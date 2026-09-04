@@ -14,6 +14,15 @@ describe("digestMemberChanged", () => {
     expect(digestMemberChanged("Sunny, 72°F.", "sunny, 72 F")).toBe(false);   // normalized-equal
     expect(digestMemberChanged("Top story: A", "Top story: B different")).toBe(true);
   });
+  it("tracks the SALIENT value, not the first number (digest-change-tracks-wrong-number)", () => {
+    // A leading percent/count must NOT be the tracked value: a real price move with a steady "up 2.5%"
+    // used to read as unchanged (firstNumber grabbed 2.5 both runs) -> a quiet digest wrongly stayed silent.
+    expect(digestMemberChanged("BTC up 2.5% at 68000", "BTC up 2.5% at 69500", "btc")).toBe(true);  // 68000->69500 = ~2.2% > 1%
+    expect(digestMemberChanged("BTC up 2.5% at 68000", "BTC up 2.6% at 68010", "btc")).toBe(false); // price ~0.01% < 1% (the % delta is ignored)
+    // magnitude suffix: "$60k" -> 60000, a move to $62k is +3.3% (firstNumber would've compared 60 vs 62)
+    expect(digestMemberChanged("$60k", "$62k")).toBe(true);
+    expect(digestMemberChanged("$60k", "$60.1k")).toBe(false); // ~0.17% < 1%
+  });
 });
 
 describe("DigestChangeStore", () => {

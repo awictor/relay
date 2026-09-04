@@ -5384,6 +5384,10 @@
     {
       "item": "save-city-cta-tap-button",
       "note": "The save-inline-city offer is now a one-TAP button on button channels (Telegram), not just \"reply yes\". New savecity callback kind (YES carries the place in the payload so no re-parse; NO is a bare opcode) + saveCityButtons(place) builder, encode/decode round-trip. Handler: on a button channel the inline-city offer attaches [📍 Save <city>] [✋ No thanks] and owns that turns keyboard (priority over the pick/act CTAs, never stacks); a YES tap stores via captureLocation + retires the buttons (editReplyMarkup, no double-save), NO dismisses. Console/no-button falls back to the existing text \"reply yes\" path unchanged. +4 tests (2 codec: savecity round-trip + button row; 2 handler-callback: inline answer attaches Save button + YES stores, NO saves nothing). 2368 green. call-tested: offline (codec + handler routing). NOTE: 3-lens AUDIT is blocked — subagent cap 200/200 for the whole session; needs a fresh session to refill a new vein."
+    },
+    {
+      "item": "digest-change-tracks-wrong-number (bug)",
+      "note": "BUG FIX (broken user-facing path): digest change-detection (digest-change.ts) used firstNumber, which grabs the FIRST number in a member reply — often a %/count/time, not the tracked value. \"BTC up 2.5% at 68000\" -> firstNumber read 2.5 (the percent), so a real price move 68000->69500 read as UNCHANGED. Effect: a \"only if changed\" digest wrongly stayed SILENT on a real move, and ✦ smart-ordering floated the wrong members. Alerts already fixed this class via extractValue (prefers currency/decimal/largest, excludes bare %, scales k/m/bn, entity-hinted); digest-change never got it. Swapped firstNumber -> extractValue(prev/body, member) so the digest compares the same salient value alerts do, with the member name as the entity hint for multi-number replies. +1 regression test (price-moves-%-steady changes; price-steady doesnt; $60k magnitude). 2369 green. call-tested: offline (pure value transform). Found via inline reliability audit (subagent AUDIT still capped 200/200 this session)."
     }
   ],
   "audits": [

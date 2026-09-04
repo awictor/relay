@@ -5,7 +5,7 @@
 // normalized text so pure phrasing drift doesn't false-fire. In-memory + persisted by the caller via
 // the injected load/save; time not needed (comparison is value-vs-value). Pure logic, unit-testable.
 
-import { firstNumber, normalizeForCompare } from "./alerts.js";
+import { extractValue, normalizeForCompare } from "./alerts.js";
 
 // Relative deadband for a numeric member (fraction of the previous value). A move smaller than this
 // isn't "changed". Env-tunable; mirrors the alert deadband intent.
@@ -13,10 +13,16 @@ const CHANGE_PCT = Math.max(0, Number(process.env.RELAY_DIGEST_CHANGE_PCT) || 1)
 
 /** Did `body` change materially vs `prev`? First run (prev undefined) is NOT a change (nothing to compare
  * — don't mark every member ✦ on the first briefing). Numeric: relative deadband. Text: normalized compare.
- * Exported for tests. */
-export function digestMemberChanged(prev: string | undefined, body: string): boolean {
+ * `member` (the digest member name, e.g. "btc") is passed to extractValue as an entity hint so a
+ * multi-number reply compares the number nearest the watched entity. Exported for tests. */
+export function digestMemberChanged(prev: string | undefined, body: string, member?: string): boolean {
   if (prev === undefined) return false;
-  const pn = firstNumber(prev), bn = firstNumber(body);
+  // Use extractValue, NOT firstNumber (digest-change-tracks-wrong-number): the first number in a member
+  // reply is often a %/count/time ("BTC up 2.5% at 68000" -> firstNumber grabs 2.5, the percent), so a
+  // real price move read as UNCHANGED and a "quiet unless changed" digest wrongly stayed silent / mis-
+  // floated ✦. extractValue prefers a currency/decimal/largest value + excludes a bare percent — the same
+  // salient-value logic alerts already use — so the deadband compares the number the member actually tracks.
+  const pn = extractValue(prev, member), bn = extractValue(body, member);
   if (pn !== null && bn !== null) {
     if (pn === 0) return bn !== 0;
     return Math.abs(bn - pn) / Math.abs(pn) >= CHANGE_PCT;
@@ -39,7 +45,7 @@ export class DigestChangeStore {
   changed(chatId: number, digest: string, member: string, body: string): boolean {
     const k = this.key(chatId, digest, member);
     const prev = this.map.get(k);
-    const did = digestMemberChanged(prev, body);
+    const did = digestMemberChanged(prev, body, member);
     this.map.set(k, body);
     if (this.persist) this.persist(Object.fromEntries(this.map));
     return did;
