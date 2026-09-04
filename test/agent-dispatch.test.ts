@@ -23,6 +23,7 @@ function recordingBackend() {
     scrape: async (url) => { hits.push(`scrape:${url}`); return { title: "t", content: "PRICE=$1", url }; },
     scrapePaged: async (url, maxPages) => { hits.push(`scrapePaged:${url}:${maxPages}`); return { title: "t", content: "--- page 1 ---\nA\n\n--- page 2 ---\nB", url, pages: 2, urls: [url, url + "?p=2"] }; },
     scrapeScroll: async (url, maxScrolls) => { hits.push(`scrapeScroll:${url}:${maxScrolls}`); return { title: "t", content: "item1 item2 item3 item4", url, scrolls: 3 }; },
+    siteSearch: async (url, query) => { hits.push(`siteSearch:${url}:${query}`); return { title: "results", content: `results for ${query}`, url: url + "?q=" + query, found: true }; },
     createSession: async () => { hits.push("createSession"); return { id: "s1" }; },
     navigate: async (_id, url) => { hits.push(`navigate:${url}`); return { url, title: "t" }; },
     click: async (_id, sel) => { hits.push(`click:${sel}`); },
@@ -41,7 +42,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
     );
   });
 
@@ -208,6 +209,39 @@ describe("runAgent dispatch", () => {
     await runAgent("list from one page", { llm, backend: b });
     expect(hits).toContain("scrape:https://x.com/one");
     expect(hits.some((h) => h.startsWith("scrapePaged:https://x.com/one"))).toBe(false);
+  });
+
+  it("site_search -> backend.siteSearch with url + query (site-search-tool)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "site_search", args: { url: "https://shop.example.com", query: "wireless earbuds" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "found some" } } as ToolCall },
+    ]);
+    const r = await runAgent("search shop.example.com for wireless earbuds", { llm, backend: b });
+    expect(hits).toContain("siteSearch:https://shop.example.com:wireless earbuds");
+    expect(r.tools).toContain("site_search");
+  });
+
+  it("site_search with an empty query errors, no backend call", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "site_search", args: { url: "https://x.com", query: "  " } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "asked to clarify" } } as ToolCall },
+    ]);
+    const r = await runAgent("search x", { llm, backend: b });
+    expect(hits.some((h) => h.startsWith("siteSearch:"))).toBe(false);
+    expect(r.reply).toBe("asked to clarify");
+  });
+
+  it("site_search with no backend.siteSearch reports unavailable (falls back)", async () => {
+    const { b } = recordingBackend();
+    delete (b as { siteSearch?: unknown }).siteSearch;
+    const llm = new ScriptLLM([
+      { toolCall: { name: "site_search", args: { url: "https://x.com", query: "hats" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "used web_search instead" } } as ToolCall },
+    ]);
+    const r = await runAgent("search x for hats", { llm, backend: b });
+    expect(r.reply).toBe("used web_search instead");
   });
 
   it("fetch_json -> backend.fetchJson", async () => {

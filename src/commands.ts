@@ -45,6 +45,7 @@ const HELP = `Relay — what I can do:
 • Pull out data: "extract the price and rating from <link>" → clean values, not a wall of text.
 • Compare across pages: "compare the price of X across these links" → a side-by-side. Add "as a CSV" and I'll send a spreadsheet file you can keep.
 • Find then fetch: "find newest listings for <thing>" → I open the search page, grab the results, and read them.
+• Search inside a site: "search <store/site> for <thing>" → I use the site's own search box and read the results back.
 • Go deeper than page one: "the 20 newest listings", "cheapest across a few pages", "what's new on <scrolling feed>" → I follow pagination or scroll a feed to gather more than the first screen, and can hand back a clean list (title + price + link per item) instead of a wall of text — add "as a CSV" and I'll send it as a spreadsheet file.
 • See a page: "screenshot the top of Hacker News", or "screenshot the whole page" for the full top-to-bottom capture → I send you an image of it.
 • Save a page: "save this as a PDF: <link>" → I send you a PDF document.

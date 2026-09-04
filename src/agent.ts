@@ -85,6 +85,11 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to open" } }, required: ["url"] },
   },
   {
+    name: "site_search",
+    description: "Search WITHIN a specific site using its OWN search box: navigates there, types the query into the site's search field, submits, and returns the results-page text. Use for \"search <site> for X\", \"find X on <store/docs/forum>\" — when the user names a site to search inside. One step instead of browse+type+click. For a general web search (no specific site) use web_search; to just read a known page use scrape.",
+    parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL of the site to search (its homepage or search page)" }, query: { type: "string", description: "What to search for" } }, required: ["url", "query"] },
+  },
+  {
     name: "click",
     description: "Click an element on the current browsed page by CSS selector. Requires a prior browse. Destructive/committing actions (pay, delete, submit, logout) are refused.",
     parameters: { type: "object", properties: { selector: { type: "string", description: "CSS selector" }, label: { type: "string", description: "Human label of what you're clicking, for the safety check" } }, required: ["selector"] },
@@ -514,6 +519,7 @@ export const SYSTEM_PROMPT = `You are Relay, an assistant reached over text mess
 
 Tools:
 - "scrape" (url): read a single page. Use for simple lookups. If the user names a site, infer the URL (Hacker News -> https://news.ycombinator.com).
+- "site_search" (url, query): search INSIDE a named site using its own search box (types + submits + reads results). Use for "search <site> for X" / "find X on <store/docs/forum>". For a general web search use web_search.
 - "scrape_pages" (url, maxPages): read a listing ACROSS pagination (follows next/more/older), returning several pages combined. Use when the user wants MORE than one page holds ("20 newest", "cheapest across a few pages", "top 30"). Default 3 pages, max 5.
 - "scroll_feed" (url, maxScrolls): read an INFINITE-SCROLL feed (loads more on scroll, no next-page link) — scrolls to load lazy items then returns the expanded text. Use when scrape got only the first few items + there's no pagination link. Default 5 scrolls, max 10.
 - "browse" (url) then "click"/"type"/"read": for tasks needing interaction (search a site, fill a form, page through results). "read" returns the current page after your actions.
@@ -583,6 +589,9 @@ export interface BrowserBackend {
   // Infinite-scroll scrape (browse-infinite-scroll): scroll a feed to load lazy items, then read.
   // Optional — when absent the scroll_feed tool reports unavailable + the model falls back to scrape.
   scrapeScroll?(url: string, maxScrolls?: number): Promise<{ title: string; content: string; url: string; scrolls: number }>;
+  // Search within a site via its own search box (site-search-tool). Optional — when absent the site_search
+  // tool reports unavailable + the model falls back to browse+type or web_search.
+  siteSearch?(url: string, query: string): Promise<{ title: string; content: string; url: string; found: boolean }>;
   createSession(): Promise<{ id: string }>;
   navigate(sessionId: string, url: string): Promise<{ url: string; title: string }>;
   click(sessionId: string, selector: string): Promise<void>;
@@ -786,6 +795,7 @@ const defaultBackend: BrowserBackend = {
   scrape: (url) => anvil.scrape(url, { format: "text" }),
   scrapePaged: (url, maxPages) => anvil.scrapePaged(url, maxPages),
   scrapeScroll: (url, maxScrolls) => anvil.scrapeScroll(url, maxScrolls),
+  siteSearch: (url, query) => anvil.siteSearch(url, query),
   videoTranscript: (url) => fetchYouTubeTranscript(url, defaultFetchText),
   convertCurrency: (amount, from, to) => fxConvert(amount, from, to, defaultFetchText),
   getQuote: (symbol) => quoteFetch(symbol, defaultFetchText),
@@ -1054,6 +1064,25 @@ export async function runAgent(
           push("browse", `Opened. TITLE: ${r.title || r.url}. Use read to see its text, or click/type to interact.`);
         } catch (e) {
           push("browse", `ERROR opening ${url}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "site_search") {
+        const url = String(call.args.url ?? "");
+        const query = String(call.args.query ?? "").trim();
+        const safe = isUrlSafe(url);
+        if (!safe.safe) { push("site_search", `ERROR: refused (${safe.reason}).`); continue; }
+        if (!query) { push("site_search", "ERROR: no query given."); continue; }
+        if (!backend.siteSearch) { push("site_search", "ERROR: site search isn't available; try browse+type or web_search."); continue; }
+        try {
+          const r = await backend.siteSearch(url, query);
+          const note = r.found
+            ? `Searched ${r.title || url} for "${query}".`
+            : `Couldn't find a search box on ${r.title || url} — this is the landing page, not results. Consider web_search with "site:" instead.`;
+          push("site_search", `${note}\n${formatPageForModel(r.title, r.url, r.content)}`);
+        } catch (e) {
+          push("site_search", `ERROR searching ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

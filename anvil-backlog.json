@@ -104,7 +104,7 @@
       "title": "site_search: type a query into a sites own search box + submit, in one tool",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "To search WITHIN a site (a store, a docs site, a forum) the agent must browse -> guess the search-box selector -> type -> find+click submit — 4 fragile steps it often flubs. A single site_search(url,query) that finds the search input heuristically (input[type=search], [name*=q], role=searchbox), types, submits, and reads results would make in-site search reliable.",
       "how": "Add site_search to anvil: navigate, find the search box by common selectors/aria, type the query, submit (Enter or a nearby submit), wait, readCurrent. New agent tool + dispatch. Live e2e against a real site search; assert results returned."
     }
@@ -149,6 +149,10 @@
     {
       "item": "extract-list-dedup-multifield",
       "note": "extract_list now dedups by ALL requested fields (composite delimiter-joined key), not just the first — two genuinely-different items sharing a title (two tickets same event different price, two listings same title different date) BOTH survive; only a row identical across every field collapses. Also fixed a latent bug found while editing: the prior join used a stray \u0001 (SOH) byte as delimiter, now a clean \" | \". +2 unit tests (share-title-keep-both; exact-dup-collapse). 2201 green. call-tested: false (pure logic)."
+    },
+    {
+      "item": "site-search-tool",
+      "note": "site_search shipped: navigate to a site, find its search box heuristically (type=search, name/id/aria/placeholder containing search|q, role=searchbox, scored), set value via the native setter + fire input/change (React-safe), submit (form.requestSubmit else a submit/search button else Enter keydown), wait, read results. New anvil siteSearch(url,query) + agent tool + dispatch (honest found:false -> \"landing page, try web_search site:\") + BrowserBackend + SYSTEM_PROMPT + /help. Replaces the fragile browse->guess-selector->type->find-submit->click dance for in-site search. +3 dispatch tests. LIVE e2e: Wikipedia search \"photosynthesis\" -> found:true, landed on the Photosynthesis article (88K chars, mentions query); MDN -> found:false (modal-trigger search, not inline) and HONESTLY reported it (no false success). 2204 green. call-tested: TRUE."
     }
   ],
   "probes": [

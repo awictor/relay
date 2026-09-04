@@ -245,6 +245,67 @@ export async function getCookies(sessionId: string): Promise<AnvilCookie[]> {
   return Array.isArray(r.cookies) ? r.cookies : [];
 }
 
+// Find a page's search box, type the query into it, and submit — all in the page (site-search-tool).
+// Locates the input by common search-box signals (type=search, name/id/aria containing "search"/"q",
+// role=searchbox, a placeholder mentioning search); sets its value + fires input/change so React-style
+// listeners see it; submits via the enclosing <form>, else clicks a nearby submit/search button, else
+// dispatches an Enter keydown. Returns whether it found + submitted a box. Never throws.
+const SITE_SEARCH_SCRIPT = (q: string) => `(() => {
+  try {
+    const query = ${JSON.stringify(q)};
+    const inputs = Array.from(document.querySelectorAll('input:not([type=hidden]), textarea'));
+    const score = (el) => {
+      const a = ((el.getAttribute('type')||'') + ' ' + (el.getAttribute('name')||'') + ' ' + (el.id||'') + ' ' + (el.getAttribute('aria-label')||'') + ' ' + (el.getAttribute('placeholder')||'') + ' ' + (el.getAttribute('role')||'')).toLowerCase();
+      let s = 0;
+      if (/\\bsearch\\b|searchbox/.test(a)) s += 3;
+      if (el.getAttribute('type') === 'search') s += 3;
+      if (/(^|[^a-z])q($|[^a-z])/.test((el.getAttribute('name')||'') + ' ' + (el.id||''))) s += 2;
+      if (/find|query|keyword/.test(a)) s += 1;
+      const r = el.getBoundingClientRect(); if (r.width === 0 && r.height === 0) s -= 5; // hidden
+      return s;
+    };
+    const box = inputs.map((el) => [el, score(el)]).filter(([,s]) => s > 0).sort((a,b) => b[1]-a[1])[0]?.[0];
+    if (!box) return 'no-search-box';
+    box.focus();
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(box), 'value')?.set;
+    if (setter) setter.call(box, query); else box.value = query;
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+    const form = box.closest('form');
+    if (form) { if (typeof form.requestSubmit === 'function') form.requestSubmit(); else form.submit(); return 'submitted-form'; }
+    const btn = document.querySelector('button[type=submit], input[type=submit], [aria-label*="search" i], button.search');
+    if (btn) { btn.click(); return 'clicked-submit'; }
+    box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+    return 'pressed-enter';
+  } catch (e) { return 'error:' + (e && e.message || e); }
+})()`;
+
+/** Search WITHIN a site (site-search-tool): navigate to the site, find its search box, type the query,
+ * submit, wait for results to load, and read the results page text. Saves the agent the fragile
+ * browse->guess-selector->type->find-submit->click dance. Returns the results-page text + title + final
+ * url + whether a search box was found. Falls back to reading the landing page (found:false) when no
+ * search box is detected, so the caller can decide to try a Google "site:" query instead. */
+export async function siteSearch(url: string, query: string): Promise<{ content: string; title: string; url: string; found: boolean }> {
+  const check = isUrlSafe(url);
+  if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
+  const session = await createSession();
+  try {
+    await navigate(session.id, url, "domcontentloaded");
+    await new Promise((r) => setTimeout(r, 600));
+    await dismissConsent(session.id);
+    await new Promise((r) => setTimeout(r, 200));
+    let outcome = "";
+    try { const r = await action(session.id, "/v1/actions/evaluate", { script: SITE_SEARCH_SCRIPT(query) }); outcome = typeof r === "string" ? r : String((r as { result?: unknown }).result ?? ""); } catch { outcome = "error"; }
+    const found = /^(submitted-form|clicked-submit|pressed-enter)$/.test(outcome);
+    // Give the results navigation/XHR time to render before reading.
+    await new Promise((r) => setTimeout(r, found ? 1500 : 300));
+    const read = await readCurrent(session.id);
+    return { content: read.content, title: read.title, url: read.url || url, found };
+  } finally {
+    await releaseSession(session.id);
+  }
+}
+
 /**
  * Harvest anchor hrefs from a page. Creates a session, navigates, evaluates the
  * DOM for links, releases. Returns absolute URLs (best-effort, deduped, capped).
