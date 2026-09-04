@@ -1,0 +1,46 @@
+{
+  "items": [
+    {
+      "id": "browse-pagination",
+      "title": "Multi-page browse: follow pagination / 'next' / 'load more' to gather N results across pages",
+      "impact": "high",
+      "effort": "L",
+      "status": "todo",
+      "why": "anvil browse/scrape reads ONE page only (grep pagination|load more|next page = 0 in agent.ts + anvil.ts). A 'find the 5 cheapest flights' / 'newest 20 listings' errand only ever sees page-one results — the exact multi-page loop the competitor (Instinct) sells. A texting user asking for 'the 10 cheapest' silently gets whatever fit on one screen.",
+      "how": "Add a bounded page-follow to the browse/find path: after reading a page, detect a next/pagination control (rel=next, a 'Next'/'More'/numbered pager, or an anchor whose text matches /next|more|older/), click it, accumulate results, cap at ~3-5 pages + a hard time budget. Reuse src/anvil.ts click+read. New tool arg or a 'depth'/'pages' hint. Offline unit test with a mock 2-page site + a LIVE e2e against a real paginated listing (e.g. HN news?p=2). Report items-gathered > page-one count."
+    },
+    {
+      "id": "screenshot-fullpage",
+      "title": "Full-page screenshot (not just the viewport fold)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "anvil.ts:463 captures the VIEWPORT only — 'screenshot the whole page' / 'screenshot this article' gives just the top fold, surprising a user who expected the full page.",
+      "how": "Add a fullPage option to the screenshot capture in src/anvil.ts (CDP captureBeyondViewport / Page.captureScreenshot with fromSurface+full metrics, or puppeteer fullPage:true). Route 'whole/full/entire page' phrasing to it in the agent's screenshot dispatch; keep viewport as the default (smaller, faster). Live e2e: assert full-page bytes are materially larger than viewport for a long page."
+    },
+    {
+      "id": "chain-partial-nonrun-paths",
+      "title": "Surface stoppedEarly on the non-/run chain paths (digest members, index.ts:174/211/970)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The interactive /run path (handler.ts:1737) flags a partial chain, but the digest-member + other index.ts call sites take bare .final and DROP stoppedEarly — a chain that failed a step mid-way is presented to the user as if it completed, in a daily briefing. Silent-wrong = trust erosion.",
+      "how": "Thread stoppedEarly/step-counts through the digest-member runChain (index.ts:174) + the other .final call sites (211, 970) and have the digest/caller append a short '(partial — N of M steps)' note, mirroring handler.ts:1737. Offline unit test: a 2-step chain whose 2nd step returns degraded shows the partial note."
+    },
+    {
+      "id": "browse-infinite-scroll",
+      "title": "Infinite-scroll capture: scroll a feed to load more items before reading",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "Feeds/listings that load on scroll (not pagination) yield only the initial ~10 items to a single read — a 'what's new on <scrolling feed>' errand under-reports.",
+      "how": "Add a bounded scroll-to-load to the browse path in src/anvil.ts: repeat scrollBy(0, viewport) + wait-for-network-idle up to K times or until item count stops growing, then read. Cap iterations + time. Live e2e against a real infinite-scroll page; assert post-scroll item count > initial."
+    }
+  ],
+  "history": [],
+  "probes": [
+    {
+      "note": "Seeded from the inline 3-lens gap analysis run at the end of the product-loop session (subagent cap 200/200 blocked the parallel AUDIT agents, so lenses were run inline over schedule-runner/alert-runner/chain-runner/agent/handler/anvil). Keyless-tool surface confirmed exhausted. Real remaining depth gaps: browse reads ONE page only (no pagination/scroll/crawl — grep=0), screenshot is viewport-only (anvil.ts:463), and non-/run chain paths drop stoppedEarly (partial presented as complete). Owner picked the anvil-depth direction; these 4 are the starting backlog. In-place schedule EDIT (alerts retune but reminders can't) was also found — parked for a reliability pass, not this browse-depth loop."
+    }
+  ]
+}
