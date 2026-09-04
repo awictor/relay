@@ -3488,7 +3488,7 @@
       "title": "date_math: \"how many days until next Friday\" / \"days until Monday\"",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Probe: runDateCalc returns null for \"how many days until next Friday\" and \"days until Monday\" — a common casual date question (\"how long till the weekend\"). Falls to a slow agent turn or an invented answer instead of exact calendar math.",
       "how": "In datecalc.ts, add a weekday-target branch to the until-parser: resolve \"next <weekday>\"/\"<weekday>\" to the next future date matching that weekday (0-6 days out; \"next\" skips to the following week if today matches). Reuse weekdayName. Add tests for each weekday + \"next\" semantics."
     },
@@ -5050,6 +5050,10 @@
     {
       "item": "convert-speed-bare-query",
       "note": "A bare speed query with no explicit target now defaults to the sensible counterpart (convert-speed-bare-query): \"how fast is 50 knots\"/\"50 knots\"->57.54 mph, \"100 km/h\"->62.14 mph, \"60 mph\"->96.56 km/h, \"30 m/s\"->108 km/h. Added a no-target fallback in parseUnitConvert GATED to speed units only, so a bare \"5 kg\"/\"10 miles\"/\"3 apples\" still returns null (not force-converted) and unrelated messages fall through to the agent. +2 tests, 2165 green."
+    },
+    {
+      "item": "date-until-weekday",
+      "note": "\"how many days until next Friday\" / \"days until Monday\" / \"how long until sunday\" now resolve to the next matching weekday (date-until-weekday) instead of null. parseDate gained a weekday-target branch (full names + abbrevs sun/mon/tue/wed/thu/fri/sat, optional next/this/coming) -> nearest FUTURE date (a bare weekday on its own day = next week, never today). Gated to real weekday words so \"may\"/\"launch\"/junk still return null. +2 tests, 2167 green. Fills a common casual date question that fell to a slow browse."
     }
   ],
   "audits": [

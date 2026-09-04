@@ -13,6 +13,11 @@ const MONTHS: Record<string, number> = {
   oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12,
 };
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+// Weekday name -> 0-6 index (Sun=0), incl. common abbreviations, for "days until next Friday" (date-until-weekday).
+const WEEKDAY_IDX: Record<string, number> = {
+  sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, tues: 2, wednesday: 3, wed: 3,
+  thursday: 4, thu: 4, thur: 4, thurs: 4, friday: 5, fri: 5, saturday: 6, sat: 6,
+};
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /** A UTC Date at midnight for a Y-M-D (UTC so day math never crosses a DST boundary). */
@@ -72,6 +77,24 @@ export function parseDate(raw: string, today: Ymd, preferFuture = false): Ymd | 
     let cand: Ymd = { y: today.y, m: holiday.m, d: holiday.d };
     if (preferFuture && daysBetween(today, cand) < 0) cand = { ...cand, y: today.y + 1 };
     return isValid(cand) ? cand : null;
+  }
+
+  // Weekday target: "friday", "next friday", "this monday", "on tuesday" (date-until-weekday). Resolves
+  // to the next date matching that weekday. Plain "<weekday>" = the nearest FUTURE one (0 excluded: a
+  // bare weekday means the upcoming one, not today — "what day until Friday" on a Friday means next week).
+  // "next <weekday>" forces the following week when today already IS that weekday. Only meaningful with
+  // preferFuture (an "until"/"days to" question); a "what day is monday" without preferFuture also resolves
+  // to the upcoming one, which is the sensible reading.
+  const wd = s.match(/^(next|this|coming|upcoming)?\s*([a-z]+)$/);
+  if (wd && WEEKDAY_IDX[wd[2]!] !== undefined) {
+    const target = WEEKDAY_IDX[wd[2]!]!;
+    const todayDow = toDate(today).getUTCDay();
+    let delta = (target - todayDow + 7) % 7;      // 0..6 days ahead; 0 = today is that weekday
+    if (delta === 0) delta = 7;                    // a bare/next weekday means the UPCOMING one, never today
+    // "next Friday" is read as this coming Friday (the nearest future one) — the common conversational
+    // meaning; users who want the one after say a date. So no extra week is added for "next".
+    const dt = new Date(toDate(today).getTime() + delta * 86_400_000);
+    return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
   }
 
   // ISO: 2026-12-25

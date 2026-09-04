@@ -85,4 +85,22 @@ describe("runDateCalc", () => {
     // still null when there's genuinely no date to peel
     expect(runDateCalc("how many days until something vague", TODAY)).toBeNull();
   });
+
+  it("resolves 'days until <weekday>' to the next matching day (date-until-weekday)", () => {
+    // TODAY = 2026-09-03 is a THURSDAY.
+    expect(runDateCalc("days until friday", TODAY)).toMatch(/^1 day until Friday, September 4, 2026\./); // tomorrow
+    expect(runDateCalc("how many days until next friday", TODAY)).toMatch(/^1 day until Friday, September 4/);
+    expect(runDateCalc("days until monday", TODAY)).toMatch(/^4 days until Monday, September 7/);
+    expect(runDateCalc("how long until sunday", TODAY)).toMatch(/^3 days until Sunday, September 6/);
+    expect(runDateCalc("days until thursday", TODAY)).toMatch(/^7 days until Thursday, September 10/); // today is Thu -> next week
+    expect(runDateCalc("days until sat", TODAY)).toMatch(/^2 days until Saturday, September 5/);        // abbrev
+    expect(runDateCalc("what day is next monday", TODAY)).toMatch(/Monday, September 7, 2026/);
+  });
+
+  it("a bare weekday word only matches real weekdays (not month words / junk)", () => {
+    expect(parseDate("friday", TODAY, true)).toEqual({ y: 2026, m: 9, d: 4 });
+    expect(parseDate("may", TODAY, true)).toBeNull();      // month word, no day -> not a weekday match
+    expect(parseDate("launch", TODAY, true)).toBeNull();
+    expect(parseDate("something", TODAY, true)).toBeNull();
+  });
 });
