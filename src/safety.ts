@@ -54,7 +54,7 @@ export function checkRateLimit(chatId: number, now = Date.now()): { allowed: boo
 // m26 safety-audit-2 kept the committing synonyms (subscribe, bid, add to cart, donate); this split
 // (dangerous-action-false-refuse) narrows the ambiguous ones without weakening the genuine catches.
 export const DANGEROUS_ACTION_RE =
-  /\b(delete|logout|log out|sign out|subscribe|unsubscribe|close account|close my account|deactivate|submit|pay|purchase|buy|checkout|transfer|withdraw|approve|authorize|destroy|wipe|erase|bid|add to cart|donate|donation|publish|unfriend|unfollow|place (?:order|bid)|complete (?:order|purchase|checkout))\b/i;
+  /\b(delete|logout|log out|sign out|subscribe|unsubscribe|close account|close my account|deactivate|submit|pay|purchase|buy|checkout|transfer|withdraw|approve|authorize|destroy|wipe|erase|bid|add to (?:cart|bag|basket)|donate|donation|publish|unfriend|unfollow|place (?:order|bid)|complete (?:order|purchase|checkout))\b/i;
 
 // A committing object that turns an ambiguous verb into a real commit. "order/booking/purchase/
 // payment/funds/money/subscription/account/reservation/card/transfer/donation" + billing/agreement
@@ -70,8 +70,19 @@ const CONTEXTUAL_RE = new RegExp(
   // password/security-sensitive resets + factory reset (destructive even without a commit object)
   + "|\\breset\\s+(?:my\\s+|the\\s+|your\\s+)?(?:password|account|settings|device|data|everything)\\b"
   + "|\\bfactory\\s+reset\\b"
-  // "book (a) <thing>" / "book now" — a reservation commitment (but not "bookings"/"booking reference")
-  + "|\\bbook\\s+(?:now|a\\s+|the\\s+|your\\s+|this\\s+)"
+  // "book (a) <thing>" / "book now" / "book flight|room|table|ticket|trip|hotel|appointment" — a
+  // reservation commitment (but not "bookings"/"booking reference")
+  + "|\\bbook\\s+(?:now|a\\s+|an\\s+|the\\s+|your\\s+|this\\s+|flight|flights|room|table|ticket|tickets|trip|hotel|appointment)"
+  // "order now" / "1-click|one-click order" / "order + <commit-object>" — a purchase commit the bare
+  // "place order" caught but a plain "order now"/"buy in one click" missed (dangerous-order-now).
+  + "|\\border\\s+now\\b|\\b(?:one|1)[-\\s]?click\\s+(?:order|buy|purchase|checkout)\\b"
+  // "rent (this|now|a|the) <thing>" — a rental commitment ("rent this", "rent now"), beyond the
+  // apply/enroll/register/reserve/rent + now/for branch which missed the bare "rent this".
+  + "|\\brent\\s+(?:this|now|it|a\\s+|an\\s+|the\\s+|your\\s+)"
+  // "sign up" is a COMMIT only with a now/free/today anchor or a commit-object ("sign up now", "sign up
+  // for premium") — NOT a nav gate ("sign up to read", which the repo deliberately ALLOWS). Kept
+  // contextual (not in the STRONG list) so the benign gate passes (dangerous-signup-contextual).
+  + "|\\bsign\\s?up\\s+(?:now|today|free|and)\\b|\\bsign\\s?up\\s+for\\s+(?:premium|pro|a\\s+plan|the\\s+plan|membership|paid)"
   // "confirm <commit>" collocations Excel/checkout use ("confirm and pay", "confirm order")
   + "|\\bconfirm\\s+(?:and\\s+)?(?:order|purchase|payment|booking|and\\s+pay|subscription|reservation)\\b"
   // send/transfer/pay/wire + a CURRENCY AMOUNT ("Send $50 to John", "transfer £200", "pay 100 usd") — a

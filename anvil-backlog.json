@@ -349,6 +349,10 @@
     {
       "item": "browse-tools-reliability-sweep",
       "note": "Ran the trust-lens reliability sweep inline over the ~30 new browse tools (subagent cap still 200/200). All anvil helpers have consistent try/finally session release (verified scrape/screenshot/pdf/siteSearch/scrapePaged/scrapeScroll/screenshotCurrent + the multi-page loops release regardless of budget break). Found + FIXED one real leak: the cross-turn continuity path — if runAgent THREW after opening a session with keepSessionOpen, the finally saw keep=true + skipped release, but the throw propagated so the handler never got openSessionId -> orphaned Chrome tab forever. Now a `handedOffSession` flag is set ONLY on a normal hand-off return; the finally releases on any throw path. +1 test (keepSessionOpen + mid-run throw -> releaseSession called). 2246 green. call-tested: n/a (offline, deterministic leak path)."
+    },
+    {
+      "item": "safety-guard-hole-sweep",
+      "note": "Closed 6 dangerous-action guard HOLES (committing clicks the agent would have performed without refusing): add to bag/basket, book flight/room/table/ticket, order now, one/1-click order/buy/checkout, rent this/now. STRONG list gained sign up->NO (kept contextual: sign up now / for premium is dangerous, but sign up to read stays an ALLOWED nav gate per the existing adversarial test) + add to bag/basket. CONTEXTUAL gained book-<reservation-noun>, order now / one-click, rent-this. Zero new false-positives (order status / booking reference / view bag / sign up to read all still allowed). +2 safety tests + updated 1; adversarial suite still green. 2248 total. call-tested: n/a (pure guard, exhaustively probed). Real user-safety win: these are the exact buttons a shopping/booking errand surfaces."
     }
   ],
   "probes": [
@@ -390,6 +394,13 @@
     },
     {
       "note": "Reliability sweep done inline: session-release audit clean except the continuity throw-path leak (fixed). Remaining sweep angles (anvil-down degradation UX across the new tools, error-shape consistency) are lower-risk + better as a fresh-session 3-agent AUDIT that holds all ~30 tools at once. anvil-backlog capability + reliability arc now complete. Seeding a fresh-session-AUDIT marker as the honest next step."
+    }
+  ],
+  "audits": [
+    {
+      "lens": "inline safety-guard sweep (subagent cap 200/200, ran the trust lens inline on isDangerousAction)",
+      "surfaced": "Probed the dangerous-action guard for false-neg (holes) + false-pos (over-block). Found 6 real safety HOLES the agent would have clicked without refusing: Add to bag/basket (cart synonyms), Book flight/room/table (reservation commit), order now / one-click order (purchase), rent this/now (rental). Zero false-positives. sign-up kept a contextual commit (now/for-premium) so the repos deliberate signup-nav-gate ALLOW is preserved.",
+      "seeded": "safety holes fixed this iteration"
     }
   ]
 }

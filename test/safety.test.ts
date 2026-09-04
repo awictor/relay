@@ -59,6 +59,18 @@ describe("isDangerousAction", () => {
       expect(isDangerousAction(t), `${t} should be allowed`).toBe(false);
     }
   });
+  it("catches commit actions the earlier lists missed (safety-hole-sweep)", () => {
+    // sign-up, cart synonyms, reservation, one-click/order-now, rental — all real commits the agent must refuse.
+    for (const t of ["sign up now", "sign up for premium", "Add to bag", "Add to basket", "Book flight", "book a room", "book table",
+                     "order now", "one-click order", "1-click buy", "rent this", "rent now"]) {
+      expect(isDangerousAction(t), `${t} should be dangerous`).toBe(true);
+    }
+  });
+  it("still allows the benign look-alikes of those (no new overblock)", () => {
+    for (const t of ["booking reference", "order status", "order history", "view bag", "reset filters", "sign in to read", "sign up to read"]) {
+      expect(isDangerousAction(t), `${t} should be allowed`).toBe(false);
+    }
+  });
 });
 
 describe("redactText", () => {
