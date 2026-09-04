@@ -4927,6 +4927,10 @@
     {
       "item": "compose-resolve-clean-pass",
       "note": "Clean probe of the compose recipient-resolution path - resolveContact/ContactStore.get normalize + match names correctly (incl. names ending in s, now that save is fixed). No code change (green tree, 2134). Confirms the boss->bos bug was save-only, not resolve."
+    },
+    {
+      "item": "calendar-probe-clean-pass",
+      "note": "Clean probe of calendar_event dispatch (arg-driven, defensive). No code change (2134 green). The offline parser vein is worked out - the last several probes (youtube/news, compose-resolve, calendar) return clean; the 24 fixes this session covered the real gaps."
     }
   ],
   "audits": [
@@ -5511,6 +5515,10 @@
     {
       "lens": "compose resolve-contact probe (clean)",
       "surfaced": "Verified the compose recipient path is clean: 'to' resolves via resolveContact -> ContactStore.get(normalizeContactName(q)), which correctly matches 'boss'/'my boss'/\"boss's\"/'Boss' to a stored 'boss'. No truncation on the RESOLVE side (only the SAVE parser had the stem-s bug, fixed last run). Compose is LLM-arg driven + store-resolved, not a fragile text parser. NO code change."
+    },
+    {
+      "lens": "calendar_event dispatch probe (clean)",
+      "surfaced": "calendar_event is LLM-arg driven + defensively handled (title required, startMs/startDate/durationMin guarded via Number.isFinite, try/catch on buildIcs). No text-parser gap. Clean. The parser/CRUD/phrasing surface is exhaustively probed now - 24 real fixes then clean-verifying counterparts (compose-resolve, calendar). No code change."
     }
   ]
 }
