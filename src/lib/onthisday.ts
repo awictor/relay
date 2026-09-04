@@ -51,9 +51,16 @@ export function parseMonthDay(text: string): { month: number; day: number } | nu
   if (m && MONTHS[m[1]!]) return { month: MONTHS[m[1]!]!, day: +m[2]! };
   m = t.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)\b/);
   if (m && MONTHS[m[2]!]) return { month: MONTHS[m[2]!]!, day: +m[1]! };
-  // "12/25" (M/D)
+  // "12/25" (M/D). If the FIRST number can't be a month (>12) but the second can, read it as D/M — the
+  // unambiguous European form "25/12" = Dec 25 (onthisday-daymonth-order). US M/D is the default when both
+  // are ≤12 (12/11 stays Dec 11), since this bot's phrasing is US-leaning; a >12 first number is the only
+  // case a swap is certain, so it never mis-reads an ambiguous date.
   m = t.match(/\b(\d{1,2})\/(\d{1,2})\b/);
-  if (m) { const mo = +m[1]!, d = +m[2]!; if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return { month: mo, day: d }; }
+  if (m) {
+    let a = +m[1]!, b = +m[2]!;
+    if (a > 12 && b >= 1 && b <= 12) { const tmp = a; a = b; b = tmp; } // D/M -> M/D
+    if (a >= 1 && a <= 12 && b >= 1 && b <= 31) return { month: a, day: b };
+  }
   return null;
 }
 

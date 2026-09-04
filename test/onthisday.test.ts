@@ -27,6 +27,10 @@ describe("parseMonthDay", () => {
     expect(parseMonthDay("on this day July 4")).toEqual({ month: 7, day: 4 });
     expect(parseMonthDay("what happened on 4 July")).toEqual({ month: 7, day: 4 });
     expect(parseMonthDay("anything on 12/25")).toEqual({ month: 12, day: 25 });
+    // European D/M when the first number can't be a month (onthisday-daymonth-order): "25/12" = Dec 25.
+    expect(parseMonthDay("on 25/12")).toEqual({ month: 12, day: 25 });
+    expect(parseMonthDay("what happened on 31/1")).toEqual({ month: 1, day: 31 });
+    expect(parseMonthDay("on 12/11")).toEqual({ month: 12, day: 11 }); // both ≤12 -> US M/D default
     expect(parseMonthDay("what happened on this day")).toBeNull(); // no explicit date -> caller uses today
   });
 });

@@ -5460,6 +5460,10 @@
     {
       "item": "textstats-verb-first-count (gap, found via inline audit)",
       "note": "Text-stats word/char count now accepts the verb-first phrasing \"count the words: X\" / \"count the characters in X\" / \"count words: X\" — previously only noun-first forms (word count of X / how many words in X) parsed, so a natural \"count the words: ...\" fell through to a slow agent turn. Added the count-verb alternative to both the char + word regexes (gated by the same character/word keyword guard). Existing forms + reverse/palindrome unchanged. +3 assertions. 2392 green. call-tested: offline. Also swept textstats primitives (wordCount collapses whitespace, palindrome ignores case/spaces/punct) + password gen — clean."
+    },
+    {
+      "item": "onthisday-daymonth-order (gap, found via inline audit)",
+      "note": "On-this-day date parse now handles the unambiguous European D/M form: \"on 25/12\" -> Dec 25 (was null — the M/D-only regex rejected month 25, so a non-US user got no history for a slashed date). When the FIRST number cant be a month (>12) but the second can (<=12), swap to M/D. Both-<=12 stays US M/D default (12/11 = Dec 11), so no ambiguous date is ever mis-read. +3 assertions (25/12, 31/1, 12/11-stays-US). 2392 green. call-tested: offline. Also swept roman (lowercase mcmxciv->1994, invalid subtractive IL/VX/IC/XM->null) — clean."
     }
   ],
   "audits": [
