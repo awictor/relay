@@ -45,7 +45,7 @@ import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { SavedStore, parseSavePage, parseSavedRecall, hostLabel, readingRecap, isUnreadSavedRequest, formatUnreadNudge, parseUnreadNudgeToggle } from "./lib/readlater.js";
 import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
-import { LogStore, parseLogCommand, parseLogQuery, sumSeries } from "./lib/logs.js";
+import { LogStore, parseLogCommand, parseLogQuery, sumSeries, logsWeeklySummary } from "./lib/logs.js";
 import { ListStore, parseListCommand, parseListExport, splitItems, MAX_ITEMS_PER_LIST } from "./lib/lists.js";
 import { ContactStore, parseSaveContact, parseForgetContact, parseFollowUp } from "./lib/contacts.js";
 import { mailtoLink, smsLink } from "./lib/compose.js";
@@ -178,6 +178,8 @@ const digestRunText = (chatId: number, name: string): Promise<DigestOutcome> => 
     // recap shows the most-recent saves, so stamp them recalled (saved-page-unread-nudge) — a page that
     // appears in the daily recap isn't "forgotten".
     savedRecap: (c) => { const list = saved.list(c); const recap = readingRecap(list); if (recap) saved.markRecalled(c, [...list].sort((a, b) => b.created - a.created).slice(0, 5).map((p) => p.url), Date.now()); return recap; },
+    // Weekly-logs recap member (logs-weekly-summary): fold the user's own trackers into the briefing.
+    logsRecap: (c) => logsWeeklySummary(logs.allSeries(c), Date.now()),
     // Smart ordering (digest-smart-ordering): float members that changed since last run to the top with a
     // ✦ marker. The DigestChangeStore remembers each member's last value + reports material change.
     memberChanged: (c, dn, member, body) => digestChanges.changed(c, dn, member, body),

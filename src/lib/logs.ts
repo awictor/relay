@@ -152,10 +152,56 @@ export class LogStore {
   tags(chatId: number): string[] {
     return this.items.find((c) => c.chatId === chatId)?.series.map((s) => s.tag) ?? [];
   }
+  /** All series (tag + points + unit) for a chat — for the weekly-logs digest recap (logs-weekly-summary). */
+  allSeries(chatId: number): Array<{ tag: string; points: LogPoint[]; unit?: string }> {
+    return this.items.find((c) => c.chatId === chatId)?.series ?? [];
+  }
 }
 
 /** Sum a series' values within an optional window (for a spend total). */
 export function sumSeries(points: LogPoint[], sinceMs?: number): { total: number; count: number } {
   const pts = sinceMs !== undefined ? points.filter((p) => p.t >= sinceMs) : points;
   return { total: pts.reduce((a, p) => a + p.v, 0), count: pts.length };
+}
+
+// A reserved digest member that folds a weekly recap of the user's OWN trackers into a briefing
+// (logs-weekly-summary) — the counterpart to the reading-list recap member. So "digest morning: weather,
+// my logs" ends each briefing with "this week you logged: weight 182→180, spent $240 on food, 5 coffees".
+const LOG_RECAP_MEMBER_NAMES = new Set(["my logs", "my trackers", "trackers", "my stats", "log recap", "weekly logs", "my week"]);
+export function isLogRecapMember(name: string): boolean {
+  return LOG_RECAP_MEMBER_NAMES.has(name.trim().toLowerCase());
+}
+
+/** One recap line for a tag over the window: a $ tag sums ("spent $240 on food, 12x"); a metric tag shows
+ * first→last with an arrow ("weight 182→180 ↓2"); a bare count sums ("5 coffees"). Null if <1 point in window. */
+function logRecapLine(tag: string, points: LogPoint[], unit: string | undefined, sinceMs: number): string | null {
+  const pts = points.filter((p) => p.t >= sinceMs).sort((a, b) => a.t - b.t);
+  if (!pts.length) return null;
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+  if (unit === "$") {
+    const total = pts.reduce((a, p) => a + p.v, 0);
+    return `spent $${fmt(total)} on ${tag}${pts.length > 1 ? ` (${pts.length}x)` : ""}`;
+  }
+  // A metric with movement (>=2 points) reads as a trend; a single reading just shows the value.
+  if (pts.length >= 2) {
+    const first = pts[0]!.v, last = pts[pts.length - 1]!.v, d = last - first;
+    const arrow = d > 0 ? "↑" : d < 0 ? "↓" : "→";
+    const move = d !== 0 ? ` ${arrow}${fmt(Math.abs(d))}` : "";
+    return `${tag} ${fmt(first)}→${fmt(last)}${move}${unit && unit !== "$" ? ` ${unit}` : ""}`;
+  }
+  return `${tag} ${fmt(pts[0]!.v)}${unit && unit !== "$" ? ` ${unit}` : ""}`;
+}
+
+/** A weekly recap of ALL of a chat's trackers for a digest section (logs-weekly-summary), or null when
+ * nothing was logged in the window (so the digest treats it as an empty member, not a failure). `windowMs`
+ * defaults to 7 days. Pure — takes the already-read series list so it stays offline-testable. */
+export function logsWeeklySummary(
+  series: Array<{ tag: string; points: LogPoint[]; unit?: string }>,
+  now: number,
+  windowMs = 7 * DAY,
+): string | null {
+  const since = now - windowMs;
+  const lines = series.map((s) => logRecapLine(s.tag, s.points, s.unit, since)).filter((l): l is string => l !== null);
+  if (!lines.length) return null;
+  return `this week you logged:\n${lines.map((l) => `  - ${l}`).join("\n")}`;
 }

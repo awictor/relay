@@ -10,6 +10,7 @@ import { mapPool } from "./lib/pool.js";
 import { hasSlots, isChain } from "./lib/recipes.js";
 import { looksLikeErrorReply } from "./lib/alerts.js";
 import { isReadingRecapMember } from "./lib/readlater.js";
+import { isLogRecapMember } from "./lib/logs.js";
 import type { AgentEnv } from "./chain-runner.js";
 
 // Cap on how many member agents run at once (DEV-0140). Each member opens an anvil browser session;
@@ -38,6 +39,11 @@ export interface DigestRunnerDeps {
   // (treated as an empty member, not a failure). No agent/anvil — pure store read. Optional; absent -> a
   // recap member falls through to resolveRecipe (and reads as "no such recipe" if there's no such recipe).
   savedRecap?: (chatId: number) => string | null;
+  // Weekly-logs recap (logs-weekly-summary): a reserved member ("my logs"/"trackers") folds a weekly recap
+  // of the user's OWN quick-log trackers into the briefing. Returns the recap text, or null when nothing was
+  // logged this week (treated as an empty member, not a failure). No agent/anvil — pure store read. Optional;
+  // absent -> a logs member falls through to resolveRecipe (reads as "no such recipe").
+  logsRecap?: (chatId: number) => string | null;
   maxMembers?: number; // safety bound on how many recipes one digest runs (default 10)
   // Smart ordering (digest-smart-ordering): given a real member's output, record its value + report
   // whether it CHANGED materially since the last run (a moved price, a new top story). When wired, the
@@ -102,6 +108,12 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
     if (deps.savedRecap && isReadingRecapMember(name)) {
       const recap = deps.savedRecap(digest.chatId);
       return recap ? { line: `• ${name}:\n${recap}`, status: "real" } : { line: `• ${name}: (nothing saved yet)`, status: "gone" };
+    }
+    // Reserved weekly-logs recap member (logs-weekly-summary): fold the user's own trackers in, no agent.
+    // Nothing logged this week -> "gone" (an empty member, not a failure), like an empty reading list.
+    if (deps.logsRecap && isLogRecapMember(name)) {
+      const recap = deps.logsRecap(digest.chatId);
+      return recap ? { line: `• ${name}:\n${recap}`, status: "real" } : { line: `• ${name}: (nothing logged this week)`, status: "gone" };
     }
     const rec = deps.resolveRecipe(digest.chatId, name);
     if (!rec) return { line: `• ${name}: (no such recipe anymore)`, status: "gone" };

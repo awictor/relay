@@ -3642,7 +3642,7 @@
       "title": "Auto weekly summary of a users trackers (\"log weight/spending\") as a digest member",
       "impact": "low",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Users log weight/spending/mood (logs.ts), but must ASK for the trend. A weekly auto-summary (\"this weeks spending: $X, weight trend: down 2lb\") as a schedulable digest member closes the log->insight loop passively.",
       "how": "Add a reserved digest member (like the reading-list recap) that summarizes a chats logs for the period via the existing logQuery/chart. Reuse the savedRecap pattern in digest-runner. Offline test the member summary."
     },
@@ -3726,6 +3726,15 @@
       "status": "todo",
       "why": "The reply-style + onboarding + location-capture veins are worked down to low-value polish; remaining non-owner todos are all low. A new high-value direction needs the 3 parallel audit agents (new-user / reliability / power), but the subagent spawn cap is 200/200 for THIS session and cannot be reset mid-session — every AUDIT attempt this session fell back to inline single-surface probes. A fresh session resets the cap.",
       "how": "Start a fresh Claude session, run /product-loop; TRIAGE will find no actionable medium+ todo and trigger STAGE AUDIT, which can now spawn the 3 agents. Seed their synthesized findings + build the top item."
+    },
+    {
+      "id": "logs-recap-nudge-or-standalone",
+      "title": "A standalone weekly \"your week in numbers\" proactive recap (opt-in), not only inside a digest",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "logs-weekly-summary only surfaces in a digest the user has to assemble. A user who just logs (weight/spend/habits) but never built a digest gets no weekly rollup — the payoff that makes daily logging feel worth it. An opt-in standalone \"weekly logs recap every Sunday\" (like the reading-list unread nudge) delivers the retention hook without requiring digest setup.",
+      "how": "Reuse the unread-nudge scheduled pattern: a per-chat opt-in (\"recap my logs weekly\" / \"stop log recaps\") that schedules a weekly proactive send of logsWeeklySummary. Silent when nothing logged that week (like the unread nudge null path). Offline tests for the toggle parse + the scheduled send composing the recap."
     }
   ],
   "history": [
@@ -5388,6 +5397,10 @@
     {
       "item": "digest-change-tracks-wrong-number (bug)",
       "note": "BUG FIX (broken user-facing path): digest change-detection (digest-change.ts) used firstNumber, which grabs the FIRST number in a member reply — often a %/count/time, not the tracked value. \"BTC up 2.5% at 68000\" -> firstNumber read 2.5 (the percent), so a real price move 68000->69500 read as UNCHANGED. Effect: a \"only if changed\" digest wrongly stayed SILENT on a real move, and ✦ smart-ordering floated the wrong members. Alerts already fixed this class via extractValue (prefers currency/decimal/largest, excludes bare %, scales k/m/bn, entity-hinted); digest-change never got it. Swapped firstNumber -> extractValue(prev/body, member) so the digest compares the same salient value alerts do, with the member name as the entity hint for multi-number replies. +1 regression test (price-moves-%-steady changes; price-steady doesnt; $60k magnitude). 2369 green. call-tested: offline (pure value transform). Found via inline reliability audit (subagent AUDIT still capped 200/200 this session)."
+    },
+    {
+      "item": "logs-weekly-summary",
+      "note": "Quick-log trackers can now fold a weekly recap into a digest — the counterpart to the reading-list recap member. Add \"my logs\" (or trackers/my trackers/my stats/log recap/weekly logs/my week) as a digest member -> the briefing ends with \"this week you logged: weight 182->180 down2, spent $45 on food (3x), coffees 2\". New pure logsWeeklySummary(series, now, windowMs=7d) + logRecapLine (a $ tag SUMS, a metric with >=2 points TRENDS first->last with an arrow, a bare count shows its value) + isLogRecapMember + LogStore.allSeries; digest-runner gained a logsRecap dep mirroring savedRecap (no agent/anvil, pure store read; nothing-logged -> empty member, not a failure). Wired in index; /help documents it. Closes the daily-habit retention loop: a reason to both log AND read the digest. +5 tests (3 logs unit: recap formatting + window exclusion + member-name match; 2 digest-runner: folds recap / empty reads as gone). 2374 green. call-tested: offline (pure summary + digest compose)."
     }
   ],
   "audits": [

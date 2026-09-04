@@ -36,6 +36,24 @@ describe("runDigest", () => {
     expect(agentRan).toBe(false); // recap is a store read, never an agent/recipe run
   });
 
+  it("a 'my logs' member folds in the weekly tracker recap, no agent run (logs-weekly-summary)", async () => {
+    let agentRan = false;
+    const out = await runDigest(digest(["weather", "my logs"]), deps({
+      runAgent: async (task: string) => { agentRan = task === "my logs" ? true : agentRan; return { reply: `RESULT[${task}]` }; },
+      logsRecap: () => "this week you logged:\n  - weight 182→180 ↓2\n  - spent $45 on food (3x)",
+    }));
+    expect(out).toContain("• weather: RESULT[get the weather]");
+    expect(out).toContain("• my logs:\nthis week you logged:");
+    expect(out).toContain("weight 182→180");
+    expect(agentRan).toBe(false); // recap is a store read, never an agent/recipe run
+  });
+
+  it("a 'my logs' member with nothing logged reads as empty (not a failure), digest still sends others", async () => {
+    const out = await runDigest(digest(["weather", "trackers"]), deps({ logsRecap: () => null }));
+    expect(out).toContain("• weather: RESULT[get the weather]");
+    expect(out).toContain("• trackers: (nothing logged this week)");
+  });
+
   it("a 'reading list' member with nothing saved reads as empty (not a failure), digest still sends its other members", async () => {
     const out = await runDigest(digest(["weather", "saved"]), deps({ savedRecap: () => null }));
     expect(out).toContain("• weather: RESULT[get the weather]");

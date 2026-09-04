@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseLogCommand, parseLogQuery, sumSeries, LogStore } from "../src/lib/logs.js";
+import { parseLogCommand, parseLogQuery, sumSeries, LogStore, logsWeeklySummary, isLogRecapMember } from "../src/lib/logs.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -90,5 +90,28 @@ describe("sumSeries", () => {
     const pts = [{ t: NOW - 10 * DAY, v: 20 }, { t: NOW - 2 * DAY, v: 14 }, { t: NOW, v: 9 }];
     expect(sumSeries(pts)).toEqual({ total: 43, count: 3 });
     expect(sumSeries(pts, NOW - 7 * DAY)).toEqual({ total: 23, count: 2 }); // last 7 days
+  });
+});
+
+describe("logsWeeklySummary (logs-weekly-summary)", () => {
+  it("recaps each tag: $ sums, a metric trends, a bare count shows its value", () => {
+    const series = [
+      { tag: "weight", points: [{ t: NOW - 6 * DAY, v: 182 }, { t: NOW - 1 * DAY, v: 180 }] },
+      { tag: "food", unit: "$", points: [{ t: NOW - 5 * DAY, v: 14 }, { t: NOW - 2 * DAY, v: 22 }, { t: NOW - 1 * DAY, v: 9 }] },
+      { tag: "coffees", points: [{ t: NOW - 3 * DAY, v: 2 }] },
+    ];
+    const out = logsWeeklySummary(series, NOW)!;
+    expect(out).toMatch(/this week you logged:/);
+    expect(out).toMatch(/weight 182→180 ↓2/);
+    expect(out).toMatch(/spent \$45 on food \(3x\)/);
+    expect(out).toMatch(/coffees 2/);
+  });
+  it("excludes points outside the window; null when nothing logged this week", () => {
+    expect(logsWeeklySummary([{ tag: "old", points: [{ t: NOW - 30 * DAY, v: 5 }] }], NOW)).toBeNull();
+  });
+  it("isLogRecapMember matches the reserved names, not an arbitrary tag", () => {
+    expect(isLogRecapMember("my logs")).toBe(true);
+    expect(isLogRecapMember("Trackers")).toBe(true);
+    expect(isLogRecapMember("weather")).toBe(false);
   });
 });
