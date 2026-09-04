@@ -22,9 +22,10 @@ const BLOCKED_IP_RANGES = [
   /^::ffff:a9fe:/i,
   /^::ffff:0\./,
   /^::ffff:0+:/i,
-  /^fc00:/i,
-  /^fe80:/i,
-  /^fd/i,
+  // DEV-0460 (mcp-forge): cover the FULL IPv6 link-local (fe80::/10 = fe80–febf) + ULA (fc00::/7 =
+  // fc00–fdff) ranges, not just their base prefixes. WHATWG serializes these to a bare hextet.
+  /^fe[89ab]/i, // link-local fe80::/10
+  /^f[cd]/i,    // unique-local fc00::/7 (fc00–fdff)
 ];
 
 const BLOCKED_HOSTNAMES = [
@@ -74,9 +75,10 @@ export async function hostResolvesToBlockedIp(hostname: string, signal?: AbortSi
   }
   const a = await query("A");
   const aaaa = await query("AAAA");
-  // Both lookups failed -> resolver unavailable -> cannot verify -> FAIL CLOSED (treat as blocked).
-  if (a === null && aaaa === null) return true;
-  const ips = [...(a ?? []), ...(aaaa ?? [])];
+  // DEV-0459 (mcp-forge): fail closed PER-FAMILY — if EITHER A or AAAA errors we can't verify that
+  // family, and fetch may prefer the unvalidated one (clean-A / errored-AAAA -> loopback over IPv6).
+  if (a === null || aaaa === null) return true;
+  const ips = [...a, ...aaaa];
   return ips.some((ip) => isBlockedIp(ip));
 }
 
