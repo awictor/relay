@@ -3149,6 +3149,15 @@
       "status": "done",
       "why": "detectFlight required a flight cue word (flight/land/gate/status/...) but 'where('s)' and 'track(ing)' — the two most natural flight-status phrasings — weren't cues, so 'where's UA83' and 'track BA2490' fell through to a flaky web_search instead of the keyless flight lookup.",
       "how": "Added where('s)/where is + track(ing) to the cue list. A parcel tracking number (1Z...) can't match FLIGHT_RE's 2-char+<=4-digit shape, so 'track' with a flight-shaped token is a flight; a cue with no such token still returns null."
+    },
+    {
+      "id": "datecalc-labeled-until",
+      "title": "'days until my birthday on <date>' fell to a slow agent guess",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "runDateCalc's days-until branch passed the whole tail to parseDate, so a LABELED date ('my birthday on 2025-06-20', 'the deadline is July 4', 'my trip on X') failed to parse -> null -> the question fell through to a slow, non-deterministic agent run for math the tool should nail instantly.",
+      "how": "When the whole phrase doesn't parse, peel a trailing date token (up to 4 words, stripping a leading on/is/for/by/the) and parse that, dropping the label. Plain 'days until Christmas' + bare-date + no-date->null all unchanged."
     }
   ],
   "history": [
@@ -4427,6 +4436,10 @@
     {
       "id": "flight-cue-where-track",
       "note": "Self-audit (anvil DOWN): probed flight detect/parse. parseAdsbdbRoute + parseAdsbLive clean. detectFlight missed 'where's UA83' + 'track BA2490' — the cue gate lacked where/track (the most natural flight phrasings), so they web_searched instead of the keyless lookup. Added the cues; guarded (a cue with no flight-shaped token = null, parcel numbers can't match the designator shape). +1 test, 2022 green. (Last run's sweep was clean; this one found a real medium — the offline vein isn't fully dry.)"
+    },
+    {
+      "id": "datecalc-labeled-until",
+      "note": "After 5 clean sweeps I'd dismissed this as niche, but it's a real gap: a deterministic-tool question ('how many days until my birthday on <date>') returned null and fell to a slow agent guess because the label broke parseDate. Added parseTrailingDate: peel a trailing date off a labeled days-until phrase. +1 test, 2023 green. (So the vein wasn't fully dry — a labeled-input class the pure-value probes missed.)"
     }
   ],
   "audits": [
@@ -4765,6 +4778,9 @@
     },
     {
       "note": "CLEAN SWEEP (anvil DOWN). Probed 3 fresh surfaces: scores (resolveLeague/wantsNextGame/filterByTeam/pickNextGame — sound; no-match filter guarded by teamMatchedAny in both scores + next-game callers), air-quality (aqiCategory EPA breakpoints + uvRisk + pollenRisk grains/m3 thresholds — all correct; my initial 1-5 pollen probe was a wrong-unit assumption), flight parsers (last run). Also verified NO .only/.skip/xit in the suite (2022 tests all enabled, real coverage). No bug found this run — the offline vein is near-dry. Not shipping filler. Standing asks unchanged: confirm-to-act (owner decision) + anvil-live-e2e (start anvil) — both in STATUS.md."
+    },
+    {
+      "note": "anvil DOWN, agent cap exhausted. Re-probed runDateCalc with LABELED inputs (not just bare values) -> found days-until dropped labeled dates to null/slow-agent. Fixed. Lesson: the remaining offline bugs are in LABELED/phrased inputs, not the core value parsing (which is swept). confirm-to-act (owner) + anvil-live-e2e (anvil) still the gated levers."
     }
   ]
 }

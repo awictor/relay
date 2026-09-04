@@ -77,4 +77,12 @@ describe("runDateCalc", () => {
   it("a target that is today says so", () => {
     expect(runDateCalc("how many days until today", TODAY)).toMatch(/is today/);
   });
+  it("days until a LABELED date ('my birthday on X', 'the deadline is X') peels the label (datecalc-labeled-until)", () => {
+    // The label ('my birthday on', 'the deadline is') used to make parseDate fail -> null -> slow agent guess.
+    expect(runDateCalc("how many days until my birthday on 2026-12-25", TODAY)).toMatch(/December 25, 2026/);
+    expect(runDateCalc("how many days until the deadline is July 4 2027", TODAY)).toMatch(/July 4, 2027/);
+    expect(runDateCalc("days until my trip on 2026-12-01", TODAY)).toMatch(/December 1, 2026/);
+    // still null when there's genuinely no date to peel
+    expect(runDateCalc("how many days until something vague", TODAY)).toBeNull();
+  });
 });

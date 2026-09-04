@@ -107,6 +107,19 @@ export function parseDate(raw: string, today: Ymd, preferFuture = false): Ymd | 
   return null;
 }
 
+/** Peel a trailing date phrase off a labeled string ("my birthday on 2025-06-15", "the deadline July 4")
+ * and parse it, dropping the label (datecalc-labeled-until). Tries progressively shorter trailing suffixes
+ * (up to 4 words), stripping a leading "on/is/:" connector, until one parses. null if none does. */
+function parseTrailingDate(phrase: string, today: Ymd): Ymd | null {
+  const words = phrase.trim().split(/\s+/);
+  for (let take = Math.min(4, words.length); take >= 1; take--) {
+    const cand = words.slice(words.length - take).join(" ").replace(/^(?:on|is|for|by|the)\s+/i, "");
+    const d = parseDate(cand, today, true);
+    if (d) return d;
+  }
+  return null;
+}
+
 /** Human date like "Saturday, July 4, 2026". */
 export function formatDate(x: Ymd): string {
   const mon = MONTH_NAMES[x.m - 1] ?? String(x.m);
@@ -137,7 +150,10 @@ export function runDateCalc(raw: string, today: Ymd): string | null {
   // "how many days until X" / "days till X" / "how long until X" / "days until my birthday 2026-..."
   m = q.match(/(?:how\s+(?:many|long)\s+)?(?:days?|weeks?|time)\s+(?:until|till|to|before)\s+(.+)$/) || q.match(/(?:how\s+long\s+)(?:until|till|to)\s+(.+)$/);
   if (m) {
-    const target = parseDate(m[1]!, today, true); // preferFuture: a bare "July 4" means the next one
+    // Parse the target. If the whole phrase doesn't parse (a labeled date like "my birthday on 2025-06-15"
+    // or "the deadline is July 4"), peel a trailing date token off the end so the label is dropped
+    // (datecalc-labeled-until): otherwise a common phrasing fell through to null -> a slow agent guess.
+    const target = parseDate(m[1]!, today, true) ?? parseTrailingDate(m[1]!, today);
     if (!target) return null;
     const days = daysBetween(today, target);
     if (days === 0) return `${formatDate(target)} is today.`;
