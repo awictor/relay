@@ -902,6 +902,13 @@ describe("parseSnoozeCommand (snooze-automations)", () => {
     expect(parseSnoozeCommand("pause btc", NOW)).toEqual({ action: "pause", which: "btc" });
     expect(parseSnoozeCommand("snooze all", NOW)).toEqual({ action: "pause", which: "all" });
   });
+  it("strips a trailing courtesy from the target name (snooze-name-courtesy-tail)", () => {
+    expect(parseSnoozeCommand("snooze btc please", NOW)).toEqual({ action: "pause", which: "btc" });
+    expect(parseSnoozeCommand("pause my btc alert thanks", NOW)).toEqual({ action: "pause", which: "btc alert" });
+    expect(parseSnoozeCommand("resume btc please", NOW)).toEqual({ action: "resume", which: "btc" });
+    // a real duration is not a courtesy — still parsed
+    expect(parseSnoozeCommand("snooze btc for a week", NOW)).toEqual({ action: "pause", which: "btc", untilMs: NOW + 7 * DAY });
+  });
   it("parses resume / unpause / unmute", () => {
     expect(parseSnoozeCommand("resume btc", NOW)).toEqual({ action: "resume", which: "btc" });
     expect(parseSnoozeCommand("unpause my morning digest", NOW)).toEqual({ action: "resume", which: "morning digest" });

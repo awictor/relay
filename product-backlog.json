@@ -4911,6 +4911,10 @@
     {
       "item": "run-command-name-tail",
       "note": "parseRunCommand didn't strip a leading my/the or a trailing courtesy: 'run my morning digest' -> 'my morning digest', 'run btc please' -> 'btc please' — neither matches a saved recipe, so a re-run silently fails ('no recipe by that name'). Added stripTrailingCourtesy + leading my/the strip. Slot-arg form ('run flow with item=milk') preserved for parseRunWithArgs downstream. +1 test. 2131 green."
+    },
+    {
+      "item": "snooze-name-courtesy-tail",
+      "note": "parseSnoozeCommand leaked a trailing courtesy into the target: 'snooze btc please' -> which 'btc please' (matches no automation -> snooze silently no-ops). Added stripTrailingCourtesy at input top; real durations ('for a week', 'until monday', '2 days') unaffected. +1 test. 2132 green. Swept the other verbatim-name parsers this run - watchThat + digestCommand already courtesy-clean; snooze was the last leak."
     }
   ],
   "audits": [
@@ -5476,6 +5480,11 @@
       "lens": "recipe-run phrasing probe",
       "surfaced": "parseRunCommand leaked my/the + courtesy into the recipe name -> re-run of a saved recipe silently failed. Fixed. This completes the recipe CRUD (save/run/edit-via-alert). 21 vein fixes. The verbatim-name parsers (run/edit/forget) all needed the same my/the/courtesy tail cleanup that the create parsers got earlier.",
       "seeded": "(recipe run clean; owner levers remain)"
+    },
+    {
+      "lens": "verbatim-name-parser courtesy sweep",
+      "surfaced": "Swept snooze/watch-that/digest for the name-tail courtesy class. Only snooze leaked ('snooze btc please'->no-op) - fixed. The name-tail cleanup class (my/the/courtesy on a verbatim lookup name) is now swept across create+run+edit+snooze+forget. 22 vein fixes. Genuinely at the tail of the phrasing veins now.",
+      "seeded": "(name-tail class swept; owner levers remain)"
     }
   ]
 }

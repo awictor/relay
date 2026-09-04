@@ -167,7 +167,10 @@ export function splitScheduleCommand(text: string, now: number): { name: string;
  * indefinite pause (caller uses PAUSE_INDEFINITE). Duration grammar reuses min/hour/day/week.
  */
 export function parseSnoozeCommand(text: string, now: number): { action: "pause" | "resume"; which: string; untilMs?: number } | null {
-  const t = text.trim();
+  // Drop a trailing courtesy so "snooze btc please" targets "btc", not "btc please" — the latter matches
+  // no automation, so the snooze silently does nothing (snooze-name-courtesy-tail). A real "for a week"
+  // duration isn't a courtesy, so the duration/until parsing below is unaffected.
+  const t = stripTrailingCourtesy(text.trim());
   const resume = t.match(/^\s*(?:resume|unpause|unmute|un-?snooze)\s+(?:my\s+)?(.+?)\s*$/i);
   if (resume) { const which = cleanSnoozeName(resume[1]!); return which ? { action: "resume", which } : null; }
   const pause = t.match(/^\s*(?:snooze|pause|mute)\s+(?:my\s+)?(.+?)\s*$/i);
