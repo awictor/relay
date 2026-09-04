@@ -25,6 +25,7 @@ import { describeWeatherCondition } from "./lib/weather-alert.js";
 import { fetchFeedItems, resolveFeedSource, parseFollowCommand } from "./lib/feeds.js";
 import { readQrFromBytes } from "./lib/qr-decode.js";
 import { formatReply, formatReplyParts } from "./lib/format-reply.js";
+import { briefenReply } from "./lib/brief.js";
 import { friendlyError } from "./lib/failure.js";
 import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
 import { ScheduleStore, parseSchedule, parseSnoozeCommand, tzOffsetMin, quietUntilMs, PAUSE_INDEFINITE, isStickyAck } from "./lib/schedule.js";
@@ -256,6 +257,9 @@ import type { ResultItem } from "./lib/result-list.js";
 const pickListStore = new Map<number, ResultItem[]>();
 const scheduleRunner = makeScheduleRunner({
   store: schedules, llm, runAgent, send: sendMessage, formatReply, formatReplyParts, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor,
+  // Brief-mode on proactive sends (brief-mode-across-proactive): a scheduled/recipe fire honors the same
+  // "keep it brief" preference as an inbound reply. briefen no-ops on a bulleted digest, so digests stay intact.
+  replyVerbosity: (c) => profiles.get(c)?.verbosity, briefen: briefenReply,
   now: () => Date.now(), periodMs: SCHED_TICK_MS,
   log: (m) => console.log(m),
   recordTurn, // proactive fires count in the same Metrics as inbound turns (m8)

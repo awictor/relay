@@ -39,6 +39,13 @@ export interface ScheduleRunnerDeps {
   // the same untrimmed source so "more" can page the dropped tail. Optional; absent = trimmed-only (old
   // behavior — no tail recovery for these fires).
   formatReplyParts?: (text: string) => { shown: string; full: string };
+  // Answer-length preference (brief-mode-across-proactive): "brief" means the user asked for short answers,
+  // so a scheduled/recipe agent send is deterministically shortened to its first few sentences — the same
+  // treatment the inbound reply path gets (reply-style-apply-to-agent-length), for consistency. Only PROSE
+  // is trimmed (briefen no-ops on a bulleted digest/list); the untrimmed fullText is still cached so "more"
+  // pages the tail. Optional; absent/"default"/"detailed" -> no trim (prior behavior).
+  replyVerbosity?: (chatId: number) => "brief" | "detailed" | undefined;
+  briefen?: (text: string) => string;
   now: () => number;
   periodMs: number;                                       // 0 (or <=0) disables the interval
   setInterval?: (fn: () => void, ms: number) => unknown;  // injectable for tests
@@ -454,8 +461,14 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       // Trimmed body for the phone-sized send + the UNTRIMMED body so "more" can page the tail
       // (sched-reminder-tail-trim). Without formatReplyParts, fall back to trimmed-only (old behavior).
       const parts = deps.formatReplyParts?.(res.reply);
-      const body = parts?.shown ?? deps.formatReply(res.reply);
-      const fullBody = parts?.full ?? body;
+      const shownBody = parts?.shown ?? deps.formatReply(res.reply);
+      const fullBody = parts?.full ?? shownBody;
+      // Brief-mode length cap (brief-mode-across-proactive): a user who set "keep it brief" gets the same
+      // deterministic prose-shortening on a scheduled/recipe fire as on an inbound reply. Only a clean
+      // (non-degraded) prose body; briefen no-ops on a bulleted/structured body. fullBody stays untrimmed
+      // below so "more" still pages the rest — brief hides the tail, never loses it.
+      const brief = !res.degraded && deps.replyVerbosity?.(s.chatId) === "brief" && deps.briefen;
+      const body = brief ? deps.briefen!(shownBody) : shownBody;
       // A degraded reply (agent ran out of steps / no answer, DEV-0176) is a soft failure, not a real
       // proactive result. Marking the unprompted message as partial keeps a flaky daily from pushing a
       // failure string as if it were the briefing, and the ok:!degraded below keeps it out of the

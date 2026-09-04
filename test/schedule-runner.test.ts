@@ -1383,3 +1383,49 @@ describe("makeScheduleRunner — sticky reminders (sticky-acknowledged-reminders
     expect(after!.stickyFired ?? 0).toBe(0);     // budget untouched — the user saw nothing, so it doesn't count
   });
 });
+
+describe("makeScheduleRunner — brief-mode on proactive sends (brief-mode-across-proactive)", () => {
+  const long = "The market is up 2 percent today across the board. Tech led the gains this morning. Bonds slipped a little. Oil held steady near seventy dollars. Traders expect a quiet close.";
+  const briefen = (t: string) => t.split(/(?<=[.!?])\s+/).slice(0, 3).join(" "); // stand-in trimmer for the test
+
+  it("shortens a scheduled recipe agent reply when the chat is brief", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock, {
+      runAgent: async () => ({ reply: long }),
+      replyVerbosity: () => "brief",
+      briefen,
+    });
+    store.add(1, { kind: "once", task: "market update", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    const body = sent[0]!.text;
+    expect(body).toContain("The market is up 2 percent");
+    expect(body).not.toContain("quiet close"); // tail trimmed by brief-mode
+  });
+
+  it("does NOT shorten when the chat has no brief preference", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock, {
+      runAgent: async () => ({ reply: long }),
+      replyVerbosity: () => undefined,
+      briefen,
+    });
+    store.add(1, { kind: "once", task: "market update", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(sent[0]!.text).toContain("quiet close"); // full answer sent
+  });
+
+  it("does NOT brief-trim a degraded (partial) reply", async () => {
+    const clock = { t: NOW };
+    let calls = 0;
+    const { store, runner, sent } = harness(clock, {
+      runAgent: async () => { calls++; return { reply: long, degraded: true }; },
+      replyVerbosity: () => "brief",
+      briefen,
+    });
+    store.add(1, { kind: "once", task: "market update", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(calls).toBe(1);
+    expect(sent[0]!.text).toContain("quiet close");      // not shortened
+    expect(sent[0]!.text).toMatch(/Partial/);            // the partial banner is present
+  });
+});

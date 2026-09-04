@@ -3660,9 +3660,18 @@
       "title": "Apply brief-mode to proactive sends (digest/alert/scheduled) too, not just inbound replies",
       "impact": "low",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "reply-style-apply-to-agent-length only shortens the INBOUND agent reply path. A brief-mode user still gets full-length scheduled recipe / alert-fire / digest-member text, which is where daily verbosity is most annoying. Making proactive sends honor the same preference is the consistency follow-through.",
       "how": "Thread replyVerbosity (or the profile) into schedule-runner/alert-runner/digest-runner reply composition; call briefenReply on a member/recipe body when the chat is brief. Keep structured digest layout intact (briefenReply already no-ops on bullets). Offline tests per runner."
+    },
+    {
+      "id": "verbosity-emoji-on-proactive",
+      "title": "Honor the no-emoji preference on proactive sends + strip emoji deterministically",
+      "impact": "low",
+      "effort": "M",
+      "status": "todo",
+      "why": "reply-style-preference stores emoji:false and injects a soft hint, but like brief-mode the free-tier LLM often still emits emoji, and proactive sends dont even get the inbound trim path. A user who said no emoji still sees them in scheduled/alert/digest pings — a small but real annoyance for someone who explicitly asked.",
+      "how": "Add a pure stripEmoji(text) lib (unicode emoji ranges) + apply it on the inbound reply AND proactive sends when profile.emoji===false. Keep the labeled header punctuation. Offline tests: strips emoji only when the pref is set, leaves plain text + non-emoji symbols (°, %, $) intact."
     }
   ],
   "history": [
@@ -5293,6 +5302,10 @@
     {
       "item": "reply-style-apply-to-agent-length",
       "note": "Brief-mode now ACTUALLY shortens replies, not just hints the LLM. When profile.verbosity===brief, the main agent reply is deterministically capped to its first ~3 sentences / 400 chars via new src/lib/brief.ts (briefenReply) — a free-tier LLM ignores the soft context hint, so this is the felt follow-through. Only clean PROSE is trimmed: bulleted/numbered/JSON-rendered/table replies are left intact (would mangle layout), and a degraded/photo/doc reply is skipped. The FULL text stays cached so \"more\" pages the hidden tail — brief HIDES the rest, never loses it — and a once-per-chat \"say \\\"more\\\" for the full answer\" hint tells the user it is reachable. Wired replyVerbosity handler dep -> profiles.get().verbosity. +11 tests (8 unit incl. run-on hard-cap + multi-paragraph + list-safety, 3 handler integration incl. once-per-chat hint + default-off). 2335 green. call-tested: offline (pure prose transform + handler routing)."
+    },
+    {
+      "item": "brief-mode-across-proactive",
+      "note": "Brief-mode now extends to PROACTIVE sends, not just inbound replies. A scheduled/recipe agent fire honors the same profile.verbosity===brief preference via the new replyVerbosity+briefen deps on makeScheduleRunner -> briefenReply, so a daily recipe push is shortened the same way an inbound answer is. Only a clean (non-degraded) PROSE body is trimmed; briefenReply no-ops on a bulleted digest (digests stay intact) and a degraded partial is skipped. The untrimmed fullText is still cached (fullBody!==body) so \"more\" pages the tail. Wired in index. +3 tests (brief trims a recipe fire, default-off leaves it full, degraded not trimmed). 2338 green. call-tested: offline (runner tick + prose transform)."
     }
   ],
   "audits": [
