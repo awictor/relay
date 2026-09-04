@@ -66,7 +66,10 @@ export function parseListCommand(text: string): ListCommand | null {
  * user keep it as a .csv document. Requires an export verb + a "list"-shaped target so a normal "show my
  * list" (which parseListCommand handles) isn't hijacked. Exported for tests. */
 export function parseListExport(text: string): { list: string } | null {
-  const m = text.trim().match(/^\s*(?:export|download|send|save)\s+(?:me\s+)?(?:my|the)\s+(.+?)(?:\s+(?:as|to)\s+(?:a\s+)?(?:csv|spreadsheet|excel|file|sheet|\.csv|\.xlsx?))?\s*$/i);
+  // Drop a trailing courtesy so "export my grocery list please" targets "grocery", not "grocery list
+  // please" (a wrong/empty list) — parseListCommand got this fix; the export path had missed it
+  // (list-export-courtesy-tail).
+  const m = stripTrailingCourtesy(text.trim()).match(/^\s*(?:export|download|send|save)\s+(?:me\s+)?(?:my|the)\s+(.+?)(?:\s+(?:as|to)\s+(?:a\s+)?(?:csv|spreadsheet|excel|file|sheet|\.csv|\.xlsx?))?\s*$/i);
   if (!m) return null;
   const raw = m[1]!.trim();
   if (!/\blist\b/i.test(raw)) return null; // must target a named LIST, not "download my invoice"

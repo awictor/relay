@@ -29,6 +29,10 @@ describe("parseListExport (csv-export-tabular)", () => {
     expect(parseListExport("send me the packing list as a spreadsheet")).toEqual({ list: "packing" });
     expect(parseListExport("save my to-do list to a file")).toEqual({ list: "to-do" });
   });
+  it("strips a trailing courtesy so 'export my grocery list please' targets 'grocery' (list-export-courtesy-tail)", () => {
+    expect(parseListExport("export my grocery list please")).toEqual({ list: "grocery" });
+    expect(parseListExport("download my grocery list as csv thanks")).toEqual({ list: "grocery" });
+  });
   it("requires an export verb + a 'list' target (doesn't hijack show/download-other)", () => {
     expect(parseListExport("my grocery list")).toBeNull();        // a show, handled elsewhere
     expect(parseListExport("what's on my grocery list")).toBeNull();

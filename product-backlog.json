@@ -4915,6 +4915,10 @@
     {
       "item": "snooze-name-courtesy-tail",
       "note": "parseSnoozeCommand leaked a trailing courtesy into the target: 'snooze btc please' -> which 'btc please' (matches no automation -> snooze silently no-ops). Added stripTrailingCourtesy at input top; real durations ('for a week', 'until monday', '2 days') unaffected. +1 test. 2132 green. Swept the other verbatim-name parsers this run - watchThat + digestCommand already courtesy-clean; snooze was the last leak."
+    },
+    {
+      "item": "list-export-courtesy-tail",
+      "note": "parseListExport leaked a trailing courtesy: 'export my grocery list please' -> list 'grocery list please' (wrong/empty list exported). parseListCommand got this fix early; the EXPORT path had missed it. Added stripTrailingCourtesy; 'as csv'/'as a spreadsheet' tails still handled. +1 test. 2133 green."
     }
   ],
   "audits": [
@@ -5485,6 +5489,11 @@
       "lens": "verbatim-name-parser courtesy sweep",
       "surfaced": "Swept snooze/watch-that/digest for the name-tail courtesy class. Only snooze leaked ('snooze btc please'->no-op) - fixed. The name-tail cleanup class (my/the/courtesy on a verbatim lookup name) is now swept across create+run+edit+snooze+forget. 22 vein fixes. Genuinely at the tail of the phrasing veins now.",
       "seeded": "(name-tail class swept; owner levers remain)"
+    },
+    {
+      "lens": "list-export courtesy (tail sweep)",
+      "surfaced": "parseListExport was the last courtesy-tail leak among the list ops (command path was fixed early, export missed). Fixed. 23 vein fixes. The courtesy-tail + name-tail classes are now swept across the full CRUD surface (create/read/update/run/forget/export/snooze) for every store.",
+      "seeded": "(courtesy/name-tail fully swept; owner levers remain)"
     }
   ]
 }
