@@ -3591,6 +3591,15 @@
       "status": "done",
       "why": "Found while adding compound interest: min/max (+ any variadic fn) with 4+ args mis-parses — the 3rd/4th operands concatenate (max(1000,5,10,365) -> 10365, not 1000). A user calling max/min with 4+ values gets a silently WRONG answer. Real correctness bug in the shunting-yard arg-count/pop path.",
       "how": "Debug toRpn argc tracking + evalRpn popN for 4+ args (the comma-depth counter or the operand stack order). Add a min/max 4-5 arg test that currently fails, fix, then compound() can regain its optional times/yr arg. Reproduce: max(1000,5,10,365) should be 1000."
+    },
+    {
+      "id": "date-business-days",
+      "title": "Business-day date math: \"3 business days from now\", \"5 working days after Monday\"",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "datecalc does \"+N days\" but not BUSINESS days — \"when will it arrive, 3 business days from now?\" / \"deadline 5 working days out\" is a common deadline/shipping ask that currently counts calendar days (wrong, includes weekends).",
+      "how": "In datecalc.ts add a business-day branch: parse \"N business/working days from <date>\", step forward skipping Sat/Sun (holidays optional/out-of-scope). Reuse the existing date parse + weekday logic. Tests + /help. Note it excludes weekends only, not public holidays."
     }
   ],
   "history": [
@@ -5865,6 +5874,11 @@
       "lens": "new-user everyday-errand (inline; cap 200/200)",
       "surfaced": "Continued inventory after percent-change: text stats (word/char count, reverse, palindrome check) + compound/simple interest both have no tool. Case-convert is arguably LLM-trivial (skip). Seeded text-stats + interest-calc.",
       "seeded": "text-stats + interest-calc"
+    },
+    {
+      "lens": "new-user everyday-errand (inline; cap 200/200)",
+      "surfaced": "Everyday-tool surface now very thorough after 8 adds + the variadic-arity fix this session. Remaining candidates are nicher: business-day date math (\"3 business days from now\" — common for deadlines/delivery, genuinely useful), GPA average, recipe scaling. Seeded business-days as the last clearly-valuable one; flagging the keyless-everyday vein as thinning (nicher asks from here).",
+      "seeded": "date-business-days"
     }
   ]
 }
