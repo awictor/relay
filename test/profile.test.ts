@@ -285,6 +285,12 @@ describe("parseCityReply (first-location-capture)", () => {
     expect(parseCityReply("Denver UTC-7")).toEqual({ location: "Denver", tzOffsetMin: -420 }); // explicit wins
     expect(parseCityReply("Smallville")).toEqual({ location: "Smallville" }); // unknown -> no tz guess
   });
+  it("strips more lead-ins + a trailing courtesy so the stored place is clean (citreply-leadin-and-courtesy)", () => {
+    expect(parseCityReply("Denver please")).toEqual({ location: "Denver", tzOffsetMin: -420 });
+    expect(parseCityReply("the city is Paris")).toEqual({ location: "Paris", tzOffsetMin: 60 });
+    expect(parseCityReply("here in Chicago")).toEqual({ location: "Chicago", tzOffsetMin: -360 });
+    expect(parseCityReply("London thanks")).toEqual({ location: "London", tzOffsetMin: 0 });
+  });
   it("rejects a reply that clearly isn't a place (bail-out / fresh task / question)", () => {
     expect(parseCityReply("/help")).toBeNull();
     expect(parseCityReply("actually never mind show me the top HN story")).toBeNull();

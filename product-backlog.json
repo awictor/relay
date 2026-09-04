@@ -3416,9 +3416,18 @@
       "title": "Probe the other profile/preference setters + capture-reply paths for missed phrasings",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "setLocation had 4 missed setter phrasings (just fixed). Sibling setters may too: units preference ('use metric'/'switch to celsius'), the first-run captureLocation reply (parseCityReply - does 'it's Austin'/'Austin' both work?), profile clear. A missed setter on a first-run-critical path silently degrades weather/near-me.",
       "how": "probe parseCityReply (bare city, 'it's X', 'I'm in X'), any units-preference parse, profileClear phrasings; widen any that miss a natural phrasing + test. One surface per iteration."
+    },
+    {
+      "id": "probe-units-pref-and-clear",
+      "title": "Probe units-preference ('use metric'/'switch to celsius') + profile-clear phrasings",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "Location capture is now clean both ways. The sibling profile setters - a units preference ('use metric', 'switch to fahrenheit', 'show me celsius') and profile clear ('forget my location', 'reset my profile') - haven't been phrase-probed; a missed phrasing silently ignores the preference.",
+      "how": "Find where units-pref + profileClear are parsed (profile.ts / handler); probe natural phrasings; widen any that miss + test. Likely the last setter sub-surface."
     }
   ],
   "history": [
@@ -4857,6 +4866,10 @@
     {
       "item": "setlocation-more-phrasings",
       "note": "phrasing gap: parseSetLocation covered '/setlocation', 'set my location to', 'my location is', 'I'm in X' — but NOT the common 'i live in X', 'my city is X', 'update/change my location to X', 'set my home city to X'. These dead-ended location capture (->agent turn or which-city loop) despite being low-ambiguity setters. Added them to the explicit form + 'i live in' to the guarded soft form (task/state tail still falls through: 'i live in a rush'->null, 'i live in trouble'->null). +1 test. 2117 green."
+    },
+    {
+      "item": "citreply-leadin-and-courtesy",
+      "note": "parseCityReply (first-run 'which city?' reply) resolved tz correctly but stored a DIRTY location label: 'Denver please'->'Denver please', 'the city is Paris'->'...', 'here in Chicago'->'...' - the courtesy/filler got saved + echoed as the place name (tz was right via substring city-match, but the displayed home location read wrong). Widened the lead-in strip (the city is / here in / city:) + added a trailing-courtesy strip. 'Austin, TX' comma preserved. +1 test. 2118 green. First-run-critical path (this is the onboarding location capture)."
     }
   ],
   "audits": [
@@ -5378,6 +5391,11 @@
       "lens": "set-location phrasing probe",
       "surfaced": "parseSetLocation missed 'i live in'/'my city is'/'update/change my location'/'set my home city' - all natural, verb-anchored, low-ambiguity setters that fell through. Fixed with the place-shape guard preserved. 13 lib-phrasing fixes now. Location-set is a first-run-critical path (gates weather/near-me/directions), so a missed setter is higher-impact than most.",
       "seeded": "probe-remaining-setter-phrasings"
+    },
+    {
+      "lens": "setter/capture-reply phrasing probe",
+      "surfaced": "parseCityReply stored dirty labels ('Denver please') - fixed. parseSetLocation was fixed last run. The location-capture path (both the direct setter + the first-run reply) is now clean. 14 lib-phrasing fixes total. Units-preference parse + profileClear not yet probed - seeded.",
+      "seeded": "probe-units-pref-and-clear"
     }
   ]
 }

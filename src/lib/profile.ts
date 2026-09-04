@@ -2,6 +2,7 @@
 // ("weather", "sushi near me", "how far to X") resolve without re-stating the city every message.
 // Small persistent JSON store (atomic + corrupt-safe via safe-store), keyed by chatId. Free-infra.
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
+import { stripTrailingCourtesy } from "./text-clean.js";
 
 export interface Profile {
   chatId: number;
@@ -274,8 +275,11 @@ export function parseCityReply(text: string, atMs?: number): { location: string;
   if (/[?]/.test(s)) return null;                        // a question, not a place
   const tz = parseUtcOffset(s);
   if (tz !== null) s = s.replace(/[([]?\b(?:utc|gmt)\s*[+-]\s*\d{1,2}(?::?\d{2})?\b[)\]]?/i, "").trim();
-  // Strip a polite lead-in ("it's", "i'm in", "i live in") so "I'm in Austin" -> "Austin".
-  s = s.replace(/^\s*(?:it'?s\s+|i'?m\s+in\s+|i\s+live\s+in\s+|in\s+)/i, "").trim();
+  // Strip a polite lead-in ("it's", "i'm in", "i live in", "the city is", "here in") so "I'm in Austin" /
+  // "the city is Paris" / "here in Chicago" -> the bare place (citreply-leadin-and-courtesy).
+  s = s.replace(/^\s*(?:it'?s\s+|i'?m\s+in\s+|i\s+live\s+in\s+|the\s+(?:city|town)\s+is\s+|here\s+in\s+|in\s+|city\s*:?\s*)/i, "").trim();
+  // Strip a trailing courtesy ("Denver please" -> "Denver") so it isn't stored/echoed as part of the place.
+  s = stripTrailingCourtesy(s);
   s = s.replace(/["']|[.,;]\s*$/g, "").trim();
   if (!s || s.split(/\s+/).length > 5 || !/[a-z]/i.test(s)) return null; // a place is short, not a sentence
   // Reject if it reads like a fresh task rather than a place.
