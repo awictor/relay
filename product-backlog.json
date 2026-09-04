@@ -941,7 +941,7 @@
       "title": "confirm-to-act one-shot approval (the acting gap)",
       "impact": "high",
       "effort": "L",
-      "status": "in-progress",
+      "status": "done",
       "why": "Relay is read-only; Instinct core is DOING. A per-chat pending-action flow (agent previews the exact single gated click + target, executes only on explicit YES, expires else) turns reader into doer without abandoning safety. OWNER-GATED though — confirm scope before building. [OWNER SIGNED OFF: build default-OFF opt-in behind RELAY_CONFIRM_TO_ACT.] Core lib built; session-persistence + agent/handler wiring next.",
       "how": "Owner-gated: stash a proposed committing action; on YES run exactly that one click in the held anvil session; timeout/NO discards. Needs owner sign-off (it deliberately crosses the DANGEROUS guard)."
     },
@@ -3443,9 +3443,18 @@
       "title": "Wire confirm-to-act: session-persist across turns + flag-gated stash/preview + handler YES/NO",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The tested core (confirm-action.ts) is landed but inert. To make it work end-to-end: (1) the anvil session must survive the preview turn -> the YES turn (currently created+released within one runAgent); (2) the click/type dispatch, when RELAY_CONFIRM_TO_ACT is on + isDangerousAction, must stash a PendingAction + return the preview instead of the flat refuse; (3) the handler must route a YES/NO reply to execute-that-one-click / discard.",
       "how": "Add a PendingActionStore dep + a keepSession option to runAgent (or a resumable session handle) so the held anvil session persists; gate the click-dispatch branch on confirmToActEnabled(); in handler, before normal routing, if a pending action exists classify the reply (yes->run the exact stashed click in the held session + clear; no/expiry->discard+ack; other->fall through). Real tests with a mock backend asserting the click fires ONLY on yes. Keep default-OFF green."
+    },
+    {
+      "id": "confirm-to-act-followups",
+      "title": "confirm-to-act polish: /help mention, telegram inline YES/NO buttons, multi-step act chains",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "Core flow ships (text YES/NO, default-OFF). Natural follow-ups now that acting works: (1) document it in /help + README when enabled; (2) on Telegram, offer inline YES/NO buttons (not just text) via the existing callback infra; (3) consider a multi-step act chain (login->add-to-cart->checkout) each gated — but that's a bigger safety surface, owner-gate again. All optional refinements, not blockers.",
+      "how": "Small: add a /help line gated on the flag. Medium: reuse callbacks.ts to attach YES/NO inline buttons to the confirm prompt + route the tap through handleCallback to the same confirmAction. Large/owner-gated: multi-action chains. One per iteration; keep default-OFF."
     }
   ],
   "history": [
@@ -4972,6 +4981,10 @@
     {
       "item": "confirm-to-act-core",
       "note": "OWNER SIGNED OFF (AskUserQuestion: 'Build, default-OFF opt-in behind RELAY_CONFIRM_TO_ACT'). Built the tested pure CORE: src/lib/confirm-action.ts - confirmToActEnabled (flag, default OFF so behavior byte-identical), classifyConfirmReply (whole-message yes/no, 'yes please also add milk'->other so no false money-spend), formatConfirmPrompt (names exact click+host, blunt irreversible warning, TTL, YES/NO), PendingActionStore (in-memory per-chat, TTL-expiry-pruned, most-recent-wins, never persisted). +11 tests. .env.example documents the flag. 2145 green. NO behavior change yet - the click dispatch still hard-refuses until the wiring lands (next)."
+    },
+    {
+      "item": "confirm-to-act-wiring",
+      "note": "WIRED confirm-to-act end-to-end (default-OFF opt-in, owner-approved). agent.ts: tracks lastUrl on browse; on a dangerous CLICK with RELAY_CONFIRM_TO_ACT on + a live session, stashes {selector,label,url}, returns a formatConfirmPrompt reply + pendingAction (instead of the flat refuse). handler.ts: stashes pendingAction post-run; a whole-message YES on the next turn runs deps.confirmAction (fresh anvil session: navigate->click->release) + acks '✅ Done', NO discards, TTL-expiry drops, anything-else falls through. index.ts: confirmAction dep wired ONLY when the flag is on (else undefined -> flow inert, agent hard-refuses as before). +4 handler tests (yes-runs/no-discards/other-falls-through/inert-when-unwired) + LIVE-verified the execute path (flag on, real anvil navigate+click OK). 2149 green. call-tested: true. Default-OFF = byte-identical behavior; the read-only boundary is unchanged unless an operator opts in. This closes the acting-gap: Relay can now DO (Instinct's core), under explicit per-action consent, without abandoning safety."
     }
   ],
   "audits": [
@@ -5600,6 +5613,11 @@
       "lens": "confirm-to-act core (owner-approved)",
       "surfaced": "Owner approved the default-OFF opt-in scope, unblocking the one substantive coded feature. Landed the safe tested core (parse/format/store) with zero behavior change. The remaining piece is effort-M: hold the anvil session across the preview->YES turns + wire the click dispatch (flag-gated: stash+preview instead of refuse) + handler YES/NO routing. Seeded.",
       "seeded": "confirm-to-act-wiring"
+    },
+    {
+      "lens": "confirm-to-act shipped (the acting gap)",
+      "surfaced": "The one substantive coded feature left is DONE end-to-end + live-verified: opt-in one-shot approval turns Relay from reader into doer under per-action YES consent, default-OFF so the strict read-only boundary is untouched unless enabled. Both backlog items (core + wiring) closed. Relay now has a safe path to ACT - the core differentiator vs a pure read-only bot. No further owner-gated coded work outstanding.",
+      "seeded": "confirm-to-act-followups"
     }
   ]
 }

@@ -2053,3 +2053,54 @@ describe("read-it-later routing (read-it-later-capture)", () => {
     expect(toggles).toHaveLength(2); // toggle didn't fire
   });
 });
+
+describe("confirm-to-act (opt-in one-shot approval)", () => {
+  it("YES on a stashed pending click runs EXACTLY that click, then clears", async () => {
+    const clicks: Array<{ url: string; selector: string }> = [];
+    // turn 1: agent proposes a committing click (returns pendingAction). turn 2: user says YES.
+    const { handle, sent } = harness({
+      runAgentFn: async () => ({ reply: "⚠️ To do this I'd click \"Place order\"… YES/NO", steps: 2, tools: ["browse"], pendingAction: { selector: "#buy", label: "Place order", url: "https://shop.example.com/checkout" } }),
+      confirmAction: async (a) => { clicks.push(a); return { ok: true }; },
+    });
+    await handle(msg("order the blue one", 5));      // agent previews + stashes
+    expect(clicks).toHaveLength(0);                   // nothing clicked yet
+    await handle(msg("yes", 5));                      // approve
+    expect(clicks).toEqual([{ url: "https://shop.example.com/checkout", selector: "#buy" }]);
+    expect(sent.some((s) => /Done — clicked "Place order"/.test(s.text))).toBe(true);
+    // a second YES does nothing (already consumed)
+    await handle(msg("yes", 5));
+    expect(clicks).toHaveLength(1);
+  });
+  it("NO discards the pending click without running it", async () => {
+    const clicks: unknown[] = [];
+    const { handle, sent } = harness({
+      runAgentFn: async () => ({ reply: "…YES/NO", steps: 2, tools: [], pendingAction: { selector: "#pay", label: "Pay", url: "https://x.com" } }),
+      confirmAction: async (a) => { clicks.push(a); return { ok: true }; },
+    });
+    await handle(msg("pay it", 5));
+    await handle(msg("no", 5));
+    expect(clicks).toHaveLength(0);
+    expect(sent.some((s) => /cancelled/i.test(s.text))).toBe(true);
+  });
+  it("an unrelated reply while a click is pending falls through (routes normally, doesn't run the click)", async () => {
+    const clicks: unknown[] = [];
+    let agentCalls = 0;
+    const { handle } = harness({
+      runAgentFn: async () => { agentCalls++; return { reply: "…YES/NO", steps: 1, tools: [], pendingAction: { selector: "#buy", label: "Buy", url: "https://x.com" } }; },
+      confirmAction: async (a) => { clicks.push(a); return { ok: true }; },
+    });
+    await handle(msg("buy it", 5));       // stash (agentCalls=1)
+    await handle(msg("what's the weather", 5)); // unrelated -> routes to agent (agentCalls=2), no click
+    expect(clicks).toHaveLength(0);
+    expect(agentCalls).toBe(2);
+  });
+  it("is inert when confirmAction isn't wired (default OFF): a pendingAction is ignored, YES does nothing special", async () => {
+    const { handle, sent } = harness({
+      runAgentFn: async () => ({ reply: "refused normally", steps: 1, tools: [], pendingAction: { selector: "#buy", label: "Buy", url: "https://x.com" } }),
+      // no confirmAction dep
+    });
+    await handle(msg("buy it", 5));
+    await handle(msg("yes", 5)); // just routes to the agent as a fresh task — no "Done — clicked" ack
+    expect(sent.some((s) => /Done — clicked/.test(s.text))).toBe(false);
+  });
+});

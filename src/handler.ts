@@ -18,6 +18,7 @@ import { needsLocationContext } from "./lib/profile.js";
 import { isBackgroundErrand, stripDispatchPhrasing, BACKGROUND_MAX_STEPS } from "./lib/background.js";
 import { isAnswerRecall, relativeAge } from "./lib/answer-log.js";
 import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./lib/recipes.js";
+import { classifyConfirmReply, formatConfirmPrompt, CONFIRM_TTL_MS } from "./lib/confirm-action.js";
 import { getTemplate, templateCatalog, templateButtons } from "./lib/templates.js";
 import { photoNeedsAgent, photoIsQrScan } from "./lib/photo-intent.js";
 import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, tryButtons as buildTryButtons, actButtons, installButtons, TRY_EXAMPLES, type InlineKeyboard } from "./lib/callbacks.js";
@@ -351,7 +352,11 @@ export interface HandlerDeps {
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (h: unknown) => void;
   // Optional override so tests don't hit the real agent loop.
-  runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; docName?: string; degraded?: boolean }>;
+  runAgentFn?: (userText: string, deps: AgentDeps, history: LLMMessage[]) => Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; docName?: string; degraded?: boolean; pendingAction?: { selector: string; label: string; url: string } }>;
+  // Confirm-to-act (confirm-to-act, opt-in): execute a single user-approved committing click. Given the
+  // stashed {url, selector}, open a fresh anvil session, navigate, click, release. Returns whether it ran.
+  // Optional; absent -> the flow is inert (the agent still hard-refuses). Bound to no chat (stateless).
+  confirmAction?: (a: { url: string; selector: string }) => Promise<{ ok: boolean; error?: string }>;
   // Background errands (async-background-errands): when true, a large "get back to me" task is ACKed
   // immediately and run DETACHED (off the per-chat chain) with a raised step budget, then delivered
   // unprompted — instead of blocking the reply and truncating at the normal step cap. Absent/false ->
@@ -428,6 +433,9 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   // Last answer's TASK text per chat (tap-to-watch-on-answers), so a "🔁 Every morning" / "🔔 Watch this"
   // button tap can turn it into a schedule/alert without the user retyping. Overwritten each clean answer.
   const lastTask = new Map<number, string>();
+  // Confirm-to-act (opt-in): per-chat stashed committing click awaiting a YES. In-memory + TTL-checked;
+  // never persisted (a committing action must not survive a restart to fire later).
+  const confirmPending = new Map<number, { selector: string; label: string; url: string; createdMs: number }>();
   const handle = ((msg: InboundMessage): Promise<void> => {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -784,6 +792,31 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     if (!msg.text.trim()) {
       await deps.sendMessage(msg.chatId, "Send me a task in words — e.g. \"top HN story\" or \"weather in Paris\".");
       return;
+    }
+
+    // Confirm-to-act (opt-in, default OFF): a committing click is stashed awaiting the user's decision.
+    // A whole-message YES runs EXACTLY that one click (fresh anvil session), NO/expiry discards, anything
+    // else falls through (routes normally) leaving the prompt to time out. Checked FIRST so a "yes"/"no"
+    // answers the pending action rather than being read as a fresh task.
+    if (deps.confirmAction) {
+      const pend = confirmPending.get(msg.chatId);
+      if (pend && deps.now() - pend.createdMs > CONFIRM_TTL_MS) { confirmPending.delete(msg.chatId); } // expired -> drop, fall through
+      else if (pend) {
+        const decision = classifyConfirmReply(msg.text);
+        if (decision === "yes") {
+          confirmPending.delete(msg.chatId);
+          const r = await deps.confirmAction({ url: pend.url, selector: pend.selector });
+          const what = pend.label ? `"${pend.label}"` : "that";
+          await deps.sendMessage(msg.chatId, r.ok ? `✅ Done — clicked ${what}.` : `Couldn't complete it: ${r.error ?? "the click failed"}. The page may have changed — try again.`);
+          return;
+        }
+        if (decision === "no") {
+          confirmPending.delete(msg.chatId);
+          await deps.sendMessage(msg.chatId, "Okay — cancelled, didn't do anything.");
+          return;
+        }
+        // "other": leave the pending action in place (it'll time out) and route this message normally.
+      }
     }
 
     // First-run location capture (first-location-capture): if we just asked this chat "which city?",
@@ -1812,8 +1845,11 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         ? `The user is replying to this message I just sent them: "${cachedPing.full.slice(0, 600)}". Answer their follow-up in that context.`
         : "";
       const context = [profileCtx, pingCtx].filter(Boolean).join(" ") || undefined;
-      const { reply, steps, tools, photo, doc, docName, degraded } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, weatherCoords: deps.weatherCoords?.(msg.chatId), weatherUnits: deps.weatherUnits?.(msg.chatId), ...(deps.recallAnswers ? { recall: (q: string) => deps.recallAnswers!(msg.chatId, q) } : {}), ...(deps.resolveContact ? { resolveContact: (n: string) => deps.resolveContact!(msg.chatId, n) } : {}) }, history);
+      const { reply, steps, tools, photo, doc, docName, degraded, pendingAction } = await runIt(msg.text, { llm: deps.llm, context, nowMs: deps.now(), tzOffsetMin: deps.chatTzOffsetMin?.(msg.chatId) ?? 0, weatherCoords: deps.weatherCoords?.(msg.chatId), weatherUnits: deps.weatherUnits?.(msg.chatId), ...(deps.recallAnswers ? { recall: (q: string) => deps.recallAnswers!(msg.chatId, q) } : {}), ...(deps.resolveContact ? { resolveContact: (n: string) => deps.resolveContact!(msg.chatId, n) } : {}) }, history);
       clearProgress();
+      // Confirm-to-act (opt-in): the agent proposed a committing click + returned it. Stash it so a YES on
+      // the NEXT message runs exactly that click. Only when confirmAction is wired (else the flow is inert).
+      if (pendingAction && deps.confirmAction) confirmPending.set(msg.chatId, { ...pendingAction, createdMs: deps.now() });
       // A degraded reply is a soft-failure fallback (agent ran out of steps / produced no answer,
       // DEV-0176), not a real answer. Prepend a one-line hint so a live-bot user knows the result is
       // partial, and count the turn as NOT-ok so the success metric isn't inflated by soft failures

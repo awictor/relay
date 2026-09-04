@@ -4,7 +4,8 @@
 
 import { selectChannel, type Channel } from "./channel.js";
 import { downloadFile, registerCommands, type InboundMessage } from "./telegram.js";
-import { anvilLive } from "./anvil.js";
+import { anvilLive, createSession, navigate, click, releaseSession } from "./anvil.js";
+import { confirmToActEnabled } from "./lib/confirm-action.js";
 import { GeminiClient, ClaudeClient, resolveProvider } from "./llm.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
 import { checkRateLimit, redactText } from "./safety.js";
@@ -557,6 +558,21 @@ const handle = createHandler({
   // save a bare "which city?" reply (+re-stamp recurring reminders if a tz came with it).
   hasLocation: (chatId) => { const p = profiles.get(chatId); return !!(p?.location || profiles.freshCoords(chatId, Date.now())); },
   saveCoords: (chatId, lat, lng) => { profiles.set(chatId, { lat, lng, coordsAt: Date.now() }); return profiles.lastSaveOk(); },
+  // Confirm-to-act (opt-in, RELAY_CONFIRM_TO_ACT): execute the ONE user-approved committing click in a
+  // fresh anvil session (navigate to the exact page, click the exact selector, release). Only wired when
+  // the flag is on — else undefined, so the whole flow stays inert + the agent hard-refuses as before.
+  ...(confirmToActEnabled() ? {
+    confirmAction: async ({ url, selector }: { url: string; selector: string }) => {
+      let sid: string | undefined;
+      try {
+        sid = (await createSession()).id;
+        await navigate(sid, url);
+        await click(sid, selector);
+        return { ok: true };
+      } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+      finally { if (sid) await releaseSession(sid).catch(() => {}); }
+    },
+  } : {}),
   weatherCoords: (chatId) => profiles.freshCoords(chatId, Date.now()),
   weatherUnits: (chatId) => profiles.get(chatId)?.units,
   captureLocation: (chatId, text) => {

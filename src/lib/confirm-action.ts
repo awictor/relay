@@ -13,6 +13,10 @@ export function confirmToActEnabled(raw: string | undefined = process.env.RELAY_
   return /^(1|true|yes|on)$/i.test(String(raw ?? "").trim());
 }
 
+/** How long a stashed pending action stays confirmable before it expires (2 min). A committing action a
+ * user didn't confirm promptly must not fire on a stale, forgotten YES. */
+export const CONFIRM_TTL_MS = 120_000;
+
 /** A stashed pending committing action: the exact click to run on YES + human context for the preview. */
 export interface PendingAction {
   chatId: number;

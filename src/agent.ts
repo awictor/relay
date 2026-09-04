@@ -11,6 +11,7 @@ import * as anvil from "./anvil.js";
 import { isUrlSafe, safeFetch } from "./lib/url-validator.js";
 import { intEnv } from "./lib/env.js";
 import { isDangerousAction } from "./safety.js";
+import { confirmToActEnabled, formatConfirmPrompt, CONFIRM_TTL_MS } from "./lib/confirm-action.js";
 import { fetchYouTubeTranscript } from "./lib/youtube.js";
 import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
@@ -845,7 +846,7 @@ export async function runAgent(
   userText: string,
   deps: AgentDeps,
   history: LLMMessage[] = []
-): Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; docName?: string; degraded?: boolean }> {
+): Promise<{ reply: string; steps: number; tools: string[]; photo?: Uint8Array; doc?: Uint8Array; docName?: string; degraded?: boolean; pendingAction?: { selector: string; label: string; url: string } }> {
   const backend: BrowserBackend = deps.backend ?? {
     ...defaultBackend,
     ...(deps.scrapeFn ? { scrape: deps.scrapeFn } : {}),
@@ -869,6 +870,8 @@ export async function runAgent(
   ];
 
   let sessionId: string | null = null; // persistent browse session, if opened
+  let lastUrl = ""; // the most recently navigated page — the target a confirm-to-act click acts on
+  let pendingAction: { selector: string; label: string; url: string } | null = null; // confirm-to-act stash
   const push = (name: string, content: string) => messages.push({ role: "tool", name, content });
 
   try {
@@ -978,6 +981,7 @@ export async function runAgent(
         try {
           if (!sessionId) sessionId = (await backend.createSession()).id;
           const r = await backend.navigate(sessionId, url);
+          lastUrl = r.url || url; // track for a confirm-to-act preview ("click Buy on <host>")
           push("browse", `Opened. TITLE: ${r.title || r.url}. Use read to see its text, or click/type to interact.`);
         } catch (e) {
           push("browse", `ERROR opening ${url}: ${e instanceof Error ? e.message : String(e)}`);
@@ -994,6 +998,16 @@ export async function runAgent(
         // The committing verb still gets caught on the click/submit whose label or selector says so.
         const target = String(call.args.label ?? "") + " " + selector;
         if (isDangerousAction(target)) {
+          // Confirm-to-act (opt-in, default OFF): instead of the flat refusal, stash the exact click +
+          // preview it, and end this run asking the user for a one-shot YES. The handler resumes on YES to
+          // run exactly this click. Only a click on a live page qualifies (a session + url must exist).
+          if (confirmToActEnabled() && call.name === "click" && sessionId && lastUrl) {
+            const label = String(call.args.label ?? "").trim();
+            pendingAction = { selector, label, url: lastUrl };
+            finalReply = formatConfirmPrompt({ label, url: lastUrl }, CONFIRM_TTL_MS);
+            usedSteps = step;
+            break;
+          }
           push(call.name, `REFUSED: that looks like a destructive/committing action ("${target.trim()}"). I won't do that autonomously — tell the user.`);
           continue;
         }
@@ -1672,7 +1686,7 @@ export async function runAgent(
       push(call.name, `ERROR: unknown tool "${call.name}".`);
     }
 
-    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed, photo, doc, docName, degraded };
+    if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed, photo, doc, docName, degraded, ...(pendingAction ? { pendingAction } : {}) };
 
     // Ran out of the step budget without a final answer — a soft failure. Ask for a best-effort reply;
     // whether or not the model produces text, this path is degraded (never a clean value for an alert).
