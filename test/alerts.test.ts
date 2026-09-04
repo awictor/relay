@@ -482,6 +482,19 @@ describe("feed-watch (new-item-feed-watch)", () => {
     // Same long text still keys identically (dedup of a genuine repeat still works).
     expect(feedItemKey(a)).toBe(feedItemKey("  " + a + "  "));
   });
+  it("keys a listing item by its URL when present, killing flap/dup/miss (watch-structured-new-items)", () => {
+    // reworded title, SAME url -> same key (no false "new" on rephrase)
+    expect(feedItemKey("Senior React Dev at Acme https://jobs.co/j/123"))
+      .toBe(feedItemKey("React Developer (Senior) — Acme https://jobs.co/j/123"));
+    // same title, DIFFERENT url -> distinct keys (two real listings not collapsed)
+    expect(feedItemKey("Remote React Role https://a.co/1"))
+      .not.toBe(feedItemKey("Remote React Role https://a.co/2"));
+    // volatile tracking params + trailing slash + case don't change identity
+    expect(feedItemKey("Job https://Jobs.co/j/9/?utm_source=x&ref=y"))
+      .toBe(feedItemKey("job https://jobs.co/j/9"));
+    // no URL -> unchanged title-normalization behavior (RSS/HN titles still key by text)
+    expect(feedItemKey("• Senior React Dev — Acme!")).toBe(feedItemKey("senior react dev acme"));
+  });
   it("store records + caps the seen-set, dropping oldest", () => {
     const s = new AlertStore({ file: tmpFile() });
     s.add(1, { name: "jobs", task: "roles", feed: true }, NOW);

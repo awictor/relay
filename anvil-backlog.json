@@ -185,7 +185,7 @@
       "title": "Watch a listing for NEW structured rows (jobs/listings), not a noisy whole-page text diff",
       "impact": "high",
       "effort": "L",
-      "status": "todo",
+      "status": "done",
       "why": "A 'watch jobs: remote react roles for new listings' currently diffs page text, so it flaps on ads/timestamps/reordering + can miss/duplicate real new items. Detecting new items by their extracted rows (title+link) is what a user actually means by 'new listings' and is the competitor's core alerting.",
       "how": "In the list-watch path, when the source is a web listing (not an RSS/HN/reddit feed), gather via scrape_pages/scroll + extract_list to a row set keyed by a stable field (link/title), diff row-keys against the stored baseline, ping only genuinely-new rows. Reuse extractListResult + the existing new-item alert plumbing (feeds.ts/alerts.ts). Offline unit test the row-diff; live e2e on a real listing across two checks."
     },
@@ -197,6 +197,15 @@
       "status": "todo",
       "why": "The interactive tools (browse->site_search->set_field->read_list) do a rich errand once, but a user cant SAVE 'filter the jobs board to remote react and list new ones' as a /run recipe or a morning digest member — so the depth only helps ad-hoc, not on the retention flywheel.",
       "how": "Confirm a multi-tool interactive task survives the recipe save/replay path (recipes run via runAgent, which now has the tools) + the chain runner; add a test that a saved recipe whose task is an interactive browse+filter re-runs cleanly. Mostly verification + any gaps found; document in /help."
+    },
+    {
+      "id": "watch-extract-row-set",
+      "title": "List-watch gathers rows via scrape_pages/extract_list (not just per-reply-line keys)",
+      "impact": "medium",
+      "effort": "L",
+      "status": "todo",
+      "why": "feedItemKey now dedups list items by URL (flap fixed), but the item SET still comes from extractListItems parsing the agents text reply — so a listing that needs pagination/scroll to show all rows, or whose rows arent clean bullet lines, under-detects. Gathering the row set with the browse-depth tools (scrape_pages+extract_list) would make new-item detection as deep as the read path.",
+      "how": "In the feed/list-watch path, when the source is a web listing URL, optionally gather via scrapePaged+extractListResult to a {title,url} row set + diff by the URL key (reuse feedItemKeys URL logic). Gate so RSS/HN/reddit feeds keep the direct fetch. Live e2e across two checks on a real listing; assert only genuinely-new rows ping."
     }
   ],
   "history": [
@@ -279,6 +288,10 @@
     {
       "item": "agent-report-current-url",
       "note": "where_am_i tool: reports the current browse sessions title + URL without reading the whole page, for \"what page are you on?\" / \"whats the link?\" mid-thread orientation. Reuses readCurrent (returns url) but pushes only title+url, no page text. Needs a prior browse (honest error else). SYSTEM_PROMPT updated. +2 dispatch tests (reports via readCurrent; errors before browse). LIVE e2e: navigate example.com -> reports {Example Domain, https://example.com/}. 2241 green. call-tested: TRUE."
+    },
+    {
+      "item": "watch-structured-new-items",
+      "note": "Core shipped (the high-leverage slice): feedItemKey now keys a listing/job item by its URL when the line carries one, instead of the reworded title. Kills the three list-watch failure modes: a reworded title with the same URL no longer reads as new (FLAP), two same-titled items at different URLs stay distinct (DUP-swallow), a re-titled same-URL item stays seen (phantom-new). URL normalized (drop scheme/trailing-slash/#frag + volatile utm_/ref/fbclid/gclid params) so campaign-tag drift doesnt false-fire. No-URL items (RSS/HN titles) keep the exact prior title-normalization behavior -> zero regression. Pure change to the shared helper used by both the agent-feed + follow-feed watch paths. +1 test (flap/dup/tracking/fallback). 2242 green. call-tested: n/a (pure lib, offline-verified via probe+tests). Remainder (gather via scrape_pages/extract_list for the row SET, not just per-line keys) reseeded as watch-extract-row-set."
     }
   ],
   "probes": [

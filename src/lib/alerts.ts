@@ -133,9 +133,35 @@ function shortHash(s: string): string {
  * long titles sharing a 120-char prefix (verbose news/marketplace boilerplate) would otherwise collide, so
  * the second is treated as already-seen and a genuinely-new item silently never pings. Exported for tests. */
 export function feedItemKey(item: string): string {
+  // Prefer a stable URL when the item line carries one (watch-structured-new-items): a listing/job/product
+  // row is "Title — desc https://site/item/123", and the URL is the item's identity. Keying on it means a
+  // reworded title doesn't read as new (kills flap), two same-titled items at different URLs stay distinct
+  // (kills dup-swallow), and a re-titled same-URL item is still "seen" (kills phantom-new). Normalize the
+  // URL (drop scheme, trailing slash, common tracking params) so cosmetic query drift doesn't false-fire.
+  const url = firstFeedUrl(item);
+  if (url) return "u:" + url;
   const norm = normalizeForCompare(item);
   if (norm.length <= 120) return norm;
   return norm.slice(0, 120) + "#" + shortHash(norm);
+}
+
+// Extract + normalize the first http(s) URL in a feed item for use as its identity key. Strips the scheme,
+// a trailing slash, a #fragment, and common volatile tracking params (utm_*, ref, fbclid, gclid) so the
+// same listing linked with different campaign tags keys the same. Returns "" when there's no URL.
+function firstFeedUrl(item: string): string {
+  const m = item.match(/https?:\/\/[^\s)>\]"']+/i);
+  if (!m) return "";
+  let u = m[0].replace(/[.,;:]+$/, ""); // trim trailing sentence punctuation
+  try {
+    const parsed = new URL(u);
+    for (const p of [...parsed.searchParams.keys()]) {
+      if (/^(utm_|ref$|ref_|fbclid$|gclid$|mc_)/i.test(p)) parsed.searchParams.delete(p);
+    }
+    u = parsed.host + parsed.pathname.replace(/\/$/, "") + (parsed.searchParams.toString() ? "?" + parsed.searchParams.toString() : "");
+  } catch {
+    u = u.replace(/^https?:\/\//i, "").replace(/#.*$/, "").replace(/\/$/, "");
+  }
+  return u.toLowerCase();
 }
 
 // Out-of-stock language (checked first — takes precedence over any affirmative on the same page).
