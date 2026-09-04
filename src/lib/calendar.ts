@@ -37,6 +37,26 @@ function icsText(s: string): string {
   return String(s).replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
 }
 
+/** Fold a content line to RFC-5545's 75-OCTET limit (ics-line-fold): a longer SUMMARY/DESCRIPTION/LOCATION
+ * emits one >75-char line, which strict importers (Apple Calendar, some Outlook) reject or truncate — so a
+ * long event silently fails to import. Continuation lines start with a single space; we measure BYTES
+ * (UTF-8) so a multi-byte char isn't split at a boundary that overflows an octet count. */
+function foldIcsLine(line: string): string {
+  const enc = new TextEncoder();
+  if (enc.encode(line).length <= 75) return line;
+  const out: string[] = [];
+  let cur = "", curBytes = 0, first = true;
+  for (const ch of line) {          // iterate by code point, not char, so a surrogate pair stays intact
+    const chBytes = enc.encode(ch).length;
+    // First line caps at 75; continuation lines carry a leading space, so their content caps at 74.
+    const cap = first ? 75 : 74;
+    if (curBytes + chBytes > cap) { out.push(first ? cur : " " + cur); first = false; cur = ""; curBytes = 0; }
+    cur += ch; curBytes += chBytes;
+  }
+  if (cur) out.push(first ? cur : " " + cur);
+  return out.join("\r\n");
+}
+
 /** Build the raw .ics (VCALENDAR/VEVENT) text for an event. `nowMs` stamps DTSTAMP (injected so it's
  * deterministic). All-day (startDate) uses VALUE=DATE; a timed event uses a UTC DTSTART/DTEND. */
 export function buildIcs(ev: CalEvent, nowMs: number): string {
@@ -52,7 +72,9 @@ export function buildIcs(ev: CalEvent, nowMs: number): string {
   if (ev.location) lines.push(`LOCATION:${icsText(ev.location)}`);
   if (ev.description) lines.push(`DESCRIPTION:${icsText(ev.description)}`);
   lines.push("END:VEVENT", "END:VCALENDAR");
-  return lines.join("\r\n");
+  // Fold every content line to the 75-octet cap (ics-line-fold) so a long summary/description imports
+  // cleanly into strict calendar apps instead of being rejected/truncated.
+  return lines.map(foldIcsLine).join("\r\n");
 }
 
 /** A Google Calendar "create event" template URL — the one-tap add on mobile/desktop. Dates use the

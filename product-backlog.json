@@ -3131,6 +3131,15 @@
       "status": "done",
       "why": "resolveWhen picked the wrong day for two common phrasings: 'day after tomorrow' matched the \\btomorrow\\b branch -> [1] (a day early), and 'next friday' only bumped +7 when it collided with today, so mid-week it returned THIS Friday not next week's. A weather answer for the wrong day reads as confidently correct.",
       "how": "Check 'day after tomorrow' (+2) BEFORE the tomorrow branch; make 'next <weekday>' always add a week past the soonest occurrence (not only on a today-collision). Both guarded by maxDays / handled out-of-window by formatWeatherWhen's 'beyond my N-day forecast' note."
+    },
+    {
+      "id": "ics-line-fold",
+      "title": "Long calendar events produced an unfoldable .ics that strict apps reject",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "buildIcs emitted content lines unbounded, but RFC-5545 caps a line at 75 octets; a long SUMMARY/DESCRIPTION/LOCATION (e.g. 'add this event with its details to my calendar') made a 200-char line that Apple Calendar + some Outlook importers reject or truncate — the add-to-calendar artifact silently failed to import.",
+      "how": "Added foldIcsLine: fold each content line at 75 UTF-8 octets with a leading-space continuation (measured by byte, iterating code points so a multi-byte char isn't split), applied to every line in buildIcs. Reversible (unfold recovers the value); short lines untouched."
     }
   ],
   "history": [
@@ -4397,6 +4406,10 @@
     {
       "id": "weather-day-resolution-bugs",
       "note": "Self-audit (anvil DOWN, both todos gated): probed weather day/hour/geo resolution. resolveHourWindow + pickCandidate clean. resolveWhen had two wrong-day bugs: 'day after tomorrow' -> [1] (tomorrow, matched \\btomorrow\\b first) and 'next friday' mid-week -> this Friday not next week's (only bumped +7 on a today-collision). Fixed both; updated the test that encoded the old 'next friday'=+4 behavior. +1 test net, 2019 green."
+    },
+    {
+      "id": "ics-line-fold",
+      "note": "Self-audit (anvil DOWN, both todos gated): probed calendar.ts. icsStamp/normalizeIsoDate/gcalLink (all-day exclusive-end) clean. Found buildIcs never folded lines -> a long summary/description made an >75-octet line that strict calendar apps reject/truncate (ics-line-fold). Added RFC-5545 folding (75-octet, byte-measured, code-point-safe, leading-space continuation, reversible). +2 tests, 2021 green."
     }
   ],
   "audits": [
@@ -4723,6 +4736,9 @@
     },
     {
       "note": "anvil DOWN -> both todos still gated (confirm-to-act owner, anvil-live-e2e anvil). Self-audit found + fixed two real weather-day resolution bugs (day-after-tomorrow, next-weekday) — wrong-day forecasts, a medium. Fresh-surface sweeps keep yielding genuine mediums; the two high-value levers remain owner/anvil-gated."
+    },
+    {
+      "note": "anvil DOWN -> both todos still gated. Self-audit found + fixed ics-line-fold (long calendar events failed to import into strict apps) — a genuine medium. Fresh-surface sweeps still yielding real mediums; confirm-to-act (owner) + anvil-live-e2e (anvil) remain the two gated high-value levers."
     }
   ]
 }

@@ -24,6 +24,21 @@ describe("buildIcs (ics-calendar-export)", () => {
     expect(ics).toContain("SUMMARY:A\\, B\\; C");
     expect(ics).toContain("DESCRIPTION:line1\\nline2");
   });
+  it("folds long content lines to the 75-octet RFC-5545 limit so strict apps import them (ics-line-fold)", () => {
+    const ics = buildIcs({ title: "T".repeat(200), startDate: "2024-07-04", description: "D".repeat(120) }, NOW);
+    // No emitted line exceeds 75 bytes.
+    for (const line of ics.split("\r\n")) expect(Buffer.byteLength(line, "utf8"), line.slice(0, 40)).toBeLessThanOrEqual(75);
+    // Continuation lines start with a single space.
+    expect(ics.split("\r\n").some((l) => l.startsWith(" "))).toBe(true);
+    // Unfolding (drop CRLF+space) recovers the original values — folding is reversible, not lossy.
+    const unfolded = ics.replace(/\r\n /g, "");
+    expect(unfolded).toContain("SUMMARY:" + "T".repeat(200));
+    expect(unfolded).toContain("DESCRIPTION:" + "D".repeat(120));
+  });
+  it("leaves a short line unfolded", () => {
+    const ics = buildIcs({ title: "Call", startMs: START }, NOW);
+    expect(ics).toContain("SUMMARY:Call"); // no continuation on a short summary
+  });
 });
 
 describe("gcalLink", () => {
