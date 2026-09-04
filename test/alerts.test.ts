@@ -44,6 +44,24 @@ describe("parseAlertCommand", () => {
   });
 });
 
+describe("parseAlertEdit", () => {
+  it("retunes an alert's condition, extracting a clean name", () => {
+    expect(parseAlertEdit("change btc alert to below 40000")).toEqual({ name: "btc alert", condition: { op: "below", operand: 40000 } });
+    expect(parseAlertEdit("set gold to above 2500")).toEqual({ name: "gold", condition: { op: "above", operand: 2500 } });
+    expect(parseAlertEdit("update btc alert below 45k")).toEqual({ name: "btc alert", condition: { op: "below", operand: 45000 } });
+  });
+  it("doesn't bleed a connector/filler word into the name (alert-edit-name-connector-bleed)", () => {
+    // Regression: "edit btc to fire above 60k" -> name "btc to"; "make btc fire when it drops ..." -> "btc fire when it".
+    expect(parseAlertEdit("edit btc to fire above 60k")).toEqual({ name: "btc", condition: { op: "above", operand: 60000 } });
+    expect(parseAlertEdit("make btc fire when it drops below 40000")).toEqual({ name: "btc", condition: { op: "below", operand: 40000 } });
+    expect(parseAlertEdit("change my btc alert to below 40k")).toEqual({ name: "btc alert", condition: { op: "below", operand: 40000 } }); // 'my' stripped
+  });
+  it("null when it isn't an edit command", () => {
+    expect(parseAlertEdit("what's the price of btc")).toBeNull();
+    expect(parseAlertEdit("watch btc: price of bitcoin below 50000")).toBeNull(); // a create, not an edit
+  });
+});
+
 describe("priceVerdict (good-deal-price-verdict)", () => {
   const series = (vals: number[]) => vals.map((v, i) => ({ t: i * 86_400_000, v }));
   it("null when there isn't enough history to judge", () => {

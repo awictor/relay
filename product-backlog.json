@@ -4903,6 +4903,10 @@
     {
       "item": "forget-place-contact-natural",
       "note": "phrasing gap: parseForgetPlace required a trailing 'place/address' noun ('forget my gym'->null), parseForgetContact required 'contact' keyword ('forget mom'->null) — the natural way to delete a saved place/contact didn't work. Widened both: parseForgetPlace now takes 'forget/delete/remove my <alias>' (dep gates on the alias being a SAVED place -> null falls through to fact, so 'forget my diet' isn't stolen); parseForgetContact takes 'remove X from contacts' + bare 'forget X' (excludes fact-lead words everything/all/what/that; dep gates on a saved contact). Dispatch order (place->fact->contact) + existence-gating keep them from shadowing each other. +2 tests. 2127 green."
+    },
+    {
+      "item": "alert-edit-name-connector-bleed",
+      "note": "parseAlertEdit name extraction bled connector/filler words: 'edit btc to fire above 60k' -> name 'btc to', 'make btc fire when it drops below 40000' -> 'btc fire when it', 'change my btc alert' kept 'my'. The wrong name means the edit targets a non-existent alert (no-op) or the wrong one. Fixed: strip a trailing connector tail (to/fire/so/it/fires/when/that/should) + leading my/the off the captured name -> clean 'btc'. +3 tests (incl. a create-not-edit null guard). 2130 green."
     }
   ],
   "audits": [
@@ -5458,6 +5462,11 @@
       "lens": "forget place/contact phrasing (sub-vein closed)",
       "surfaced": "Both forget parsers now accept natural phrasing, existence-gated so they don't steal fact-forgets. The forget/delete sub-vein is complete: fact (scoped-vs-all data-loss fixed prior run) + place + contact all natural. 19 vein fixes total. The setter+forget+recall phrasing veins are now thoroughly worked.",
       "seeded": "(forget sub-vein complete; owner levers remain)"
+    },
+    {
+      "lens": "alert-edit phrasing probe",
+      "surfaced": "parseAlertEdit leaked connector words into the alert name (edit targeted the wrong/nonexistent alert). Fixed. This is the retune path for existing price alerts - a mis-parsed name = silent no-op on a change the user asked for. 20 vein fixes total. Alert create + edit now both clean.",
+      "seeded": "(alert edit clean; owner levers remain)"
     }
   ]
 }

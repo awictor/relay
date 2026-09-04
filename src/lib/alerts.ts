@@ -350,7 +350,15 @@ export function parseAlertEdit(text: string): { name: string; threshold?: number
   // "<verb> <name> [to|fire|so it fires] <clause>". Verb-anchored so it can't swallow a define.
   const m = text.trim().match(/^\s*(?:change|update|edit|set|make)\s+(?:alert\s+)?(.+?)\s+(?:to\s+|fire\s+|so\s+it\s+fires?\s+)?((?:when\s+|drops?\s+|goes?\s+|rises?\s+|back\s+)?(?:below|under|<|above|over|hits?|reaches?|>|in\s+stock|by)\b.*)$/i);
   if (!m) return null;
-  const name = normalizeName(m[1]!);
+  // The optional connector ("to"/"fire"/"so it fires") is non-capturing + optional, so the non-greedy
+  // name can absorb a trailing connector word ("edit btc to fire ..." -> "btc to"; "make btc fire when it
+  // drops ..." -> "btc fire when it"). Strip a trailing connector/filler tail + a leading my/the off the
+  // captured name so it's just the alert name ("btc") (alert-edit-name-connector-bleed).
+  const name = normalizeName(
+    m[1]!.replace(/^\s*(?:my|the)\s+/i, "")
+      .replace(/\s+(?:to|fire|so|it|fires?|when|that|should)(?:\s+(?:to|fire|so|it|fires?|when|that|should))*\s*$/i, "")
+      .trim(),
+  );
   const clause = " " + m[2]!.trim();
   if (!name) return null;
 
