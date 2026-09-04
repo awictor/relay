@@ -147,6 +147,31 @@ describe("runAgent dispatch", () => {
     expect(r.reply).toBe("found 2");
   });
 
+  it("extract_list falls back to scrolling when pagination finds only one page (extract-list-scroll-source)", async () => {
+    const { b, hits } = recordingBackend();
+    // pagination yields a single page (no next link) -> should try scrapeScroll to expand the feed
+    b.scrapePaged = async (url) => { hits.push(`scrapePaged:${url}`); return { title: "t", content: "short", url, pages: 1, urls: [url] }; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "extract_list", args: { url: "https://x.com/feed", fields: ["title"], maxPages: 3 } } as ToolCall },
+      { text: '[{"title":"a"},{"title":"b"},{"title":"c"}]' },
+      { toolCall: { name: "reply", args: { text: "done" } } as ToolCall },
+    ]);
+    await runAgent("newest on the feed", { llm, backend: b });
+    expect(hits).toContain("scrapePaged:https://x.com/feed"); // tried pagination first
+    expect(hits).toContain("scrapeScroll:https://x.com/feed:5"); // fell back to scroll (pages===1)
+  });
+
+  it("extract_list does NOT scroll-fallback when pagination gathered multiple pages", async () => {
+    const { b, hits } = recordingBackend(); // default scrapePaged returns pages:2
+    const llm = new ScriptLLM([
+      { toolCall: { name: "extract_list", args: { url: "https://x.com/list", fields: ["title"], maxPages: 3 } } as ToolCall },
+      { text: '[{"title":"a"}]' },
+      { toolCall: { name: "reply", args: { text: "ok" } } as ToolCall },
+    ]);
+    await runAgent("list", { llm, backend: b });
+    expect(hits.some((h) => h.startsWith("scrapeScroll:"))).toBe(false); // multi-page -> no scroll needed
+  });
+
   it("extract_list maxPages=1 uses a single scrape, not the pager", async () => {
     const { b, hits } = recordingBackend();
     const llm = new ScriptLLM([

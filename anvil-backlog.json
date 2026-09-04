@@ -59,9 +59,18 @@
       "title": "extract_list should also gather from an infinite-scroll feed (not just pagination)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "extract_list gathers via scrapePaged (pagination links) only. A scroll-loaded feed (no next link) would still extract just the first screen of rows. Pairing it with scrapeScroll closes the gap for feeds like listings/job boards that lazy-load.",
       "how": "Add a source hint (or auto-detect: if scrapePaged returns pages=1, try scrapeScroll) to extract_list so it can gather from a scrolling feed before the row extraction. Reuse scrapeScroll. Live e2e on a real infinite-scroll listing."
+    },
+    {
+      "id": "extract-list-csv",
+      "title": "extract_list can hand back a CSV/spreadsheet file (like compare does)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "compare already offers \"as a CSV\" -> a spreadsheet file. extract_list returns a JSON array of rows the user often wants to KEEP (20 listings, prices). A CSV export is the natural save for a list, and the rows are already structured.",
+      "how": "When the user says csv/spreadsheet/export, serialize the extract_list rows to CSV (reuse the compare CSV path / a shared rows-to-csv helper) and attach as a doc. Header = fields; one row per item. Unit test the CSV shape; live e2e optional."
     }
   ],
   "history": [
@@ -84,6 +93,10 @@
     {
       "item": "extract-across-pages",
       "note": "Structured list extraction across pages shipped. New extractListResult(llm,text,fields,limit) asks the LLM for a JSON ARRAY of row-objects, normalized to the requested fields, deduped by the first field, all-null rows dropped, capped 1-50. New extract_list tool (url,fields,limit,maxPages) gathers across pagination via scrapePaged (default 2 pages) then extracts rows — the real \"5 cheapest / 20 newest with price+link\" errand, returning clean rows not a text wall. +6 unit tests. ALSO fixed a real pagination-detector bug found in live e2e: NEXT_PAGE_SCRIPT required an EXACT label match so \"Next →\"/\"Next »\" (arrow-suffixed, the common case) was NOT followed — now strips trailing/leading arrow glyphs before matching (also strengthens the shipped scrape_pages). LIVE e2e: quotes.toscrape.com 2 pages gathered -> real Gemini extracted 8 {author,quote} rows across pages. 2196 green. call-tested: TRUE."
+    },
+    {
+      "item": "extract-list-scroll-source",
+      "note": "extract_list now gathers from an infinite-scroll feed, not just pagination: when scrapePaged finds no next link (pages===1) it auto-falls back to scrapeScroll(5) to expand the feed before row extraction. Closes the gap for scroll-loaded listings/job boards. Tool description + dispatch note (\"from scrolling (Nx)\") updated. +2 unit tests (fallback fires on pages===1; NOT when multi-page gathered). LIVE e2e: quotes.toscrape.com/scroll (no pager) -> pagination saw 1 page -> scroll 5x (10K chars) -> Gemini extracted 10 distinct {author,quote} rows. 2198 green. call-tested: TRUE."
     }
   ],
   "probes": [

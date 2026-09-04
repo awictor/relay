@@ -113,7 +113,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "extract_list",
-    description: "Extract a LIST of items as structured rows from a listing page, following pagination/scroll to gather across pages. Use for \"the 5 cheapest\", \"20 newest listings\", \"top 30 <things> with price + link\" — when the user wants MANY items with the same fields each, not one page's prose. Returns a JSON ARRAY of objects keyed by `fields`, deduped, capped at `limit`. For ONE item's fields use extract; for comparing specific known URLs use compare.",
+    description: "Extract a LIST of items as structured rows from a listing page, gathering across pages — follows pagination, and auto-falls back to scrolling an infinite-scroll feed when there's no next link. Use for \"the 5 cheapest\", \"20 newest listings\", \"top 30 <things> with price + link\" — when the user wants MANY items with the same fields each, not one page's prose. Returns a JSON ARRAY of objects keyed by `fields`, deduped, capped at `limit`. For ONE item's fields use extract; for comparing specific known URLs use compare.",
     parameters: {
       type: "object",
       properties: {
@@ -1676,16 +1676,24 @@ export async function runAgent(
         const maxPages = Math.max(1, Math.min(5, Number(call.args.maxPages) || 2));
         try {
           // Gather across pages when available (extract-across-pages) — else a single scrape.
-          let text: string, srcTitle = "", pages = 1;
+          let text: string, srcTitle = "", pages = 1, source = "one page";
           if (maxPages > 1 && backend.scrapePaged) {
             const r = await backend.scrapePaged(url, maxPages);
             text = r.content; srcTitle = r.title; pages = r.pages;
+            source = `${pages} page${pages === 1 ? "" : "s"}`;
+            // No pagination link found (pages===1) but this may be an INFINITE-SCROLL feed that lazy-loads
+            // more items on scroll (extract-list-scroll-source). Fall back to scrolling to expand the feed
+            // before extraction, so a scroll-loaded listing yields more than the first screen of rows.
+            if (pages === 1 && backend.scrapeScroll) {
+              const s = await backend.scrapeScroll(url, 5);
+              if (s.scrolls > 0 && s.content.length > text.length) { text = s.content; srcTitle = s.title || srcTitle; source = `scrolling (${s.scrolls}x)`; }
+            }
           } else {
             const r = await backend.scrape(url);
             text = r.content; srcTitle = r.title;
           }
           const { json, count } = await extractListResult(deps.llm, truncateForModel(text, 16000), fields, limit);
-          const note = `Extracted ${count} item${count === 1 ? "" : "s"} across ${pages} page${pages === 1 ? "" : "s"} from ${srcTitle || url}.`;
+          const note = `Extracted ${count} item${count === 1 ? "" : "s"} from ${source} of ${srcTitle || url}.`;
           push("extract_list", count > 0 ? `${note}\n${json}\nReport these to the user.` : `${note} (nothing matched — tell the user honestly; the page may need a different URL or the items load another way.)`);
         } catch (e) {
           push("extract_list", `ERROR extracting list from ${url}: ${e instanceof Error ? e.message : String(e)}`);
