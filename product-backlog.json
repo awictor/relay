@@ -3627,6 +3627,24 @@
       "status": "done",
       "why": "Beyond floating changed members, a single lead line (\"btc +9%, 2 new stories\") lets a reader get the gist without reading the whole briefing.",
       "how": "In digest-runner, when members changed, compute a compact delta summary (reuse firstNumber for the % move) + prepend as a header line. Offline test."
+    },
+    {
+      "id": "reply-style-preference",
+      "title": "Remember answer-style prefs: \"keep it brief\", \"no emoji\", \"more detail\"",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "Units/location are personalized, but a users ANSWER-STYLE preference isnt — someone who texts \"just give me short answers\" or \"stop with the emojis\" has to repeat it every session. Remembering it (like units) is a real personalization/retention win + reduces annoyance for a daily user.",
+      "how": "Add a style field to ProfileStore (e.g. {verbosity?:brief|detailed, emoji?:boolean}). Parse setter phrases (\"keep it brief/short\", \"more detail\", \"no emoji/stop using emojis\", \"use emoji\") in profile.ts. Inject the stored style into the agent SYSTEM context line (like units) so replies honor it. /profile shows it; clearable. Offline tests for parse + context injection."
+    },
+    {
+      "id": "logs-weekly-summary",
+      "title": "Auto weekly summary of a users trackers (\"log weight/spending\") as a digest member",
+      "impact": "low",
+      "effort": "M",
+      "status": "todo",
+      "why": "Users log weight/spending/mood (logs.ts), but must ASK for the trend. A weekly auto-summary (\"this weeks spending: $X, weight trend: down 2lb\") as a schedulable digest member closes the log->insight loop passively.",
+      "how": "Add a reserved digest member (like the reading-list recap) that summarizes a chats logs for the period via the existing logQuery/chart. Reuse the savedRecap pattern in digest-runner. Offline test the member summary."
     }
   ],
   "history": [
@@ -5927,6 +5945,11 @@
       "lens": "power/retention (inline; cap 200/200 blocks parallel agents)",
       "surfaced": "Confirmed the everyday-tool, interactive-browse, AND inbound-voice (transcribeVoice wired) surfaces are all thorough. No net-new capability findable by single-surface inline probing that isnt a niche micro-tool. The genuinely-new directions (a 2nd channel, proactive intelligence, sharing) need the 3-lens AUDIT that cant run until the subagent cap resets. Seeded one concrete power item + kept the fresh-session marker.",
       "seeded": "digest-smart-ordering + (owner) fresh-session-audit"
+    },
+    {
+      "lens": "power/retention (inline; cap 200/200 blocks parallel agents)",
+      "surfaced": "Digest-retention arc complete (order/quiet/summary). Probed personalization depth: units ARE remembered but ANSWER STYLE (brief vs detailed, no-emoji) is NOT — a user who says \"keep answers short\" / \"stop using emoji\" isnt remembered across turns. Genuinely net-new (personalization, not another tool), keyless. Seeded reply-style-preference + a logs-weekly-summary follow.",
+      "seeded": "reply-style-preference + logs-weekly-summary"
     }
   ]
 }
