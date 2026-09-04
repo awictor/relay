@@ -171,6 +171,13 @@ export function resolveWhen(text: string, todayDow: number, maxDays: number): nu
   // and wrongly return [1] (tomorrow), a day early (weather-day-after-tomorrow).
   if (/\b(?:the\s+)?day after tomorrow\b/.test(t)) return maxDays > 2 ? [2] : null;
   if (/\btomorrow\b/.test(t)) return maxDays > 1 ? [1] : null;
+  // "in 3 days" / "3 days from now" / "in a week" -> that day offset (weather-in-n-days): a natural
+  // forecast phrasing that returned null, so the caller fell back to TODAY's weather for a future day.
+  // n may exceed the forecast window — formatWeatherWhen turns an out-of-window index into an honest
+  // "beyond my N-day forecast" note (same as the weekday branch), so we return [n] for any n>=1.
+  const inN = t.match(/\bin\s+(\d+)\s+days?\b/) || t.match(/\b(\d+)\s+days?\s+from\s+(?:now|today)\b/);
+  if (inN) { const n = parseInt(inN[1]!, 10); return n >= 1 ? [n] : null; }
+  if (/\bin\s+a\s+week\b|\bin\s+1\s+week\b/.test(t)) return [7];
   if (/\bthis weekend\b|\bweekend\b/.test(t)) {
     const idx: number[] = [];
     for (let i = 0; i < maxDays; i++) { const dow = (todayDow + i) % 7; if (dow === 6 || dow === 0) idx.push(i); }

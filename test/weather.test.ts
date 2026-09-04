@@ -233,6 +233,15 @@ describe("multi-day forecast (weather-multi-day)", () => {
     expect(resolveWhen("day after tomorrow", 3, 2)).toBeNull();
   });
 
+  it("resolveWhen: 'in N days' / 'N days from now' / 'in a week' resolve to that offset (weather-in-n-days)", () => {
+    expect(resolveWhen("weather in 3 days", 3, 7)).toEqual([3]);
+    expect(resolveWhen("will it rain 2 days from now", 3, 7)).toEqual([2]);
+    expect(resolveWhen("forecast in a week", 3, 14)).toEqual([7]);
+    // beyond the window still returns the index (caller gives an honest 'beyond my N-day forecast' note),
+    // NOT null->today.
+    expect(resolveWhen("weather in 10 days", 3, 7)).toEqual([10]);
+  });
+
   it("dayLabel names Today/Tomorrow/weekday", () => {
     expect(dayLabel(0, 6)).toBe("Today");
     expect(dayLabel(1, 6)).toBe("Tomorrow");

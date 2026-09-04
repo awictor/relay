@@ -4806,6 +4806,10 @@
     {
       "item": "places-category-substring",
       "note": "REAL bug in find-nearby category matching: categoryFilters used raw w.includes(key), so the short key 'er' (hospital) matched inside 'here' — 'atm around here' resolved to HOSPITAL (user asks ATM, gets hospitals). Also 'hardware store' hit 'store'->supermarket (substring, no longest-key pref). Fixed: strip 'here/around here/right now' fillers + match on WORD BOUNDARIES with longest-key-first + a trailing-plural tolerance ('restaurants'->restaurant). Now atm->atm, gas station>gas, hardware store->hardware. +1 test (regression-named). 2112 green."
+    },
+    {
+      "item": "weather-in-n-days",
+      "note": "phrasing gap: weather resolveWhen had no 'in N days' branch, so 'weather in 3 days' / '2 days from now' / 'in a week' returned null -> the caller fell back to TODAY's weather for a future-day question (silently wrong day). Added an 'in N days'/'N days from now'/'in a week' branch returning [n]; out-of-window n still returns the index so formatWeatherWhen gives the honest 'beyond my N-day forecast' note (not today). scores resolveLeague probed clean (team+league forms all resolve). +1 test. 2113 green."
     }
   ],
   "audits": [
@@ -5298,6 +5302,11 @@
       "lens": "places/fun phrasing probe",
       "surfaced": "find_nearby categoryFilters had a substring-match bug misrouting 'atm around here'->hospital (short key 'er' inside 'here') + 'hardware store'->supermarket - both fixed with boundary matching + longest-key-first + filler strip. fun (joke/fact/trivia) probed clean. 8 real lib-phrasing fixes now; this one was the highest-severity of the batch (wrong category entirely). Remaining: scores team-name forms, translate lang edge, geocode.",
       "seeded": "probe-remaining-lib-phrasings (continue: scores team-forms, geocode)"
+    },
+    {
+      "lens": "weather/scores phrasing probe",
+      "surfaced": "scores resolveLeague solid (lakers/man city/chiefs/real madrid/arsenal all map). weather resolveWhen missed 'in N days' (fixed) - would show today for a future ask. weekday/weekend/tomorrow/day-after all correct. 9 real lib-phrasing fixes now. Remaining libs largely covered; next probe: geocode/directions place phrasings, translate lang-name forms.",
+      "seeded": "probe-remaining-lib-phrasings (continue: geocode, translate lang forms)"
     }
   ]
 }
