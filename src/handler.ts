@@ -919,7 +919,14 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     if (deps.chartWatch) {
       const r = await deps.chartWatch(msg.chatId, msg.text);
       if (r) {
-        if ("png" in r && deps.sendPhoto) { await deps.sendPhoto(msg.chatId, r.png, r.caption); return; }
+        if ("png" in r && deps.sendPhoto) {
+          // Fall back to the caption text if the image upload fails (artifact-send-fail-swallowed): a
+          // failed chart send would otherwise leave the user with nothing instead of at least the summary.
+          if (await deps.sendPhoto(msg.chatId, r.png, r.caption) === false) {
+            await deps.sendMessage(msg.chatId, `${r.caption ?? "Here's your chart"} — but I couldn't send the image just now (try again in a moment).`);
+          }
+          return;
+        }
         if ("png" in r) { await deps.sendMessage(msg.chatId, `${r.caption ?? "Here's your chart"} — but I can't send images on this channel.`); return; }
         await deps.sendMessage(msg.chatId, r.text); return;
       }
@@ -1067,7 +1074,11 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         if (!ex.items.length) { await deps.sendMessage(msg.chatId, `Your ${ex.name} list is empty (or I don't have one by that name) — nothing to export.`); return; }
         const csv = rowsToCsv(ex.items.map((item) => ({ item })));
         if (csv && deps.sendDocument) {
-          await deps.sendDocument(msg.chatId, new TextEncoder().encode(csv), `${ex.name.replace(/[^\w-]+/g, "_")}.csv`, `Your ${ex.name} list (${ex.items.length} item${ex.items.length === 1 ? "" : "s"})`);
+          // Fall back to the readable list if the .csv upload fails (artifact-send-fail-swallowed): the
+          // user asked to export their list — a silently-dropped document leaves them with nothing.
+          if (await deps.sendDocument(msg.chatId, new TextEncoder().encode(csv), `${ex.name.replace(/[^\w-]+/g, "_")}.csv`, `Your ${ex.name} list (${ex.items.length} item${ex.items.length === 1 ? "" : "s"})`) === false) {
+            await deps.sendMessage(msg.chatId, `Couldn't send the .csv just now, so here's your ${ex.name} list:\n${ex.items.map((i) => `• ${i}`).join("\n")}`);
+          }
         } else {
           // No document channel (console) — fall back to the readable list text.
           await deps.sendMessage(msg.chatId, `Your ${ex.name} list:\n${ex.items.map((i) => `• ${i}`).join("\n")}`);
@@ -1239,7 +1250,11 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     if (!isExplicitCommand && deps.logQuery && /\b(how much (?:did|have|do)|show\s+(?:me\s+)?(?:my|the)|my\s+\w+\s+(?:trend|history|log)|\btrend\b|\bhistory\b)\b/i.test(msg.text)) {
       const r = await deps.logQuery(msg.chatId, msg.text, deps.now());
       if (r) {
-        if (r.png && deps.sendPhoto) { await deps.sendPhoto(msg.chatId, r.png, r.text); return; }
+        // Fall back to the text summary if the chart image fails to send (artifact-send-fail-swallowed).
+        if (r.png && deps.sendPhoto) {
+          if (await deps.sendPhoto(msg.chatId, r.png, r.text) === false) await deps.sendMessage(msg.chatId, r.text);
+          return;
+        }
         await deps.sendMessage(msg.chatId, r.text);
         return;
       }

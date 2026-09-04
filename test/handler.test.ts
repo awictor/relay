@@ -1325,6 +1325,16 @@ describe("named lists routing (personal-notes-lists-store)", () => {
     expect(docs).toHaveLength(0);
     expect(sent[0]!.text).toMatch(/empty|nothing to export/i);
   });
+
+  it("falls back to the readable list when the .csv document fails to send (artifact-send-fail-swallowed)", async () => {
+    // The user asked to export their list; a silently-dropped .csv upload leaves them empty-handed.
+    const { handle, sent } = harness({
+      listExport: () => ({ name: "grocery", items: ["eggs", "milk"] }),
+      sendDocument: async () => false, // upload fails
+    });
+    await handle(msg("export my grocery list as csv", 7));
+    expect(sent.some((s) => /couldn't send the \.csv/i.test(s.text) && /eggs/.test(s.text) && /milk/.test(s.text))).toBe(true);
+  });
 });
 
 describe("saved named places routing (saved-named-places)", () => {
@@ -1696,6 +1706,16 @@ describe("chart a watch (chart-it-tool)", () => {
     });
     await handle(msg("chart btc", 5));
     expect(sent[0]!.text).toMatch(/enough checks/);
+  });
+  it("falls back to the caption text when the chart image fails to send (artifact-send-fail-swallowed)", async () => {
+    // A failed PNG upload used to leave the user with nothing; now the summary caption still reaches them.
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const { handle, sent } = harness({
+      chartWatch: async () => ({ png, caption: "📈 btc up 3%" }),
+      sendPhoto: async () => false, // upload fails
+    });
+    await handle(msg("chart btc", 5));
+    expect(sent.some((s) => /btc up 3%/.test(s.text) && /couldn't send the image/i.test(s.text))).toBe(true);
   });
   it("a non-chart message falls through (chartWatch returns null)", async () => {
     let ran = "";

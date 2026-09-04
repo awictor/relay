@@ -3245,9 +3245,18 @@
       "title": "Apply the same delivery-gating audit to the INBOUND photo/doc + chart/export send sites",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The agent-reply photo/doc path is now gated, but other sendPhoto/sendDocument call sites (inbound photo-to-action res.photo at ~689, chart-it PNG at ~922/1242, csv-export at ~1069) may still write memory as delivered on a failed artifact send - the same class, other entry points.",
       "how": "Read each sendPhoto/sendDocument site in handler.ts; where a memory write or 'done' state follows an ungated artifact send, gate it on the boolean now returned. Add a test per fixed site."
+    },
+    {
+      "id": "probe-scheduler-proactive-delivery",
+      "title": "Audit PROACTIVE (scheduler/alert/digest) sends for the same artifact/text delivery-gating + a chart in a scheduled digest",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "Inbound (user-initiated) delivery is now gated everywhere. The proactive side - schedule-runner/alert-runner/digest firing - sends unprompted; if a scheduled reminder or a digest's chart PNG fails to send, does it mark the task complete/advance anyway (losing that fire), and can a digest even include an artifact? Same reliability class, the side the user CAN'T retry.",
+      "how": "Read schedule-runner.ts/alert-runner.ts/digest send paths; confirm each gates completion/advance on send success (deps.send boolean) incl. any sendPhoto in a digest; add a test for any ungated proactive artifact/text send."
     }
   ],
   "history": [
@@ -4574,6 +4583,10 @@
     {
       "item": "artifact-send-fail-swallowed",
       "note": "REAL BUG found+fixed probing handler.ts delivery. The text reply path gates memory-write on sendMessage's boolean (inbound-send-fail-swallowed), but the photo/doc branches did NOT: sendPhoto/sendDocument returned Promise<void> (swallowed failure) and the handler never checked. A screenshot/pdf that 429s/too-large/network-fails left the user with NOTHING while memory recorded the turn as delivered -> next turn's context claimed an answer never seen. Fixed: sendPhoto/sendDocument now return Promise<boolean>; handler gates `delivered` on them (=== false, so console's void still counts delivered). +5 handler tests + telegram return-type. 2050 green."
+    },
+    {
+      "item": "artifact-send-fail-fallback",
+      "note": "Applied the artifact-send-fail-swallowed fix to the 3 OTHER sites where the artifact IS the sole deliverable: chart-it PNG (chartWatch), csv list-export (sendDocument), and log-query chart PNG (logQuery). Each now checks the boolean the senders return and falls back to a text summary/list on failure, so a dropped upload no longer leaves the user in SILENCE. (Inbound photo-to-action already gates its memory write on the TEXT send, photo is supplementary - left as-is.) +2 tests (chart fallback, csv fallback). 2052 green."
     }
   ],
   "audits": [
@@ -4952,6 +4965,11 @@
       "lens": "inline handler delivery probe (agent cap 200/200)",
       "surfaced": "handler.ts routing + callback state looked sound, but the AGENT-ARTIFACT delivery path had the exact silent-drop bug the text path had already fixed - photo/doc sends weren't gated on success, so a failed upload poisoned memory. This is the highest-severity find in several iterations (user gets nothing + context lies). Fixed. Callback flows (Stop/snooze/gone button-strip) already covered by handler-callback.test.ts.",
       "seeded": "probe-inbound-photo-doc-delivery"
+    },
+    {
+      "lens": "inline artifact-send-site sweep (agent cap 200/200)",
+      "surfaced": "All sendPhoto/sendDocument sites now handle a failed send: agent-reply path gates memory (prev iter), and the 3 artifact-is-deliverable sites (chart, csv-export, log-chart) fall back to text. The inbound photo/doc DESCRIBE paths gate their memory on the text send already. The artifact-delivery reliability class is now swept end-to-end.",
+      "seeded": "probe-scheduler-proactive-delivery"
     }
   ]
 }
