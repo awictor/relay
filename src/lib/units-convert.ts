@@ -5,7 +5,7 @@
 // DETERMINISTIC converter over fixed factor tables (no network, no LLM), mirroring convert_currency.
 // Pure parse + convert helpers exported + unit-tested.
 
-type Dim = "length" | "mass" | "volume" | "temperature";
+type Dim = "length" | "mass" | "volume" | "temperature" | "data";
 interface Unit { dim: Dim; toBase: number; base?: boolean; label: string; }
 
 // Each unit maps to a base (length=meter, mass=gram, volume=milliliter) by a multiply factor. Temperature
@@ -37,6 +37,15 @@ const UNITS: Record<string, Unit> = {
   pint: { dim: "volume", toBase: 473.176, label: "pt" }, pt: { dim: "volume", toBase: 473.176, label: "pt" },
   quart: { dim: "volume", toBase: 946.353, label: "qt" }, qt: { dim: "volume", toBase: 946.353, label: "qt" },
   gal: { dim: "volume", toBase: 3785.41, label: "gal" }, gallon: { dim: "volume", toBase: 3785.41, label: "gal" },
+  // digital storage (base: byte). Binary factors (1 KB = 1024 B) — the convention people mean by "how
+  // many GB is 500 MB" (data-unit-convert). "b"/"bit" deliberately omitted: "MB" vs "Mb" (bytes vs bits)
+  // is a common confusion, and every alias here is BYTES, so a bare token can't silently mean bits.
+  byte: { dim: "data", toBase: 1, base: true, label: "B" }, bytes: { dim: "data", toBase: 1, base: true, label: "B" },
+  kb: { dim: "data", toBase: 1024, label: "KB" }, kilobyte: { dim: "data", toBase: 1024, label: "KB" }, kilobytes: { dim: "data", toBase: 1024, label: "KB" },
+  mb: { dim: "data", toBase: 1024 ** 2, label: "MB" }, megabyte: { dim: "data", toBase: 1024 ** 2, label: "MB" }, megabytes: { dim: "data", toBase: 1024 ** 2, label: "MB" },
+  gb: { dim: "data", toBase: 1024 ** 3, label: "GB" }, gigabyte: { dim: "data", toBase: 1024 ** 3, label: "GB" }, gigabytes: { dim: "data", toBase: 1024 ** 3, label: "GB" },
+  tb: { dim: "data", toBase: 1024 ** 4, label: "TB" }, terabyte: { dim: "data", toBase: 1024 ** 4, label: "TB" }, terabytes: { dim: "data", toBase: 1024 ** 4, label: "TB" },
+  pb: { dim: "data", toBase: 1024 ** 5, label: "PB" }, petabyte: { dim: "data", toBase: 1024 ** 5, label: "PB" },
 };
 // Temperature units (affine). Handled outside the factor table.
 const TEMP = new Set(["c", "celsius", "centigrade", "f", "fahrenheit", "k", "kelvin"]);

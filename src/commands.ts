@@ -43,7 +43,7 @@ const HELP = `Relay — what I can do:
 • Strong passwords: "generate a strong password", "a 24-character password no symbols", "a passphrase", "6-digit PIN" → a cryptographically-random secret you copy into your password manager. I don't store it.
 • Encode / decode: "base64 encode X", "decode this base64 ...", "url-encode ...", "hex decode ...", "decode this JWT ..." → exact conversion, instantly (I read a JWT's payload but don't verify its signature).
 • Convert currency: "how much is 200 USD in EUR" → I use the live rate, instantly.
-• Convert units: "180C to F", "5 foot 11 in cm", "2 cups of flour in grams", "10 miles in km" → exact, instantly.
+• Convert units: "180C to F", "5 foot 11 in cm", "2 cups of flour in grams", "10 miles in km", "500 MB in GB" → exact, instantly.
 • Better buy: "which is cheaper, 500g for $4 or 1.2kg for $9?" → I compare price-per-unit and name the winner.
 • Do the math: "split $127.50 three ways with 20% tip", "monthly payment on a $30k loan at 6% for 5 years" → I compute it exactly, not a guess.
 • Translate: "how do you say 'where's the pharmacy' in Spanish", "translate this page to English: <link>" → the translation (with pronunciation for non-Latin scripts).

@@ -3326,9 +3326,18 @@
       "title": "Final capability-gap scan: check the last few common asks, build if clearly valuable else report vein tapped",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Three capability builds landed (password, encode/decode, time-until). The obvious high-value gaps are now filled. A last scan (UUID/GUID gen, 'roll a random name/lorem', a units-of-DATA convert like MB->GB if not covered, a 'coin flip best of N') confirms whether anything common remains or the vein is tapped and value returns to owner-gated (confirm-to-act, anvil).",
       "how": "Quick-probe 4-5 remaining candidate asks against the tool set; build the ONE with real user demand + offline feasibility, else honestly report the capability vein is tapped and re-surface the owner levers."
+    },
+    {
+      "id": "owner-levers-remain",
+      "title": "Capability vein tapped — remaining value is owner-gated (confirm-to-act, anvil live e2e)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "Across ~14 iterations: swept every offline reliability/parsing surface (2100 green) AND shipped 4 new capabilities (password, encode/decode, time-until, data-unit convert). The offline gap-finding vein is now genuinely exhausted - a fresh scan found only low-value candidates. The subagent cap (200/200) blocks the real 3-lens AUDIT until a NEW session.",
+      "how": "OWNER ACTIONS (loop cannot self-serve): (1) confirm-to-act — product-UX decision on whether/how Relay confirms a state-changing step. (2) start anvil (docker/local) for the overdue anvil-live-e2e-when-up real errand. (3) start a FRESH Claude session to reset the subagent cap so the 3-lens AUDIT can seed new directions. Until one of these, further /product-loop runs will find only marginal work."
     }
   ],
   "history": [
@@ -4691,6 +4700,10 @@
     {
       "item": "time-until-tool",
       "note": "3rd capability-gap build: 'how long until 5pm' / 'minutes until midnight' countdown. date_math handled days-until-a-DATE but returned null for a clock time; get_time only gave current time. New src/lib/timeuntil.ts: parseTimeUntil (5pm/9:30am/17:00/midnight/noon, guards DATE asks like 'until Friday' -> fall through to date_math) + runTimeUntil (tz-aware via injected nowMs+tzOffsetMin, tomorrow-rollover when passed, h/m format, seconds-accurate). Wired into get_time dispatch (has tz+now already) before worldclock + TOOLS desc + prompt + HELP. +8 tests. 2099 green."
+    },
+    {
+      "item": "data-unit-convert",
+      "note": "4th capability build (final-scan): digital-storage unit conversion. parseUnitConvert already PARSED '500 MB in GB' but runConvert returned null (no data dimension in the factor table) -> fell to a slow agent guess. Added a 'data' Dim + byte-based binary table (KB/MB/GB/TB/PB, 1024 factors, bits deliberately omitted to avoid MB-vs-Mb ambiguity - all aliases are BYTES). Cross-dimension still correctly null (MB->miles). +6 test cases, HELP updated. 2100 green. Scanned UUID (low value), roman numerals (rare), word-count (agent handles) - not worth building."
     }
   ],
   "audits": [
@@ -5119,6 +5132,11 @@
       "lens": "capability-gap build #3",
       "surfaced": "time-of-day countdown was the last clearly-common capability gap. Built it tz-aware into get_time. Remaining candidate gaps are now low-value (UUID) or need proactive-fire infra (stopwatch/timer). The capability-gap vein is now largely tapped - next run likely returns to owner-gated reality or one more marginal gap.",
       "seeded": "capability-gap-final-scan"
+    },
+    {
+      "lens": "capability-gap final scan",
+      "surfaced": "Data-unit convert was a genuine parse-but-no-compute gap - fixed. Other candidates (UUID gen, roman numerals, word/char count) are low-demand or already agent-handled. The capability-gap vein is now TAPPED: 4 builds shipped (password, encode/decode, time-until, data-units). No further common offline capability gap found. Value now genuinely returns to the owner-gated levers.",
+      "seeded": "owner-levers-remain"
     }
   ]
 }

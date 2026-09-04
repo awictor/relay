@@ -37,6 +37,15 @@ describe("convertUnit — length/mass/volume (factor)", () => {
     expect(convertUnit(1, "kg", "miles")).toBeNull(); // mass -> length
     expect(convertUnit(1, "cup", "kg")).toBeNull();   // volume -> mass (not oz) still can't
     expect(convertUnit(1, "florbs", "km")).toBeNull(); // unknown
+    expect(convertUnit(5, "MB", "miles")).toBeNull();  // data -> length
+  });
+  it("data storage (binary factors: 1 KB = 1024 B) (data-unit-convert)", () => {
+    expect(convertUnit(500, "MB", "GB")!.value).toBeCloseTo(0.48828, 4);
+    expect(convertUnit(2, "GB", "MB")!.value).toBeCloseTo(2048, 3);
+    expect(convertUnit(1024, "KB", "MB")!.value).toBeCloseTo(1, 6);
+    expect(convertUnit(1, "GB", "bytes")!.value).toBe(1024 ** 3);
+    expect(convertUnit(1.5, "TB", "GB")!.value).toBeCloseTo(1536, 3);
+    expect(runConvert("500 MB in GB")).toMatch(/0\.488 GB/);
   });
 });
 
