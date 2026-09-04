@@ -44,6 +44,14 @@ describe("calc — percentages", () => {
     expect(calc("50 - 20%")).toBe(40);
     expect(calc("80 - 25% off")).toBe(60);
   });
+  it("percent-first discount 'X% off Y' (calc-pct-off-first)", () => {
+    // The common phrasing "20% off 50" (percent first, no minus sign) — a top shopping-math ask.
+    expect(calc("20% off 50")).toBe(40);
+    expect(calc("15% off 80")).toBe(68);
+    expect(calc("20% off $50")).toBe(40);   // $ stripped in normalizeExpr
+    // still distinct from "% of": "20% of 50" is the part, not the remainder
+    expect(calc("20% of 50")).toBe(10);
+  });
 });
 
 describe("calc — the bill-split + loan cases the audit flagged", () => {

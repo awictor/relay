@@ -43,6 +43,9 @@ export function tokenize(input: string): Token[] {
   // percentage — the percent idioms below only make sense when "%" TRAILS a number ("20% of", "50 - 20%").
   // Route the operator form to the same MODOP sentinel so it survives the percent rewrites.
   s = s.replace(/%\s*(?=[0-9(])/g, " MODOP ");
+  // Percent-FIRST discount idiom: "20% off 50" -> "50*(1-20/100)" (the common phrasing; the sign-based
+  // rewrite below only catches "50 - 20% off"). Checked before "% of" so "off" isn't misread (calc-pct-off-first).
+  s = s.replace(/(\d+(?:\.\d+)?)\s*%\s*off\b\s*(\d+(?:\.\d+)?)/g, "($2)*(1-$1/100)");
   s = s.replace(/(\d+(?:\.\d+)?)\s*%\s*of\b\s*/g, "($1/100)*"); // \bof\b so "% off" isn't read as "% of f"
   s = s.replace(/([\d.)+\-*/^ ]+?)\s*([+\-])\s*(\d+(?:\.\d+)?)\s*%(?:\s*(off))?/g, (_m, base, sign, pct, off) => {
     const op = off ? "-" : sign; // "X - 20% off" and "X - 20%" both subtract; "X + 20%" adds

@@ -3347,6 +3347,15 @@
       "status": "todo",
       "why": "After ~15 iterations: full offline reliability+parsing sweep AND 5 new capabilities, 2102 green. A fresh capability scan now yields nothing common. Real 3-lens AUDIT still blocked by subagent cap (200/200) until a new session.",
       "how": "OWNER: (1) decide confirm-to-act (product UX). (2) start anvil for the live e2e. (3) fresh Claude session resets the cap for a real AUDIT. Absent these, /product-loop will only find marginal work — recommend pausing the loop until an owner lever is actioned."
+    },
+    {
+      "id": "probe-tool-idiom-coverage",
+      "title": "Probe each existing tool's DOCUMENTED idioms actually work (doc-vs-behavior drift)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The '% off' bug shows a class: a tool's header/description advertises an idiom that a later refactor broke, and no test covered that exact phrasing. Other tools may have the same doc-vs-behavior drift (worldclock conversions, unit-convert compound forms, datecalc phrasings, translate URL form).",
+      "how": "For each tool, read its doc/description's listed example phrasings + probe them via the lib; where a documented idiom errors or returns null, fix + add a test. One tool per iteration."
     }
   ],
   "history": [
@@ -4717,6 +4726,10 @@
     {
       "item": "uuid-in-random",
       "note": "5th small capability: UUID/GUID generation folded into the existing random tool (reuse-before-reinvent, not a new TOOLS entry). 'generate a uuid'/'random guid'/'uuid v4' -> a well-formed RFC-4122 v4 built from the injected rand() (a convenience id, not a credential, so no crypto RNG needed unlike generate_password). +2 tests (parse + v4 shape). HELP + prompt updated. 2102 green."
+    },
+    {
+      "item": "calc-pct-off-first",
+      "note": "REAL BUG (not a new capability): calc's header advertised the 'x% off' idiom, but only '50 - 20% off' (sign-first) worked — the COMMON phrasing '20% off 50' (percent-first, no minus) fell through to 'I don't know off' error. A top shopping-math ask silently broke. Added a percent-first rewrite '20% off 50' -> '50*(1-20/100)' before the %-of rewrite. '20% of 50'=10 (part) stays distinct from '20% off 50'=40 (remainder). +4 test cases. 2103 green. Found by probing calc coverage when the backlog was owner-gated - a genuine find, not filler."
     }
   ],
   "audits": [
@@ -5155,6 +5168,11 @@
       "lens": "marginal capability build",
       "surfaced": "UUID was the one remaining dev-adjacent ask worth folding in (into random, cheaply). Now genuinely done - no further common offline capability gap exists. 5 capabilities shipped this session (password, encode/decode, time-until, data-units, uuid) on top of the full reliability/parsing sweep (2102 green). The autonomous vein is exhausted.",
       "seeded": "owner-levers-remain (re-stated)"
+    },
+    {
+      "lens": "calc-coverage probe (owner-gated backlog)",
+      "surfaced": "Probed the calculate tool's idiom coverage - found '20% off 50' erroring despite the documented %-off support (only the sign-first form worked). Fixed. Also noted calc lacks factorial/log/trig (low demand, deliberate scope). This was a real bug behind a green suite - worth the probe even with the backlog owner-gated.",
+      "seeded": "probe-tool-idiom-coverage"
     }
   ]
 }
