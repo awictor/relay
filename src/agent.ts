@@ -105,6 +105,11 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: "object", properties: { selector: { type: "string", description: "CSS selector of the select/checkbox/radio/input" }, value: { type: "string", description: "For a select: the option text or value. For a checkbox/radio: on/off. For an input: the text." } }, required: ["selector", "value"] },
   },
   {
+    name: "wait_for",
+    description: "Wait until something appears on the current browsed page before reading — a CSS selector OR a text phrase. Use after a click/set_field/site_search on a slow or JavaScript-heavy page (SPA filters, lazy result grids) so you don't read a stale/empty page. Requires a prior browse. Returns whether it appeared before the timeout.",
+    parameters: { type: "object", properties: { target: { type: "string", description: "A CSS selector (e.g. \".results .item\") or a text phrase (e.g. \"In stock\") to wait for" }, timeoutMs: { type: "number", description: "Max wait in ms (1000-30000, default 8000)" } }, required: ["target"] },
+  },
+  {
     name: "read",
     description: "Read the current browsed page's text after navigating/clicking. Requires a prior browse.",
     parameters: { type: "object", properties: {}, required: [] },
@@ -527,7 +532,7 @@ Tools:
 - "site_search" (url, query): search INSIDE a named site using its own search box (types + submits + reads results). Use for "search <site> for X" / "find X on <store/docs/forum>". For a general web search use web_search.
 - "scrape_pages" (url, maxPages): read a listing ACROSS pagination (follows next/more/older), returning several pages combined. Use when the user wants MORE than one page holds ("20 newest", "cheapest across a few pages", "top 30"). Default 3 pages, max 5.
 - "scroll_feed" (url, maxScrolls): read an INFINITE-SCROLL feed (loads more on scroll, no next-page link) — scrolls to load lazy items then returns the expanded text. Use when scrape got only the first few items + there's no pagination link. Default 5 scrolls, max 10.
-- "browse" (url) then "click"/"type"/"set_field"/"read": for tasks needing interaction (search a site, fill a form, page through results). Use "set_field" for a <select> dropdown, checkbox, or radio (click/type can't set those). "read" returns the current page after your actions.
+- "browse" (url) then "click"/"type"/"set_field"/"wait_for"/"read": for tasks needing interaction (search a site, fill a form, page through results). Use "set_field" for a <select> dropdown, checkbox, or radio (click/type can't set those). After an action on a slow/JS-heavy page, call "wait_for" (a selector or text phrase) before "read" so you don't read a stale page. "read" returns the current page after your actions.
 - "fetch_json" (url): hit a JSON HTTP API directly, no browser — fastest for public data APIs (weather, prices, sports). Use when you know a JSON endpoint; use scrape/browse for HTML pages.
 - "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
 - "extract_list" (url, fields, limit, maxPages): get a LIST of items as structured rows, gathering across pagination. Use for "the 5 cheapest", "20 newest listings", "top 30 X with price + link" — many items, same fields each. Returns a deduped JSON array. Beats scrape_pages when the user wants ROWS, not a text wall.
@@ -604,6 +609,9 @@ export interface BrowserBackend {
   // Set a <select>/checkbox/radio/input the click+type pair can't drive (select-dropdown-support).
   // Optional — when absent the set_field tool reports unavailable.
   setField?(sessionId: string, selector: string, value: string): Promise<string>;
+  // Wait for a selector/text to appear on the current page before reading (wait-for-selector). Optional —
+  // when absent the wait_for tool reports unavailable + the model reads directly.
+  waitFor?(sessionId: string, target: string, timeoutMs?: number): Promise<boolean>;
   readCurrent(sessionId: string): Promise<{ title: string; content: string; url: string }>;
   releaseSession(sessionId: string): Promise<void>;
   discoverLinks(url: string, limit?: number): Promise<string[]>;
@@ -828,6 +836,7 @@ const defaultBackend: BrowserBackend = {
   click: (id, sel) => anvil.click(id, sel),
   type: (id, sel, text) => anvil.type(id, sel, text),
   setField: (id, sel, value) => anvil.setField(id, sel, value),
+  waitFor: (id, target, timeoutMs) => anvil.waitFor(id, target, timeoutMs),
   readCurrent: (id) => anvil.readCurrent(id),
   releaseSession: (id) => anvil.releaseSession(id),
   discoverLinks: (url, limit) => anvil.discoverLinks(url, limit),
@@ -1147,6 +1156,21 @@ export async function runAgent(
           push("set_field", msg);
         } catch (e) {
           push("set_field", `ERROR: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "wait_for") {
+        if (!sessionId) { push("wait_for", "ERROR: no page open. Call browse first."); continue; }
+        if (!backend.waitFor) { push("wait_for", "ERROR: wait isn't available; read directly."); continue; }
+        const target = String(call.args.target ?? "").trim();
+        if (!target) { push("wait_for", "ERROR: no target given (a selector or text phrase)."); continue; }
+        const timeoutMs = Math.max(1000, Math.min(30000, Number(call.args.timeoutMs) || 8000));
+        try {
+          const appeared = await backend.waitFor(sessionId, target, timeoutMs);
+          push("wait_for", appeared ? `"${target}" appeared. Call read to see the page.` : `"${target}" didn't appear within ${Math.round(timeoutMs / 1000)}s — read anyway, but the content may not have loaded (tell the user if it's missing).`);
+        } catch (e) {
+          push("wait_for", `ERROR: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

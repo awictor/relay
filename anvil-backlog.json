@@ -122,7 +122,7 @@
       "title": "wait_for tool: wait until a selector/text appears before reading (slow AJAX/SPA results)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "click/set_field/site_search use fixed sleeps (600-1500ms). A slow SPA filter or lazy result grid can render AFTER that, so read() captures a stale/empty page and the agent answers wrong. A wait-for-selector closes the race.",
       "how": "Add anvil waitFor(sessionId, selector|text, timeoutMs) that polls in-page (evaluate querySelector / body.innerText.includes) until present or timeout; expose as a wait_for tool the agent calls after an action before read. Live e2e on a page that loads content after a delay."
     }
@@ -175,6 +175,10 @@
     {
       "item": "select-dropdown-support",
       "note": "set_field shipped: drives the form controls click/type couldnt — a <select> dropdown (match option by value OR visible text, case-insensitive substring ok), checkbox/radio (on/off, clicks to toggle so frameworks see it), or any inputs value (React-safe native setter + input/change). New anvil setField(sessionId,selector,value) + agent tool set_field + dispatch (requires prior browse; honest not-found/no-option; safety-guarded so a confirm/delete control is REFUSED) + BrowserBackend + SYSTEM_PROMPT + /help note. +3 dispatch tests (dropdown set; no-browse errors; delete-box refused). LIVE e2e on an injected real page: select set by visible text (value->p), checkbox toggled on, missing selector -> not-found. 2207 green. call-tested: TRUE. Completes the interactive form path (filters/sort/quantity/agree now settable, still read-only-safe)."
+    },
+    {
+      "item": "wait-for-selector",
+      "note": "wait_for shipped: waits until a CSS selector OR a text phrase appears on the current session page (polls ~400ms up to a 1-30s clamp, default 8s) before reading — closes the read-too-early race after click/set_field/site_search on slow SPA/AJAX pages where the fixed sleeps could read a stale/empty page. Auto-detects selector-vs-text (tries querySelector, falls back to body text includes). New anvil waitFor(sessionId,target,timeoutMs) + agent tool wait_for + dispatch (needs prior browse; honest timeout message -> read anyway but warn) + BrowserBackend + SYSTEM_PROMPT. +2 dispatch tests. LIVE e2e: delayed content appended after 1.5s -> selector detected at 1.65s, text phrase found, #never-appears timed out false at ~2s. 2209 green. call-tested: TRUE."
     }
   ],
   "probes": [

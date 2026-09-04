@@ -29,6 +29,7 @@ function recordingBackend() {
     click: async (_id, sel) => { hits.push(`click:${sel}`); },
     type: async (_id, sel) => { hits.push(`type:${sel}`); },
     setField: async (_id, sel, value) => { hits.push(`setField:${sel}=${value}`); return "select-set"; },
+    waitFor: async (_id, target, timeoutMs) => { hits.push(`waitFor:${target}:${timeoutMs}`); return true; },
     readCurrent: async () => { hits.push("readCurrent"); return { title: "t", content: "text", url: "u" }; },
     releaseSession: async () => { hits.push("releaseSession"); },
     discoverLinks: async (url) => { hits.push(`discoverLinks:${url}`); return ["https://x.com/a"]; },
@@ -43,7 +44,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "wait_for", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
     );
   });
 
@@ -222,6 +223,29 @@ describe("runAgent dispatch", () => {
     const r = await runAgent("sort the shop by price", { llm, backend: b });
     expect(hits).toContain("setField:#sort=Price: Low to High");
     expect(r.tools).toContain("set_field");
+  });
+
+  it("wait_for -> backend.waitFor after a browse (wait-for-selector)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://spa.example.com" } } as ToolCall },
+      { toolCall: { name: "wait_for", args: { target: ".results .item", timeoutMs: 5000 } } as ToolCall },
+      { toolCall: { name: "read", args: {} } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "loaded" } } as ToolCall },
+    ]);
+    const r = await runAgent("filter then read the spa", { llm, backend: b });
+    expect(hits).toContain("waitFor:.results .item:5000");
+    expect(r.tools).toContain("wait_for");
+  });
+
+  it("wait_for before any browse errors, no backend call", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "wait_for", args: { target: "#x" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "need a page" } } as ToolCall },
+    ]);
+    await runAgent("wait for x", { llm, backend: b });
+    expect(hits.some((h) => h.startsWith("waitFor:"))).toBe(false);
   });
 
   it("set_field before any browse errors, no backend call", async () => {

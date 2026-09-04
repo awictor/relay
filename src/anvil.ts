@@ -196,6 +196,35 @@ export async function setField(sessionId: string, selector: string, value: strin
   return typeof r === "string" ? r : String((r as { result?: unknown }).result ?? "");
 }
 
+// One presence check in the page: true if `target` matches a CSS selector with an element, OR (when it
+// isn't valid CSS / matches nothing) if the body's text contains it (case-insensitive). Lets wait_for
+// take either a selector (".results .item") or a phrase ("In stock") without the caller knowing which.
+const PRESENCE_SCRIPT = (target: string) => `(() => {
+  try {
+    const t = ${JSON.stringify(target)};
+    try { if (document.querySelector(t)) return true; } catch (e) { /* not a valid selector — fall through to text */ }
+    return (document.body ? document.body.innerText : '').toLowerCase().includes(t.toLowerCase());
+  } catch (e) { return false; }
+})()`;
+
+/** Wait until `target` (a CSS selector OR a text phrase) appears on the current session's page, polling
+ * until present or `timeoutMs` (wait-for-selector). Closes the read-too-early race after a click /
+ * set_field / site_search on a slow SPA/AJAX page, where the fixed sleeps could read a stale/empty page.
+ * Requires a prior browse. Returns true if it appeared, false on timeout (the caller still reads + reports
+ * honestly). Polls ~every 400ms; timeout clamped 1-30s. */
+export async function waitFor(sessionId: string, target: string, timeoutMs = 8000): Promise<boolean> {
+  const budget = Math.max(1000, Math.min(30000, timeoutMs));
+  const started = Date.now();
+  const script = PRESENCE_SCRIPT(target);
+  for (;;) {
+    let present = false;
+    try { const r = await action(sessionId, "/v1/actions/evaluate", { script }); present = (r as unknown) === true; } catch { present = false; }
+    if (present) return true;
+    if (Date.now() - started >= budget) return false;
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
 /**
  * Read the CURRENT page's text after navigate/click/type. anvil's /v1/scrape
  * always navigates (requires a url), so to read the live page we evaluate
