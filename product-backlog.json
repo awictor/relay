@@ -3353,9 +3353,18 @@
       "title": "Probe each existing tool's DOCUMENTED idioms actually work (doc-vs-behavior drift)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The '% off' bug shows a class: a tool's header/description advertises an idiom that a later refactor broke, and no test covered that exact phrasing. Other tools may have the same doc-vs-behavior drift (worldclock conversions, unit-convert compound forms, datecalc phrasings, translate URL form).",
       "how": "For each tool, read its doc/description's listed example phrasings + probe them via the lib; where a documented idiom errors or returns null, fix + add a test. One tool per iteration."
+    },
+    {
+      "id": "probe-tool-idiom-coverage-2",
+      "title": "Continue the documented-idiom coverage sweep on the remaining tools (datecalc, translate, directions, scores, flight, feeds)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The convert_units + calc %-off finds prove doc-vs-behavior drift is a live class. Tools not yet idiom-probed: datecalc (all its listed phrasings), translate (URL/page form), directions (transit/modes), get_scores (team vs league), get_flight (route form), feeds (each follow target type). A documented idiom that errors is a silent dead-end.",
+      "how": "For each remaining tool, extract the example phrasings from its description + doc comment, probe each via the lib/dispatch, fix any that error/return-null-when-they-shouldn't + add a test. One tool per iteration; stop the class when a full pass finds nothing."
     }
   ],
   "history": [
@@ -4730,6 +4739,10 @@
     {
       "item": "calc-pct-off-first",
       "note": "REAL BUG (not a new capability): calc's header advertised the 'x% off' idiom, but only '50 - 20% off' (sign-first) worked — the COMMON phrasing '20% off 50' (percent-first, no minus) fell through to 'I don't know off' error. A top shopping-math ask silently broke. Added a percent-first rewrite '20% off 50' -> '50*(1-20/100)' before the %-of rewrite. '20% of 50'=10 (part) stays distinct from '20% off 50'=40 (remainder). +4 test cases. 2103 green. Found by probing calc coverage when the backlog was owner-gated - a genuine find, not filler."
+    },
+    {
+      "item": "unit-convert-density",
+      "note": "doc-vs-behavior drift fix (from probe-tool-idiom-coverage): convert_units' description + prompt (3 places) advertised '2 cups of flour in grams' but it returned NULL — volume<->mass needs a density, so the tool erred on its OWN documented cooking example (a dead-end on a common ask). Fixed by DELIVERING the feature: parseUnitConvert now captures 'of <ingredient>', + a density table (flour/sugar/butter/water/etc g/ml) resolves volume<->mass ('2 cups of flour'≈251g, flagged approximate). Unknown ingredient -> null (no guessed density); no ingredient -> water default (flagged). +1 test case + 2 stale assertions updated. worldclock/datecalc idioms probed clean. 2104 green."
     }
   ],
   "audits": [
@@ -5173,6 +5186,11 @@
       "lens": "calc-coverage probe (owner-gated backlog)",
       "surfaced": "Probed the calculate tool's idiom coverage - found '20% off 50' erroring despite the documented %-off support (only the sign-first form worked). Fixed. Also noted calc lacks factorial/log/trig (low demand, deliberate scope). This was a real bug behind a green suite - worth the probe even with the backlog owner-gated.",
       "seeded": "probe-tool-idiom-coverage"
+    },
+    {
+      "lens": "tool-idiom coverage probe #1",
+      "surfaced": "Probed documented idioms across worldclock (clean: Tokyo/PT->London/EST->Tokyo all work), unit-convert (FOUND: 'cups of flour in grams' advertised but null), datecalc. The one real drift was convert_units promising a density conversion it couldn't do — now delivered. worldclock + the rest of unit-convert's documented forms verified working.",
+      "seeded": "probe-tool-idiom-coverage-2"
     }
   ]
 }

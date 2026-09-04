@@ -39,6 +39,18 @@ describe("convertUnit — length/mass/volume (factor)", () => {
     expect(convertUnit(1, "florbs", "km")).toBeNull(); // unknown
     expect(convertUnit(5, "MB", "miles")).toBeNull();  // data -> length
   });
+  it("volume<->mass via ingredient density — the advertised 'cups of flour in grams' (unit-convert-density)", () => {
+    // 2 cups = 473.176 ml; flour 0.53 g/ml -> ~251 g. Approximate, flagged.
+    expect(runConvert("2 cups of flour in grams")).toMatch(/251 g.*approx/);
+    expect(runConvert("1 cup of sugar in grams")).toMatch(/201 g/);
+    expect(runConvert("250 g of butter in cups")).toMatch(/cup/);
+    // an unknown ingredient must NOT guess a density -> null (falls to the agent).
+    expect(runConvert("2 cups of unobtanium in grams")).toBeNull();
+    // no ingredient named -> water default, flagged.
+    expect(runConvert("1 cup in grams")).toMatch(/assuming water/);
+    // same-dimension conversions are unaffected by the density path.
+    expect(runConvert("1 cup in ml")).toMatch(/236\.6 ml/);
+  });
   it("data storage (binary factors: 1 KB = 1024 B) (data-unit-convert)", () => {
     expect(convertUnit(500, "MB", "GB")!.value).toBeCloseTo(0.48828, 4);
     expect(convertUnit(2, "GB", "MB")!.value).toBeCloseTo(2048, 3);
@@ -65,8 +77,9 @@ describe("parseUnitConvert", () => {
     expect(parseUnitConvert("convert 10 miles to km")).toEqual({ amount: 10, from: "miles", to: "km" });
     expect(parseUnitConvert("3 lb in kg")).toEqual({ amount: 3, from: "lb", to: "kg" });
   });
-  it("ignores an 'of <thing>' clause (cooking)", () => {
-    expect(parseUnitConvert("2 cups of flour in grams")).toEqual({ amount: 2, from: "cups", to: "grams" });
+  it("captures an 'of <ingredient>' clause (cooking density — unit-convert-density)", () => {
+    expect(parseUnitConvert("2 cups of flour in grams")).toEqual({ amount: 2, from: "cups", to: "grams", of: "flour" });
+    expect(parseUnitConvert("10 miles in km")).toEqual({ amount: 10, from: "miles", to: "km" }); // no 'of' -> no field
   });
   it("sums a compound feet+inches height into inches", () => {
     expect(parseUnitConvert("5 ft 11 in in cm")).toEqual({ amount: 71, from: "in", to: "cm" });
@@ -86,7 +99,7 @@ describe("parseUnitConvert", () => {
 describe("runConvert (parse + convert + format)", () => {
   it("formats a full request", () => {
     expect(runConvert("180C to F")).toMatch(/180 °C = 356 °F/);
-    expect(runConvert("2 cups of flour in grams")).toBeNull(); // cups->grams is volume->mass, can't
+    expect(runConvert("2 cups of flour in grams")).toMatch(/251 g/); // now resolves via flour density
     expect(runConvert("2 cups in ml")).toMatch(/= 473\.2 ml/);
     expect(runConvert("5 ft 11 in in cm")).toMatch(/= 180\.3 cm/);
     expect(runConvert("convert 100 kg to lbs please")).toMatch(/100 kg = 220\.5 lb/); // trailing 'please' no longer breaks it

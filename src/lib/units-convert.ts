@@ -109,7 +109,7 @@ export function convertUnit(amount: number, from: string, to: string): { value: 
 /** Parse a "convert" request into { amount, from, to } or null. Handles:
  *   "180C to F", "convert 10 miles to km", "5 ft 11 in in cm", "2 cups of flour in grams", "3 lb in kg".
  * A compound imperial length ("5 ft 11 in") is summed. "of <thing>" is ignored. Exported for tests. */
-export function parseUnitConvert(text: string): { amount: number; from: string; to: string } | null {
+export function parseUnitConvert(text: string): { amount: number; from: string; to: string; of?: string } | null {
   // Strip a leading "convert" + a trailing politeness/punctuation ("... to lbs please" / "... in cm?"):
   // otherwise the trailing word became part of the target unit ("lbs please") and the conversion failed
   // on an unknown unit (unit-convert-trailing-please).
@@ -120,14 +120,28 @@ export function parseUnitConvert(text: string): { amount: number; from: string; 
     const totalIn = parseFloat(compound[1]!) * 12 + parseFloat(compound[2]!);
     return { amount: totalIn, from: "in", to: compound[3]!.trim() };
   }
-  // Standard: "<amount> <from> [of X] (to|in|into) <to>". Temp allows a °/no-space form ("180C to F").
-  const m = t.match(/(-?\d+(?:\.\d+)?)\s*°?\s*([a-z][a-z ]*?)\s+(?:of\s+[a-z ]+\s+)?(?:in ?to|into|to|in)\s+°?\s*([a-z][a-z ]*?)\s*$/i);
+  // Standard: "<amount> <from> [of <ingredient>] (to|in|into) <to>". Temp allows a °/no-space form
+  // ("180C to F"). The "of <ingredient>" is CAPTURED (not just skipped) so a volume<->mass cooking
+  // conversion can pick the right density ("2 cups of flour in grams") (unit-convert-density).
+  const m = t.match(/(-?\d+(?:\.\d+)?)\s*°?\s*([a-z][a-z ]*?)\s+(?:of\s+([a-z ]+?)\s+)?(?:in ?to|into|to|in)\s+°?\s*([a-z][a-z ]*?)\s*$/i);
   if (!m) return null;
   const amount = parseFloat(m[1]!);
-  const from = m[2]!.trim(), to = m[3]!.trim();
+  const from = m[2]!.trim(), to = m[4]!.trim();
+  const of = m[3]?.trim();
   if (!from || !to) return null;
-  return { amount, from, to };
+  return { amount, from, to, ...(of ? { of } : {}) };
 }
+
+// Common cooking-ingredient densities in grams per milliliter (unit-convert-density). Lets a volume<->mass
+// conversion the tool advertises ("2 cups of flour in grams") actually resolve instead of returning null.
+// Approximate (brands/packing vary) — the reply flags it as approximate. "water" is the 1.0 default when an
+// ingredient isn't listed but a density is still needed.
+const DENSITY_G_PER_ML: Record<string, number> = {
+  water: 1.0, milk: 1.03, flour: 0.53, "all purpose flour": 0.53, "bread flour": 0.53,
+  sugar: 0.85, "granulated sugar": 0.85, "brown sugar": 0.72, "powdered sugar": 0.56, "icing sugar": 0.56,
+  butter: 0.911, oil: 0.92, "olive oil": 0.92, "vegetable oil": 0.92, honey: 1.42, salt: 1.2,
+  rice: 0.85, "cocoa powder": 0.52, cornstarch: 0.54, "maple syrup": 1.33,
+};
 
 /** Format a conversion result: trims to a sensible precision, keeps integers clean. Exported. */
 export function formatConvert(amount: number, from: string, to: string, r: { value: number; fromLabel: string; toLabel: string }): string {
@@ -144,6 +158,33 @@ export function runConvert(text: string): string | null {
   const p = parseUnitConvert(text);
   if (!p) return null;
   const r = convertUnit(p.amount, p.from, p.to);
-  if (!r) return null;
-  return formatConvert(p.amount, p.from, p.to, r);
+  if (r) return formatConvert(p.amount, p.from, p.to, r);
+  // Same-dimension failed — try a density-based volume<->mass cooking conversion ("2 cups of flour in
+  // grams") (unit-convert-density). Needs a known ingredient density (or water as the 1.0 default).
+  const dens = densityConvert(p);
+  return dens; // null when it isn't a volume<->mass pair or the ingredient's density is unknown
+}
+
+// Volume<->mass via ingredient density. Returns a formatted line, or null if not applicable / unknown
+// density. base-volume is ml, base-mass is g, density is g/ml, so grams = ml * density.
+function densityConvert(p: { amount: number; from: string; to: string; of?: string }): string | null {
+  const fb = toBaseAmount(p.amount, p.from);   // {base, dim}
+  const tu = UNITS[normalizeUnit(p.to)];
+  if (!fb || !tu) return null;
+  const fromDim = fb.dim, toDim = tu.dim;
+  const isVM = (fromDim === "volume" && toDim === "mass") || (fromDim === "mass" && toDim === "volume");
+  if (!isVM) return null;
+  // Density: the named ingredient, else water (1.0). Only proceed if the ingredient is known OR the user
+  // gave none (then water is a reasonable, clearly-flagged default).
+  const key = (p.of ?? "").toLowerCase().trim();
+  const density = key ? DENSITY_G_PER_ML[key] : 1.0;
+  if (density === undefined) return null; // an unknown ingredient -> don't guess a density
+  let grams: number, ml: number, value: number, toLabel = tu.label;
+  if (fromDim === "volume") { ml = fb.base; grams = ml * density; value = grams / tu.toBase; }
+  else { grams = fb.base; ml = grams / density; value = ml / tu.toBase; }
+  const fmt = (n: number) => { const a = Math.abs(n); const dp = a && a < 1 ? 4 : a < 100 ? 1 : 0; return Number(n.toFixed(dp)).toLocaleString("en-US"); };
+  const ing = key ? ` of ${key}` : "";
+  const approxNote = key ? ` (approx — ${key} density varies)` : ` (assuming water; name the ingredient for a better estimate)`;
+  const fromLabel = UNITS[normalizeUnit(p.from)]?.label ?? p.from;
+  return `${fmt(p.amount)} ${fromLabel}${ing} ≈ ${fmt(value)} ${toLabel}${approxNote}`;
 }
