@@ -32,6 +32,9 @@ import type { DigestOutcome } from "./digest-runner.js";
 // scheduler, which streaks all-failed silently), or null for a gone/empty digest (caller supplies copy).
 function digestDisplay(outcome: DigestOutcome): string | null {
   if (outcome && typeof outcome === "object" && "allFailed" in outcome) return outcome.note;
+  // quiet-unchanged (digest-skip-unchanged): a SCHEDULED fire stays silent, but /run asked right now —
+  // show the composed briefing (with a note that nothing moved) rather than nothing.
+  if (outcome && typeof outcome === "object" && "quietNoChange" in outcome) return `${outcome.text}\n\n(Nothing changed since last time.)`;
   return outcome;
 }
 

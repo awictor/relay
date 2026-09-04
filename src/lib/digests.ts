@@ -11,12 +11,14 @@ export interface Digest {
   name: string;       // unique per chat (lowercased)
   members: string[];  // recipe names (lowercased), in order
   schedule?: string;  // optional raw schedule phrase
+  quietUnchanged?: boolean; // digest-skip-unchanged: a SCHEDULED fire stays silent when nothing changed
   created: number;
 }
 
 export interface ParsedDigest {
   name: string;
   members: string[];
+  quietUnchanged?: boolean;
 }
 
 function normalizeName(s: string): string {
@@ -36,9 +38,15 @@ export function parseDigestCommand(text: string): ParsedDigest | null {
   const m = stripTrailingCourtesy(text.trim()).match(/^\s*(?:define\s+)?digest\s+([^:]+?)\s*:\s*(.+)$/i);
   if (!m) return null;
   const name = normalizeName(m[1]!);
-  const members = m[2]!.split(",").map((s) => normalizeName(s)).filter(Boolean);
+  // "digest morning: ... (only if changed)" / "... only when changed" -> quiet-unchanged: a scheduled
+  // fire stays silent when no member moved (digest-skip-unchanged). Strip the marker from the member list.
+  let membersRaw = m[2]!;
+  let quietUnchanged = false;
+  const qm = membersRaw.match(/\s*[\(\-,]?\s*only\s+(?:if|when)\s+(?:something\s+)?changed\)?\s*$/i);
+  if (qm) { quietUnchanged = true; membersRaw = membersRaw.slice(0, qm.index).trim(); }
+  const members = membersRaw.split(",").map((s) => normalizeName(s)).filter(Boolean);
   if (!name || members.length === 0) return null;
-  return { name, members };
+  return { name, members, ...(quietUnchanged ? { quietUnchanged } : {}) };
 }
 
 export interface DigestStoreOptions {
@@ -103,10 +111,11 @@ export class DigestStore {
     if (existing) {
       existing.members = members;
       existing.schedule = d.schedule;
+      if (d.quietUnchanged !== undefined) existing.quietUnchanged = d.quietUnchanged;
       this.persist();
       return existing;
     }
-    const rec: Digest = { chatId, name, members, schedule: d.schedule, created: now };
+    const rec: Digest = { chatId, name, members, schedule: d.schedule, ...(d.quietUnchanged ? { quietUnchanged: true } : {}), created: now };
     this.items.push(rec);
     this.persist();
     return rec;

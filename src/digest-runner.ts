@@ -45,6 +45,10 @@ export interface DigestRunnerDeps {
   // first. Optional; absent -> members stay in definition order (prior behavior). The store lives in the
   // caller (index) so it's persisted + testable. Called once per REAL member, in member order.
   memberChanged?: (chatId: number, digestName: string, member: string, body: string) => boolean;
+  // digest-skip-unchanged: has this digest been run before (does the change-store hold any prior value for
+  // it)? Lets the runner tell a genuine "nothing changed" from a first run — the FIRST scheduled fire must
+  // still send (seed the baseline), only later unchanged fires go quiet. Called BEFORE memberChanged writes.
+  digestSeenBefore?: (chatId: number, digestName: string) => boolean;
   // Per-user profile context (product-loop) so a scheduled digest resolves the user's location.
   contextFor?: (chatId: number) => string;
 }
@@ -58,7 +62,11 @@ export interface DigestRunnerDeps {
 //    every single cadence with no way to notice a source that's now permanently broken. The inbound /run +
 //    callback paths still SHOW `note` (the user asked right now, so an honest "couldn't build it" is right).
 export interface DigestAllFailed { allFailed: true; note: string; }
-export type DigestOutcome = string | DigestAllFailed | null;
+// quiet-unchanged (digest-skip-unchanged): the digest built fine but NOTHING changed since last run + the
+// digest is set "only if changed". A SCHEDULED fire stays silent (skip the morning buzz); the inbound /run
+// path shows `text` anyway (the user asked right now). `text` is the full composed briefing.
+export interface DigestQuietNoChange { quietNoChange: true; text: string; }
+export type DigestOutcome = string | DigestAllFailed | DigestQuietNoChange | null;
 
 /**
  * Run a digest: execute each member recipe, compose a single message with a section per
@@ -72,6 +80,9 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
   // a SCHEDULED fire stays silent instead of pinging a contentless "📋 name" on cadence, and the inbound
   // /run path shows "empty or gone" (empty-digest-fires-noise). Guarded again after building sections.
   if (members.length === 0) return null;
+  // digest-skip-unchanged: snapshot whether this digest ran before BEFORE the members write new values,
+  // so the first-ever fire still sends (only a later all-unchanged fire goes quiet).
+  const seenBefore = digest.quietUnchanged ? (deps.digestSeenBefore?.(digest.chatId, digest.name) ?? false) : false;
   // Run members CONCURRENTLY (DEV-0139) but BOUNDED (DEV-0140): each member is a seconds-long agent
   // (LLM+browser) call, so a sequential for..await made a 5-member digest take ~5x one member. A
   // plain Promise.all fixed that but could open one anvil session PER member at once and exhaust the
@@ -153,6 +164,12 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
     return null;
   }
   const title = `📋 ${digest.name}`;
+  // digest-skip-unchanged: this digest is "only if changed", it has run before, and NO member moved this
+  // time -> return quietNoChange so a SCHEDULED fire stays silent (no morning buzz), while /run still shows
+  // the composed briefing. Only when change-detection is wired (else there's no change signal to trust).
+  if (digest.quietUnchanged && deps.memberChanged && seenBefore && !built.some((b) => b.changed)) {
+    return { quietNoChange: true, text: `${title}\n${built.map((b) => b.line).join("\n")}` };
+  }
   // Smart ordering (digest-smart-ordering): when change-detection is wired, float members that CHANGED
   // materially since last run to the top with a ✦ marker, so a daily reader sees what's different first.
   // Stable within each group (preserves definition order among changed, and among unchanged). No-op when

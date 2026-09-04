@@ -179,6 +179,7 @@ const digestRunText = (chatId: number, name: string): Promise<DigestOutcome> => 
     // Smart ordering (digest-smart-ordering): float members that changed since last run to the top with a
     // ✦ marker. The DigestChangeStore remembers each member's last value + reports material change.
     memberChanged: (c, dn, member, body) => digestChanges.changed(c, dn, member, body),
+    digestSeenBefore: (c, dn) => digestChanges.seenBefore(c, dn),
     // A chained-recipe member runs as a sequential workflow, not a literal task (digest-chain-member-literal).
     // Return the STRUCTURED result so the digest flags a chain that stopped early instead of showing its
     // partial output as a complete section (chain-partial-nonrun-paths).

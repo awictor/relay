@@ -368,8 +368,19 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: false });
         return;
       }
+      // quiet-unchanged (digest-skip-unchanged): the digest built fine but nothing moved + it's set "only
+      // if changed" — stay SILENT this scheduled fire (no morning buzz), advance the schedule, clear any
+      // fail streak (it's a healthy run, just uneventful). /run still shows it (handler's digestDisplay).
+      if (typeof composed === "object" && composed !== null && "quietNoChange" in composed) {
+        if (isCancelled()) return;
+        softFailStreak.delete(s.id);
+        deps.store.complete(s.id, deps.now());
+        log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, digest: digestMatch[1], ok: true, sent: false, quiet_no_change: true })}`);
+        deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
+        return;
+      }
       softFailStreak.delete(s.id); // real briefing content this run — clear any all-failed streak
-      res = { reply: composed };
+      res = { reply: composed as string };
       sendText = deps.formatReply(res.reply); // digest text already labeled; no reminder prefix
       fullText = composed; // untrimmed source, so "more"/"link" can page the tail formatReply dropped
     } else {

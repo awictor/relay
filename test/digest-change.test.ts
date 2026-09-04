@@ -30,6 +30,15 @@ describe("DigestChangeStore", () => {
     expect(s.changed(2, "morning", "btc", "100")).toBe(false);
     expect(s.changed(1, "evening", "btc", "100")).toBe(false);     // different digest name
   });
+  it("seenBefore: false until a member of that digest is recorded (digest-skip-unchanged)", () => {
+    const s = new DigestChangeStore();
+    expect(s.seenBefore(1, "morning")).toBe(false);
+    s.changed(1, "morning", "btc", "$100");
+    expect(s.seenBefore(1, "morning")).toBe(true);
+    expect(s.seenBefore(1, "evening")).toBe(false); // different digest
+    expect(s.seenBefore(2, "morning")).toBe(false); // different chat
+  });
+
   it("persist callback fires with a flat snapshot", () => {
     let saved: Record<string, string> | null = null;
     const s = new DigestChangeStore((o) => { saved = o; });

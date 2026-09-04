@@ -114,6 +114,29 @@ describe("runDigest", () => {
     expect(out).toMatch(/• hn:/);
   });
 
+  it("quiet-unchanged: seen-before + nothing changed -> quietNoChange (digest-skip-unchanged)", async () => {
+    const d: Digest = { chatId: 1, name: "morning", members: ["weather", "btc"], schedule: undefined, quietUnchanged: true, created: NOW };
+    const out = await runDigest(d, deps({
+      memberChanged: () => false,       // nothing moved
+      digestSeenBefore: () => true,     // ran before -> not a first fire
+    }));
+    expect(out && typeof out === "object" && "quietNoChange" in out).toBe(true);
+    expect((out as { text: string }).text).toMatch(/• weather:/); // composed text still available for /run
+  });
+
+  it("quiet-unchanged: FIRST run (not seen before) still SENDS (seeds baseline)", async () => {
+    const d: Digest = { chatId: 1, name: "morning", members: ["weather", "btc"], schedule: undefined, quietUnchanged: true, created: NOW };
+    const out = await runDigest(d, deps({ memberChanged: () => false, digestSeenBefore: () => false }));
+    expect(typeof out).toBe("string"); // sends the briefing on the first fire
+  });
+
+  it("quiet-unchanged: a CHANGED member sends normally (not quiet)", async () => {
+    const d: Digest = { chatId: 1, name: "morning", members: ["weather", "btc"], schedule: undefined, quietUnchanged: true, created: NOW };
+    const out = await runDigest(d, deps({ memberChanged: (_c, _dn, m) => m === "btc", digestSeenBefore: () => true }));
+    expect(typeof out).toBe("string");
+    expect(out as string).toMatch(/✦ btc:/);
+  });
+
   it("no reorder when nothing changed (identical to definition-order briefing)", async () => {
     const out = await runDigest(digest(["weather", "hn"]), deps({
       memberChanged: () => false,

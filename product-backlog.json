@@ -3615,7 +3615,7 @@
       "title": "Digest option: only send when SOMETHING changed (quiet mornings stay quiet)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "With change-detection now in place (digest-smart-ordering), a natural follow-on: a user can set a digest to ONLY ping when a member actually changed — a market watch that hasnt moved + no new stories shouldnt buzz the phone every morning. Reduces notification fatigue, a real retention lever.",
       "how": "Reuse DigestChangeStore: add an opt-in per-digest \"only if changed\" flag (define syntax + store field). In digest-runner, when the flag is set and NO member changed (all first-run-seeded or within deadband), return a silent outcome (like null) for a SCHEDULED fire; /run still shows it. Offline test: unchanged -> silent, changed -> sends."
     },
@@ -5241,6 +5241,10 @@
     {
       "item": "digest-smart-ordering",
       "note": "Digests now lead with what CHANGED: a member whose value moved materially since the last run floats to the top with a ✦ marker (\"✦ = changed since last time\" header), so a daily reader sees whats different first instead of fixed definition order. New src/lib/digest-change.ts: digestMemberChanged (numeric relative deadband default 1% via RELAY_DIGEST_CHANGE_PCT, else normalized-text compare; first run never ✦) + DigestChangeStore (per chat/digest/member last-value). Wired via new optional memberChanged dep in digest-runner (absent -> prior definition order, zero behavior change); in-memory store in index. +8 tests (lib change-detect/isolation/persist + runner reorder/no-reorder). LIVE e2e: 2-run digest, btc +9% -> floated ✦ to top, weather unchanged below. 2312 green. call-tested: TRUE. Net-new RETENTION feature (not a micro-tool) — first power-lens item in a while."
+    },
+    {
+      "item": "digest-skip-unchanged",
+      "note": "Digests can now stay QUIET when nothing changed (notification-fatigue win). Add \"(only if changed)\" / \"only when changed\" to a digest definition -> a SCHEDULED fire returns quietNoChange (silent) when the digest ran before + no member moved; the FIRST fire still sends (seeds baseline), and /run always shows it (with a \"nothing changed\" note). New quietUnchanged flag on Digest + parse + store; runner uses digestSeenBefore (new DigestChangeStore.seenBefore) to distinguish first-run from genuine no-change; schedule-runner stays silent + advances on quietNoChange; handler digestDisplay shows it for /run. Caught+fixed a null-byte corruption in the store key template (spaces became \u0000, breaking seenBefore) mid-build. +8 tests. LIVE e2e: run1 sends, run2 unchanged->silent, run3 btc+9%->sends ✦. 2317 green. call-tested: TRUE."
     }
   ],
   "audits": [

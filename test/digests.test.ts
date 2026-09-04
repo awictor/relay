@@ -25,6 +25,11 @@ describe("parseDigestCommand", () => {
     expect(parseDigestCommand("digest morning: weather, hn please")).toEqual({ name: "morning", members: ["weather", "hn"] });
     expect(parseDigestCommand("define digest evening: btc, news thanks")).toEqual({ name: "evening", members: ["btc", "news"] });
   });
+  it("parses the 'only if changed' quiet-unchanged marker (digest-skip-unchanged)", () => {
+    expect(parseDigestCommand("digest morning: weather, hn, btc (only if changed)")).toEqual({ name: "morning", members: ["weather", "hn", "btc"], quietUnchanged: true });
+    expect(parseDigestCommand("define digest m: weather, btc only when changed")).toEqual({ name: "m", members: ["weather", "btc"], quietUnchanged: true });
+    expect(parseDigestCommand("digest x: weather, hn")).toEqual({ name: "x", members: ["weather", "hn"] }); // no flag
+  });
 });
 
 describe("DigestStore", () => {
