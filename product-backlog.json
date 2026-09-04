@@ -3365,6 +3365,15 @@
       "status": "done",
       "why": "The convert_units + calc %-off finds prove doc-vs-behavior drift is a live class. Tools not yet idiom-probed: datecalc (all its listed phrasings), translate (URL/page form), directions (transit/modes), get_scores (team vs league), get_flight (route form), feeds (each follow target type). A documented idiom that errors is a silent dead-end.",
       "how": "For each remaining tool, extract the example phrasings from its description + doc comment, probe each via the lib/dispatch, fix any that error/return-null-when-they-shouldn't + add a test. One tool per iteration; stop the class when a full pass finds nothing."
+    },
+    {
+      "id": "probe-error-and-edge-messaging",
+      "title": "Sweep remaining user-facing MESSAGE surfaces for accuracy (empty-result, rate-limit, cap-hit, ask-clarify copy)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "The friendlyError find shows user-facing message copy is a live probe surface (not just parsing/logic). Other message paths may be vague or wrong: empty-search-result phrasing, per-chat rate-limit message, schedule/list cap-hit copy, the various 'couldn't tell what you meant' clarifiers - do they name the actual problem + a next step?",
+      "how": "Probe each canned user-message path (grep push()/sendMessage string literals + the tool clarify branches); where a message is vague, misleading, or lacks a next step, sharpen it + assert in a test. One surface per iteration."
     }
   ],
   "history": [
@@ -4751,6 +4760,10 @@
     {
       "item": "readme-capability-refresh",
       "note": "README doc-drift: the 'What you can text it' section had NO 'Instant answers' subsection at all — every keyless tool (weather/prices/math/units/words/time/dates/utilities/lookups) was undocumented, incl. all 5 new ones shipped this session (password, encode/decode, time-until, data-unit convert, uuid). README is the first thing a prospective user/dev reads; missing capabilities = undiscovered. Added a grouped Instant-answers subsection + refreshed the Commands line (added /setlocation /profile /dashboard /contacts /templates). Doc-only, no code; tsc green, no README test. 2104 tests unchanged."
+    },
+    {
+      "item": "failure-network-errno-generic",
+      "note": "REAL bug in friendlyError classification: the browser/network category matched 'timeout'/'ECONNREFUSED' but MISSED the common node socket/DNS errno family (ETIMEDOUT, ENOTFOUND, ENETUNREACH, EHOSTUNREACH, EPIPE, ECONNABORTED) and Chrome's net::ERR_* codes — so a timed-out or DNS-failed fetch fell to the vague generic 'something went wrong on my end' instead of the accurate 'my browser's having trouble, try again'. A daily user hitting a flaky network got a confusing message. Widened the browser regex. llm/blocked/generic precedence intact. +1 test. 2105 green."
     }
   ],
   "audits": [
@@ -5208,6 +5221,11 @@
       "lens": "README accuracy probe",
       "surfaced": "The in-bot HELP/START copy is thorough, but the REPO README lagged badly — 0 mentions of instant-answer tools or the session's 5 new capabilities. Fixed. This was the last stale doc surface; in-bot discovery + README now both current.",
       "seeded": "(none new — owner levers remain the standing work)"
+    },
+    {
+      "lens": "friendlyError classification probe",
+      "surfaced": "Probed failure.ts error->message mapping: found ETIMEDOUT/ENOTFOUND/net::ERR_* misclassified as generic (should be browser). Fixed. This was a real user-facing-message bug behind the green suite - the error-mapping surface hadn't been idiom-probed. classifyFailure precedence (llm>blocked>browser>generic) verified correct.",
+      "seeded": "probe-error-and-edge-messaging"
     }
   ]
 }

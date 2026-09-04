@@ -19,7 +19,10 @@ export function classifyFailure(rawMessage: string): FailureKind {
   if (/Blocked URL|Blocked protocol|Blocked hostname|Blocked IP|\brefused \(/i.test(m)) return "blocked";
   // anvil / browser transport down: connection refused, DNS, socket, fetch failed, anvil's own
   // "create session failed" / "anvil ... failed", or a bare timeout with no other classification.
-  if (/ECONNREFUSED|ECONNRESET|EAI_AGAIN|socket hang up|fetch failed|network|anvil|create session|browserWSEndpoint|\bWebSocket\b|timed out|timeout/i.test(m)) return "browser";
+  // Includes the Node socket/DNS errno family (ETIMEDOUT/ENOTFOUND/ENETUNREACH/EHOSTUNREACH) and Chrome's
+  // net::ERR_* codes — these are network/browser failures that were falling to the generic apology instead
+  // of the accurate "browser's having trouble" hint (failure-network-errno-generic).
+  if (/ECONNREFUSED|ECONNRESET|ECONNABORTED|EAI_AGAIN|ETIMEDOUT|ENOTFOUND|ENETUNREACH|EHOSTUNREACH|EPIPE|socket hang up|fetch failed|network|net::ERR|anvil|create session|browserWSEndpoint|\bWebSocket\b|timed out|timeout/i.test(m)) return "browser";
   return "generic";
 }
 

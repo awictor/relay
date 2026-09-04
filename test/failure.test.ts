@@ -16,6 +16,11 @@ describe("classifyFailure", () => {
     for (const m of ["anvil create session failed: connect ECONNREFUSED 127.0.0.1:3000", "fetch failed", "socket hang up", "navigation timed out"])
       expect(classifyFailure(m), m).toBe("browser");
   });
+  it("browser: node socket/DNS errno + Chrome net::ERR codes (failure-network-errno-generic)", () => {
+    // These used to fall to the generic apology instead of the accurate 'browser trouble' hint.
+    for (const m of ["ETIMEDOUT", "ENOTFOUND api.example.com", "EHOSTUNREACH", "ENETUNREACH", "net::ERR_NAME_NOT_RESOLVED", "net::ERR_CONNECTION_TIMED_OUT"])
+      expect(classifyFailure(m), m).toBe("browser");
+  });
   it("generic: anything unclassified", () => {
     expect(classifyFailure("TypeError: undefined is not a function")).toBe("generic");
     expect(classifyFailure("")).toBe("generic");
