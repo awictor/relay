@@ -29,6 +29,7 @@ function recordingBackend() {
     click: async (_id, sel) => { hits.push(`click:${sel}`); },
     type: async (_id, sel) => { hits.push(`type:${sel}`); },
     setField: async (_id, sel, value) => { hits.push(`setField:${sel}=${value}`); return "select-set"; },
+    describeControls: async (_id, kind) => { hits.push(`describeControls:${kind}`); return kind === "field" ? [{ selector: "#q", text: "Search" }] : [{ selector: "#addToCart", text: "Add to cart" }]; },
     waitFor: async (_id, target, timeoutMs) => { hits.push(`waitFor:${target}:${timeoutMs}`); return true; },
     readCurrent: async () => { hits.push("readCurrent"); return { title: "t", content: "text", url: "u" }; },
     releaseSession: async () => { hits.push("releaseSession"); },
@@ -306,6 +307,39 @@ describe("runAgent dispatch", () => {
     ]);
     await runAgent("check the delete box", { llm, backend: b });
     expect(hits.some((h) => h.startsWith("setField:"))).toBe(false); // guard blocked it
+  });
+
+  it("a failed click feeds back the page's real clickable elements (selector-not-found-candidates)", async () => {
+    const { b, hits } = recordingBackend();
+    b.click = async (_id, sel) => { hits.push(`click:${sel}`); throw new Error("no element for selector"); };
+    // After the failed click, the tool message carries the candidates; the model then retries with a real one.
+    let sawCandidates = false;
+    const llm = new (class {
+      private step = 0;
+      async complete(messages: import("../src/llm.js").LLMMessage[]) {
+        // detect the candidate hint landed in the tool feedback before the model's 2nd move
+        if (messages.some((m) => m.role === "tool" && /#addToCart/.test(m.content ?? ""))) sawCandidates = true;
+        this.step++;
+        if (this.step === 1) return { toolCall: { name: "browse", args: { url: "https://shop.example.com" } } as ToolCall };
+        if (this.step === 2) return { toolCall: { name: "click", args: { selector: ".wrong-guess", label: "the results tab" } } as ToolCall };
+        return { toolCall: { name: "reply", args: { text: "done" } } as ToolCall };
+      }
+    })() as unknown as import("../src/llm.js").LLMClient;
+    await runAgent("click buy", { llm, backend: b });
+    expect(hits).toContain("describeControls:click"); // pulled the page's real controls on the miss
+    expect(sawCandidates).toBe(true);                   // and fed them back to the model
+  });
+
+  it("a set_field not-found feeds back the real fields", async () => {
+    const { b, hits } = recordingBackend();
+    b.setField = async (_id, sel) => { hits.push(`setField:${sel}`); return "not-found"; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://x.com" } } as ToolCall },
+      { toolCall: { name: "set_field", args: { selector: "#nope", value: "x" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "done" } } as ToolCall },
+    ]);
+    await runAgent("set the field", { llm, backend: b });
+    expect(hits).toContain("describeControls:field");
   });
 
   it("site_search -> backend.siteSearch with url + query (site-search-tool)", async () => {

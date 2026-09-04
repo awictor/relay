@@ -614,6 +614,9 @@ export interface BrowserBackend {
   // Set a <select>/checkbox/radio/input the click+type pair can't drive (select-dropdown-support).
   // Optional — when absent the set_field tool reports unavailable.
   setField?(sessionId: string, selector: string, value: string): Promise<string>;
+  // List the page's real controls (buttons/links or inputs/selects) so a wrong-selector miss can
+  // self-correct (selector-not-found-candidates). Optional; absent -> no candidate hint on a miss.
+  describeControls?(sessionId: string, kind: "click" | "field"): Promise<Array<{ selector: string; text: string }>>;
   // Wait for a selector/text to appear on the current page before reading (wait-for-selector). Optional —
   // when absent the wait_for tool reports unavailable + the model reads directly.
   waitFor?(sessionId: string, target: string, timeoutMs?: number): Promise<boolean>;
@@ -844,6 +847,7 @@ const defaultBackend: BrowserBackend = {
   click: (id, sel) => anvil.click(id, sel),
   type: (id, sel, text) => anvil.type(id, sel, text),
   setField: (id, sel, value) => anvil.setField(id, sel, value),
+  describeControls: (id, kind) => anvil.describeControls(id, kind),
   waitFor: (id, target, timeoutMs) => anvil.waitFor(id, target, timeoutMs),
   readCurrent: (id) => anvil.readCurrent(id),
   releaseSession: (id) => anvil.releaseSession(id),
@@ -956,6 +960,18 @@ export async function runAgent(
   let lastUrl = ""; // the most recently navigated page — the target a confirm-to-act click acts on
   let pendingAction: { selector: string; label: string; url: string } | null = null; // confirm-to-act stash
   const push = (name: string, content: string) => messages.push({ role: "tool", name, content });
+  // On a wrong-selector miss, list the page's real controls so the model retries with a real one instead
+  // of re-guessing blind (selector-not-found-candidates). Returns a short " Real <kind>s: ..." suffix, or
+  // "" when unavailable / none found. kind: "click" (buttons/links) | "field" (inputs/selects).
+  const candidatesHint = async (kind: "click" | "field"): Promise<string> => {
+    if (!sessionId || !backend.describeControls) return "";
+    try {
+      const ctrls = await backend.describeControls(sessionId, kind);
+      if (!ctrls.length) return "";
+      const list = ctrls.slice(0, 8).map((c) => `${c.selector}${c.text ? ` ("${c.text}")` : ""}`).join(" | ");
+      return ` Real ${kind === "field" ? "fields" : "clickable elements"} on the page: ${list}. Retry with one of these exact selectors.`;
+    } catch { return ""; }
+  };
 
   try {
     let finalReply: string | null = null;
@@ -1163,7 +1179,10 @@ export async function runAgent(
           else await backend.type(sessionId, selector, String(call.args.text ?? ""));
           push(call.name, `Done: ${call.name} ${selector}. Call read to see the updated page.`);
         } catch (e) {
-          push(call.name, `ERROR: ${e instanceof Error ? e.message : String(e)}`);
+          // A failed click/type is almost always a wrong selector — hand back the page's real controls so
+          // the model self-corrects instead of re-guessing (selector-not-found-candidates).
+          const hint = await candidatesHint(call.name === "type" ? "field" : "click");
+          push(call.name, `ERROR: ${e instanceof Error ? e.message : String(e)}.${hint}`);
         }
         continue;
       }
@@ -1181,7 +1200,7 @@ export async function runAgent(
         }
         try {
           const outcome = await backend.setField(sessionId, selector, value);
-          const msg = outcome === "not-found" ? `Couldn't find ${selector} on the page.`
+          const msg = outcome === "not-found" ? `Couldn't find ${selector} on the page.${await candidatesHint("field")}`
             : outcome === "no-option" ? `No dropdown option matching "${value}" in ${selector}.`
             : `Set ${selector} (${outcome}). Call read to see the updated page.`;
           push("set_field", msg);

@@ -196,6 +196,60 @@ export async function setField(sessionId: string, selector: string, value: strin
   return typeof r === "string" ? r : String((r as { result?: unknown }).result ?? "");
 }
 
+// List the page's real interactive controls so a wrong-selector miss can self-correct
+// (selector-not-found-candidates). kind="click" -> visible buttons/links; kind="field" -> inputs/selects/
+// textareas. Each gets a STABLE selector (id > name > a nth-of-type path) + its visible text/label, capped.
+// Runs in the page; returns [] on any error.
+const DESCRIBE_CONTROLS_SCRIPT = (kind: string, cap: number) => `(() => {
+  try {
+    const kind = ${JSON.stringify(kind)};
+    const sel = kind === 'field'
+      ? 'input:not([type=hidden]), select, textarea'
+      : 'button, a[href], [role=button], input[type=button], input[type=submit]';
+    const cssEsc = (s) => (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/[^a-zA-Z0-9_-]/g, '\\\\$&');
+    const pathOf = (el) => {
+      if (el.id) return '#' + cssEsc(el.id);
+      const name = el.getAttribute && el.getAttribute('name');
+      if (name) return el.tagName.toLowerCase() + '[name=' + JSON.stringify(name) + ']';
+      // nth-of-type path from the nearest id-anchored ancestor, else from body
+      const parts = [];
+      let node = el;
+      while (node && node.nodeType === 1 && node.tagName.toLowerCase() !== 'html') {
+        if (node.id) { parts.unshift('#' + cssEsc(node.id)); break; }
+        const tag = node.tagName.toLowerCase();
+        const sibs = node.parentNode ? Array.from(node.parentNode.children).filter((c) => c.tagName === node.tagName) : [node];
+        const idx = sibs.indexOf(node) + 1;
+        parts.unshift(sibs.length > 1 ? tag + ':nth-of-type(' + idx + ')' : tag);
+        node = node.parentNode;
+      }
+      return parts.join(' > ');
+    };
+    const out = [];
+    const seen = new Set();
+    for (const el of Array.from(document.querySelectorAll(sel))) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;                 // skip hidden
+      const text = ((el.innerText || el.textContent || el.value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '') + '').replace(/\\s+/g, ' ').trim().slice(0, 60);
+      const selector = pathOf(el);
+      if (!selector || seen.has(selector)) continue;
+      seen.add(selector);
+      out.push({ selector, text });
+      if (out.length >= ${cap}) break;
+    }
+    return out;
+  } catch (e) { return []; }
+})()`;
+
+/** List the page's visible interactive controls for the OPEN session — buttons/links (kind="click") or
+ * inputs/selects (kind="field") — as [{selector,text}] with a stable selector each. Feeds a not-found
+ * click/set_field/type back the page's REAL elements so the agent retries with a real selector instead of
+ * re-guessing (selector-not-found-candidates). Requires a prior browse; capped (~12). Returns [] on error. */
+export async function describeControls(sessionId: string, kind: "click" | "field", cap = 12): Promise<Array<{ selector: string; text: string }>> {
+  const r = await action(sessionId, "/v1/actions/evaluate", { script: DESCRIBE_CONTROLS_SCRIPT(kind, Math.max(1, Math.min(30, cap))) });
+  const arr = Array.isArray(r) ? r : (r as { result?: unknown }).result;
+  return Array.isArray(arr) ? arr.filter((x): x is { selector: string; text: string } => !!x && typeof (x as { selector?: unknown }).selector === "string") : [];
+}
+
 // One presence check in the page: true if `target` matches a CSS selector with an element, OR (when it
 // isn't valid CSS / matches nothing) if the body's text contains it (case-insensitive). Lets wait_for
 // take either a selector (".results .item") or a phrase ("In stock") without the caller knowing which.

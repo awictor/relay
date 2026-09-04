@@ -167,7 +167,7 @@
       "title": "On a click/set_field/type not-found, feed back the page's real candidate elements so the agent self-corrects",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A wrong selector (model guessed '.buy-btn' but it's '#addToCart') returns a bare 'couldn't find it' - the agent then re-guesses blind + often flails or quits mid-errand. The page KNOWS its buttons/inputs; handing back a short list of real candidate selectors + their visible text on a miss turns a dead-end into a one-step self-correct. The single biggest reliability win for interactive tasks.",
       "how": "Add an anvil describeControls(sessionId, kind) that evaluates the page for visible buttons/links (kind=click) or inputs/selects (kind=field) -> [{selector,text}] (stable selector: id, else name, else nth-of-type path), capped ~12. On a click/set_field/type not-found in dispatch, call it + append candidates to the error push so the model retries with a real one. Live e2e: wrong selector -> candidates returned -> retry hits."
     },
@@ -253,6 +253,10 @@
     {
       "item": "session-status-surface",
       "note": "Made held-browse-session state legible (session-status-surface, continuity flag on): the FIRST time a page is kept open for a thread, the reply appends a one-time hint (\"kept that page open — say sort/filter to keep going, or done to close\"); a \"done\"/\"close the page\"/\"nevermind\" message releases the carried tab + confirms. New isCloseSessionRequest parser (whole-message + anchored so \"close my rings\"/\"are you done?\" arent intercepted). Hint fires once per hold (browseHinted set, cleared on drop/reset/close). All handler+flag-gated; default OFF unchanged. +3 tests (parser match/reject, hint-once + done-closes). 2237 green. call-tested: n/a (handler logic, no anvil path)."
+    },
+    {
+      "item": "selector-not-found-candidates",
+      "note": "Interactive self-correction: a failed click/type or a set_field not-found now feeds the model the pages REAL controls so it retries with a real selector instead of re-guessing blind. New anvil describeControls(sessionId,kind): in-page, kind=click -> visible buttons/links, kind=field -> inputs/selects/textareas, each with a STABLE selector (id > name > nth-of-type path) + visible text, capped 12. candidatesHint() in runAgent appends \" Real <kind>s: sel (text) | ...\" to the error push on a click/type throw + a set_field not-found. New BrowserBackend.describeControls. +2 dispatch tests (failed click -> describeControls:click + candidates fed to model; set_field not-found -> describeControls:field). LIVE e2e: injected a form+buttons -> describeControls returned #addToCart(\"Add to cart\"), input[name=q](\"Search\"), #sort etc with stable selectors. 2239 green. call-tested: TRUE. Biggest interactive-reliability win: a wrong-selector dead-end becomes a one-step self-correct."
     }
   ],
   "probes": [
