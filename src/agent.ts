@@ -76,7 +76,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "scroll_feed",
-    description: "Read a feed/listing that loads MORE items as you scroll (infinite scroll — no 'next page' link). Scrolls to the bottom repeatedly to load lazy content, then returns the fully-expanded page text. Use for a scrolling feed when scrape returned only the first handful of items and there's no pagination link. For a paginated listing use scrape_pages; for a normal page use scrape.",
+    description: "Read a feed/listing that loads MORE items as you scroll OR via a 'Load more'/'Show more' button (no 'next page' link). Scrolls to the bottom and clicks a load-more button repeatedly to load lazy content, then returns the fully-expanded page text. Use for a scrolling/load-more feed when scrape returned only the first handful of items and there's no pagination link. For a paginated listing use scrape_pages; for a normal page use scrape.",
     parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL of the feed" }, maxScrolls: { type: "number", description: "How many times to scroll for more (1-10, default 5)" } }, required: ["url"] },
   },
   {

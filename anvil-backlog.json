@@ -77,7 +77,7 @@
       "title": "Click-driven \"Load more\" BUTTON support in the multi-page browse path",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "scrapePaged follows <a href> pagers and scrapeScroll handles scroll, but a <button>Load more</button>/<button>Show more</button> that fetches + appends items (very common on listings/job boards/product grids) is neither — the browse tools still get only the first batch.",
       "how": "In scrapeScroll (or a variant), after each scroll also try clicking a visible button/anchor whose text matches load more|show more|see more (reuse the wants regex, in-page click via evaluate), wait for content to grow, repeat under the same cap+budget. Live e2e on a real load-more listing; assert item count grows past the first batch."
     },
@@ -123,6 +123,10 @@
     {
       "item": "extract-list-csv",
       "note": "extract_list can now hand back its rows as a downloadable CSV (extract-list-csv): when the user says csv/spreadsheet/export, the extracted rows are serialized via the shared rowsToCsv (reused from compare) + attached as list.csv instead of pasted as JSON. Header=fields, one row per item. Tool description + /help updated. +2 unit tests (CSV attached on request; NOT attached otherwise). 2200 green. call-tested: false (offline unit; pure serialization of already-live-verified extraction)."
+    },
+    {
+      "item": "load-more-button",
+      "note": "scrapeScroll now handles a click-driven Load more/Show more BUTTON, not just pure scroll: when a scroll doesnt grow the page it tries clicking a visible, enabled button/anchor whose text matches load more|show more|see more|more results (in-page click via evaluate), waits, re-measures, and only stops if THAT also adds nothing. A pure-scroll feed is unchanged (stops immediately when scroll stops growing). scroll_feed + extract_list (which falls back to scrapeScroll) both inherit it. Tool description + doc updated. LIVE e2e: pure-scroll regression intact (quotes/scroll 5 scrolls, 10K chars); load-more click verified on an injected real-http listing (Load more click grew list 1 -> 11 items). 2200 green. call-tested: TRUE. Logic in anvil internals (module-level fetch), so live e2e is the proof; scroll_feed tool routing covered by dispatch unit tests."
     }
   ],
   "probes": [

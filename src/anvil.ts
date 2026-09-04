@@ -535,12 +535,36 @@ export async function scrapePaged(
 // the new scrollHeight so the caller can tell whether more content appeared. Runs in the page.
 const SCROLL_STEP_SCRIPT = "(() => { window.scrollTo(0, document.body.scrollHeight); return document.body.scrollHeight; })()";
 
+// Click a visible "Load more" / "Show more" / "See more" BUTTON (or button-like anchor) that fetches +
+// appends items (load-more-button) — a pattern that is NEITHER a pagination link nor pure scroll. Matches
+// on button text, skips a disabled/hidden control, clicks the first match, and returns whether it clicked.
+// Runs in the page; never throws (returns false on any error).
+const LOAD_MORE_CLICK_SCRIPT = `(() => {
+  try {
+    const wants = /^(load more|show more|see more|view more|more results|more|load more results|show \\d+ more)$/i;
+    const els = Array.from(document.querySelectorAll('button, a[role=button], [role=button], input[type=button], input[type=submit]'));
+    for (const el of els) {
+      const t = ((el.innerText || el.textContent || el.value || '') + '').replace(/\\s+/g, ' ').trim();
+      if (!wants.test(t)) continue;
+      if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;   // hidden control
+      el.scrollIntoView({ block: 'center' });
+      el.click();
+      return true;
+    }
+    return false;
+  } catch (e) { return false; }
+})()`;
+
 /** Scrape an INFINITE-SCROLL feed: navigate, then repeatedly scroll to the bottom (letting lazy content
  * load) until the page stops growing, a scroll cap is hit, or a wall-clock budget expires — THEN read the
- * fully-expanded text (browse-infinite-scroll). For feeds/listings that load on scroll rather than via a
- * pagination link (where scrapePaged finds no "next"). One session; `maxScrolls` capped 1-10 (default 5).
- * Returns the text + how many scrolls actually loaded new content. Falls back to a plain read when the
- * page doesn't grow (so it's safe on any page). */
+ * fully-expanded text (browse-infinite-scroll). When a scroll doesn't grow the page, it also tries clicking
+ * a "Load more"/"Show more" BUTTON that fetches+appends items (load-more-button) before giving up. For
+ * feeds/listings that load on scroll or a load-more click rather than a pagination link (where scrapePaged
+ * finds no "next"). One session; `maxScrolls` (each = one scroll OR one load-more click) capped 1-10
+ * (default 5). Returns the text + how many rounds loaded new content. Safe on any page (stops at once when
+ * nothing grows). */
 export async function scrapeScroll(
   url: string,
   maxScrolls = 5,
@@ -564,7 +588,21 @@ export async function scrapeScroll(
       let height = 0;
       try { const r = await action(session.id, "/v1/actions/evaluate", { script: SCROLL_STEP_SCRIPT }); height = Number(r) || 0; } catch { break; }
       await new Promise((r) => setTimeout(r, 900)); // let lazy content fetch + render
-      if (height <= lastHeight) break;               // page stopped growing -> no more to load
+      if (height <= lastHeight) {
+        // Scroll alone didn't grow the page — many listings gate "more" behind a "Load more" BUTTON that
+        // fetches + appends on click (load-more-button). Try clicking it, then re-measure; only stop if
+        // that ALSO doesn't grow the page (so a pure-scroll feed still stops immediately, unchanged).
+        let clicked = false;
+        try { const c = await action(session.id, "/v1/actions/evaluate", { script: LOAD_MORE_CLICK_SCRIPT }); clicked = (c as unknown) === true; } catch { clicked = false; }
+        if (!clicked) break;                           // no scroll growth AND no load-more button -> done
+        await new Promise((r) => setTimeout(r, 1000)); // let the click's fetch append
+        let h2 = 0;
+        try { const r = await action(session.id, "/v1/actions/evaluate", { script: "document.body.scrollHeight" }); h2 = Number(r) || 0; } catch { h2 = 0; }
+        if (h2 <= lastHeight) break;                   // button click didn't add content -> done
+        lastHeight = h2;
+        productiveScrolls++;
+        continue;
+      }
       lastHeight = height;
       productiveScrolls++;
     }
