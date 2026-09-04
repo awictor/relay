@@ -3624,7 +3624,7 @@
       "title": "Digest: one-line \"whats new\" summary header (what moved + by how much)",
       "impact": "low",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Beyond floating changed members, a single lead line (\"btc +9%, 2 new stories\") lets a reader get the gist without reading the whole briefing.",
       "how": "In digest-runner, when members changed, compute a compact delta summary (reuse firstNumber for the % move) + prepend as a header line. Offline test."
     }
@@ -5245,6 +5245,10 @@
     {
       "item": "digest-skip-unchanged",
       "note": "Digests can now stay QUIET when nothing changed (notification-fatigue win). Add \"(only if changed)\" / \"only when changed\" to a digest definition -> a SCHEDULED fire returns quietNoChange (silent) when the digest ran before + no member moved; the FIRST fire still sends (seeds baseline), and /run always shows it (with a \"nothing changed\" note). New quietUnchanged flag on Digest + parse + store; runner uses digestSeenBefore (new DigestChangeStore.seenBefore) to distinguish first-run from genuine no-change; schedule-runner stays silent + advances on quietNoChange; handler digestDisplay shows it for /run. Caught+fixed a null-byte corruption in the store key template (spaces became \u0000, breaking seenBefore) mid-build. +8 tests. LIVE e2e: run1 sends, run2 unchanged->silent, run3 btc+9%->sends ✦. 2317 green. call-tested: TRUE."
+    },
+    {
+      "item": "digest-change-summary",
+      "note": "Digest ✦ header now names WHATS NEW: when members changed, the header reads \"...(✦ = changed since last time) — new: hn, btc\" so a reader gets the gist before the sections. Names pulled from the changed members line prefixes, in float order. Small add on top of digest-smart-ordering. +1 test. 2318 green. call-tested: n/a (pure compose)."
     }
   ],
   "audits": [

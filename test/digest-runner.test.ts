@@ -137,6 +137,14 @@ describe("runDigest", () => {
     expect(out as string).toMatch(/✦ btc:/);
   });
 
+  it("changed members get a 'what's new' header naming them (digest-change-summary)", async () => {
+    const out = await runDigest(digest(["weather", "hn", "btc"]), deps({
+      memberChanged: (_c, _d, m) => m === "btc" || m === "hn",
+    })) as string;
+    expect(out).toMatch(/new: hn, btc/); // header names the changed members, in float order
+    expect(out.split("\n")[0]).toMatch(/✦ = changed since last time/);
+  });
+
   it("no reorder when nothing changed (identical to definition-order briefing)", async () => {
     const out = await runDigest(digest(["weather", "hn"]), deps({
       memberChanged: () => false,

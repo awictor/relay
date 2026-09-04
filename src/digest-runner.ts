@@ -179,7 +179,11 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
     const changed = built.filter((b) => b.changed);
     const rest = built.filter((b) => !b.changed);
     const ordered = [...changed, ...rest];
-    return `${title} (✦ = changed since last time)\n${ordered.map(mark).join("\n")}`;
+    // "What's new" header (digest-change-summary): name the changed members up front so a reader gets the
+    // gist before the sections. Member name is the "• <name>: ..." prefix of each changed line.
+    const names = changed.map((b) => b.line.replace(/^• /, "").split(":")[0]!.trim()).filter(Boolean);
+    const summary = names.length ? ` — new: ${names.join(", ")}` : "";
+    return `${title} (✦ = changed since last time)${summary}\n${ordered.map(mark).join("\n")}`;
   }
   return `${title}\n${built.map((b) => b.line).join("\n")}`;
 }
