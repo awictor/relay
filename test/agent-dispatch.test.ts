@@ -529,3 +529,63 @@ describe("runAgent dispatch", () => {
     expect(hits).toContain("click:#go");
   });
 });
+
+// Multi-step flow invariants: state that must survive ACROSS tool calls in one run — session reuse (not
+// a new browser per step), a single release, and the captured photo/doc surviving to the returned result
+// even when the run ends WITHOUT a clean reply. These are user-facing guarantees (the right artifact
+// actually reaches the user) that single-tool dispatch tests don't cover (probe-multistep-agent-flows).
+describe("runAgent multi-step flows", () => {
+  it("browse -> click -> read -> reply reuses ONE session and releases it once", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://x.com" } } as ToolCall },
+      { toolCall: { name: "click", args: { selector: "#next", label: "next" } } as ToolCall },
+      { toolCall: { name: "read", args: {} } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "done" } } as ToolCall },
+    ]);
+    const out = await runAgent("navigate the page", { llm, backend: b });
+    expect(hits.filter((h) => h === "createSession")).toHaveLength(1); // NOT one session per step
+    expect(hits.filter((h) => h === "releaseSession")).toHaveLength(1); // released exactly once (finally)
+    expect(hits).toEqual(["createSession", "navigate:https://x.com", "click:#next", "readCurrent", "releaseSession"]);
+    expect(out.reply).toBe("done");
+  });
+
+  it("two browse calls in one run share the session (no per-navigate leak)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://a.com" } } as ToolCall },
+      { toolCall: { name: "browse", args: { url: "https://b.com" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "ok" } } as ToolCall },
+    ]);
+    await runAgent("open two", { llm, backend: b });
+    expect(hits.filter((h) => h === "createSession")).toHaveLength(1);
+    expect(hits.filter((h) => h === "releaseSession")).toHaveLength(1);
+  });
+
+  it("a captured screenshot is delivered even when the STEP BUDGET runs out before a reply", async () => {
+    // The photo is set on the screenshot step; if the run then exhausts its budget with no reply, the
+    // degraded fallback path must STILL return the photo — else the user's screenshot silently vanishes.
+    const { b } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "screenshot", args: { url: "https://x.com" } } as ToolCall },
+      { text: "best-effort answer" }, // budget-reached final completion (no reply tool call)
+    ]);
+    const out = await runAgent("screenshot it", { llm, backend: b, maxSteps: 1 });
+    expect(out.photo).toBeInstanceOf(Uint8Array);
+    expect(out.photo!.length).toBe(3);
+    expect(out.degraded).toBe(true); // ran out of steps -> soft failure, but the artifact survived
+  });
+
+  it("screenshot + pdf + an empty reply delivers BOTH artifacts with a default caption", async () => {
+    const { b } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "screenshot", args: { url: "https://x.com" } } as ToolCall },
+      { toolCall: { name: "pdf", args: { url: "https://x.com" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "" } } as ToolCall }, // empty caption -> "Done."
+    ]);
+    const out = await runAgent("shot and pdf", { llm, backend: b });
+    expect(out.photo!.length).toBe(3);
+    expect(out.doc!.length).toBe(4);
+    expect(out.reply).toBe("Done.");
+  });
+});

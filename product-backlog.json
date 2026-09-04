@@ -3227,9 +3227,18 @@
       "title": "Probe multi-step agent flows for state bugs across tool calls (session reuse, photo/doc carryover, truncation)",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Single-tool dispatch is now robust. The untested surface is MULTI-call flows: a browse then click then read chain, a screenshot followed by reply (photo carryover), window truncation mid-conversation, session release timing. A state bug here would make the bot lose context or send the wrong artifact.",
       "how": "Script the mock LLM to emit 3-5 chained tool calls (browse->click->read->reply; screenshot->reply; a long chain that trips truncateWindow) and assert the right backend calls fire in order + the right photo/doc/reply is delivered. Offline via ScriptLLM + recordingBackend."
+    },
+    {
+      "id": "probe-handler-callback-flows",
+      "title": "Probe handler.ts inbound-message + callback-button flows for state/delivery bugs",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "agent.ts core loop is now well-covered. The next untested user-facing surface is src/handler.ts: how an inbound message routes to agent vs a direct parser, how inline-button callbacks (Stop/snooze/gone) mutate state + strip buttons, and whether a photo/doc from the agent is actually forwarded to the channel. A bug here = the user taps a button and nothing happens, or an artifact never sends.",
+      "how": "Read handler.ts dispatch + handleCallback; script inbound texts + callback payloads against a mock channel/backend; assert the right send/editReplyMarkup fires + state changes. Offline via injected deps."
     }
   ],
   "history": [
@@ -4548,6 +4557,10 @@
     {
       "item": "convert-currency-nan-amount",
       "note": "agent.ts convert_currency dispatch: a non-numeric amount (model passed a word like 'twenty', -> NaN) was silently coerced to 1, returning a per-unit rate as if the user asked for it (wrong money answer, no signal). Now errors + asks for a number when amount is present but non-finite; a null amount still keeps the intended per-unit behavior for a rate query. +2 dispatch tests (guard + valid path). Rest of dispatch surface (String/Number coercion, backend guards, try/catch, url safety) reviewed - robust."
+    },
+    {
+      "item": "multistep-flow-invariants",
+      "note": "Probed multi-step agent flows (browse->click->read->reply, double-browse, screenshot+budget-exhaust, screenshot+pdf+empty-reply) via ScriptLLM+recordingBackend. NO bug found - loop is robust: one session reused across steps + released once in finally, artifacts (photo/doc) survive to the return even when the step budget runs out before a reply. Codified these 4 user-facing invariants as regression tests (they had ZERO coverage; a refactor could silently drop the artifact or leak sessions). +4 tests, 2046 green."
     }
   ],
   "audits": [
@@ -4916,6 +4929,11 @@
       "lens": "inline agent-dispatch probe (agent cap 200/200)",
       "surfaced": "Read all ~46 tool dispatch blocks in agent.ts. Arg handling is uniformly defensive (String(x??''), backend-presence guards, per-tool try/catch, isUrlSafe on every url tool) EXCEPT convert_currency, which silently defaulted a bad amount to 1 -> a wrong money figure. Fixed. No other silent-wrong-arg path found.",
       "seeded": "probe-multistep-agent-flows"
+    },
+    {
+      "lens": "inline multi-step flow probe (agent cap 200/200)",
+      "surfaced": "Session lifecycle + artifact carryover across chained tool calls are correct - single session, single release, photo/doc delivered even on the degraded budget-exhausted path. The gap was TEST coverage, not behavior. No message-window trimming exists mid-run (step limit caps growth) - fine at MAX_STEPS=8. Nothing to fix.",
+      "seeded": "probe-handler-callback-flows"
     }
   ]
 }
