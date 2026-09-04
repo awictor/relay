@@ -62,6 +62,11 @@ describe("parseWorldClock", () => {
     expect(parseWorldClock("what's 9am PT in London")).toEqual({ kind: "convert", time: "9am", from: "PT", to: "London" });
     expect(parseWorldClock("convert 3pm EST to Tokyo time")).toEqual({ kind: "convert", time: "3pm", from: "EST", to: "Tokyo" });
   });
+  it("parses an IMPLICIT-from convert anchored to the user's own zone (world-clock-implicit-home)", () => {
+    expect(parseWorldClock("what's 9am in Tokyo")).toEqual({ kind: "convert", time: "9am", from: "", to: "Tokyo" });
+    expect(parseWorldClock("convert 3pm to London")).toEqual({ kind: "convert", time: "3pm", from: "", to: "London" });
+    expect(parseWorldClock("9am my time in London")).toEqual({ kind: "convert", time: "9am", from: "my time", to: "London" });
+  });
   it("returns null for non-time chatter", () => {
     expect(parseWorldClock("what's the weather in Tokyo")).toBeNull();
     expect(parseWorldClock("remind me at 9am")).toBeNull();
@@ -86,6 +91,18 @@ describe("runWorldClock", () => {
     // 9:00 PM EST (-300) -> UTC 02:00 next day -> Tokyo (+540) = 11:00 AM next day
     expect(runWorldClock({ kind: "convert", time: "9pm", from: "EST", to: "Tokyo" }, NOW)!)
       .toMatch(/next day/);
+  });
+  it("converts an implicit/'my time' from-zone using the caller's home offset (world-clock-implicit-home)", () => {
+    // home = PST (-480): 9am home -> UTC 17:00 -> Tokyo (+540) = 2:00 AM next day
+    const out = runWorldClock({ kind: "convert", time: "9am", from: "", to: "Tokyo" }, NOW, -480)!;
+    expect(out).toMatch(/your time \(UTC-8\)/);
+    expect(out).toMatch(/2:00 AM.*next day.*Tokyo.*UTC\+9/);
+    // "my time" / "here" resolve the same way
+    expect(runWorldClock({ kind: "convert", time: "3pm", from: "here", to: "London" }, NOW, 0)!)
+      .toMatch(/your time \(UTC\+0\)/);
+  });
+  it("an implicit-from convert with NO known home offset returns null (can't anchor)", () => {
+    expect(runWorldClock({ kind: "convert", time: "9am", from: "", to: "Tokyo" }, NOW)).toBeNull();
   });
   it("returns null on an unresolvable zone", () => {
     expect(runWorldClock({ kind: "now", place: "Narnia" }, NOW)).toBeNull();

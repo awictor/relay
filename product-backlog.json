@@ -5444,6 +5444,10 @@
     {
       "item": "proactive-brief-emoji-consistency",
       "note": "VERIFIED NO-OP, no code shipped (avoided filler). Checked whether briefen bypassing the unread:/logrecap: branches matters: it does NOT. briefenReply only shortens free-flowing PROSE and no-ops on bullets/lists. The unread nudge + log recap sends are BULLETED lists (briefen no-ops), the empty-store log nudge is already short prose (under the 3-sentence/400-char budget so unchanged), alert sends are terse crossings, digest sends are bulleted. So a brief-mode user loses nothing — there is no long prose in any proactive nudge to shorten. stripEmoji already sits after ALL branches so no-emoji is honored everywhere. Confirmed via /tmp probe (briefenReply(unread)===unread, ===logrecap, empty-nudge unchanged). Closed rather than ship a change that provably does nothing."
+    },
+    {
+      "item": "world-clock-implicit-home (found via inline audit)",
+      "note": "Time-zone convert now anchors to the users OWN zone when no from-zone is named — \"whats 9am in Tokyo\", \"convert 3pm to London\", \"9am my time in London\", \"3pm here in Paris\" all previously fell through parseWorldClock (only \"9am PT in London\" with an explicit from parsed) to a slow/guessy agent turn. Added: a convHome parse branch (implicit from=\"\"), resolveZone treats \"\"/\"my time\"/\"here\"/\"local\" as the caller home offset (dstExact), runWorldClock takes homeOffsetMin (threaded from deps.tzOffsetMin in the get_time dispatch) + labels it \"your time (UTC-x)\". Returns null when no home offset is known (cant anchor -> agent asks). Explicit-from + bare-now paths unchanged. +5 tests (3 parse implicit-from, 2 run: home-anchored convert + null-without-home). /help updated. 2389 green. call-tested: offline (parse+run probe: 9am PST -> 2am next-day Tokyo, my-time/here anchor, PT still explicit)."
     }
   ],
   "audits": [

@@ -41,9 +41,13 @@ export interface Zone { offsetMin: number; label: string; dstExact?: boolean; }
  * first (whole-string or trailing token — "9am PT" / "PST"; taken AS TYPED, standard-only), then a city/
  * region: with `atMs`, via its IANA zone for the DST-CORRECT offset at that instant (world-clock-dst),
  * else the standard CITY_TZ table. label is a tidy UTC±H:MM. Exported for tests. */
-export function resolveZone(text: string, atMs?: number): Zone | null {
+export function resolveZone(text: string, atMs?: number, homeOffsetMin?: number): Zone | null {
   const raw = String(text ?? "").trim();
-  if (!raw) return null;
+  // Empty or a self-referential zone ("my time"/"here"/"local"/"my zone") -> the caller's home offset, when
+  // known (world-clock-implicit-home). Lets "what's 9am in Tokyo" convert from the user's own time.
+  if (!raw || /^(?:my\s+(?:time|zone|timezone)|here|local(?:\s+time)?|my\s+local\s+time)$/i.test(raw)) {
+    return homeOffsetMin === undefined ? null : { offsetMin: homeOffsetMin, label: utcLabel(homeOffsetMin), dstExact: true };
+  }
   const low = raw.toLowerCase().replace(/[^\p{L}\p{N}\s,+:-]/gu, " ").replace(/\s+/g, " ").trim();
   // whole string is an abbrev ("pst", "utc") — the user named a SPECIFIC offset (PST≠PDT), honor it as-is.
   if (low in TZ_ABBR) return { offsetMin: TZ_ABBR[low]!, label: utcLabel(TZ_ABBR[low]!) };
@@ -124,6 +128,18 @@ export function parseWorldClock(text: string): WorldClockRequest | null {
     }
   }
 
+  // convert with an IMPLICIT from = the user's OWN zone (world-clock-implicit-home): "what's 9am in Tokyo",
+  // "convert 3pm to London", "9pm in Sydney" — no explicit from-zone, so it anchors to the caller's home tz
+  // (runWorldClock resolves "" via homeOffsetMin). Checked AFTER the explicit-from form so "9am PT in London"
+  // still parses its PT. The tail must NOT itself look like a bare "now" query (handled below).
+  const convHome = t.match(/^\s*(?:convert\s+|what(?:'?s| is)\s+)?((?:\d{1,2}(?::\d{2})?\s*(?:am|pm))|noon|midnight|midday)\s+(?:in|to)\s+(.+?)(?:\s+time)?\s*\??\s*$/i);
+  if (convHome) {
+    const time = convHome[1]!.trim();
+    if (parseClockTime(time) !== null) {
+      return { kind: "convert", time, from: "", to: convHome[2]!.trim() };
+    }
+  }
+
   // now: "what time is it in X" / "(current) time in X" / "the time in X"
   const now = t.match(/^\s*(?:what(?:'?s| is)?\s+)?(?:the\s+)?(?:current\s+)?(?:local\s+)?time\s+(?:is\s+it\s+)?(?:right\s+now\s+)?(?:in|at)\s+(.+?)(?:\s+(?:right\s+)?now)?\s*\??\s*$/i);
   if (now) return { kind: "now", place: now[1]!.trim() };
@@ -137,13 +153,13 @@ export function parseWorldClock(text: string): WorldClockRequest | null {
 
 /** Answer a parsed world-clock request from an injected nowMs, or null if a zone can't be resolved.
  * Exported for tests + the tool dispatch. */
-export function runWorldClock(req: WorldClockRequest, nowMs: number): string | null {
+export function runWorldClock(req: WorldClockRequest, nowMs: number, homeOffsetMin?: number): string | null {
   // The DST disclaimer is only shown when an offset is standard-only (an abbreviation, or a city with no
   // IANA mapping) — a zone-resolved answer is exact at the query instant, so the old always-on note (which
   // undercut a correct answer) is dropped in that case (world-clock-dst).
   const DST_NOTE = " Note: I use standard time, so during daylight-saving months this may be an hour off.";
   if (req.kind === "now") {
-    const z = resolveZone(req.place, nowMs);
+    const z = resolveZone(req.place, nowMs, homeOffsetMin);
     if (!z) return null;
     const d = new Date(nowMs + z.offsetMin * 60_000);
     const place = req.place.replace(/\s+time$/i, "").trim();
@@ -151,16 +167,18 @@ export function runWorldClock(req: WorldClockRequest, nowMs: number): string | n
   }
   // convert: resolve both zones at the query instant so a city side is DST-correct (an abbreviation side
   // stays as-typed). The disclaimer shows only if EITHER side is standard-only.
-  const from = resolveZone(req.from, nowMs);
-  const to = resolveZone(req.to, nowMs);
+  const from = resolveZone(req.from, nowMs, homeOffsetMin);
+  const to = resolveZone(req.to, nowMs, homeOffsetMin);
   const mins = parseClockTime(req.time);
   if (!from || !to || mins === null) return null;
+  // An implicit/home from-zone reads as "your time" in the output, not a bare "UTC-8".
+  const fromLabel = (!req.from || /^(?:my\s|here|local)/i.test(req.from)) ? `your time (${from.label})` : from.label;
   // Convert: a wall-clock time in `from` maps to UTC (mins - fromOffset), then to `to` (+ toOffset).
   const toMins = mins - from.offsetMin + to.offsetMin;
   const dayShift = Math.floor(toMins / 1440);
   const shiftNote = dayShift > 0 ? " (next day)" : dayShift < 0 ? " (previous day)" : "";
   const exact = from.dstExact === true && to.dstExact === true;
-  return `${fmtHM(mins)} ${from.label} is ${fmtHM(toMins)}${shiftNote} in ${titleCase(req.to.replace(/\s+time$/i, "").trim())} (${to.label}).${exact ? "" : " Note: standard time — may shift an hour during daylight-saving months."}`;
+  return `${fmtHM(mins)} ${fromLabel} is ${fmtHM(toMins)}${shiftNote} in ${titleCase(req.to.replace(/\s+time$/i, "").trim())} (${to.label}).${exact ? "" : " Note: standard time — may shift an hour during daylight-saving months."}`;
 }
 
 function titleCase(s: string): string {

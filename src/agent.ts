@@ -1498,7 +1498,9 @@ export async function runAgent(
         }
         const parsed = parseWorldClock(request);
         const nowForTz = deps.nowMs ?? Date.now();
-        const answer = parsed ? runWorldClock(parsed, nowForTz) : null;
+        // Pass the user's home offset so a convert with an implicit/"my time" from-zone ("what's 9am in
+        // Tokyo") anchors to their own zone instead of failing (world-clock-implicit-home).
+        const answer = parsed ? runWorldClock(parsed, nowForTz, deps.tzOffsetMin) : null;
         if (!answer) { push("get_time", `Couldn't resolve a timezone in "${request}" (unknown city/abbreviation). Report that you couldn't place that zone + ask which city/UTC offset, or try web_search for an unusual place.`); continue; }
         push("get_time", `${answer}\n\nReport this to the user (include the daylight-saving caveat only if it's relevant / they're near a DST change).`);
         continue;
