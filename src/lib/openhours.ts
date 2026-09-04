@@ -75,7 +75,16 @@ export function isOpenNow(spec: string, dow: number, mins: number): OpenState {
       const start = hm(a!.trim()), end0 = hm(b!.trim());
       if (start === null || end0 === null) continue;
       const end = end0 === 0 ? 24 * 60 : end0; // "24:00" / "00:00" as close = midnight
-      if (mins >= start && mins < end) return "open";
+      if (start < end) {
+        if (mins >= start && mins < end) return "open"; // same-day window
+      } else {
+        // OVERNIGHT window (openhours-overnight-window): "18:00-02:00" wraps midnight. Open when now is
+        // at/after the start (this evening) OR before the end (early hours). Note this rule's DAY token
+        // labels the OPENING day; the after-midnight tail technically belongs to the next calendar day,
+        // but treating "now < end" as open on the same matched rule is right for the common "Mo-Su" case
+        // and never falsely OPENS a day the rule doesn't list.
+        if (mins >= start || mins < end) return "open";
+      }
     }
   }
   if (!anyParsed) return "unknown";

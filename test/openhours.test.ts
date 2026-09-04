@@ -30,6 +30,13 @@ describe("isOpenNow", () => {
     expect(isOpenNow(spec, 2, 750)).toBe("closed");  // 12:30 (break)
     expect(isOpenNow(spec, 2, 840)).toBe("open");    // 14:00
   });
+  it("overnight window that wraps midnight (openhours-overnight-window)", () => {
+    const spec = "Mo-Su 18:00-02:00"; // a bar open 6pm–2am
+    expect(isOpenNow(spec, 5, 1380)).toBe("open");   // Fri 11pm — after start
+    expect(isOpenNow(spec, 6, 60)).toBe("open");     // Sat 1am — before end (early hours)
+    expect(isOpenNow(spec, 6, 180)).toBe("closed");  // Sat 3am — past close
+    expect(isOpenNow(spec, 3, 720)).toBe("closed");  // Wed noon — between windows
+  });
   it("explicit closed rule for a day", () => {
     expect(isOpenNow("Mo-Sa 08:00-18:00; Su off", 0, 600)).toBe("closed");
   });

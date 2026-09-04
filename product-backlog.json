@@ -5464,6 +5464,10 @@
     {
       "item": "onthisday-daymonth-order (gap, found via inline audit)",
       "note": "On-this-day date parse now handles the unambiguous European D/M form: \"on 25/12\" -> Dec 25 (was null — the M/D-only regex rejected month 25, so a non-US user got no history for a slashed date). When the FIRST number cant be a month (>12) but the second can (<=12), swap to M/D. Both-<=12 stays US M/D default (12/11 = Dec 11), so no ambiguous date is ever mis-read. +3 assertions (25/12, 31/1, 12/11-stays-US). 2392 green. call-tested: offline. Also swept roman (lowercase mcmxciv->1994, invalid subtractive IL/VX/IC/XM->null) — clean."
+    },
+    {
+      "item": "openhours-overnight-window (bug, found via inline audit)",
+      "note": "BUG FIX (wrong open/closed): the is-open-now evaluator only handled same-day windows (start<end), so an OVERNIGHT window like \"Mo-Su 18:00-02:00\" (a bar/pharmacy open past midnight) never registered open — a place open at 11pm or 1am was tagged \"closed now\" in near-me results. Added the wrap case: when start>end, open when mins>=start (this evening) OR mins<end (early hours). Same-day windows, split lunch windows, 24/7, and closed-day rules all unchanged. +1 test (Fri 11pm open, Sat 1am open, Sat 3am closed, Wed noon closed). 2393 green. call-tested: offline (probe confirmed all four)."
     }
   ],
   "audits": [
