@@ -15,6 +15,7 @@ import { confirmToActEnabled, formatConfirmPrompt, CONFIRM_TTL_MS } from "./lib/
 import { fetchYouTubeTranscript } from "./lib/youtube.js";
 import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
+import { runHolidays } from "./lib/holidays.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
 import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
@@ -166,6 +167,18 @@ export const TOOLS: ToolSpec[] = [
     name: "fetch_json",
     description: "GET a JSON HTTP API directly (no browser) and return the JSON. Fastest for public data APIs — weather, prices, sports, etc. Use when you know a JSON endpoint; falls back to scrape/browse for HTML pages. Only http(s), JSON responses, size-capped.",
     parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL of a JSON API endpoint" } }, required: ["url"] },
+  },
+  {
+    name: "get_holidays",
+    description: "Public / bank holidays for a country (no key, instant). Use this — NOT web_search — for \"is today a holiday?\", \"when's the next public holiday?\", \"what are the holidays this year in the UK?\". Pass the user's question verbatim + the country if they named one (defaults to US). Covers most countries by name or 2-letter code.",
+    parameters: {
+      type: "object",
+      properties: {
+        request: { type: "string", description: "The user's holiday question verbatim, e.g. \"is today a holiday\" / \"next public holiday\" / \"holidays this year\"" },
+        country: { type: "string", description: "Country name or ISO code if the user named one (e.g. \"UK\", \"Canada\", \"DE\"). Omit for US." },
+      },
+      required: ["request"],
+    },
   },
   {
     name: "convert_currency",
@@ -556,6 +569,7 @@ Tools:
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
 - "get_time" (request): current time in another city/timezone, convert a time between zones, or count down to a clock time today ("how long until 5pm", "minutes until midnight"). Use this — NOT web_search — for "what time is it in Tokyo"/"time in London"/"9am PT in London"/"convert 3pm EST to Tokyo"/"how long until 5pm". Pass the request verbatim. City/region answers are daylight-saving-correct; a typed abbreviation (PST/EST) is taken as-is.
 - "date_math" (request): date/calendar math EXACTLY. Use this — NOT mental counting or web_search — for "how many days until Christmas/my birthday/July 4", "what day of the week is/was <date>", "how old if born <date>", "days between two dates", "date in 10 days". Knows common US holidays by name. Reckons from the user's local today.
+- "get_holidays" (request, country): public/bank holidays for a country (no key). Use for "is today a holiday?", "next public holiday", "holidays this year in <country>". Defaults to US; pass the country if named. NOT date_math (that's calendar arithmetic, not the holiday list).
 - "meal_ideas" (request): cooking meal ideas or a recipe. Use this — NOT web_search — for "what can I make with chicken"/"dinner ideas"/"random meal"/"recipe for X". FOOD, not Relay's saved automation recipes.
 - "convert_units" (request): convert units of measure EXACTLY (temperature/length/weight/volume/cooking). Use for "180C to F"/"5 foot 11 in cm"/"2 cups in grams"/"10 miles in km". NOT currency (use convert_currency).
 - "unit_price" (request): compare package sizes + name the better buy by price-per-unit EXACTLY. Use for "which is cheaper, 500g for $4 or 1.2kg for $9"/"$3.99 for 12oz vs $5.49 for 20oz"/"12 for $6 or 30 for $13". NOT mental math.
@@ -652,6 +666,9 @@ export interface BrowserBackend {
   // Optional: convert an amount between currencies at the live rate (fx-conversion-tool). Absent ->
   // the convert_currency tool reports it's unavailable. Returns null on a bad code / fetch failure.
   convertCurrency?(amount: number, from: string, to: string): Promise<import("./lib/fx.js").Conversion | null>;
+  // Public holidays for a country (holidays-tool). `today` is the user's local YYYY-MM-DD. Optional;
+  // absent -> the get_holidays tool reports it's unavailable. Returns a formatted line or null.
+  getHolidays?(request: string, country: string | undefined, today: string): Promise<string | null>;
   // Optional: latest stock/equity quote for a ticker (stock-quote-tool). Absent -> the get_quote tool
   // reports it's unavailable. Returns null on a bad symbol / fetch failure.
   getQuote?(symbol: string): Promise<import("./lib/quote.js").Quote | null>;
@@ -830,6 +847,7 @@ const defaultBackend: BrowserBackend = {
   siteSearch: (url, query) => anvil.siteSearch(url, query),
   videoTranscript: (url) => fetchYouTubeTranscript(url, defaultFetchText),
   convertCurrency: (amount, from, to) => fxConvert(amount, from, to, defaultFetchText),
+  getHolidays: (request, country, today) => runHolidays(request, country, today, defaultFetchText),
   getQuote: (symbol) => quoteFetch(symbol, defaultFetchText),
   getCrypto: (coin) => cryptoFetch(coin, defaultFetchText),
   defineWord: (word) => dictFetch(word, defaultFetchText),
@@ -1420,6 +1438,24 @@ export async function runAgent(
         const answer = runDateCalc(request, today);
         if (!answer) { push("date_math", `Couldn't parse a date question from "${request}". If it's a date I can't compute (a moving holiday like Easter, or a fuzzy phrase), say so + try web_search; otherwise ask the user for an explicit date.`); continue; }
         push("date_math", `${answer} Report this exact result to the user.`);
+        continue;
+      }
+
+      if (call.name === "get_holidays") {
+        if (!backend.getHolidays) { push("get_holidays", "ERROR: holidays lookup isn't available; try web_search."); continue; }
+        const request = String(call.args.request ?? "").trim();
+        const country = call.args.country != null ? String(call.args.country) : undefined;
+        // "today" in the user's LOCAL calendar (nowMs + tz), so "is it a holiday" + days-until reckon
+        // from the user's date, not server UTC. Mirrors date_math.
+        const local = new Date((deps.nowMs ?? Date.now()) + (deps.tzOffsetMin ?? 0) * 60_000);
+        const today = `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, "0")}-${String(local.getUTCDate()).padStart(2, "0")}`;
+        try {
+          const answer = await backend.getHolidays(request, country, today);
+          if (!answer) { push("get_holidays", `Couldn't look up holidays${country ? ` for "${country}"` : ""} (unknown country, or the source didn't answer). Ask the user to name the country, or try web_search.`); continue; }
+          push("get_holidays", `${answer} Report this to the user.`);
+        } catch (e) {
+          push("get_holidays", `ERROR looking up holidays: ${e instanceof Error ? e.message : String(e)}`);
+        }
         continue;
       }
 

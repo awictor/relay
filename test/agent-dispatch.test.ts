@@ -46,7 +46,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "read_list", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "wait_for", "where_am_i", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "get_holidays", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "read_list", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "wait_for", "where_am_i", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
     );
   });
 
@@ -784,6 +784,29 @@ describe("runAgent dispatch", () => {
     expect(out.reply).toBe("Saturday");
     // pure calendar math — no browser/network method touched
     expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
+  });
+
+  it("get_holidays -> backend.getHolidays with the local today + country (holidays-tool)", async () => {
+    const { b, hits } = recordingBackend();
+    (b as { getHolidays?: (r: string, c: string | undefined, t: string) => Promise<string | null> }).getHolidays =
+      async (r, c, t) => { hits.push(`getHolidays:${r}|${c ?? "-"}|${t}`); return "The next public holiday in GB is X."; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_holidays", args: { request: "next holiday", country: "UK" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "next up: X" } } as ToolCall },
+    ]);
+    const out = await runAgent("next uk holiday", { llm, backend: b, nowMs: 1_756_800_000_000, tzOffsetMin: 0 });
+    expect(hits).toContain("getHolidays:next holiday|UK|2025-09-02"); // request + country + local YMD from nowMs
+    expect(out.reply).toBe("next up: X");
+  });
+
+  it("get_holidays with no backend.getHolidays reports unavailable, still reaches reply", async () => {
+    const { b } = recordingBackend(); // no getHolidays set
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_holidays", args: { request: "is today a holiday" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "used web_search" } } as ToolCall },
+    ]);
+    const out = await runAgent("holiday today?", { llm, backend: b });
+    expect(out.reply).toBe("used web_search");
   });
 
   it("define with no backend.defineWord reports unavailable, still reaches reply", async () => {

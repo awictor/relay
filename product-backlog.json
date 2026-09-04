@@ -5107,6 +5107,10 @@
     {
       "item": "encode-morse",
       "note": "encode_decode gained Morse: \"morse code SOS\"->\"... --- ...\", \"decode morse ... --- ...\"->sos; A-Z/0-9/punctuation, letters space-separated + words on \"/\", tolerant decode, round-trips, friendly errors on un-encodable char / invalid morse. Op inferred from dot-dash payload. Tool desc + /help updated. +4 tests, 2181 green. This was the LAST queued micro-tool."
+    },
+    {
+      "item": "holidays-tool",
+      "note": "New get_holidays tool (new-user lens: a common everyday ask with no home). Keyless nager.date API: \"is today a holiday?\", \"next public holiday\", \"holidays this year in <country>\". New src/lib/holidays.ts (pure resolveCountryCode/parseHolidays/parseHolidayIntent + runHolidays with injected fetch); tool + dispatch (local-today from nowMs+tz like date_math) + BrowserBackend.getHolidays + SYSTEM_PROMPT + /help. Country by name/adjective/2-letter code, defaults US. +11 tests (9 lib + 2 dispatch incl. unavailable-fallback). LIVE e2e vs real API: US next=Labor Day(6d), UK=St Andrews Day, is-today Jan1=New Years yes, DE list=19. 2259 green. call-tested: TRUE. First NON-browse capability add in a while — a genuinely new everyday errand class."
     }
   ],
   "audits": [
@@ -5755,6 +5759,11 @@
       "lens": "honesty check on value trend (inline, subagent cap still 200/200)",
       "surfaced": "Last ~5 iterations shipped low-impact keyless-tool polish (speed convert, calc phrasings, weekday/since dates, hash/rot13/binary) - all real fixes but diminishing user-impact; the keyless-tool surface is now well-covered. The genuinely high-value levers (confirm-to-act multi-step chains, richer anvil browsing depth, proactive digests) are either owner-gated or need a live-anvil e2e loop, not more offline micro-tools.",
       "seeded": "encode-morse (last low-effort tool), then recommend the loop pause on micro-tools until an AUDIT with a fresh session (cap reset) or owner input redirects to higher-impact work"
+    },
+    {
+      "lens": "new-user everyday-errand (inline; subagent cap 200/200)",
+      "surfaced": "Inventoried the ~55 tools vs common asks. All the usual (weather/crypto/units/define/time/date/tip/nearby/flight/package/meals/sun/air/nutrition/translate/scores/news) covered — but \"is it a holiday / next public holiday / holidays in <country>\" had NO tool (date_math only knows a few US holidays by NAME for date arithmetic). Built get_holidays (keyless).",
+      "seeded": "holidays-tool shipped this iteration"
     }
   ]
 }
