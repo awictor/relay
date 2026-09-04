@@ -778,11 +778,25 @@ const handle = createHandler({
       const m = s.task.match(/^(alert|digest|recipe):(.+)$/i);
       if (m) markerPause.set(`${m[1]!.toLowerCase()}:${m[2]!.toLowerCase()}`, pauseInfo(s));
     }
+    // Weekly proactive opt-ins (dashboard-shows-log-recap-optin): the reading-list unread nudge +
+    // standalone log recap are "unread:"/"logrecap:" schedules — surface them as subscriptions (with the
+    // off phrase), not raw reminder rows. Map the marker prefix -> its human label + off phrase.
+    const SUBSCRIPTION_MARKERS: Record<string, { label: string; offPhrase: string }> = {
+      "unread:": { label: "Reading-list nudge (saved pages you haven't read)", offPhrase: "stop reading list nudges" },
+      "logrecap:": { label: "Log recap (your week in numbers)", offPhrase: "stop log recaps" },
+    };
+    const subMarker = (task: string) => Object.keys(SUBSCRIPTION_MARKERS).find((p) => task.toLowerCase().startsWith(p));
     const data: DashboardData = {
-      // Reminders: schedules that AREN'T markers (a real "remind me"/"every morning" task).
-      schedules: sched.filter((s) => !/^(alert|digest|recipe):/i.test(s.task)).map((s) => {
+      // Reminders: schedules that AREN'T markers (a real "remind me"/"every morning" task) and aren't a
+      // weekly subscription marker (shown in their own section below).
+      schedules: sched.filter((s) => !/^(alert|digest|recipe):/i.test(s.task) && !subMarker(s.task)).map((s) => {
         const p = pauseInfo(s);
         return { kind: s.kind, task: s.task, whenText: formatWhen(s.dueMs, off, now), paused: p.paused, pausedUntilText: p.untilText };
+      }),
+      subscriptions: sched.filter((s) => subMarker(s.task)).map((s) => {
+        const meta = SUBSCRIPTION_MARKERS[subMarker(s.task)!]!;
+        const p = pauseInfo(s);
+        return { label: meta.label, whenText: formatWhen(s.dueMs, off, now), offPhrase: meta.offPhrase, paused: p.paused, pausedUntilText: p.untilText };
       }),
       alerts: alerts.list(chatId).map((a) => {
         const trigger = a.members?.length ? `watchlist, ${a.members.length} items`

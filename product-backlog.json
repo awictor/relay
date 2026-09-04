@@ -3741,9 +3741,18 @@
       "title": "Surface the weekly log-recap + reading-list nudge opt-ins on /dashboard so users see/manage them",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A user who turned on \"recap my logs weekly\" or the reading-list nudge has no single place to SEE that its on or turn it off except remembering the exact phrase. /dashboard already rolls up reminders/watches/digests/recipes; the two weekly proactive opt-ins (logrecap:/unread: schedules) are invisible there, so they feel like set-and-forget-and-forget. Listing them (with the off phrase) closes the manage-what-Im-subscribed-to gap.",
       "how": "In the dashboard rollup (src/lib/dashboard.ts + wiring), detect the logrecap:weekly and unread:reading-list schedules for the chat and show a short \"Weekly: log recap (Mon 9am) — say stop log recaps\" line. Offline test: dashboard text lists an active opt-in + omits it when absent."
+    },
+    {
+      "id": "log-recap-empty-guidance",
+      "title": "A user who turns on the weekly log recap but has never logged should get a heads-up, not silent nothing",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "logsRecapProactive returns null (stays silent) when nothing was logged that week — correct for a paused-logging week, but a user who opted INTO the recap yet has NEVER logged anything gets total silence every Monday and assumes the feature is broken. A first-fire-with-zero-logs case should nudge how to log, not vanish.",
+      "how": "When the recap fires and the chats log store is entirely empty (not just empty this week), send a one-time short \"you have the weekly recap on but haven't logged anything yet — try \\\"log weight 182\\\"\" instead of null. Keep the silent path for a user who HAS logged before (a genuinely quiet week). Offline test: never-logged chat gets the nudge once; a previously-logged chat with a quiet week stays silent."
     }
   ],
   "history": [
@@ -5414,6 +5423,10 @@
     {
       "item": "logs-recap-nudge-or-standalone",
       "note": "Standalone weekly log recap for users who log but never built a digest. Say \"recap my logs weekly\" -> a WEEKLY \"logrecap:weekly\" schedule fires a proactive \"📊 Your week in numbers\" send (Mon 9am, chat-tz); \"stop log recaps\" cancels. Mirrors the unread-nudge pattern end to end: new parseLogRecapToggle (ON/OFF phrasings, does NOT hijack a real log/query), schedule-runner logrecap: branch (pure store read via new logsRecapProactive dep, null=nothing-logged -> stay silent + reschedule, a quiet week isnt a failure), index toggle (one schedule per chat, removeByTask first, persist-hedge both ways) + logsRecapProactive dep, handler route BEFORE logAdd/logQuery so a toggle phrase isnt misread as a data point. Reuses logsWeeklySummary. /help documents it. +6 tests (3 toggle parse incl. no-hijack; 2 runner fire+silent; 1 handler routing). 2380 green. call-tested: offline (parse + runner + handler routing)."
+    },
+    {
+      "item": "dashboard-shows-log-recap-optin",
+      "note": "/dashboard now surfaces the two weekly proactive opt-ins (reading-list unread nudge + standalone log recap) in a \"🔁 Weekly recaps\" section instead of leaking them as raw \"unread:\"/\"logrecap:\" reminder rows. Each shows a human label + next-fire time + the exact off phrase (\"say stop log recaps to stop\"), and honors pause state. New optional subscriptions[] on DashboardData; index maps the marker prefixes -> {label, offPhrase} and filters them out of the reminders list. Closes the manage-what-Im-subscribed-to gap. +2 tests (renders the section w/ off phrases; omits when none). 2382 green. call-tested: offline (pure formatter + data assembly)."
     }
   ],
   "audits": [

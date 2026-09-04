@@ -25,6 +25,28 @@ describe("formatDashboard (unified-dashboard)", () => {
     expect(out).not.toMatch(/Recipes/);
   });
 
+  it("renders a Weekly recaps section for subscriptions, with the off phrase (dashboard-shows-log-recap-optin)", () => {
+    const out = formatDashboard({
+      ...empty,
+      subscriptions: [
+        { label: "Log recap (your week in numbers)", whenText: "Mon 9:00am", offPhrase: "stop log recaps" },
+        { label: "Reading-list nudge (saved pages you haven't read)", whenText: "Mon 9:00am", offPhrase: "stop reading list nudges" },
+      ],
+    });
+    expect(out).toMatch(/🔁 Weekly recaps \(2\)/);
+    expect(out).toMatch(/Log recap \(your week in numbers\) — Mon 9:00am/);
+    expect(out).toMatch(/say "stop log recaps" to stop/);
+    expect(out).toMatch(/say "stop reading list nudges" to stop/);
+  });
+
+  it("omits the Weekly recaps section when there are no subscriptions", () => {
+    const out = formatDashboard({
+      ...empty,
+      schedules: [{ kind: "once", task: "call mom", whenText: "today 5pm" }],
+    });
+    expect(out).not.toMatch(/Weekly recaps/);
+  });
+
   it("shows a paused suffix with the resume time, or a bare paused for indefinite", () => {
     const out = formatDashboard({
       ...empty,

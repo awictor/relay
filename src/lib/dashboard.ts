@@ -9,6 +9,10 @@ export interface DashboardData {
   alerts: Array<{ name: string; trigger: string; lastValue?: string; paused?: boolean; pausedUntilText?: string }>;
   digests: Array<{ name: string; memberCount: number; scheduleText?: string; paused?: boolean; pausedUntilText?: string }>;
   recipes: Array<{ name: string; scheduled?: boolean; scheduleText?: string; paused?: boolean; pausedUntilText?: string }>;
+  // Weekly proactive opt-ins the user turned on (dashboard-shows-log-recap-optin): the reading-list unread
+  // nudge + the standalone log recap. These are "unread:"/"logrecap:" schedules that otherwise leaked into
+  // the reminders list as raw markers; surfaced here with the phrase to turn each off. Optional/empty -> omitted.
+  subscriptions?: Array<{ label: string; whenText: string; offPhrase: string; paused?: boolean; pausedUntilText?: string }>;
 }
 
 /** A short "(paused …)" suffix for any row that's snoozed, or "" when it's live. */
@@ -29,7 +33,8 @@ function oneLine(s: string, max = 60): string {
  * caller pre-formats every time via formatWhen). Kept plain-text (Telegram-safe), grouped by kind.
  */
 export function formatDashboard(d: DashboardData): string {
-  const total = d.schedules.length + d.alerts.length + d.digests.length + d.recipes.length;
+  const subs = d.subscriptions ?? [];
+  const total = d.schedules.length + d.alerts.length + d.digests.length + d.recipes.length + subs.length;
   if (total === 0) {
     return "Your dashboard is empty. Try: \"remind me to stretch at 3pm\", \"watch btc: bitcoin below 50000\", or \"save morning: top 3 HN stories\".";
   }
@@ -60,6 +65,13 @@ export function formatDashboard(d: DashboardData): string {
     for (const r of d.recipes) {
       const sched = r.scheduled ? ` — runs ${r.scheduleText ?? "on schedule"}` : " — /run " + r.name;
       out.push(`• ${r.name}${sched}${pausedSuffix(r.paused, r.pausedUntilText)}`);
+    }
+  }
+
+  if (subs.length) {
+    out.push("", `🔁 Weekly recaps (${subs.length})`);
+    for (const s of subs) {
+      out.push(`• ${s.label} — ${s.whenText}${pausedSuffix(s.paused, s.pausedUntilText)} · say "${s.offPhrase}" to stop`);
     }
   }
 
