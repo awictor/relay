@@ -3546,6 +3546,24 @@
       "status": "done",
       "why": "encode_decode does hex of TEXT (\"hex encode hi\"), not NUMBER bases (\"255 in binary\", \"0xFF in decimal\", \"convert 42 to octal\") — a common dev/learning ask that currently falls to calc (errors) or a slow browse.",
       "how": "Add a small number-base branch (new lib or extend convert_units): parse a number in dec/hex(0x)/bin(0b)/oct + a target base, output the converted value. Pure, keyless. Tool or fold into calculate. Tests."
+    },
+    {
+      "id": "roman-numerals",
+      "title": "Roman numeral convert: \"42 in roman numerals\", \"MMXXIV to a number\"",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "A common learning/quiz ask with no tool — calc chokes, get_fact is overkill. Pure + keyless, both directions.",
+      "how": "Small lib: int<->roman (1-3999 standard), tool convert_roman (or fold into convert_base family) + dispatch + tests + /help."
+    },
+    {
+      "id": "percent-change",
+      "title": "Percent change: \"50 to 75 is what % increase\", \"20% off 80\"",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "calc does \"20% of 50\" + tip, but not \"X to Y percent change\" or a clean \"% off\" final-price. Common shopping/finance ask.",
+      "how": "Extend calc.ts normalizeExpr (or a small percent branch) for \"A to B percent change\" -> ((B-A)/A)*100 and \"N% off P\" -> P*(1-N/100). Tests. Verify no clash with existing % idioms."
     }
   ],
   "history": [
@@ -5790,6 +5808,11 @@
       "lens": "new-user everyday-errand (inline; cap 200/200)",
       "surfaced": "Continued inventory: \"on this day in history\" + number-base convert both had no tool. Built on-this-day (keyless Wikimedia). Number-base convert (255 in binary/hex/octal) seeded as the next candidate.",
       "seeded": "on-this-day shipped; number-base convert queued as a low-effort follow"
+    },
+    {
+      "lens": "new-user everyday-errand (inline; cap 200/200)",
+      "surfaced": "Continued inventory: Roman numerals (\"42 in roman numerals\", \"MMXXIV to number\") + percent-change (\"50 to 75 is what % increase\") both have no tool. UUID already covered (random.ts). Seeded both.",
+      "seeded": "roman-numerals + percent-change"
     }
   ]
 }
