@@ -359,6 +359,9 @@ const handle = createHandler({
   // answer is filtered through both without the user re-stating them.
   profileContext: (chatId) => [profiles.contextLine(chatId, Date.now()), notes.contextLine(chatId), places.contextLine(chatId)].filter(Boolean).join("; "),
   chatTzOffsetMin: (chatId) => profiles.offsetMinAt(chatId, Date.now()) ?? tzOffsetMin(), // DST-correct at now (current-datetime-dst-stale)
+  // Answer-length preference (reply-style-apply-to-agent-length): brief-mode deterministically shortens
+  // the main agent reply so "keep it brief" is felt even when the free-tier LLM ignores the soft hint.
+  replyVerbosity: (chatId) => profiles.get(chatId)?.verbosity,
 
   // /profile view + clear (product-loop): echo the stored profile so a wrong city/tz is visible.
   profileView: (chatId) => { const l = profiles.contextLine(chatId); return l ? l.charAt(0).toUpperCase() + l.slice(1) : null; },

@@ -7,6 +7,7 @@ import type { InboundMessage } from "./telegram.js";
 import type { LLMMessage, LLMClient } from "./llm.js";
 import { runAgent, type AgentDeps } from "./agent.js";
 import { formatReply, formatReplyParts } from "./lib/format-reply.js";
+import { briefenReply } from "./lib/brief.js";
 import { isMoreRequest, isLinkRequest, extractLinks, chunkFrom, deliveredLen, parsePickIndex } from "./lib/last-result.js";
 import { BrowseSessionStore, browseContinuityEnabled, isCloseSessionRequest } from "./lib/browse-session.js";
 import { formatTurnLog } from "./lib/turn-log.js";
@@ -126,6 +127,11 @@ export interface HandlerDeps {
   // All optional so older wiring/tests are unaffected.
   setLocation?: (chatId: number, text: string) => { location: string; units?: string; tzOffsetMin?: number; restamped?: number; saved?: boolean } | null;
   profileContext?: (chatId: number) => string;
+  // The chat's answer-length preference (reply-style-apply-to-agent-length): "brief" means the user
+  // explicitly asked for short answers, so the main agent reply is deterministically shortened to its
+  // first few sentences (a free-tier LLM ignores the soft context hint). Absent/"default" -> no trim.
+  // Only the SHOWN text is shortened; the full reply is still cached for a "more" follow-up.
+  replyVerbosity?: (chatId: number) => "brief" | "detailed" | undefined;
   // The chat's tz offset (minutes east of UTC) for the agent's current-datetime line + reasoning
   // (inject-current-datetime). Optional; absent -> UTC (0).
   chatTzOffsetMin?: (chatId: number) => number | undefined;
@@ -462,6 +468,9 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   // on that page…" hint appends a single time per held thread, not after every interactive turn. Cleared
   // when the session is dropped so a fresh hold re-hints.
   const browseHinted = new Set<number>();
+  // Chats told once that brief-mode trimmed a reply (reply-style-apply-to-agent-length) — so the "say
+  // 'more' for the rest" hint appends a single time, not after every shortened answer.
+  const briefHinted = new Set<number>();
   const handle = ((msg: InboundMessage): Promise<void> => {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -1944,11 +1953,19 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       // partial, and count the turn as NOT-ok so the success metric isn't inflated by soft failures
       // (DEV-0178 — handler is the 3rd consumer of the degraded flag, after alert-runner + digest-runner).
       const parts = formatReplyParts(reply);
-      const body = parts.shown;
+      // Brief-mode length cap (reply-style-apply-to-agent-length): a user who set "keep it brief" gets a
+      // soft context hint, but a free-tier LLM often ignores it — so deterministically shorten a PROSE
+      // reply to its first few sentences. Only for a clean text reply (a degraded partial already narrows;
+      // a photo/doc/structured list is left alone by briefenReply). The full text is still cached below so
+      // "more" pages the hidden tail — brief HIDES the rest, never loses it.
+      const briefMode = !degraded && !photo && !doc && deps.replyVerbosity?.(msg.chatId) === "brief";
+      const body = briefMode ? briefenReply(parts.shown) : parts.shown;
+      const briefened = briefMode && body.length < parts.shown.length; // trim actually removed something
       let out = degraded ? `⚠️ Partial answer — I ran low on steps. Try narrowing the request.\n\n${body}` : body;
       // Cache the full (untrimmed) reply + what we showed, so a follow-up "more"/"link" serves the
       // dropped tail / source URLs without re-running the agent (last-result-drilldown). Text replies
-      // only (a photo/doc has no pageable text).
+      // only (a photo/doc has no pageable text). `sent` reflects the (possibly brief-trimmed) body so
+      // "more" resumes from exactly what the user saw.
       if (!photo && !doc) lastResult.set(msg.chatId, { full: parts.full, sent: deliveredLen(parts.full, body) });
       // Retention nudge (product-loop): if this task repeats one the user already asked, offer to save
       // it as a recipe. Only on a clean text reply (not degraded / not a binary), so it never clutters
@@ -1972,6 +1989,13 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       if (browseHeldNew && !photo && !doc && !degraded) {
         browseHinted.add(msg.chatId);
         out += "\n\n(I've kept that page open — say \"sort/filter…\" to keep going, or \"done\" to close it.)";
+      }
+      // Brief-mode trim hint (reply-style-apply-to-agent-length): the FIRST time brief-mode actually
+      // shortened a reply for this chat, tell them once that the rest is a "more" away — so a user who
+      // asked for brevity still knows the full answer is reachable, not lost. Once per chat.
+      if (briefened && !briefHinted.has(msg.chatId)) {
+        briefHinted.add(msg.chatId);
+        out += "\n\n(Kept it brief — say \"more\" for the full answer.)";
       }
       // If the agent produced a binary (screenshot image or PDF), send it first with the reply as
       // caption, then the text if the caption overflowed. Falls back to text-only when nothing was

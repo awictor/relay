@@ -3651,9 +3651,18 @@
       "title": "Brief-mode should also CAP the agent step/verbosity, not just hint the LLM",
       "impact": "low",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "reply-style-preference injects a context line asking for brief answers, but a free-tier LLM often ignores a soft hint and still returns a wall of text. A user who explicitly asked for brief answers would notice if replies stayed long. Making brief-mode actually shorter (hard post-trim or a tighter max) is the follow-through that makes the feature felt.",
       "how": "When profile.verbosity===brief, either (a) post-process the final reply to the first N sentences / a char cap in handler formatReply, or (b) pass a stricter maxSteps/length budget into runAgent. Prefer a gentle post-trim that keeps whole sentences. Offline test: a long mock reply gets trimmed only when brief is set."
+    },
+    {
+      "id": "brief-mode-across-proactive",
+      "title": "Apply brief-mode to proactive sends (digest/alert/scheduled) too, not just inbound replies",
+      "impact": "low",
+      "effort": "M",
+      "status": "todo",
+      "why": "reply-style-apply-to-agent-length only shortens the INBOUND agent reply path. A brief-mode user still gets full-length scheduled recipe / alert-fire / digest-member text, which is where daily verbosity is most annoying. Making proactive sends honor the same preference is the consistency follow-through.",
+      "how": "Thread replyVerbosity (or the profile) into schedule-runner/alert-runner/digest-runner reply composition; call briefenReply on a member/recipe body when the chat is brief. Keep structured digest layout intact (briefenReply already no-ops on bullets). Offline tests per runner."
     }
   ],
   "history": [
@@ -5280,6 +5289,10 @@
     {
       "item": "reply-style-preference",
       "note": "Relay now REMEMBERS answer-style prefs like it remembers units. Say \"keep it brief\"/\"give me more detail\" (verbosity) or \"no emoji\"/\"use emoji\" (emoji toggle) and it stores {verbosity,emoji} in the profile + injects them into the agent context line so every later reply honors it without re-asking. New parseReplyStyle (cue-gated so \"that was a short trip\" != a pref; handles combined \"brief and no emoji\") + setReplyStyle handler dep (routed before setLocation so a style command isnt misread as a place) + /profile shows it + /help line. FOUND+FIXED a real bug: ProfileStore.set whitelists patch fields and never copied verbosity/emoji, so the prefs were silently dropped on save — added the two lines + a reload-from-disk regression test. +6 tests (parse, combined, no-hijack, persist+contextLine, 2 handler-routing). 2324 green. call-tested: offline (no live anvil needed — pure profile/handler)."
+    },
+    {
+      "item": "reply-style-apply-to-agent-length",
+      "note": "Brief-mode now ACTUALLY shortens replies, not just hints the LLM. When profile.verbosity===brief, the main agent reply is deterministically capped to its first ~3 sentences / 400 chars via new src/lib/brief.ts (briefenReply) — a free-tier LLM ignores the soft context hint, so this is the felt follow-through. Only clean PROSE is trimmed: bulleted/numbered/JSON-rendered/table replies are left intact (would mangle layout), and a degraded/photo/doc reply is skipped. The FULL text stays cached so \"more\" pages the hidden tail — brief HIDES the rest, never loses it — and a once-per-chat \"say \\\"more\\\" for the full answer\" hint tells the user it is reachable. Wired replyVerbosity handler dep -> profiles.get().verbosity. +11 tests (8 unit incl. run-on hard-cap + multi-paragraph + list-safety, 3 handler integration incl. once-per-chat hint + default-off). 2335 green. call-tested: offline (pure prose transform + handler routing)."
     }
   ],
   "audits": [

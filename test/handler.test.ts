@@ -60,6 +60,41 @@ describe("createHandler — memory-write hedge (memory-write-silent-fail)", () =
   });
 });
 
+describe("createHandler — brief-mode length cap (reply-style-apply-to-agent-length)", () => {
+  const long = "Austin is sunny and 82 degrees right now. Winds are light from the south at 5 mph. Humidity is around 40 percent. No rain is expected today at all. Tomorrow looks similar with a few clouds.";
+
+  it("shortens a long prose reply when verbosity is brief + hints 'more' once", async () => {
+    const { handle, sent } = harness({
+      replyVerbosity: () => "brief",
+      runAgentFn: async () => ({ reply: long, steps: 1, tools: [] }),
+    });
+    await handle(msg("weather"));
+    const body = sent[0]!.text;
+    expect(body).toContain("Austin is sunny and 82 degrees");
+    expect(body).not.toContain("Tomorrow looks similar"); // tail trimmed
+    expect(body).toMatch(/say "more" for the full answer/);
+  });
+
+  it("does NOT shorten when verbosity is unset (default)", async () => {
+    const { handle, sent } = harness({
+      runAgentFn: async () => ({ reply: long, steps: 1, tools: [] }),
+    });
+    await handle(msg("weather"));
+    expect(sent[0]!.text).toContain("Tomorrow looks similar"); // full answer sent
+  });
+
+  it("the brief hint fires only once per chat", async () => {
+    const { handle, sent } = harness({
+      replyVerbosity: () => "brief",
+      runAgentFn: async () => ({ reply: long, steps: 1, tools: [] }),
+    });
+    await handle(msg("weather"));
+    await handle(msg("weather again"));
+    const hints = sent.filter((s) => /say "more" for the full answer/.test(s.text));
+    expect(hints).toHaveLength(1);
+  });
+});
+
 describe("createHandler — contact follow-up nudge (contact-followup-nudge)", () => {
   it("'follow up with Sarah in 3 days' schedules it + confirms, no agent", async () => {
     let seen = "";
