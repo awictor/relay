@@ -3759,7 +3759,7 @@
       "title": "Brief-mode should also shorten the reading-list nudge + log-recap proactive sends (currently bypasses briefen)",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Confirmed: the final stripEmoji pass in schedule-runner covers ALL branches (unread:/logrecap: included), so no-emoji is honored. But briefen is applied only inside the recipe-else branch, so a brief-mode users unread:/logrecap: send is NOT shortened. Minor, but a brief user gets a full-length nudge.",
       "how": "Move/duplicate the briefen application so the unread: and logrecap: sendText also pass through it when replyVerbosity===brief (the stripEmoji block already sits after all branches — mirror that placement for briefen). Offline test: a brief chats logrecap send is shortened."
     }
@@ -5440,6 +5440,10 @@
     {
       "item": "log-recap-empty-guidance",
       "note": "A user who opts into the weekly log recap but has NEVER logged anything now gets a one-time how-to-log nudge instead of silent nothing forever. New pure logRecapProactiveText(series, alreadyNudgedEmpty, now): recap when something was logged this week; a one-time \"you havent logged anything yet — try log weight 182...\" when the store is EMPTY + not yet nudged (returns nudgedEmpty:true so the caller records it); null for a logged-before user having a genuinely quiet week OR an empty-store user already nudged. index tracks the one-time fire via a logRecapEmptyNudged Set + delegates to the helper. Distinguishes never-logged from quiet-week so a real subscriber isnt spammed. +4 tests (recap / first-empty-nudge / already-nudged-silent / logged-before-quiet-week-silent). 2386 green. call-tested: offline (pure text selection)."
+    },
+    {
+      "item": "proactive-brief-emoji-consistency",
+      "note": "VERIFIED NO-OP, no code shipped (avoided filler). Checked whether briefen bypassing the unread:/logrecap: branches matters: it does NOT. briefenReply only shortens free-flowing PROSE and no-ops on bullets/lists. The unread nudge + log recap sends are BULLETED lists (briefen no-ops), the empty-store log nudge is already short prose (under the 3-sentence/400-char budget so unchanged), alert sends are terse crossings, digest sends are bulleted. So a brief-mode user loses nothing — there is no long prose in any proactive nudge to shorten. stripEmoji already sits after ALL branches so no-emoji is honored everywhere. Confirmed via /tmp probe (briefenReply(unread)===unread, ===logrecap, empty-nudge unchanged). Closed rather than ship a change that provably does nothing."
     }
   ],
   "audits": [
