@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseLogCommand, parseLogQuery, sumSeries, LogStore, logsWeeklySummary, isLogRecapMember, parseLogRecapToggle } from "../src/lib/logs.js";
+import { parseLogCommand, parseLogQuery, sumSeries, LogStore, logsWeeklySummary, isLogRecapMember, parseLogRecapToggle, logRecapProactiveText } from "../src/lib/logs.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -113,6 +113,28 @@ describe("logsWeeklySummary (logs-weekly-summary)", () => {
     expect(isLogRecapMember("my logs")).toBe(true);
     expect(isLogRecapMember("Trackers")).toBe(true);
     expect(isLogRecapMember("weather")).toBe(false);
+  });
+});
+
+describe("logRecapProactiveText (log-recap-empty-guidance)", () => {
+  const withData = [{ tag: "weight", points: [{ t: NOW - 2 * DAY, v: 182 }, { t: NOW - 1 * DAY, v: 180 }] }];
+  it("returns the recap when something was logged this week", () => {
+    const r = logRecapProactiveText(withData, false, NOW)!;
+    expect(r.text).toMatch(/Your week in numbers/);
+    expect(r.nudgedEmpty).toBeUndefined();
+  });
+  it("nudges a NEVER-logged subscriber once (empty store, not yet nudged)", () => {
+    const r = logRecapProactiveText([], false, NOW)!;
+    expect(r.text).toMatch(/haven't logged anything yet/i);
+    expect(r.text).toMatch(/log weight 182/);
+    expect(r.nudgedEmpty).toBe(true);
+  });
+  it("stays silent for a never-logged subscriber already nudged (no weekly repeat)", () => {
+    expect(logRecapProactiveText([], true, NOW)).toBeNull();
+  });
+  it("stays silent for a logged-before user having a quiet week (not empty store)", () => {
+    const stale = [{ tag: "weight", points: [{ t: NOW - 30 * DAY, v: 200 }] }]; // logged before, nothing recent
+    expect(logRecapProactiveText(stale, false, NOW)).toBeNull();
   });
 });
 

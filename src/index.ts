@@ -45,7 +45,7 @@ import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { SavedStore, parseSavePage, parseSavedRecall, hostLabel, readingRecap, isUnreadSavedRequest, formatUnreadNudge, parseUnreadNudgeToggle } from "./lib/readlater.js";
 import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
-import { LogStore, parseLogCommand, parseLogQuery, sumSeries, logsWeeklySummary, parseLogRecapToggle } from "./lib/logs.js";
+import { LogStore, parseLogCommand, parseLogQuery, sumSeries, logsWeeklySummary, parseLogRecapToggle, logRecapProactiveText } from "./lib/logs.js";
 import { ListStore, parseListCommand, parseListExport, splitItems, MAX_ITEMS_PER_LIST } from "./lib/lists.js";
 import { ContactStore, parseSaveContact, parseForgetContact, parseFollowUp } from "./lib/contacts.js";
 import { mailtoLink, smsLink } from "./lib/compose.js";
@@ -253,6 +253,9 @@ const SCHED_TICK_MS = intEnv(process.env.RELAY_SCHED_TICK_MS, { fallback: 30_000
 // Shared last-result cache (proactive-ping-drilldown-cache): the handler stores answers here + the
 // runner records proactive sends, so "more"/"send the link" works after an unprompted ping too.
 const lastResultStore = new Map<number, { full: string; sent: number; ping?: { full: string; sent: number } }>();
+// Chats already sent the "you opted into log recaps but never logged" nudge (log-recap-empty-guidance) —
+// fired once so a never-logging subscriber isn't pinged the same reminder every week.
+const logRecapEmptyNudged = new Set<number>();
 // Shared pick-list cache (picker-on-proactive-pings): the handler caches an inbound list reply's items
 // here + the schedule-runner caches a proactive list ping's items, so a "pick N" button tap resolves
 // against whichever list the chat last saw — inbound answer or unprompted ping.
@@ -279,7 +282,12 @@ const scheduleRunner = makeScheduleRunner({
   },
   // Weekly standalone log recap (logs-recap-nudge-or-standalone): a "logrecap:" schedule fires this. A
   // "📊 Your week in numbers" header labels the unprompted send; null when nothing was logged this week.
-  logsRecapProactive: (chatId) => { const recap = logsWeeklySummary(logs.allSeries(chatId), Date.now()); return recap ? `📊 Your week in numbers\n${recap}` : null; },
+  logsRecapProactive: (chatId) => {
+    const r = logRecapProactiveText(logs.allSeries(chatId), logRecapEmptyNudged.has(chatId), Date.now());
+    if (!r) return null;
+    if (r.nudgedEmpty) logRecapEmptyNudged.add(chatId); // one-time empty-store nudge (log-recap-empty-guidance)
+    return r.text;
+  },
   alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
   recipeResolveTask: (chatId, name) => { const r = recipes.get(chatId, name); return r ? r.task : null; }, // scheduled recipes: resolve current task at fire time
   // Scheduled chained recipe = sequential workflow. Return the structured result (final + stoppedEarly)

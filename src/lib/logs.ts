@@ -212,6 +212,29 @@ function logRecapLine(tag: string, points: LogPoint[], unit: string | undefined,
   return `${tag} ${fmt(pts[0]!.v)}${unit && unit !== "$" ? ` ${unit}` : ""}`;
 }
 
+/** The proactive weekly-recap message for a "logrecap:" fire (logs-recap-nudge-or-standalone +
+ * log-recap-empty-guidance), or null to stay silent. Three cases:
+ *   - something logged this week -> the "📊 Your week in numbers" recap.
+ *   - NEVER logged (empty store) + not yet nudged -> a one-time "how to log" heads-up (so a subscriber who
+ *     never logged isn't met with silence forever). The caller records the nudge so it fires once.
+ *   - logged before but a quiet week (or already nudged) -> null (a genuine no-news week isn't worth a ping).
+ * Pure: takes the series + whether the empty-nudge already fired. Exported for tests. */
+export function logRecapProactiveText(
+  series: Array<{ tag: string; points: LogPoint[]; unit?: string }>,
+  alreadyNudgedEmpty: boolean,
+  now: number,
+): { text: string; nudgedEmpty?: boolean } | null {
+  const recap = logsWeeklySummary(series, now);
+  if (recap) return { text: `📊 Your week in numbers\n${recap}` };
+  if (series.length === 0 && !alreadyNudgedEmpty) {
+    return {
+      text: `📊 Your weekly log recap is on, but you haven't logged anything yet. Try "log weight 182", "spent $14 on lunch", or "log mood 7" — then I'll recap it here each week. (Say "stop log recaps" to turn this off.)`,
+      nudgedEmpty: true,
+    };
+  }
+  return null;
+}
+
 /** A weekly recap of ALL of a chat's trackers for a digest section (logs-weekly-summary), or null when
  * nothing was logged in the window (so the digest treats it as an empty member, not a failure). `windowMs`
  * defaults to 7 days. Pure — takes the already-read series list so it stays offline-testable. */
