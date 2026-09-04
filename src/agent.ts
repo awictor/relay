@@ -34,6 +34,8 @@ import { getSunTimes as sunFetch, formatSunTimes, sunPlace } from "./lib/suntime
 import { getAirQuality as airFetch, formatAirQuality, airPlace, isUvRequest, isPollenRequest } from "./lib/airquality.js";
 import { renderQr, parseQrRequest } from "./lib/qr.js";
 import { parseRandomRequest, runRandom } from "./lib/random.js";
+import { parsePasswordRequest, generateSecret, formatSecret } from "./lib/password.js";
+import { randomInt as cryptoRandomInt } from "node:crypto";
 import { detectCarrier, trackingUrl, carrierName } from "./lib/tracking.js";
 import { detectFlight, getFlight as fetchFlight, formatFlight } from "./lib/flight.js";
 import { relativeAge } from "./lib/answer-log.js";
@@ -141,6 +143,15 @@ export const TOOLS: ToolSpec[] = [
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The user's random/decision ask, e.g. \"flip a coin\", \"roll 2d6\", \"pick between A and B\"." } },
+      required: ["request"],
+    },
+  },
+  {
+    name: "generate_password",
+    description: "Generate a genuinely-random, cryptographically-strong password or passphrase — use for \"generate a password\", \"make me a strong 24-character password\", \"a passphrase\", \"random PIN\". NEVER invent a password yourself (a made-up one isn't secure). Pass the user's request verbatim (it carries the length + any \"no symbols\"/\"digits only\"/\"passphrase\" preference). Relay never stores it.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The user's password ask, e.g. \"strong 20 char password\", \"passphrase\", \"password no symbols\", \"6 digit pin\"." } },
       required: ["request"],
     },
   },
@@ -497,6 +508,7 @@ Tools:
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
 - "get_flight" (flight): flight route + live position by number. Use this — NOT web_search — for "is AA100 on time"/"where's UA83"/"when does DL215 land". Returns airline + from→to + airborne-now + a tracker link; it CAN'T get scheduled gate/on-time — report honestly, don't invent a gate/delay.
 - "random" (request): flip a coin / roll dice / random number / pick from options. Use this — NEVER invent a "random" value yourself — for "flip a coin", "roll a d20", "random number 1-100", "pick one: X or Y".
+- "generate_password" (request): a cryptographically-strong random password/passphrase/PIN. Use this — NEVER make up a password yourself — for "generate a password", "strong 24-char password", "a passphrase", "6-digit pin". Relay never stores it.
 - "get_crypto" (coin): current crypto price + 24h change. Use this — NOT get_quote/web_search — for "price of bitcoin"/"what's ETH at"/"BTC price"/"how's doge doing". Pass the ticker or name (btc, eth, sol, doge).
 - "get_quote" (symbol): latest stock/equity price. Use this — NOT web_search/scrape — for any "what's Tesla at"/"AAPL price"/"how's NVDA doing" question; it's instant. Pass the ticker (AAPL, TSLA); non-US add a market suffix (VOD.UK).
 - "get_weather" (place?, when?): current weather, today's high/low, per-hour rain timing, + up to a 7-day forecast. Use this — NOT web_search/scrape — for any weather/forecast/"will it rain" question. Omit place to use the user's saved location. Pass "when" with the user's words for a day OR time-of-day ("tomorrow", "this weekend", "Saturday", "this afternoon", "tonight", "at 3pm", "later today") so the RIGHT window is reported, not just today's max.
@@ -1057,6 +1069,15 @@ export async function runAgent(
         if (!req) { push("random", "Couldn't tell what to randomize — ask the user to clarify (coin / dice / a number range / a list to pick from)."); continue; }
         // App-side RNG (Math.random) — genuinely random, no network. The LLM must NOT invent the value.
         push("random", `${runRandom(req)}. Report this EXACT result to the user; do not change or re-roll it.`);
+        continue;
+      }
+
+      if (call.name === "generate_password") {
+        const req = parsePasswordRequest(String(call.args.request ?? "")) ?? { kind: "password" as const, length: 20, symbols: true, digits: true };
+        // crypto RNG (not Math.random) — this is a credential; a predictable "random" password is unsafe.
+        const secret = generateSecret(req, (n) => cryptoRandomInt(n));
+        // Return the FORMATTED reply verbatim: the model must relay this exact secret, not invent its own.
+        push("generate_password", `${formatSecret(req, secret)}\n\n[Send this EXACT text to the user — do NOT alter, regenerate, or paraphrase the secret.]`);
         continue;
       }
 

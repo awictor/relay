@@ -39,7 +39,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
     );
   });
 
@@ -262,6 +262,21 @@ describe("runAgent dispatch", () => {
     const out = await runAgent("how tall is everest", { llm, backend: b });
     expect(hits).toContain("getFact:Mount Everest");
     expect(out.reply).toMatch(/Everest/);
+  });
+
+  it("generate_password produces a strong secret with no backend/network, reaches reply (password-generator)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "generate_password", args: { request: "generate a 20 character password" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "Here's your password." } } as ToolCall },
+    ]);
+    await runAgent("make me a strong password", { llm, backend: b });
+    // The tool result carries a real 20-char secret in a code span; no browser/network was touched.
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool")!.content;
+    const secret = toolMsg.match(/`([^`]+)`/)?.[1] ?? "";
+    expect(secret).toHaveLength(20);
+    expect(toolMsg).toMatch(/EXACT/); // instructs the model not to alter the secret
+    expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
   });
 
   it("where_to_watch returns a JustWatch link with no backend call (movie-where-to-watch)", async () => {

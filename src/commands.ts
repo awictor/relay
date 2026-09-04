@@ -10,6 +10,7 @@ Just ask:
 • "price of bitcoin" · "is AAPL up today?"
 • "where's my package 1Z999..." · "coffee near me"
 • "tell me a joke" · "fun fact" · "quiz me"
+• "generate a strong password" · "a passphrase"
 
 Remember & remind:
 • "remind me to leave at 5:30" · "every morning: weather + top news"
@@ -39,6 +40,7 @@ const HELP = `Relay — what I can do:
 • Find places nearby: "coffee near me", "nearest pharmacy" (share your location first) → real nearby spots with distance + hours.
 • Crypto + stock prices: "price of bitcoin", "what's ETH at", "AAPL price" → live price + 24h change, instantly.
 • Flip / roll / pick: "flip a coin", "roll a d20", "random number 1-100", "pick one: tacos or sushi" → a genuinely random answer.
+• Strong passwords: "generate a strong password", "a 24-character password no symbols", "a passphrase", "6-digit PIN" → a cryptographically-random secret you copy into your password manager. I don't store it.
 • Convert currency: "how much is 200 USD in EUR" → I use the live rate, instantly.
 • Convert units: "180C to F", "5 foot 11 in cm", "2 cups of flour in grams", "10 miles in km" → exact, instantly.
 • Better buy: "which is cheaper, 500g for $4 or 1.2kg for $9?" → I compare price-per-unit and name the winner.

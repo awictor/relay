@@ -3302,6 +3302,15 @@
       "status": "todo",
       "why": "After ~11 iterations every autonomously-reachable offline surface is deeply swept (parsing, dispatch, multi-step flows, inbound+proactive delivery gating, persistence hedges across ALL stores, onboarding, mid-session discovery) at 2061 green tests, and the real 3-lens AUDIT is blocked by the exhausted subagent cap (200/200) until a NEW session. Continued inline probing is now genuinely dry.",
       "how": "OWNER ACTIONS (loop cannot do these): (1) confirm-to-act — decide whether Relay should confirm before a state-changing step + the UX; this is a product decision only Alex can make. (2) start anvil (docker/local) so anvil-live-e2e-when-up can run the overdue real end-to-end errand. (3) OPTIONAL: start a fresh Claude session to reset the subagent cap so the 3-lens parallel AUDIT can seed genuinely new directions. Until one of these, the loop has no value-adding offline move left."
+    },
+    {
+      "id": "probe-more-capability-gaps",
+      "title": "Find the next genuinely-missing everyday capability (offline/free, like the password tool)",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "The password-generator find proves there ARE still real capability gaps (not just bugs) reachable offline. Other common text-a-bot asks may lack a tool: a countdown/stopwatch timer, a tip/split already covered by calculate?, a 'roll a name/lorem/uuid', unit-of-time 'how long until 5pm', a percentage/discount helper, base64/url encode-decode, color hex<->name. Audit the tool set vs common asks + build the highest-value missing one.",
+      "how": "List current TOOLS; brainstorm 8-10 common phone-assistant asks; for each check if a tool/parser handles it (probe); build the highest impact-per-effort genuinely-missing one with a lib+tool+dispatch+prompt+test, same pattern as password. One per iteration."
     }
   ],
   "history": [
@@ -4652,6 +4661,10 @@
     {
       "item": "location-pin-persist-hedge",
       "note": "3-lens AUDIT re-attempted but subagent cap still 200/200 (same session). Inline-probed the two unswept surfaces (voice-note + location-pin). Voice path is well-handled (echo supplementary, agent path gated). Real gap in the location-PIN save: saveCoords returned void, dropping ProfileStore.set's persisted status, so a failed coords write acked '📍 Got your location' while near-me/weather would silently break on restart (the ONE store-mutation ack still unhedged after the persistence sweep - it was in handler.ts's pin branch, not a lib parser). saveCoords now returns boolean; the captionless-pin ack hedges on false. +2 tests. 2061 green."
+    },
+    {
+      "item": "password-generator-tool",
+      "note": "NEW capability (not a probe): generate_password tool. 'generate a strong password' / 'a 24-char password no symbols' / 'a passphrase' / '6-digit PIN' was a common everyday text-a-bot ask with NO tool — fell to a slow browse OR the LLM inventing a non-random (unsafe) string for a credential. New src/lib/password.ts: parsePasswordRequest (length/symbols/digits/PIN/passphrase, recall+reset guarded so 'what's my password' doesn't hijack) + generateSecret (crypto.randomInt injected, guarantees one char/class, Fisher-Yates shuffle, no-lookalike alphabet, inline word list for passphrases) + formatSecret (copy span, 'I don't store it'). Wired: TOOLS entry + dispatch (crypto RNG, never Math.random for a credential) + prompt menu + HELP/START discoverability + sorted dispatch-test list. +16 tests (password.test 15 + dispatch 1). 2077 green."
     }
   ],
   "audits": [
@@ -5065,6 +5078,11 @@
       "lens": "inline compose/tracking probe (agent cap 200/200; real 3-lens AUDIT still blocked)",
       "surfaced": "Probed 3 more user-facing surfaces this run: compose/draft (mailto/sms link encoding of &, #, newlines, commas - all correct; invalid recipient flagged not silently blanked), package-tracking carrier detect (courtesy-immune, number-pattern anchored), and re-confirmed voice/location from last run. All CLEAN. No bug, no manufactured change. The autonomously-reachable offline surface is exhausted; every probe now returns clean.",
       "seeded": "(none - no actionable non-owner item found; owner-decision-needed remains the standing report)"
+    },
+    {
+      "lens": "capability-gap build (broke the dry streak)",
+      "surfaced": "After 3 clean bug-probe runs, shifted from hunting bugs to shipping product value. Tool inventory review found a real everyday gap: no password/passphrase generator despite it being a top text-a-bot ask. Built it offline+free with crypto RNG. This is genuine user-noticeable value, not a hardening tweak.",
+      "seeded": "probe-more-capability-gaps"
     }
   ]
 }
