@@ -5456,6 +5456,10 @@
     {
       "item": "unitprice-named-count (gap, found via inline audit)",
       "note": "Unit-price better-buy now handles a NAMED count noun (\"12 eggs for $3 vs 18 for $4\", \"50 capsules $10 or 100 $18\"). toBaseAmount only knew a fixed count-word list (ct/pack/roll/each/...), so an arbitrary noun (eggs/capsules/sheets) returned null and the WHOLE compare failed even though both sides count the same thing -> fell to the models forbidden mental math. Fix in compareUnitPrice: when NO option names a real measure (all blank / known-count / same unknown noun, <=1 distinct noun), treat every option as a plain per-item count. A mix of a real measure + a count noun (\"500g vs 12 eggs\") or TWO different nouns (\"eggs vs rolls\") still refuses (dimension mismatch). +3 tests (same-noun compares, named+bare compares, two-nouns refuse). 2392 green. call-tested: offline (probe: 12 eggs $3 vs 18 $4 -> $0.25 vs $0.22 each, 11% cheaper; g-vs-eggs null)."
+    },
+    {
+      "item": "textstats-verb-first-count (gap, found via inline audit)",
+      "note": "Text-stats word/char count now accepts the verb-first phrasing \"count the words: X\" / \"count the characters in X\" / \"count words: X\" — previously only noun-first forms (word count of X / how many words in X) parsed, so a natural \"count the words: ...\" fell through to a slow agent turn. Added the count-verb alternative to both the char + word regexes (gated by the same character/word keyword guard). Existing forms + reverse/palindrome unchanged. +3 assertions. 2392 green. call-tested: offline. Also swept textstats primitives (wordCount collapses whitespace, palindrome ignores case/spaces/punct) + password gen — clean."
     }
   ],
   "audits": [

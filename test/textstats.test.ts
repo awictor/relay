@@ -30,6 +30,10 @@ describe("parseTextStats", () => {
     expect(parseTextStats("how many characters in hello world")).toEqual({ op: "chars", text: "hello world" });
     expect(parseTextStats("reverse this: hello")).toEqual({ op: "reverse", text: "hello" });
     expect(parseTextStats("is racecar a palindrome")).toEqual({ op: "palindrome", text: "racecar" });
+    // verb-first "count the words/characters" phrasing (previously fell through to null).
+    expect(parseTextStats("count the words: one two three four five")).toEqual({ op: "words", text: "one two three four five" });
+    expect(parseTextStats("count the characters in hello")).toEqual({ op: "chars", text: "hello" });
+    expect(parseTextStats("count words: a b c")).toEqual({ op: "words", text: "a b c" });
     expect(parseTextStats("what's the weather")).toBeNull();
   });
 });

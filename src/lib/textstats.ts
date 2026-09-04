@@ -41,11 +41,12 @@ export function parseTextStats(request: string): { op: TextOp; text: string } | 
   // reverse: "reverse <X>" / "reverse this: X"
   m = r.match(/\breverse(?:\s+(?:this|the text|string))?[:\s]+(.+)$/i);
   if (m) return { op: "reverse", text: m[1]!.trim().replace(/^["'`]|["'`]$/g, "") };
-  // char count: "how many characters in X" / "character count of X" / "char count: X"
-  m = r.match(/\b(?:how many characters?(?:\s+(?:are\s+)?in)?|characters?\s+count(?:\s+of)?|char\s*count)[:\s]+(.+)$/i);
+  // char count: "how many characters in X" / "character count of X" / "char count: X" / "count the characters: X"
+  m = r.match(/\b(?:how many characters?(?:\s+(?:are\s+)?in)?|characters?\s+count(?:\s+of)?|char\s*count|count\s+(?:the\s+)?characters?(?:\s+(?:in|of))?)[:\s]+(.+)$/i);
   if (m && /character|char/i.test(lower)) return { op: "chars", text: m[1]!.trim().replace(/^["'`]|["'`]$/g, "") };
-  // word count: "how many words in X" / "word count of X"
-  m = r.match(/\b(?:how many words?(?:\s+(?:are\s+)?in)?|words?\s+count(?:\s+of)?|word\s*count)[:\s]+(.+)$/i);
+  // word count: "how many words in X" / "word count of X" / "count the words: X" (verb-first — a natural
+  // phrasing the count-noun-first forms missed, so it fell through to a slow agent turn).
+  m = r.match(/\b(?:how many words?(?:\s+(?:are\s+)?in)?|words?\s+count(?:\s+of)?|word\s*count|count\s+(?:the\s+)?words?(?:\s+(?:in|of))?)[:\s]+(.+)$/i);
   if (m && /\bword/i.test(lower)) return { op: "words", text: m[1]!.trim().replace(/^["'`]|["'`]$/g, "") };
   return null;
 }
