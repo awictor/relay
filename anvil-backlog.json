@@ -32,9 +32,27 @@
       "title": "Infinite-scroll capture: scroll a feed to load more items before reading",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Feeds/listings that load on scroll (not pagination) yield only the initial ~10 items to a single read — a 'what's new on <scrolling feed>' errand under-reports.",
       "how": "Add a bounded scroll-to-load to the browse path in src/anvil.ts: repeat scrollBy(0, viewport) + wait-for-network-idle up to K times or until item count stops growing, then read. Cap iterations + time. Live e2e against a real infinite-scroll page; assert post-scroll item count > initial."
+    },
+    {
+      "id": "extract-across-pages",
+      "title": "Structured extraction across paginated/scrolled results (rows, not a text wall)",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "scrape_pages + scroll_feed now GATHER multiple pages, but return raw concatenated text — for \"the 5 cheapest\" / \"20 newest listings\" the model must re-parse a big blob, which is lossy + token-heavy. Extracting structured rows (title/price/url) across the gathered pages is the actual competitor-grade listing errand.",
+      "how": "Add a paged/scrolled variant to the extract path (or a fields option on scrape_pages/scroll_feed) that runs the existing per-item extraction over each gathered page and returns a deduped JSON array capped at the requested N. Reuse extract.ts + the multi-page gatherers. Offline unit test with a mock 2-page listing; live e2e asserting N rows across pages."
+    },
+    {
+      "id": "pdf-fullpage",
+      "title": "Full-page PDF: \"save the whole article/thread as a PDF\" captures everything, not one print-page",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "pdf() renders via anvil /v1/pdf; like screenshot before the fullPage fix, a long thread/article likely gets clipped to default print pagination. A user saving a long page expects the whole thing. Mirror the screenshot-fullpage win.",
+      "how": "Check anvil /v1/pdf options (printBackground, preferCSSPageSize, scale, full-content). Thread a fullPage/complete flag through relay pdf(url,full) + the pdf tool dispatch when the user says whole/entire/full. Live e2e: full PDF byte size materially larger for a long page."
     }
   ],
   "history": [
@@ -49,11 +67,18 @@
     {
       "item": "browse-pagination",
       "note": "Multi-page browse shipped: new anvil scrapePaged(url,maxPages) reads a listing, finds the next/more/older pager IN the rendered DOM (rel=next, else an anchor whose text/aria-label matches next|more|older|>>|», never previous), follows it reusing ONE session, accumulates labeled page text; capped 1-5 pages (default 3) + 45s budget, loop-guarded (seen-set) + SSRF-checked on each next URL. New agent tool scrape_pages (url,maxPages) + dispatch (clamps 1-5, reports pages read so the model doesn't overclaim) + BrowserBackend.scrapePaged + SYSTEM_PROMPT + /help. scrape() unchanged. +4 unit tests. LIVE e2e drove real anvil on Hacker News: followed More -> 3 distinct pages (news, ?p=2, ?p=3), 12.3K chars vs 4.2K single-page (2.95x). 2188 green. call-tested: TRUE (live anvil, real pagination)."
+    },
+    {
+      "item": "browse-infinite-scroll",
+      "note": "Infinite-scroll capture shipped: new anvil scrapeScroll(url,maxScrolls) navigates, dismisses consent, scrolls to the bottom repeatedly (900ms settle per step) until the page stops growing / cap / 45s budget, then reads the fully-expanded text. Capped 1-10 scrolls (default 5). New agent tool scroll_feed (url,maxScrolls) + dispatch (clamps, reports scrolls done so the model doesn't overclaim) + BrowserBackend.scrapeScroll + SYSTEM_PROMPT + /help. +2 unit tests. LIVE e2e on quotes.toscrape.com/scroll (real infinite-scroll): plain scrape 1492 chars (~first 10) vs scrolled 6x -> 12181 chars (8.16x, all items loaded). 2190 green. call-tested: TRUE (live anvil). This completes the anvil browse-depth backlog (pagination + full-page shot + scroll all done)."
     }
   ],
   "probes": [
     {
       "note": "Seeded from the inline 3-lens gap analysis run at the end of the product-loop session (subagent cap 200/200 blocked the parallel AUDIT agents, so lenses were run inline over schedule-runner/alert-runner/chain-runner/agent/handler/anvil). Keyless-tool surface confirmed exhausted. Real remaining depth gaps: browse reads ONE page only (no pagination/scroll/crawl — grep=0), screenshot is viewport-only (anvil.ts:463), and non-/run chain paths drop stoppedEarly (partial presented as complete). Owner picked the anvil-depth direction; these 4 are the starting backlog. In-place schedule EDIT (alerts retune but reminders can't) was also found — parked for a reliability pass, not this browse-depth loop."
+    },
+    {
+      "note": "Depth trio complete (pagination, full-page screenshot, infinite-scroll — all live-verified). Next depth tier surfaced while building: (1) the multi-page tools return RAW concatenated page text; a listing errand (\"5 cheapest\", \"20 newest\") would be far stronger if the agent EXTRACTED structured rows across the gathered pages (title/price/link) instead of the model re-parsing a wall of text — pairs scrape_pages/scroll_feed with the existing extract path. (2) full-page PDF: pdf() exists but, like screenshot was, likely renders one viewport/print-page; \"save the whole thread/article as PDF\" wants the full scroll. Seeded both. Owner-gated confirm-to-act multi-step chains + in-place schedule edit still parked."
     }
   ]
 }

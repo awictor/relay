@@ -22,6 +22,7 @@ function recordingBackend() {
   const b: BrowserBackend = {
     scrape: async (url) => { hits.push(`scrape:${url}`); return { title: "t", content: "PRICE=$1", url }; },
     scrapePaged: async (url, maxPages) => { hits.push(`scrapePaged:${url}:${maxPages}`); return { title: "t", content: "--- page 1 ---\nA\n\n--- page 2 ---\nB", url, pages: 2, urls: [url, url + "?p=2"] }; },
+    scrapeScroll: async (url, maxScrolls) => { hits.push(`scrapeScroll:${url}:${maxScrolls}`); return { title: "t", content: "item1 item2 item3 item4", url, scrolls: 3 }; },
     createSession: async () => { hits.push("createSession"); return { id: "s1" }; },
     navigate: async (_id, url) => { hits.push(`navigate:${url}`); return { url, title: "t" }; },
     click: async (_id, sel) => { hits.push(`click:${sel}`); },
@@ -40,7 +41,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "scrape_pages", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
     );
   });
 
@@ -106,6 +107,30 @@ describe("runAgent dispatch", () => {
     ]);
     const r = await runAgent("more results", { llm, backend: b });
     expect(r.reply).toBe("used scrape instead"); // no throw; model continues
+  });
+
+  it("scroll_feed -> backend.scrapeScroll, clamps maxScrolls 1..10, default 5 (browse-infinite-scroll)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "scroll_feed", args: { url: "https://x.com/feed", maxScrolls: 50 } } as ToolCall },
+      { toolCall: { name: "scroll_feed", args: { url: "https://x.com/feed2" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "loaded the feed" } } as ToolCall },
+    ]);
+    const r = await runAgent("what's new on the feed", { llm, backend: b });
+    expect(hits).toContain("scrapeScroll:https://x.com/feed:10"); // clamped from 50
+    expect(hits).toContain("scrapeScroll:https://x.com/feed2:5"); // default
+    expect(r.tools).toContain("scroll_feed");
+  });
+
+  it("scroll_feed with no backend.scrapeScroll reports unavailable (falls back to scrape)", async () => {
+    const { b } = recordingBackend();
+    delete (b as { scrapeScroll?: unknown }).scrapeScroll;
+    const llm = new ScriptLLM([
+      { toolCall: { name: "scroll_feed", args: { url: "https://x.com/feed" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "scrape fallback" } } as ToolCall },
+    ]);
+    const r = await runAgent("feed please", { llm, backend: b });
+    expect(r.reply).toBe("scrape fallback");
   });
 
   it("fetch_json -> backend.fetchJson", async () => {

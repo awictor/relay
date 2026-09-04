@@ -75,6 +75,11 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL of the first page / listing" }, maxPages: { type: "number", description: "How many pages to follow (1-5, default 3)" } }, required: ["url"] },
   },
   {
+    name: "scroll_feed",
+    description: "Read a feed/listing that loads MORE items as you scroll (infinite scroll — no 'next page' link). Scrolls to the bottom repeatedly to load lazy content, then returns the fully-expanded page text. Use for a scrolling feed when scrape returned only the first handful of items and there's no pagination link. For a paginated listing use scrape_pages; for a normal page use scrape.",
+    parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL of the feed" }, maxScrolls: { type: "number", description: "How many times to scroll for more (1-10, default 5)" } }, required: ["url"] },
+  },
+  {
     name: "browse",
     description: "Open a page in a persistent browser session for MULTI-STEP interaction (then use click/type/read). Use when a task needs clicking or typing, not just reading. Returns the page title.",
     parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to open" } }, required: ["url"] },
@@ -496,6 +501,7 @@ export const SYSTEM_PROMPT = `You are Relay, an assistant reached over text mess
 Tools:
 - "scrape" (url): read a single page. Use for simple lookups. If the user names a site, infer the URL (Hacker News -> https://news.ycombinator.com).
 - "scrape_pages" (url, maxPages): read a listing ACROSS pagination (follows next/more/older), returning several pages combined. Use when the user wants MORE than one page holds ("20 newest", "cheapest across a few pages", "top 30"). Default 3 pages, max 5.
+- "scroll_feed" (url, maxScrolls): read an INFINITE-SCROLL feed (loads more on scroll, no next-page link) — scrolls to load lazy items then returns the expanded text. Use when scrape got only the first few items + there's no pagination link. Default 5 scrolls, max 10.
 - "browse" (url) then "click"/"type"/"read": for tasks needing interaction (search a site, fill a form, page through results). "read" returns the current page after your actions.
 - "fetch_json" (url): hit a JSON HTTP API directly, no browser — fastest for public data APIs (weather, prices, sports). Use when you know a JSON endpoint; use scrape/browse for HTML pages.
 - "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
@@ -559,6 +565,9 @@ export interface BrowserBackend {
   // Multi-page scrape (multi-page-browse): follow pagination + return several pages' text combined.
   // Optional — when absent the scrape_pages tool reports unavailable + the model falls back to scrape.
   scrapePaged?(url: string, maxPages?: number): Promise<{ title: string; content: string; url: string; pages: number; urls: string[] }>;
+  // Infinite-scroll scrape (browse-infinite-scroll): scroll a feed to load lazy items, then read.
+  // Optional — when absent the scroll_feed tool reports unavailable + the model falls back to scrape.
+  scrapeScroll?(url: string, maxScrolls?: number): Promise<{ title: string; content: string; url: string; scrolls: number }>;
   createSession(): Promise<{ id: string }>;
   navigate(sessionId: string, url: string): Promise<{ url: string; title: string }>;
   click(sessionId: string, selector: string): Promise<void>;
@@ -761,6 +770,7 @@ async function defaultFetchTextPost(url: string, body?: string): Promise<string>
 const defaultBackend: BrowserBackend = {
   scrape: (url) => anvil.scrape(url, { format: "text" }),
   scrapePaged: (url, maxPages) => anvil.scrapePaged(url, maxPages),
+  scrapeScroll: (url, maxScrolls) => anvil.scrapeScroll(url, maxScrolls),
   videoTranscript: (url) => fetchYouTubeTranscript(url, defaultFetchText),
   convertCurrency: (amount, from, to) => fxConvert(amount, from, to, defaultFetchText),
   getQuote: (symbol) => quoteFetch(symbol, defaultFetchText),
@@ -939,6 +949,22 @@ export async function runAgent(
           push("scrape_pages", `${note}\n${formatPageForModel(r.title, r.url, r.content)}`);
         } catch (e) {
           push("scrape_pages", `ERROR fetching ${url}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "scroll_feed") {
+        const url = String(call.args.url ?? "");
+        const safe = isUrlSafe(url);
+        if (!safe.safe) { push("scroll_feed", `ERROR: refused (${safe.reason}).`); continue; }
+        if (!backend.scrapeScroll) { push("scroll_feed", "ERROR: scroll-to-load isn't available; use scrape."); continue; }
+        const maxScrolls = Math.max(1, Math.min(10, Number(call.args.maxScrolls) || 5));
+        try {
+          const r = await backend.scrapeScroll(url, maxScrolls);
+          const note = `Scrolled ${r.scrolls} time${r.scrolls === 1 ? "" : "s"}${r.scrolls === 0 ? " (page didn't load more on scroll)" : ""}.`;
+          push("scroll_feed", `${note}\n${formatPageForModel(r.title, r.url, r.content)}`);
+        } catch (e) {
+          push("scroll_feed", `ERROR fetching ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

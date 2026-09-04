@@ -527,6 +527,50 @@ export async function scrapePaged(
   }
 }
 
+// Scroll the page to its current bottom (to trigger an infinite-scroll feed to load more), then report
+// the new scrollHeight so the caller can tell whether more content appeared. Runs in the page.
+const SCROLL_STEP_SCRIPT = "(() => { window.scrollTo(0, document.body.scrollHeight); return document.body.scrollHeight; })()";
+
+/** Scrape an INFINITE-SCROLL feed: navigate, then repeatedly scroll to the bottom (letting lazy content
+ * load) until the page stops growing, a scroll cap is hit, or a wall-clock budget expires — THEN read the
+ * fully-expanded text (browse-infinite-scroll). For feeds/listings that load on scroll rather than via a
+ * pagination link (where scrapePaged finds no "next"). One session; `maxScrolls` capped 1-10 (default 5).
+ * Returns the text + how many scrolls actually loaded new content. Falls back to a plain read when the
+ * page doesn't grow (so it's safe on any page). */
+export async function scrapeScroll(
+  url: string,
+  maxScrolls = 5,
+  opts: { budgetMs?: number } = {}
+): Promise<{ content: string; title: string; url: string; scrolls: number }> {
+  const check = isUrlSafe(url);
+  if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
+  const cap = Math.max(1, Math.min(10, maxScrolls));
+  const budgetMs = opts.budgetMs ?? 45000;
+  const started = Date.now();
+  const session = await createSession();
+  try {
+    await navigate(session.id, url, "domcontentloaded");
+    await new Promise((r) => setTimeout(r, 600));
+    await dismissConsent(session.id);
+    await new Promise((r) => setTimeout(r, 200));
+    let lastHeight = 0;
+    let productiveScrolls = 0;
+    for (let i = 0; i < cap; i++) {
+      if (Date.now() - started > budgetMs) break;
+      let height = 0;
+      try { const r = await action(session.id, "/v1/actions/evaluate", { script: SCROLL_STEP_SCRIPT }); height = Number(r) || 0; } catch { break; }
+      await new Promise((r) => setTimeout(r, 900)); // let lazy content fetch + render
+      if (height <= lastHeight) break;               // page stopped growing -> no more to load
+      lastHeight = height;
+      productiveScrolls++;
+    }
+    const read = await readCurrent(session.id);
+    return { content: read.content, title: read.title, url: read.url || url, scrolls: productiveScrolls };
+  } finally {
+    await releaseSession(session.id);
+  }
+}
+
 /** Screenshot a URL: create a session, navigate, capture bytes, release. SSRF-guarded like scrape.
  * `fullPage` captures the whole scrollable page (anvil's ?fullPage=true) instead of just the viewport
  * fold (full-page-screenshot) — for "screenshot the WHOLE page". A full-page capture of a long page can
