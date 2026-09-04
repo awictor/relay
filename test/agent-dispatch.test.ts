@@ -1042,5 +1042,20 @@ describe("runAgent multi-step flows", () => {
       const out = await runAgent("hello", { llm, backend: b, keepSessionOpen: true });
       expect(out.openSessionId).toBeUndefined();           // nothing open to carry
     });
+
+    it("keepSessionOpen but the run THROWS after opening a session -> the session is RELEASED, not leaked (browse-tools-reliability-sweep)", async () => {
+      const { b, hits } = recordingBackend();
+      // The LLM throws on its 2nd call — after browse opened a session, before any hand-off return.
+      const llm = new (class {
+        private n = 0;
+        async complete() {
+          this.n++;
+          if (this.n === 1) return { toolCall: { name: "browse", args: { url: "https://shop.example.com" } } as ToolCall };
+          throw new Error("LLM exploded mid-interactive");
+        }
+      })() as unknown as import("../src/llm.js").LLMClient;
+      await expect(runAgent("open then die", { llm, backend: b, keepSessionOpen: true })).rejects.toThrow(/exploded/);
+      expect(hits).toContain("releaseSession"); // NOT leaked — the throw path released the open session
+    });
   });
 });

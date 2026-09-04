@@ -962,6 +962,7 @@ export async function runAgent(
   // so browse/click/set_field/read act on the page the last turn left open. A resumed session that anvil
   // has since reaped just fails the first action + the model re-browses — no special handling needed.
   let sessionId: string | null = deps.resumeSessionId ?? null; // persistent browse session, if opened
+  let handedOffSession = false; // true once an open session is returned to the handler (keepSessionOpen); gates release in finally
   let lastUrl = ""; // the most recently navigated page — the target a confirm-to-act click acts on
   let pendingAction: { selector: string; label: string; url: string } | null = null; // confirm-to-act stash
   const push = (name: string, content: string) => messages.push({ role: "tool", name, content });
@@ -1977,6 +1978,7 @@ export async function runAgent(
     // When the handler asked to keep the session (keepSessionOpen) AND a browse session is open, hand its
     // id back so the handler can carry it to the next turn; otherwise the finally releases it as before.
     const openSessionId = deps.keepSessionOpen && sessionId ? sessionId : undefined;
+    if (openSessionId) handedOffSession = true; // a NORMAL return hands the session to the handler
     if (finalReply !== null) return { reply: finalReply, steps: usedSteps, tools: toolsUsed, photo, doc, docName, degraded, ...(pendingAction ? { pendingAction } : {}), ...(openSessionId ? { openSessionId } : {}) };
 
     // Ran out of the step budget without a final answer — a soft failure. Ask for a best-effort reply;
@@ -1987,12 +1989,12 @@ export async function runAgent(
     );
     return { reply: finalRes.text?.trim() || "I ran out of steps before finishing. Try narrowing the request.", steps: stepLimit, tools: toolsUsed, photo, doc, docName, degraded: true, ...(openSessionId ? { openSessionId } : {}) };
   } finally {
-    // Release the session UNLESS the handler is carrying it across turns (keepSessionOpen) and it's still
-    // open — then the handler owns release + idle reaping. A session opened THIS turn but not kept (flag
-    // off) is released as before, so default single-turn behavior + resource cleanup is unchanged. If we
-    // resumed a session and it wasn't kept, we still release it (the errand finished / flag turned off).
-    const keep = deps.keepSessionOpen && sessionId;
-    if (sessionId && !keep) await backend.releaseSession(sessionId).catch(() => {});
+    // Release the session UNLESS it was actually HANDED OFF to the handler on a normal return (a
+    // keepSessionOpen turn that reached a return with openSessionId set `handedOffSession`). If the try
+    // body THREW after opening a session, we did NOT hand it off — the handler never got the id — so we
+    // must release it here or it leaks a Chrome tab forever (browse-tools-reliability-sweep). Default
+    // single-turn behavior (flag off) is unchanged: never handed off -> always released.
+    if (sessionId && !handedOffSession) await backend.releaseSession(sessionId).catch(() => {});
   }
 }
 
