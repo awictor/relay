@@ -110,6 +110,11 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: "object", properties: { target: { type: "string", description: "A CSS selector (e.g. \".results .item\") or a text phrase (e.g. \"In stock\") to wait for" }, timeoutMs: { type: "number", description: "Max wait in ms (1000-30000, default 8000)" } }, required: ["target"] },
   },
   {
+    name: "read_list",
+    description: "Extract a LIST of structured rows from the CURRENT browsed page (the results after your filters/sort/search in this session), NOT a fresh URL. Use after browse + set_field/click/site_search to turn the on-screen results into clean rows (e.g. [\"title\",\"price\",\"link\"]). Returns a JSON array, deduped, capped at limit; add a CSV/spreadsheet ask and it's attached as a file. For a fresh URL use extract_list instead.",
+    parameters: { type: "object", properties: { fields: { type: "array", items: { type: "string" }, description: "Fields for each row, e.g. [\"title\",\"price\"]" }, limit: { type: "number", description: "Max items (1-50, default 10)" } }, required: ["fields"] },
+  },
+  {
     name: "read",
     description: "Read the current browsed page's text after navigating/clicking. Requires a prior browse.",
     parameters: { type: "object", properties: {}, required: [] },
@@ -532,7 +537,7 @@ Tools:
 - "site_search" (url, query): search INSIDE a named site using its own search box (types + submits + reads results). Use for "search <site> for X" / "find X on <store/docs/forum>". For a general web search use web_search.
 - "scrape_pages" (url, maxPages): read a listing ACROSS pagination (follows next/more/older), returning several pages combined. Use when the user wants MORE than one page holds ("20 newest", "cheapest across a few pages", "top 30"). Default 3 pages, max 5.
 - "scroll_feed" (url, maxScrolls): read an INFINITE-SCROLL feed (loads more on scroll, no next-page link) — scrolls to load lazy items then returns the expanded text. Use when scrape got only the first few items + there's no pagination link. Default 5 scrolls, max 10.
-- "browse" (url) then "click"/"type"/"set_field"/"wait_for"/"read": for tasks needing interaction (search a site, fill a form, page through results). Use "set_field" for a <select> dropdown, checkbox, or radio (click/type can't set those). After an action on a slow/JS-heavy page, call "wait_for" (a selector or text phrase) before "read" so you don't read a stale page. "read" returns the current page after your actions.
+- "browse" (url) then "click"/"type"/"set_field"/"wait_for"/"read": for tasks needing interaction (search a site, fill a form, page through results). Use "set_field" for a <select> dropdown, checkbox, or radio (click/type can't set those). After an action on a slow/JS-heavy page, call "wait_for" (a selector or text phrase) before "read" so you don't read a stale page. "read" returns the current page after your actions; "read_list" (fields) turns the current page's results into structured rows (add a CSV ask for a file).
 - "fetch_json" (url): hit a JSON HTTP API directly, no browser — fastest for public data APIs (weather, prices, sports). Use when you know a JSON endpoint; use scrape/browse for HTML pages.
 - "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
 - "extract_list" (url, fields, limit, maxPages): get a LIST of items as structured rows, gathering across pagination. Use for "the 5 cheapest", "20 newest listings", "top 30 X with price + link" — many items, same fields each. Returns a deduped JSON array. Beats scrape_pages when the user wants ROWS, not a text wall.
@@ -1868,6 +1873,28 @@ export async function runAgent(
           push("search", `FOUND ${links.length} links on ${url}:\n${JSON.stringify(links, null, 2)}\nUse extract/compare on these.`);
         } catch (e) {
           push("search", `ERROR searching ${url}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "read_list") {
+        if (!sessionId) { push("read_list", "ERROR: no page open. Call browse first."); continue; }
+        const fields = Array.isArray(call.args.fields) ? call.args.fields.map(String).filter(Boolean) : [];
+        if (fields.length === 0) { push("read_list", "ERROR: no fields given. Provide the row field names."); continue; }
+        const limit = Math.max(1, Math.min(50, Number(call.args.limit) || 10));
+        try {
+          // Extract rows from the CURRENT session's rendered page (post-filter/sort/search), not a fresh
+          // navigate (read-structured-current) — the whole point is to structure what the agent just drove to.
+          const r = await backend.readCurrent(sessionId);
+          const { json, count } = await extractListResult(deps.llm, truncateForModel(r.content, 16000), fields, limit);
+          const note = `Extracted ${count} item${count === 1 ? "" : "s"} from the current page (${r.title || r.url}).`;
+          if (count > 0 && !doc && CSV_REQUEST_RE.test(userText)) {
+            const csv = rowsToCsv(JSON.parse(json) as Record<string, unknown>[]);
+            if (csv) { doc = new TextEncoder().encode(csv); docName = "list.csv"; push("read_list", `${note} Attached a CSV (${count} rows). It will be sent to the user; call reply with a short summary.`); continue; }
+          }
+          push("read_list", count > 0 ? `${note}\n${json}\nReport these to the user.` : `${note} (nothing matched — the results may not have loaded, or try different field names / a wait_for first.)`);
+        } catch (e) {
+          push("read_list", `ERROR: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

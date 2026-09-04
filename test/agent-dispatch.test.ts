@@ -44,7 +44,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "wait_for", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "read_list", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "wait_for", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
     );
   });
 
@@ -223,6 +223,44 @@ describe("runAgent dispatch", () => {
     const r = await runAgent("sort the shop by price", { llm, backend: b });
     expect(hits).toContain("setField:#sort=Price: Low to High");
     expect(r.tools).toContain("set_field");
+  });
+
+  it("read_list extracts rows from the CURRENT session (read-structured-current)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://shop.example.com" } } as ToolCall },
+      { toolCall: { name: "set_field", args: { selector: "#sort", value: "price" } } as ToolCall },
+      { toolCall: { name: "read_list", args: { fields: ["title", "price"], limit: 5 } } as ToolCall },
+      { text: '[{"title":"A","price":"$1"},{"title":"B","price":"$2"}]' }, // extractor over readCurrent text
+      { toolCall: { name: "reply", args: { text: "2 items" } } as ToolCall },
+    ]);
+    const r = await runAgent("filter the shop then list the results", { llm, backend: b });
+    expect(hits).toContain("readCurrent");        // read the current session, no fresh navigate
+    expect(r.tools).toContain("read_list");
+    expect(r.doc).toBeUndefined();                // no CSV asked
+  });
+
+  it("read_list attaches a CSV when asked", async () => {
+    const { b } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://shop.example.com" } } as ToolCall },
+      { toolCall: { name: "read_list", args: { fields: ["title", "price"] } } as ToolCall },
+      { text: '[{"title":"A","price":"$1"}]' },
+      { toolCall: { name: "reply", args: { text: "csv sent" } } as ToolCall },
+    ]);
+    const r = await runAgent("list the current results as a csv", { llm, backend: b });
+    expect(r.docName).toBe("list.csv");
+    expect(new TextDecoder().decode(r.doc!)).toMatch(/title.*price/i);
+  });
+
+  it("read_list before any browse errors, no read", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "read_list", args: { fields: ["title"] } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "need a page" } } as ToolCall },
+    ]);
+    await runAgent("list stuff", { llm, backend: b });
+    expect(hits).not.toContain("readCurrent");
   });
 
   it("wait_for -> backend.waitFor after a browse (wait-for-selector)", async () => {

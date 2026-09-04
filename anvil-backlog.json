@@ -113,7 +113,7 @@
       "title": "Extract structured rows from the CURRENT browsed session (post-filter results), not just a URL",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "extract_list takes a URL + does its own navigate, so it cant capture the results of an interactive session (after set_field filters + a click). A user who filters a store then wants the rows as a list/CSV cant get structured output from that session — only raw read() text.",
       "how": "Add an extract mode to read (or a new read_list) that runs extractListResult over readCurrent(session) text with given fields/limit, reusing the session the agent already drove. Offline unit test with a mock backend readCurrent; live e2e: browse->set_field filter->read_list rows."
     },
@@ -179,6 +179,10 @@
     {
       "item": "wait-for-selector",
       "note": "wait_for shipped: waits until a CSS selector OR a text phrase appears on the current session page (polls ~400ms up to a 1-30s clamp, default 8s) before reading — closes the read-too-early race after click/set_field/site_search on slow SPA/AJAX pages where the fixed sleeps could read a stale/empty page. Auto-detects selector-vs-text (tries querySelector, falls back to body text includes). New anvil waitFor(sessionId,target,timeoutMs) + agent tool wait_for + dispatch (needs prior browse; honest timeout message -> read anyway but warn) + BrowserBackend + SYSTEM_PROMPT. +2 dispatch tests. LIVE e2e: delayed content appended after 1.5s -> selector detected at 1.65s, text phrase found, #never-appears timed out false at ~2s. 2209 green. call-tested: TRUE."
+    },
+    {
+      "item": "read-structured-current",
+      "note": "read_list shipped: extracts structured rows from the CURRENT browsed session (post-filter/sort/search results), not a fresh URL — the finish to the interactive form arc. Reuses readCurrent(session) + extractListResult (dedup, cap) + the CSV path (add a spreadsheet ask -> list.csv). New agent tool read_list(fields,limit) + dispatch (needs prior browse; honest nothing-matched hint to try wait_for). No new backend method (reuses readCurrent). +3 dispatch tests (rows from current session; CSV on request; no-browse errors). LIVE e2e: browse quotes.toscrape -> readCurrent -> real Gemini extracted 10 rows (8 distinct authors) from the session. 2212 green. call-tested: TRUE. Completes browse->set_field->wait_for->read_list: filter a site + get structured rows/CSV back."
     }
   ],
   "probes": [
