@@ -39,6 +39,10 @@ describe("parseCountdown", () => {
     // still needs a real countdown intent — a bare imperative isn't one
     expect(parseCountdown("start a fire", TODAY)).toBeNull();
   });
+  it("accepts 'count down' as two words (countdown-two-word)", () => {
+    expect(parseCountdown("count down to launch on 2026-02-01", TODAY)!.label).toBe("launch");
+    expect(parseCountdown("start a count down to vacation on 2026-07-01", TODAY)!.label).toBe("vacation");
+  });
   it("null when there's no parseable date", () => {
     expect(parseCountdown("countdown to something someday", TODAY)).toBeNull();
     expect(parseCountdown("what's the weather", TODAY)).toBeNull();

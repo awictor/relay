@@ -23,8 +23,9 @@ export function parseCountdown(text: string, today: Ymd): Countdown | null {
   // Optional "start/set/create/make/add (a/the) [new]" lead so "start a countdown to my birthday June 3"
   // parses like the bare "countdown to ..." (countdown-start-a-lead) — a natural way users open the ask.
   const lead = "(?:(?:can\\s+you\\s+)?(?:start|set|create|make|add|set\\s+up)\\s+(?:a\\s+|an\\s+|the\\s+)?(?:new\\s+)?)?";
-  const m = t.match(new RegExp(`^\\s*${lead}(?:countdown\\s+(?:to|for)|days?\\s+(?:until|til|till|to)|time\\s+(?:until|til|to))\\s+(.+)$`, "i"))
-    || t.match(/^\s*(.+?)\s+countdown\s+(.+)$/i);
+  // "count down" (two words) is as natural as "countdown" — accept the optional space (countdown-two-word).
+  const m = t.match(new RegExp(`^\\s*${lead}(?:count\\s?down\\s+(?:to|for)|days?\\s+(?:until|til|till|to)|time\\s+(?:until|til|to))\\s+(.+)$`, "i"))
+    || t.match(/^\s*(.+?)\s+count\s?down\s+(.+)$/i);
   if (!m) return null;
   // Two shapes: intent-first (m[1] = "label ... date") or "<label> countdown <date>" (m[1]=label,m[2]=date).
   let labelPart: string, datePart: string | null = null;

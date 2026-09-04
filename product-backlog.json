@@ -5468,6 +5468,10 @@
     {
       "item": "openhours-overnight-window (bug, found via inline audit)",
       "note": "BUG FIX (wrong open/closed): the is-open-now evaluator only handled same-day windows (start<end), so an OVERNIGHT window like \"Mo-Su 18:00-02:00\" (a bar/pharmacy open past midnight) never registered open — a place open at 11pm or 1am was tagged \"closed now\" in near-me results. Added the wrap case: when start>end, open when mins>=start (this evening) OR mins<end (early hours). Same-day windows, split lunch windows, 24/7, and closed-day rules all unchanged. +1 test (Fri 11pm open, Sat 1am open, Sat 3am closed, Wed noon closed). 2393 green. call-tested: offline (probe confirmed all four)."
+    },
+    {
+      "item": "countdown-two-word (gap, found via inline audit)",
+      "note": "Countdown parse now accepts \"count down\" as two words, not just \"countdown\". \"count down to launch on 2026-02-01\" returned null (only the joined spelling matched the intent regex) -> fell to a slow agent turn. Added optional space (counts?down) to both intent forms. Existing joined-word + start/set-a-lead + holiday-label forms unchanged. +2 assertions. 2394 green. call-tested: offline. Also swept snooze-duration parsing (3 days/week/couple-days/until-monday/indefinite) — all correct."
     }
   ],
   "audits": [
