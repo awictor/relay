@@ -534,6 +534,30 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.list(1)).toHaveLength(1); // still armed for next week
   });
 
+  it("a 'logrecap:' schedule sends the weekly recap + reschedules (logs-recap-nudge-or-standalone)", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock, {
+      logsRecapProactive: () => "📊 Your week in numbers\nthis week you logged:\n  - weight 182→180 ↓2",
+    });
+    store.add(1, { kind: "weekly", task: "logrecap:weekly", dueMs: NOW - 1, hourMin: "09:00", weekdays: [1] }, NOW);
+    await runner.tick();
+    expect(sent.some((s) => /week in numbers/.test(s.text))).toBe(true);
+    expect(store.list(1)).toHaveLength(1); // weekly rescheduled
+  });
+
+  it("a 'logrecap:' schedule with nothing logged stays SILENT + reschedules", async () => {
+    const clock = { t: NOW };
+    let calls = 0;
+    const { store, runner, sent } = harness(clock, {
+      logsRecapProactive: () => { calls++; return null; },
+    });
+    store.add(1, { kind: "weekly", task: "logrecap:weekly", dueMs: NOW - 1, hourMin: "09:00", weekdays: [1] }, NOW);
+    await runner.tick();
+    expect(calls).toBe(1);
+    expect(sent).toHaveLength(0);          // silent (quiet week)
+    expect(store.list(1)).toHaveLength(1); // still armed
+  });
+
   it("a ONCE recipe whose content is gone stays silent (no notice — it just drops)", async () => {
     const clock = { t: NOW };
     const notices: unknown[] = [];

@@ -147,7 +147,7 @@ Remember things about you: "remember I'm vegetarian", "remember my wife's birthd
 
 Keep a list: "add eggs to my grocery list", "add milk and bread to groceries" — I'll keep a running list you can read back with "what's on my grocery list", drop from with "remove eggs from my list", or wipe with "clear my list". Handy for groceries, packing, to-dos. Say "export my grocery list as csv" to get it as a spreadsheet file you can keep.
 
-Track anything about yourself: "log weight 182", "spent $14 on lunch", "log mood 7" — then "show my weight this month" (I'll chart it) or "how much did I spend on food this week" (I'll total it). Great for weight, spending, habits, sleep. Add "my logs" as a digest member ("define digest morning: weather, my logs") for a weekly recap of everything you've tracked in your briefing.
+Track anything about yourself: "log weight 182", "spent $14 on lunch", "log mood 7" — then "show my weight this month" (I'll chart it) or "how much did I spend on food this week" (I'll total it). Great for weight, spending, habits, sleep. Add "my logs" as a digest member ("define digest morning: weather, my logs") for a weekly recap of everything you've tracked in your briefing — or, without any digest, say "recap my logs weekly" and I'll send a "your week in numbers" every Monday ("stop log recaps" to turn it off).
 
 Recall a past answer: "what was that sushi place you found?" or "resend the flights" — I search what I've told you before, no need to re-run it.
 

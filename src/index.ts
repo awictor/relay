@@ -45,7 +45,7 @@ import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { SavedStore, parseSavePage, parseSavedRecall, hostLabel, readingRecap, isUnreadSavedRequest, formatUnreadNudge, parseUnreadNudgeToggle } from "./lib/readlater.js";
 import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "./lib/places-store.js";
-import { LogStore, parseLogCommand, parseLogQuery, sumSeries, logsWeeklySummary } from "./lib/logs.js";
+import { LogStore, parseLogCommand, parseLogQuery, sumSeries, logsWeeklySummary, parseLogRecapToggle } from "./lib/logs.js";
 import { ListStore, parseListCommand, parseListExport, splitItems, MAX_ITEMS_PER_LIST } from "./lib/lists.js";
 import { ContactStore, parseSaveContact, parseForgetContact, parseFollowUp } from "./lib/contacts.js";
 import { mailtoLink, smsLink } from "./lib/compose.js";
@@ -277,6 +277,9 @@ const scheduleRunner = makeScheduleRunner({
     if (note) saved.markRecalled(chatId, pages.map((p) => p.url), Date.now());
     return note;
   },
+  // Weekly standalone log recap (logs-recap-nudge-or-standalone): a "logrecap:" schedule fires this. A
+  // "📊 Your week in numbers" header labels the unprompted send; null when nothing was logged this week.
+  logsRecapProactive: (chatId) => { const recap = logsWeeklySummary(logs.allSeries(chatId), Date.now()); return recap ? `📊 Your week in numbers\n${recap}` : null; },
   alertCheck: (chatId, name) => alertCheck(chatId, name),   // scheduled alerts (m10): send only on change
   recipeResolveTask: (chatId, name) => { const r = recipes.get(chatId, name); return r ? r.task : null; }, // scheduled recipes: resolve current task at fire time
   // Scheduled chained recipe = sequential workflow. Return the structured result (final + stoppedEarly)
@@ -936,6 +939,24 @@ const handle = createHandler({
     if (!s) return "You have a lot of automations already — remove one and try again.";
     const warn = schedules.lastSaveOk() ? "" : "\n\n⚠️ But I couldn't save that to disk — the nudge may be lost if I restart. Try again in a moment.";
     return `Done — every Monday morning I'll remind you of saved pages you haven't gotten back to. Say "stop reading list nudges" to turn it off.${warn}`;
+  },
+  // Weekly log-recap opt-in (logs-recap-nudge-or-standalone): a standalone weekly "your week in numbers"
+  // send for a user who logs but never built a digest. Mirrors unreadNudgeToggle: one "logrecap:" schedule
+  // per chat (removeByTask first so re-opt-in doesn't stack), fired by logsRecapProactive.
+  logRecapToggle: (chatId, text) => {
+    const t = parseLogRecapToggle(text);
+    if (!t) return null;
+    schedules.removeByTask(chatId, "logrecap:weekly");
+    if (!t.on) {
+      const warn = schedules.lastSaveOk() ? "" : " (⚠️ but I couldn't save that to disk — the recap may come back if I restart; try again in a moment.)";
+      return `Okay, I've turned off your weekly log recaps.${warn}`;
+    }
+    const p = parseScheduleFor("every monday at 9am", "logrecap:weekly", Date.now(), profiles.offsetMin(chatId));
+    if (!p) return "I couldn't set that up just now — try again.";
+    const s = schedules.add(chatId, p, Date.now());
+    if (!s) return "You have a lot of automations already — remove one and try again.";
+    const warn = schedules.lastSaveOk() ? "" : "\n\n⚠️ But I couldn't save that to disk — the recap may be lost if I restart. Try again in a moment.";
+    return `Done — every Monday morning I'll send a recap of what you logged that week. Say "stop log recaps" to turn it off.${warn}`;
   },
   digestSchedule: (chatId, name, whenClause, now) => {
     const d = digests.get(chatId, name);

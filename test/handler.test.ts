@@ -7,6 +7,7 @@ import { NotesStore, parseRemember, parseForgetFact } from "../src/lib/notes.js"
 import { ListStore, parseListCommand, parseListExport, splitItems } from "../src/lib/lists.js";
 import { PlacesStore, parseSavePlace, parseForgetPlace, isListPlacesRequest } from "../src/lib/places-store.js";
 import { SavedStore, parseSavePage, parseSavedRecall, parseUnreadNudgeToggle } from "../src/lib/readlater.js";
+import { parseLogRecapToggle } from "../src/lib/logs.js";
 import { parseCityReply } from "../src/lib/profile.js";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
@@ -2200,6 +2201,23 @@ describe("read-it-later routing (read-it-later-capture)", () => {
     expect(agentRan).toBe(false);
     await handle(msg("remind me to read the newspaper at 8am", 9)); // a real reminder, not the toggle
     expect(toggles).toHaveLength(2); // toggle didn't fire
+  });
+  it("'recap my logs weekly' opts in; 'stop log recaps' opts out; a real log falls through (logs-recap-nudge-or-standalone)", async () => {
+    let logged = false;
+    const toggles: Array<{ on: boolean }> = [];
+    const { handle, sent } = harness({
+      logRecapToggle: (_c, text) => { const t = parseLogRecapToggle(text); if (!t) return null; toggles.push(t); return t.on ? "Done — weekly recap on." : "Turned off."; },
+      logAdd: () => { logged = true; return { ok: true, tag: "weight", value: 182, count: 1, saved: true }; },
+    });
+    await handle(msg("recap my logs weekly", 9));
+    expect(sent[0]!.text).toMatch(/weekly recap on/i);
+    await handle(msg("stop log recaps", 9));
+    expect(sent[1]!.text).toMatch(/turned off/i);
+    expect(toggles).toEqual([{ on: true }, { on: false }]);
+    expect(logged).toBe(false);       // toggle intercepted before logAdd
+    await handle(msg("log weight 182", 9)); // a real log, not the toggle
+    expect(logged).toBe(true);
+    expect(toggles).toHaveLength(2);  // toggle didn't fire on the real log
   });
 });
 

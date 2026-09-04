@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseLogCommand, parseLogQuery, sumSeries, LogStore, logsWeeklySummary, isLogRecapMember } from "../src/lib/logs.js";
+import { parseLogCommand, parseLogQuery, sumSeries, LogStore, logsWeeklySummary, isLogRecapMember, parseLogRecapToggle } from "../src/lib/logs.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -113,5 +113,24 @@ describe("logsWeeklySummary (logs-weekly-summary)", () => {
     expect(isLogRecapMember("my logs")).toBe(true);
     expect(isLogRecapMember("Trackers")).toBe(true);
     expect(isLogRecapMember("weather")).toBe(false);
+  });
+});
+
+describe("parseLogRecapToggle (logs-recap-nudge-or-standalone)", () => {
+  it("parses ON phrasings", () => {
+    expect(parseLogRecapToggle("recap my logs weekly")).toEqual({ on: true });
+    expect(parseLogRecapToggle("weekly log recap")).toEqual({ on: true });
+    expect(parseLogRecapToggle("send me my stats weekly")).toEqual({ on: true });
+    expect(parseLogRecapToggle("weekly logs recap")).toEqual({ on: true });
+  });
+  it("parses OFF phrasings", () => {
+    expect(parseLogRecapToggle("stop log recaps")).toEqual({ on: false });
+    expect(parseLogRecapToggle("turn off weekly logs")).toEqual({ on: false });
+    expect(parseLogRecapToggle("stop recapping my logs")).toEqual({ on: false });
+  });
+  it("does NOT hijack a real log command or query", () => {
+    expect(parseLogRecapToggle("log weight 182")).toBeNull();
+    expect(parseLogRecapToggle("show my weight this month")).toBeNull();
+    expect(parseLogRecapToggle("how much did I spend on food")).toBeNull();
   });
 });

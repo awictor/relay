@@ -172,6 +172,26 @@ export function isLogRecapMember(name: string): boolean {
   return LOG_RECAP_MEMBER_NAMES.has(name.trim().toLowerCase());
 }
 
+/** Parse a weekly log-recap opt-in/opt-out (logs-recap-nudge-or-standalone), or null if it isn't one.
+ *   ON:  "recap my logs weekly" / "weekly log recap" / "send me my logs weekly" / "weekly stats recap"
+ *   OFF: "stop log recaps" / "turn off weekly logs" / "stop recapping my logs"
+ * Distinct from the digest "my logs" MEMBER: this schedules a STANDALONE weekly send for a user who logs
+ * but never built a digest. Exported for tests. */
+export function parseLogRecapToggle(text: string): { on: boolean } | null {
+  const t = text.trim().toLowerCase();
+  if (/^\s*(?:stop|turn off|disable|cancel|no more)\b.*\b(?:log|logs|stats|tracker)\b.*\brecap|^\s*(?:stop|turn off|disable)\s+(?:my\s+)?(?:weekly\s+)?(?:log|logs|stats|tracker)s?\b/i.test(t)
+      || /^\s*(?:stop|turn off|disable|cancel)\s+recapping\s+(?:my\s+)?(?:logs?|stats|trackers?)\b/i.test(t)) {
+    return { on: false };
+  }
+  if (/^\s*(?:recap|summar(?:ize|y\s+of))\s+(?:my\s+)?(?:logs?|stats|trackers?)\s+(?:weekly|every\s+week)\b/i.test(t)
+      || /^\s*(?:weekly\s+)?(?:log|logs|stats|tracker)s?\s+recaps?\b/i.test(t)
+      || /^\s*(?:send|text)\s+me\s+(?:my\s+)?(?:logs?|stats|trackers?)\s+(?:weekly|every\s+week)\b/i.test(t)
+      || /^\s*(?:weekly\s+)?(?:my\s+)?(?:logs?|stats|tracker)s?\s+(?:weekly|recap)\b/i.test(t)) {
+    return { on: true };
+  }
+  return null;
+}
+
 /** One recap line for a tag over the window: a $ tag sums ("spent $240 on food, 12x"); a metric tag shows
  * first→last with an arrow ("weight 182→180 ↓2"); a bare count sums ("5 coffees"). Null if <1 point in window. */
 function logRecapLine(tag: string, points: LogPoint[], unit: string | undefined, sinceMs: number): string | null {

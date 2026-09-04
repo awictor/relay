@@ -216,6 +216,10 @@ export interface HandlerDeps {
   // weekly proactive "you saved these but never read them" ping; "stop reading list nudges" cancels it.
   // Returns a confirmation, or null if it isn't a toggle command. Optional.
   unreadNudgeToggle?: (chatId: number, text: string) => string | null;
+  // Weekly log-recap opt-in (logs-recap-nudge-or-standalone): "recap my logs weekly" schedules a standalone
+  // weekly "your week in numbers" send; "stop log recaps" cancels it. Returns the confirmation, or null when
+  // the message isn't a toggle. Optional.
+  logRecapToggle?: (chatId: number, text: string) => string | null;
   // Countdown (countdown-tracker): parse "countdown to X on <date>" / "days until X <date>" and schedule
   // milestone pings (a week out / day before / morning of), returning the immediate day-count. null when
   // it isn't a countdown command; { ok:false, reason:"past" } for an already-passed date. Optional.
@@ -1162,6 +1166,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // capture so "what did I save" isn't mistaken for a save. Checked before the memory/scheduler/agent.
     if (deps.unreadNudgeToggle) {
       const out = deps.unreadNudgeToggle(msg.chatId, msg.text);
+      if (out) { await deps.sendMessage(msg.chatId, out); return; }
+    }
+    // Weekly log-recap opt-in (logs-recap-nudge-or-standalone): "recap my logs weekly" / "stop log recaps".
+    // Before logAdd/logQuery so a toggle phrase isn't misread as a data point or a query.
+    if (deps.logRecapToggle) {
+      const out = deps.logRecapToggle(msg.chatId, msg.text);
       if (out) { await deps.sendMessage(msg.chatId, out); return; }
     }
     if (deps.recallSaved) {

@@ -70,6 +70,10 @@ export interface ScheduleRunnerDeps {
   // silent + reschedule — a quiet week is normal, not a failure). No agent/anvil — a pure store read.
   // Optional; absent -> an "unread:" schedule stays silent.
   unreadNudge?: (chatId: number) => string | null;
+  // Weekly standalone log recap (logs-recap-nudge-or-standalone): a "logrecap:" schedule fires this to get
+  // a recap of the user's own trackers for the week, or null when nothing was logged (stay silent +
+  // reschedule). No agent/anvil — a pure store read. Optional; absent -> a "logrecap:" schedule stays silent.
+  logsRecapProactive?: (chatId: number) => string | null;
   // Alerts (m10 alert-3): a scheduled alert stores "alert:<name>"; on fire, check it and get back
   // the notify message ONLY if it changed (null = silent) + a commit() to advance the baseline, which
   // MUST be called only AFTER a successful send so a failed send re-fires next check. Optional.
@@ -281,6 +285,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     const alertMatch = s.task.match(/^alert:(.+)$/);
     const recipeMatch = s.task.match(/^recipe:(.+)$/);
     const unreadMatch = s.task.match(/^unread:/);
+    const logRecapMatch = s.task.match(/^logrecap:/);
     let res: { reply: string; steps?: number; tools?: string[]; degraded?: boolean };
     let sendText: string | null;
     // The UNTRIMMED text behind sendText, cached for a "more"/"link" follow-up so a long digest's dropped
@@ -299,6 +304,20 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         if (isCancelled()) return;
         deps.store.complete(s.id, deps.now());
         log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, unread: true, ok: true, sent: false })}`);
+        deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
+        return;
+      }
+      res = { reply: note };
+      sendText = deps.formatReply(note);
+    } else if (logRecapMatch && deps.logsRecapProactive) {
+      // Weekly standalone log recap (logs-recap-nudge-or-standalone): pure store read, mirrors the unread
+      // nudge. null = nothing logged this week -> stay silent + reschedule (a quiet week is normal, never a
+      // failure), so a user who paused logging isn't pinged an empty recap.
+      const note = deps.logsRecapProactive(s.chatId);
+      if (note === null) {
+        if (isCancelled()) return;
+        deps.store.complete(s.id, deps.now());
+        log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, logrecap: true, ok: true, sent: false })}`);
         deps.recordTurn?.({ steps: 0, tools: [], elapsedMs: deps.now() - startedAt, ok: true });
         return;
       }
