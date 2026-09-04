@@ -5452,6 +5452,10 @@
     {
       "item": "numbase-adjacent-source-base (bug, found via inline audit)",
       "note": "BUG FIX (wrong-answer): a base word ADJACENT after the number named the SOURCE base but was mis-read. \"1010 binary to decimal\" -> parseSourceNumber took 1010 as DECIMAL (plain-decimal branch ran before the source-base-named branches) AND parseTargetBase grabbed the leading \"binary\" as the TARGET, so it answered 1010 decimal = 0b1111110010 binary instead of 1010 binary = 10 decimal. Two fixes: (1) parseSourceNumber now detects a base word directly following the digits (\"1010 binary\", \"FF hex\", \"52 octal\") as the source base BEFORE the decimal fallback, digit-validated per base; excluded when preceded by in/to (that word is the target). (2) parseTargetBase prefers the base named AFTER to/in/into/as (the target) over an earlier source-base word, via an index-scan. 0x/0b-prefixed + \"255 in binary\" forms unchanged. +6 assertions across the 3 existing describe blocks. 2389 green. call-tested: offline (probe: 1010 binary->10 decimal, FF hex->binary, 52 octal->42; 255 in binary still 0b11111111)."
+    },
+    {
+      "item": "unitprice-named-count (gap, found via inline audit)",
+      "note": "Unit-price better-buy now handles a NAMED count noun (\"12 eggs for $3 vs 18 for $4\", \"50 capsules $10 or 100 $18\"). toBaseAmount only knew a fixed count-word list (ct/pack/roll/each/...), so an arbitrary noun (eggs/capsules/sheets) returned null and the WHOLE compare failed even though both sides count the same thing -> fell to the models forbidden mental math. Fix in compareUnitPrice: when NO option names a real measure (all blank / known-count / same unknown noun, <=1 distinct noun), treat every option as a plain per-item count. A mix of a real measure + a count noun (\"500g vs 12 eggs\") or TWO different nouns (\"eggs vs rolls\") still refuses (dimension mismatch). +3 tests (same-noun compares, named+bare compares, two-nouns refuse). 2392 green. call-tested: offline (probe: 12 eggs $3 vs 18 $4 -> $0.25 vs $0.22 each, 11% cheaper; g-vs-eggs null)."
     }
   ],
   "audits": [

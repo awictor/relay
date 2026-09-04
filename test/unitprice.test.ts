@@ -58,9 +58,22 @@ describe("compareUnitPrice", () => {
   it("null when options mix dimensions (weight vs volume)", () => {
     expect(compareUnitPrice([{ qty: 500, unit: "g", price: 4 }, { qty: 1, unit: "L", price: 9 }])).toBeNull();
   });
-  it("null on a bad price/qty or unknown unit", () => {
+  it("null on a bad price/qty, or a MIX of a real measure + an unknown noun (can't compare)", () => {
     expect(compareUnitPrice([{ qty: 0, unit: "g", price: 4 }, { qty: 1, unit: "kg", price: 9 }])).toBeNull();
     expect(compareUnitPrice([{ qty: 5, unit: "blorp", price: 4 }, { qty: 1, unit: "kg", price: 9 }])).toBeNull();
+  });
+  it("a same named-count noun on both sides compares per-item (unitprice-named-count)", () => {
+    // "eggs" isn't a measurement unit, but both sides count eggs -> compare per-egg.
+    const r = compareUnitPrice([{ qty: 12, unit: "eggs", price: 3 }, { qty: 18, unit: "eggs", price: 4 }])!;
+    expect(r.options.every((o) => o.dim === "count")).toBe(true);
+    expect(r.cheapest).toBe(1); // 4/18 = 0.22 < 3/12 = 0.25
+  });
+  it("a named count on one side + a bare count on the other still compares (2nd drops the noun)", () => {
+    const r = compareUnitPrice([{ qty: 12, unit: "eggs", price: 3 }, { qty: 18, unit: "", price: 4 }])!;
+    expect(r.cheapest).toBe(1);
+  });
+  it("TWO different unknown nouns refuse (not the same thing)", () => {
+    expect(compareUnitPrice([{ qty: 12, unit: "eggs", price: 3 }, { qty: 18, unit: "rolls", price: 4 }])).toBeNull();
   });
 });
 

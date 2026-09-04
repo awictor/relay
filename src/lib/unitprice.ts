@@ -53,10 +53,27 @@ export function parseUnitPrice(text: string): Array<{ qty: number; unit: string;
  * index of the cheapest, or null if any unit is unknown or they mix dimensions (can't compare g vs ml).
  * Exported for tests. */
 export function compareUnitPrice(raw: Array<{ qty: number; unit: string; price: number }>): { options: PriceOption[]; cheapest: number } | null {
+  // A named COUNT noun ("12 eggs", "18 rolls", "50 capsules") isn't a measurement unit, so toBaseAmount
+  // returns null and the whole compare failed even though both sides count the SAME thing (unitprice-named-
+  // count). When EVERY option's unit is unrecognized-by-toBaseAmount AND they all share the same unit word
+  // (or empty), treat them as a plain per-item count so "12 eggs $3 vs 18 eggs $4" compares. A MIX of a real
+  // measure + a count noun (or two different count nouns) still refuses below (dimension mismatch).
+  const norm = (u: string) => u.trim().toLowerCase().replace(/s$/, "");
+  // A named count noun that toBaseAmount doesn't know (eggs/capsules/sheets — NOT g/ml/oz, which it does).
+  const isNamedCount = (u: string) => u.trim() !== "" && toBaseAmount(1, u) === null;
+  // Treat every option as a plain per-item count when NONE names a real measure (so all are either a blank/
+  // known-count word -> dim "count", or a same unknown noun), and at most one distinct unknown noun appears
+  // ("12 eggs vs 18" — the 2nd drops the noun, still eggs). A real measure on any side falls through to the
+  // dimension check (so "500g vs 12 eggs" refuses). (unitprice-named-count)
+  const distinctNouns = new Set(raw.map((o) => norm(o.unit)).filter(Boolean));
+  const anyRealMeasure = raw.some((o) => { const b = toBaseAmount(o.qty, o.unit); return b !== null && b.dim !== "count"; });
+  const allBareCount = raw.length > 0 && !anyRealMeasure
+    && raw.every((o) => o.unit.trim() === "" || toBaseAmount(o.qty, o.unit)?.dim === "count" || isNamedCount(o.unit))
+    && distinctNouns.size <= 1;
   const options: PriceOption[] = [];
   for (const o of raw) {
     if (!(o.price > 0) || !(o.qty > 0)) return null;
-    const b = toBaseAmount(o.qty, o.unit);
+    const b = allBareCount ? { base: o.qty, dim: "count" } : toBaseAmount(o.qty, o.unit);
     if (!b || b.base <= 0) return null;
     options.push({ ...o, base: b.base, dim: b.dim, perBase: o.price / b.base });
   }
