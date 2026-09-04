@@ -3470,7 +3470,7 @@
       "title": "calc handles natural phrasing: \"20% tip on 47\", scientific notation \"1e3\", factorial \"5!\"",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Probe found calc(\"20% tip on 47\") errors with \"I don’t know tip\", \"1e3+1\" errors on \"e\", and \"5!\" errors on \"!\". A texting user asking \"20% tip on 47\" gets an error instead of 9.40 (or falls to a slow agent). The tip/split path may be handled elsewhere, but bare calc chokes.",
       "how": "In calc.ts normalizeExpr: strip/interpret \"X% tip on Y\" -> Y*X/100 (or route to the tip handler), accept 1e3 scientific-notation number tokens in tokenize, and support trailing ! as factorial. Verify against the existing tip-split path so there’s no double-handling. Add tests."
     },
@@ -5024,6 +5024,10 @@
     {
       "item": "units-speed-convert",
       "note": "Added a SPEED dimension to the unit converter (base m/s): mph, km/h (+kph/kmh/kmph/\"km per hour\"), m/s, ft/s, knots (kn/kt). normalizeUnit now canonicalizes the slashed + spoken forms (\"km per hour\"->km/h, \"miles per hour\"->mph, \"feet per second\"->ft/s) and the parser char-class allows \"/\" so a speed unit is captured whole. \"100 km/h to mph\"->62.14, \"60 mph\"->96.56 km/h, \"60 mph\"->88 ft/s, \"50 knots\"->57.54 mph — all exact; cross-dim (speed->length) still null. Tool description + SYSTEM_PROMPT + /help updated so the LLM routes speed queries here (not web_search). +4 tests, 2159 green. Fixes a daily travel errand that used to fall to a slow agent browse."
+    },
+    {
+      "item": "calc-natural-phrasing",
+      "note": "calc.ts now handles 3 natural phrasings that used to ERROR: (1) \"20% tip on 47\" / \"18% gratuity on 200\" -> the tip AMOUNT (Y*X/100 = 9.40), matching the SYSTEM_PROMPT example (was \"I dont know tip\"); (2) scientific notation \"1e3\"/\"6.02e23\"/\"2.5e-4\" as a number (was unknown \"e\"; bare \"e\" still errors since no digits follow); (3) trailing factorial \"5!\"->120 with whole-number + 170-overflow guards (was \"Unexpected character !\"). Existing percent/mod/currency idioms unchanged. +4 tests, 2163 green."
     }
   ],
   "audits": [

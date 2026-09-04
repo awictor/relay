@@ -107,3 +107,33 @@ describe("normalizeExpr / formatResult", () => {
     expect(formatResult(579.976)).toBe("579.98");
   });
 });
+
+describe("natural phrasing: tip idiom, scientific notation, factorial (calc-natural-phrasing)", () => {
+  it("'X% tip on Y' gives the tip AMOUNT (Y*X/100), not an 'I don't know tip' error", () => {
+    expect(calc("20% tip on 47")).toBeCloseTo(9.4, 6);
+    expect(calc("20% tip on $47")).toBeCloseTo(9.4, 6);   // $ stripped
+    expect(calc("15% tip on 120")).toBeCloseTo(18, 6);
+    expect(calc("18% gratuity on 200")).toBeCloseTo(36, 6);
+  });
+  it("scientific notation is a number, not an unknown 'e'", () => {
+    expect(calc("1e3 + 1")).toBe(1001);
+    expect(calc("6.02e23")).toBeCloseTo(6.02e23, -18);
+    expect(calc("2.5e-4")).toBeCloseTo(0.00025, 9);
+    expect(() => calc("e")).toThrow(/don't know/);        // bare 'e' still errors (no digits follow)
+    expect(() => calc("e + 1")).toThrow();
+  });
+  it("trailing '!' is factorial, with whole-number + overflow guards", () => {
+    expect(calc("5!")).toBe(120);
+    expect(calc("0!")).toBe(1);
+    expect(calc("10!")).toBe(3628800);
+    expect(calc("5! + 1")).toBe(121);
+    expect(() => calc("3.5!")).toThrow(/whole number/);
+    expect(() => calc("171!")).toThrow(/too big/);
+  });
+  it("regressions: existing percent/mod/currency idioms unchanged", () => {
+    expect(calc("20% of 50")).toBe(10);
+    expect(calc("50 - 20%")).toBe(40);
+    expect(calc("5 mod 2")).toBe(1);
+    expect(calc("1,000 + 1")).toBe(1001);
+  });
+});

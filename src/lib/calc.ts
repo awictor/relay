@@ -8,7 +8,7 @@
 
 export type Token = { t: "num"; v: number } | { t: "op"; v: string } | { t: "fn"; v: string; argc?: number } | { t: "paren"; v: "(" | ")" } | { t: "comma" };
 
-const FUNCS = new Set(["sqrt", "abs", "round", "floor", "ceil", "min", "max", "pow", "loanpayment"]);
+const FUNCS = new Set(["sqrt", "abs", "round", "floor", "ceil", "min", "max", "pow", "loanpayment", "fact"]);
 // operator precedence + right-assoc flag. Unary minus is handled as a special "neg" op at parse time.
 const OPS: Record<string, { prec: number; right?: boolean }> = {
   "+": { prec: 2 }, "-": { prec: 2 }, "*": { prec: 3 }, "/": { prec: 3 }, "%": { prec: 3 },
@@ -38,6 +38,11 @@ export function tokenize(input: string): Token[] {
   //   "20% of 50" -> "(20/100)*50" ; "50 + 20%" / "50 plus 20%" -> "50*(1+20/100)" ; "50 - 20%" off ->
   //   "50*(1-20/100)". A bare trailing "%" elsewhere means /100.
   let s = " " + input.toLowerCase() + " "; // pad so a leading/trailing operator-word matches
+  // "X% tip on Y" / "X% gratuity on Y" -> the TIP AMOUNT (Y * X/100), matching the SYSTEM_PROMPT's
+  // "20% tip on $47 = $9.40" (calc-tip-idiom). Rewritten before the modulo/percent passes so the "%"
+  // isn't misread as an operator. "tip"/"gratuity" are the only words the tokenizer would otherwise
+  // reject; this turns the natural phrasing into plain arithmetic instead of erroring on "tip".
+  s = s.replace(/(\d+(?:\.\d+)?)\s*%\s*(?:tip|gratuity)\s+on\s+(\d+(?:\.\d+)?)/g, "($1/100)*($2)");
   s = s.replace(/ mod /g, " MODOP "); // temp %-free sentinel for modulo so the percent rewrites below cannot eat a % char
   // A bare "%" used as an operator BETWEEN two operands ("17 % 5", "17 % (2+3)") is modulo, not a
   // percentage — the percent idioms below only make sense when "%" TRAILS a number ("20% of", "50 - 20%").
@@ -53,6 +58,10 @@ export function tokenize(input: string): Token[] {
   });
   s = s.replace(/(\d+(?:\.\d+)?)\s*%/g, "($1/100)"); // any remaining bare percent -> /100
   s = s.replace(/MODOP/g, "%"); // restore modulo to the % operator (tokenized as op %)
+  // Factorial: a trailing "!" after a number -> fact(...) (calc-factorial). "5!" -> "fact(5)". Done after
+  // the percent passes so a "%" can't be swept into the group. Only the bare-number form (the common one);
+  // "(2+3)!" is left unhandled (a following pass would error) rather than risk a wrong rewrite.
+  s = s.replace(/(\d+(?:\.\d+)?)\s*!/g, "fact($1)");
 
   const out: Token[] = [];
   let i = 0;
@@ -62,6 +71,14 @@ export function tokenize(input: string): Token[] {
     if (/[0-9.]/.test(c)) {
       let j = i + 1;
       while (j < s.length && /[0-9.]/.test(s[j]!)) j++;
+      // Scientific notation: a trailing "e"/"E" followed by an optional sign + digits ("1e3", "2.5e-4",
+      // "6.02e23") is part of the number (calc-sci-notation) — otherwise "e" tokenized as an unknown
+      // name and the calc errored. Only consume "e" when real digits follow, so "e" alone still errors.
+      if ((s[j] === "e") && /[0-9]/.test(s[j + 1] ?? "") || (s[j] === "e" && (s[j + 1] === "+" || s[j + 1] === "-") && /[0-9]/.test(s[j + 2] ?? ""))) {
+        j++; // consume 'e'
+        if (s[j] === "+" || s[j] === "-") j++;
+        while (j < s.length && /[0-9]/.test(s[j]!)) j++;
+      }
       const num = Number(s.slice(i, j));
       if (!Number.isFinite(num)) throw new Error(`Bad number: "${s.slice(i, j)}"`);
       out.push({ t: "num", v: num }); i = j; continue;
@@ -173,6 +190,14 @@ export function evalRpn(rpn: Token[]): number {
         case "min": { const args = popN(argc ?? 2); if (!args.length) throw new Error("min needs at least one number."); st.push(Math.min(...args)); break; }
         case "max": { const args = popN(argc ?? 2); if (!args.length) throw new Error("max needs at least one number."); st.push(Math.max(...args)); break; }
         case "pow": { const [a, b] = need(2, "pow"); st.push(a! ** b!); break; }
+        // Factorial (calc-factorial): whole numbers 0..170 only (171! overflows to Infinity). A negative
+        // or non-integer factorial isn't defined here — throw a friendly error rather than return NaN.
+        case "fact": {
+          const [a] = need(1, "fact");
+          if (!Number.isInteger(a!) || a! < 0) throw new Error("Factorial needs a whole number ≥ 0.");
+          if (a! > 170) throw new Error("That factorial is too big for me to compute.");
+          let f = 1; for (let k = 2; k <= a!; k++) f *= k; st.push(f); break;
+        }
         // loanpayment(principal, annualRatePct, years) -> monthly payment (amortized).
         case "loanpayment": {
           const [principal, ratePct, years] = need(3, "loanpayment");
