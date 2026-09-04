@@ -6,6 +6,14 @@
 // opt-in and hard-bounded (one session per chat, idle-reaped). No timers: reaping is lazy (checked on
 // each touch/get), so nothing leaks if the process is idle.
 
+/** True if the WHOLE message asks to close/drop a held browse page ("done", "close the page", "nevermind",
+ * "stop browsing"). Lets a user explicitly release a carried session instead of waiting for the idle reap
+ * (session-status-surface). Whole-message + anchored so a real task ("close my rings", "done with X?")
+ * isn't intercepted; only fires when a session is actually held (checked at the call site). */
+export function isCloseSessionRequest(text: string): boolean {
+  return /^\s*(?:done|i'?m done|that'?s all|close(?: the| that)?(?: page| tab| browser| session)?|stop browsing|nevermind|never mind|nvm|forget it|drop it|close it)\s*[.!]*\s*$/i.test(text);
+}
+
 /** Is cross-turn browse continuity enabled? Default OFF (opt-in; each carried session pins a Chrome tab). */
 export function browseContinuityEnabled(raw: string | undefined = process.env.RELAY_BROWSE_CONTINUITY): boolean {
   return /^(1|true|yes|on)$/i.test(String(raw ?? "").trim());

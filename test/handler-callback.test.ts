@@ -424,6 +424,28 @@ describe("multi-turn browse continuity (persist-browse-session-across-turns)", (
     }
   });
 
+  it("hints ONCE that a page is held, and 'done' closes it (session-status-surface)", async () => {
+    const prev = process.env.RELAY_BROWSE_CONTINUITY;
+    process.env.RELAY_BROWSE_CONTINUITY = "1";
+    try {
+      const released: string[] = [];
+      const { handle, sent } = harness({
+        handleCommand: () => null,
+        releaseBrowseSession: (sid) => { released.push(sid); },
+        runAgentFn: async () => ({ reply: "here are the results", steps: 1, tools: ["browse"], openSessionId: "sess-H" }),
+      });
+      await handle(mkMsg("filter the flights", 1, 1));
+      expect(sent[sent.length - 1]!.text).toMatch(/kept that page open/i);   // hinted turn 1
+      await handle(mkMsg("filter more", 1, 2));
+      expect(sent[sent.length - 1]!.text).not.toMatch(/kept that page open/i); // NOT re-hinted turn 2
+      await handle(mkMsg("done", 1, 3));                                       // close intent
+      expect(sent[sent.length - 1]!.text).toMatch(/closed that page/i);
+      expect(released).toContain("sess-H");
+    } finally {
+      if (prev === undefined) delete process.env.RELAY_BROWSE_CONTINUITY; else process.env.RELAY_BROWSE_CONTINUITY = prev;
+    }
+  });
+
   it("a turn that stops browsing drops the carried session (flag ON)", async () => {
     const prev = process.env.RELAY_BROWSE_CONTINUITY;
     process.env.RELAY_BROWSE_CONTINUITY = "1";

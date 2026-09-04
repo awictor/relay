@@ -158,7 +158,7 @@
       "title": "Let the user know a page is being held (\"still on the flights page — say sort/open/done\")",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "With continuity ON, a session is silently held for a few minutes. A texting user has no signal that a follow-up will continue vs start fresh, and no easy way to say \"drop it\". A light touch — a one-line hint after an interactive turn + a \"done/close/nevermind\" to release — makes the held state legible.",
       "how": "When a turn returns openSessionId (flag on), append a short hint to the reply (once per held thread). Add a \"done\"/\"close the page\"/\"nevermind\" intent that drops the carried session. Handler-only + gated on the flag; unit-test the hint-once + drop-intent."
     }
@@ -231,6 +231,10 @@
     {
       "item": "screenshot-current-session",
       "note": "screenshot can now capture the CURRENT open browse session instead of only re-navigating a fresh URL: OMIT the url + a session is open -> new anvil screenshotCurrent(sessionId,fullPage) shoots the live page (no navigate/release), so with continuity on the user SEES the filtered/scrolled state theyre iterating on. New anvil helper + BrowserBackend.screenshotCurrent + dispatch routing (no-url + open session -> current; else the url path) + tool schema (url now optional) + SYSTEM_PROMPT. +2 dispatch tests. LIVE e2e: navigate + mutate the live page (simulated filter) + screenshotCurrent -> 10.6KB capture of the mutated page, no re-nav. 2234 green. call-tested: TRUE."
+    },
+    {
+      "item": "session-status-surface",
+      "note": "Made held-browse-session state legible (session-status-surface, continuity flag on): the FIRST time a page is kept open for a thread, the reply appends a one-time hint (\"kept that page open — say sort/filter to keep going, or done to close\"); a \"done\"/\"close the page\"/\"nevermind\" message releases the carried tab + confirms. New isCloseSessionRequest parser (whole-message + anchored so \"close my rings\"/\"are you done?\" arent intercepted). Hint fires once per hold (browseHinted set, cleared on drop/reset/close). All handler+flag-gated; default OFF unchanged. +3 tests (parser match/reject, hint-once + done-closes). 2237 green. call-tested: n/a (handler logic, no anvil path)."
     }
   ],
   "probes": [

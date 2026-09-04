@@ -8,7 +8,7 @@ import type { LLMMessage, LLMClient } from "./llm.js";
 import { runAgent, type AgentDeps } from "./agent.js";
 import { formatReply, formatReplyParts } from "./lib/format-reply.js";
 import { isMoreRequest, isLinkRequest, extractLinks, chunkFrom, deliveredLen, parsePickIndex } from "./lib/last-result.js";
-import { BrowseSessionStore, browseContinuityEnabled } from "./lib/browse-session.js";
+import { BrowseSessionStore, browseContinuityEnabled, isCloseSessionRequest } from "./lib/browse-session.js";
 import { formatTurnLog } from "./lib/turn-log.js";
 import { friendlyError } from "./lib/failure.js";
 import { splitScheduleCommand } from "./lib/schedule.js";
@@ -451,6 +451,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     (sid) => deps.releaseBrowseSession?.(sid),
     () => deps.now(),
   );
+  // Chats already told once that a browse page is being held (session-status-surface) — so the "I'm still
+  // on that page…" hint appends a single time per held thread, not after every interactive turn. Cleared
+  // when the session is dropped so a fresh hold re-hints.
+  const browseHinted = new Set<number>();
   const handle = ((msg: InboundMessage): Promise<void> => {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -930,7 +934,7 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     }
     if (first === "/reset" || first === "/clear") {
       const had = deps.memoryClear(msg.chatId);
-      if (browseContinuity) browseSessions.drop(msg.chatId); // starting fresh -> release any carried browse tab
+      if (browseContinuity) { browseSessions.drop(msg.chatId); browseHinted.delete(msg.chatId); } // starting fresh -> release any carried browse tab
       await deps.sendMessage(msg.chatId, had ? "Cleared our conversation — starting fresh." : "Nothing to clear — we've got no history yet.");
       return;
     }
@@ -1826,6 +1830,14 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           return;
         }
       }
+      // Close a held browse page on request (session-status-surface): "done", "close the page", "nevermind".
+      // Only when continuity's on AND a session is actually held — else fall through so "done" / "nevermind"
+      // stays a normal message. Releases the tab + confirms.
+      if (browseContinuity && browseSessions.get(msg.chatId) && isCloseSessionRequest(msg.text)) {
+        browseSessions.drop(msg.chatId); browseHinted.delete(msg.chatId);
+        await deps.sendMessage(msg.chatId, "Closed that page — starting fresh next time.");
+        return;
+      }
     }
 
     // Recipe auto-recall (product-loop): a saved recipe is otherwise write-only — /run needs the exact
@@ -1906,7 +1918,11 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       clearProgress();
       // Carry the session forward if the agent kept one open this turn; else drop any stale carry (the
       // turn didn't use the browser, so a previously-open page is done). Idle sessions are reaped inside.
-      if (browseContinuity) { if (openSessionId) browseSessions.set(msg.chatId, openSessionId); else browseSessions.drop(msg.chatId); }
+      let browseHeldNew = false; // set below when a session is newly held this turn (for a one-time hint)
+      if (browseContinuity) {
+        if (openSessionId) { browseHeldNew = !browseHinted.has(msg.chatId); browseSessions.set(msg.chatId, openSessionId); }
+        else { browseSessions.drop(msg.chatId); browseHinted.delete(msg.chatId); } // page done -> re-hint on the next hold
+      }
       // Confirm-to-act (opt-in): the agent proposed a committing click + returned it. Stash it so a YES on
       // the NEXT message runs exactly that click. Only when confirmAction is wired (else the flow is inert).
       if (pendingAction && deps.confirmAction) confirmPending.set(msg.chatId, { ...pendingAction, createdMs: deps.now() });
@@ -1936,6 +1952,13 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
           // digest, else the plain daily — a relevant CTA converts better than a templated one.
           out += recurringCta(msg.text, reply, tools);
         }
+      }
+      // Session-held hint (session-status-surface): the FIRST time a browse page is kept open for this
+      // thread, tell the user once — so they know a follow-up continues here + how to drop it. Clean text
+      // replies only (a photo/doc caption or a partial answer shouldn't carry it); once per held thread.
+      if (browseHeldNew && !photo && !doc && !degraded) {
+        browseHinted.add(msg.chatId);
+        out += "\n\n(I've kept that page open — say \"sort/filter…\" to keep going, or \"done\" to close it.)";
       }
       // If the agent produced a binary (screenshot image or PDF), send it first with the reply as
       // caption, then the text if the caption overflowed. Falls back to text-only when nothing was

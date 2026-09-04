@@ -1,5 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { BrowseSessionStore, browseContinuityEnabled, BROWSE_IDLE_MS } from "../src/lib/browse-session.js";
+import { BrowseSessionStore, browseContinuityEnabled, BROWSE_IDLE_MS, isCloseSessionRequest } from "../src/lib/browse-session.js";
+
+describe("isCloseSessionRequest (session-status-surface)", () => {
+  it("matches whole-message close asks", () => {
+    for (const t of ["done", "I'm done", "close the page", "close it", "stop browsing", "nevermind", "nvm", "drop it", "that's all"]) {
+      expect(isCloseSessionRequest(t)).toBe(true);
+    }
+  });
+  it("does NOT match a real task that merely contains a close word", () => {
+    for (const t of ["close my activity rings", "are you done?", "close reading on the topic", "stop the btc watch", "done with the flights, now book one"]) {
+      expect(isCloseSessionRequest(t)).toBe(false);
+    }
+  });
+});
 
 describe("browseContinuityEnabled", () => {
   it("is OFF by default and on only for truthy flags", () => {
