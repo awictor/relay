@@ -423,6 +423,19 @@ describe("runAgent dispatch", () => {
     expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
   });
 
+  it("get_time handles a 'how long until' countdown from nowMs + tz, no backend (time-until-tool)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "get_time", args: { request: "how long until 5pm" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "2 hours." } } as ToolCall },
+    ]);
+    // now = 2026-09-03 15:00 UTC, tz=UTC -> 2h until 5pm
+    await runAgent("how long until 5pm", { llm, backend: b, nowMs: Date.UTC(2026, 8, 3, 15, 0, 0), tzOffsetMin: 0 });
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool")!.content;
+    expect(toolMsg).toMatch(/2 hours until 5:00 PM/);
+    expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
+  });
+
   it("date_math answers from nowMs + tzOffsetMin without any backend call, reaches reply", async () => {
     const { b, hits } = recordingBackend();
     const llm = new ScriptLLM([

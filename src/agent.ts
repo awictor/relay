@@ -21,6 +21,7 @@ import { getFact as factFetch, formatFact } from "./lib/wikifact.js";
 import { getNutrition as nutritionFetch, formatNutrition } from "./lib/nutrition.js";
 import { parseWatchQuery, formatWatchWhere } from "./lib/watch-where.js";
 import { parseWorldClock, runWorldClock } from "./lib/worldclock.js";
+import { parseTimeUntil, runTimeUntil } from "./lib/timeuntil.js";
 import { runDateCalc, type Ymd } from "./lib/datecalc.js";
 import { getScores as scoresFetch, formatScores, getNextGame as nextGameFetch, formatNextGame, wantsNextGame } from "./lib/scores.js";
 import { getNews as newsFetch, formatNews } from "./lib/news.js";
@@ -284,7 +285,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "get_time",
-    description: "Get the current time in another city/timezone, or convert a time between zones (no key, instant). Use this — NOT web_search — for \"what time is it in Tokyo\", \"time in London\", \"what's 9am PT in London\", \"convert 3pm EST to Tokyo time\". Pass the user's request verbatim. (City/region answers are daylight-saving-correct; a typed abbreviation like PST/EST is taken as-is.)",
+    description: "Get the current time in another city/timezone, convert a time between zones, OR count down to a clock time today (\"how long until 5pm\", \"minutes until midnight\") — no key, instant. Use this — NOT web_search — for \"what time is it in Tokyo\", \"time in London\", \"9am PT in London\", \"convert 3pm EST to Tokyo\", \"how long until 5pm\". Pass the user's request verbatim. (City/region answers are daylight-saving-correct; a typed abbreviation like PST/EST is taken as-is.)",
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The user's time question verbatim, e.g. \"what time is it in Tokyo\" or \"9am PT in London\"." } },
@@ -499,7 +500,7 @@ Tools:
 - "pdf" (url): render a page to a PDF and send it as a document. Use when the user wants to SAVE or KEEP a page ("save as PDF", "send me a PDF of X"). Then call reply with a short caption.
 - "transcript" (url): get a YouTube video's spoken transcript. Use this — NOT scrape — for any YouTube link the user wants summarized or answered from; scrape only sees YouTube's empty JS shell.
 - "convert_currency" (amount, from, to): live currency conversion. Use this — NOT web_search — for any "X USD in EUR" / "convert 100 CAD to JPY" question; it's instant and exact.
-- "get_time" (request): current time in another city/timezone, or convert a time between zones. Use this — NOT web_search — for "what time is it in Tokyo"/"time in London"/"9am PT in London"/"convert 3pm EST to Tokyo". Pass the request verbatim. City/region answers are daylight-saving-correct; a typed abbreviation (PST/EST) is taken as-is.
+- "get_time" (request): current time in another city/timezone, convert a time between zones, or count down to a clock time today ("how long until 5pm", "minutes until midnight"). Use this — NOT web_search — for "what time is it in Tokyo"/"time in London"/"9am PT in London"/"convert 3pm EST to Tokyo"/"how long until 5pm". Pass the request verbatim. City/region answers are daylight-saving-correct; a typed abbreviation (PST/EST) is taken as-is.
 - "date_math" (request): date/calendar math EXACTLY. Use this — NOT mental counting or web_search — for "how many days until Christmas/my birthday/July 4", "what day of the week is/was <date>", "how old if born <date>", "days between two dates", "date in 10 days". Knows common US holidays by name. Reckons from the user's local today.
 - "meal_ideas" (request): cooking meal ideas or a recipe. Use this — NOT web_search — for "what can I make with chicken"/"dinner ideas"/"random meal"/"recipe for X". FOOD, not Relay's saved automation recipes.
 - "convert_units" (request): convert units of measure EXACTLY (temperature/length/weight/volume/cooking). Use for "180C to F"/"5 foot 11 in cm"/"2 cups in grams"/"10 miles in km". NOT currency (use convert_currency).
@@ -1171,6 +1172,13 @@ export async function runAgent(
 
       if (call.name === "get_time") {
         const request = String(call.args.request ?? "").trim();
+        // "how long until 5pm / midnight" — a duration-to-a-clock-time, computed in the user's tz. Checked
+        // before worldclock (it's not a zone lookup). Rolls to tomorrow when the time already passed today.
+        const until = parseTimeUntil(request);
+        if (until) {
+          push("get_time", `${runTimeUntil(until, deps.nowMs ?? Date.now(), deps.tzOffsetMin ?? 0)}\n\nReport this EXACT duration to the user.`);
+          continue;
+        }
         const parsed = parseWorldClock(request);
         const nowForTz = deps.nowMs ?? Date.now();
         const answer = parsed ? runWorldClock(parsed, nowForTz) : null;

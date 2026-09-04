@@ -3317,9 +3317,18 @@
       "title": "Add 'how long until <time today>' countdown (time-of-day, tz-aware) — the one remaining common gap found",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "datecalc handles days-until-a-DATE but returns null for 'how long until 5pm' / 'minutes until midnight' — a very common quick ask. It needs the chat's tz (already in profile) + now, then formats h/m remaining. get_time/date_math both miss it.",
       "how": "Add a parse+compute in datecalc or a small time-until helper: detect 'how long/how many minutes until <clock time>', resolve against the chat's tzOffset + nowMs (both already threaded to the agent env), handle 'tomorrow' rollover when the time already passed today. Wire into date_math or get_time dispatch (they already receive tz+now). Unit-test with injected now/tz. One iteration."
+    },
+    {
+      "id": "capability-gap-final-scan",
+      "title": "Final capability-gap scan: check the last few common asks, build if clearly valuable else report vein tapped",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "Three capability builds landed (password, encode/decode, time-until). The obvious high-value gaps are now filled. A last scan (UUID/GUID gen, 'roll a random name/lorem', a units-of-DATA convert like MB->GB if not covered, a 'coin flip best of N') confirms whether anything common remains or the vein is tapped and value returns to owner-gated (confirm-to-act, anvil).",
+      "how": "Quick-probe 4-5 remaining candidate asks against the tool set; build the ONE with real user demand + offline feasibility, else honestly report the capability vein is tapped and re-surface the owner levers."
     }
   ],
   "history": [
@@ -4678,6 +4687,10 @@
     {
       "item": "encode-decode-tool",
       "note": "2nd capability-gap build: encode_decode tool. base64/base64url/URL/hex encode-decode + JWT payload read was a common dev/utility text-a-bot ask with no tool (fell to a slow browse or the LLM hand-computing an encoding - wrong on base64 padding + multi-byte UTF-8). New src/lib/encoding.ts: parseEncodingRequest (codec + verbatim payload, colon or last-keyword delimited, JWT segment capture) + runEncoding (Node Buffer/URI codecs, round-trip validity check rejects garbage base64/hex, JWT payload-only never verifies sig) + formatEncoding (copy span + JWT sig-not-verified note). Wired: TOOLS + dispatch + prompt + HELP + sorted test list. +14 tests (encoding 13 + dispatch 1). 2091 green. Also confirmed: percentages/discount already handled by calc; 'how long until 5pm' (time-of-day countdown) is a real remaining gap but needs tz+clock (heavier)."
+    },
+    {
+      "item": "time-until-tool",
+      "note": "3rd capability-gap build: 'how long until 5pm' / 'minutes until midnight' countdown. date_math handled days-until-a-DATE but returned null for a clock time; get_time only gave current time. New src/lib/timeuntil.ts: parseTimeUntil (5pm/9:30am/17:00/midnight/noon, guards DATE asks like 'until Friday' -> fall through to date_math) + runTimeUntil (tz-aware via injected nowMs+tzOffsetMin, tomorrow-rollover when passed, h/m format, seconds-accurate). Wired into get_time dispatch (has tz+now already) before worldclock + TOOLS desc + prompt + HELP. +8 tests. 2099 green."
     }
   ],
   "audits": [
@@ -5101,6 +5114,11 @@
       "lens": "capability-gap build #2",
       "surfaced": "Tool-set vs common-asks review: base64/encode-decode was the top missing dev/utility capability (offline, free, pairs with QR/save-page). Built it. Remaining candidate gaps noted: time-of-day countdown ('how long until 5pm' - needs tz), UUID generator (low value), stopwatch/timer (needs persistent proactive fire). The capability-gap vein has ~1-2 more S/M items then is largely tapped.",
       "seeded": "capability-gap-time-until OR uuid"
+    },
+    {
+      "lens": "capability-gap build #3",
+      "surfaced": "time-of-day countdown was the last clearly-common capability gap. Built it tz-aware into get_time. Remaining candidate gaps are now low-value (UUID) or need proactive-fire infra (stopwatch/timer). The capability-gap vein is now largely tapped - next run likely returns to owner-gated reality or one more marginal gap.",
+      "seeded": "capability-gap-final-scan"
     }
   ]
 }
