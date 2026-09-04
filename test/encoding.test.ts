@@ -101,3 +101,28 @@ describe("hashing + rot13 (encode-hash-rot13)", () => {
     expect(run("decode hex 6869")).toBe("hi");
   });
 });
+
+describe("binary <-> text (encode-binary-text)", () => {
+  const run = (t: string) => { const p = parseEncodingRequest(t); return p ? runEncoding(p) : null; };
+  it("encodes text to 8-bit bytes from either phrasing", () => {
+    expect(run("binary of A")).toBe("01000001");
+    expect(run("hi in binary")).toBe("01101000 01101001");
+    expect(run("hello world in binary")).toBe("01101000 01100101 01101100 01101100 01101111 00100000 01110111 01101111 01110010 01101100 01100100");
+  });
+  it("decodes binary to text (spaced or unspaced), inferring op from the 0/1 payload", () => {
+    expect(run("decode this binary 01001000 01101001")).toBe("Hi");
+    expect(run("binary 01000001")).toBe("A");               // bare payload of 0/1 -> decode
+    expect(run("decode binary 0100100001101001")).toBe("Hi"); // no spaces
+    expect(run("binary to text 01001000 01101001")).toBe("Hi");
+  });
+  it("round-trips + multi-byte UTF-8", () => {
+    const p = parseEncodingRequest("binary of café")!;
+    const bin = runEncoding(p);
+    const back = runEncoding(parseEncodingRequest(`decode binary ${bin}`)!);
+    expect(back).toBe("café");
+  });
+  it("rejects malformed binary (not a multiple of 8 bits)", () => {
+    const p = parseEncodingRequest("decode binary 0100100")!; // 7 bits
+    expect(() => runEncoding(p)).toThrow(/valid binary/);
+  });
+});

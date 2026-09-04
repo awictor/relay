@@ -3515,9 +3515,18 @@
       "title": "encode_decode: text<->binary + text<->decimal codepoints",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "\"binary of A\", \"hello in binary\", \"decode this binary 01001000...\" is a common learning/puzzle ask with no home — falls to a slow browse. Deterministic + keyless.",
       "how": "Add a binary codec (encode: each char -> 8-bit; decode: 8-bit groups -> chars) to encoding.ts, mirroring hex. Tolerate spaces between bytes on decode. Tests + tool-description mention."
+    },
+    {
+      "id": "encode-morse",
+      "title": "encode_decode: Morse code (text <-> morse)",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "\"morse code SOS\", \"decode ... -.-.\" is a common fun/learning ask with no home. Rounds out the codec set. Genuinely low impact - flagged as the last micro-tool before the loop should seek higher-value work.",
+      "how": "Add a morse codec to encoding.ts: A-Z/0-9 <-> dot/dash table, space-separated letters, \"/\" between words on encode; tolerant split on decode. Tests + tool-desc mention."
     }
   ],
   "history": [
@@ -5080,6 +5089,10 @@
     {
       "item": "encode-hash-rot13",
       "note": "encode_decode gained sha256/sha1/md5 hashing (node:crypto, exact hex digests — a hallucinated hash LOOKS right but is wrong, a real trust risk) + rot13 (its own inverse). Parser matches \"sha256 of X\", \"md5 hash of Y\", \"rot13 ...\"; hashing is one-way so \"reverse/decode this sha256\" gets a friendly refusal, not a fake answer. Verified vs known vectors (sha256(hello), md5(hello), sha1(abc)). Tool description + /help updated. +5 tests, 2173 green."
+    },
+    {
+      "item": "encode-binary-text",
+      "note": "encode_decode gained a binary codec: \"hello in binary\"/\"binary of A\" -> 8-bit bytes; \"decode this binary 0100...\"/bare 0/1 payload -> text (op inferred from payload shape, spaced or unspaced, multi-byte UTF-8 round-trips). Rejects non-8-bit input. Payload extracted from either phrasing (before \"in binary\" or after the keyword). Tool description + /help updated. +4 tests, 2177 green."
     }
   ],
   "audits": [
@@ -5723,6 +5736,11 @@
       "lens": "inline probe (subagent cap 200/200 — ran offline edge-probes on pure keyless tools instead of 3 agents)",
       "surfaced": "Probed calc + unit conversions for wrong/missing answers. Found: SPEED conversion entirely unsupported — runConvert returned null for every mph/km/h/knots/m·s query (\"100 km/h to mph\", \"60 mph to kph\"), a daily travel/driving errand that fell through to a slow floundering agent browse instead of an instant exact answer. calc + length/mass/volume/temp/data all correct.",
       "seeded": "units-speed-convert (built this iteration)"
+    },
+    {
+      "lens": "honesty check on value trend (inline, subagent cap still 200/200)",
+      "surfaced": "Last ~5 iterations shipped low-impact keyless-tool polish (speed convert, calc phrasings, weekday/since dates, hash/rot13/binary) - all real fixes but diminishing user-impact; the keyless-tool surface is now well-covered. The genuinely high-value levers (confirm-to-act multi-step chains, richer anvil browsing depth, proactive digests) are either owner-gated or need a live-anvil e2e loop, not more offline micro-tools.",
+      "seeded": "encode-morse (last low-effort tool), then recommend the loop pause on micro-tools until an AUDIT with a fresh session (cap reset) or owner input redirects to higher-impact work"
     }
   ]
 }

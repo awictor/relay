@@ -160,7 +160,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "encode_decode",
-    description: "Encode or decode text: base64 / base64url / URL-encoding / hex / ROT13, hash with sha256/sha1/md5, or read a JWT's payload. Use for \"base64 encode X\", \"decode this base64 ...\", \"url encode ...\", \"hex decode ...\", \"sha256 of X\", \"md5 of X\", \"rot13 ...\", \"decode this jwt ...\". Exact + deterministic (don't compute a hash or encoding yourself — it's error-prone and a wrong hash looks right). Pass the user's request verbatim (it carries the codec + the payload). Hashes are one-way (can't be reversed); for JWT it reads the payload only, never verifies the signature.",
+    description: "Encode or decode text: base64 / base64url / URL-encoding / hex / ROT13 / binary, hash with sha256/sha1/md5, or read a JWT's payload. Use for \"base64 encode X\", \"decode this base64 ...\", \"url encode ...\", \"hex decode ...\", \"sha256 of X\", \"md5 of X\", \"rot13 ...\", \"hello in binary\", \"decode this binary 0100...\", \"decode this jwt ...\". Exact + deterministic (don't compute a hash or encoding yourself — it's error-prone and a wrong hash looks right). Pass the user's request verbatim (it carries the codec + the payload). Hashes are one-way (can't be reversed); for JWT it reads the payload only, never verifies the signature.",
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The user's encode/decode ask incl. the payload, e.g. \"base64 encode hello\", \"decode this base64: aGk=\", \"decode this jwt eyJ...\"." } },

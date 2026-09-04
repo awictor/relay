@@ -7,8 +7,8 @@
 import { createHash } from "node:crypto";
 
 export type EncOp =
-  | { op: "encode"; codec: "base64" | "base64url" | "url" | "hex" | "rot13" }
-  | { op: "decode"; codec: "base64" | "base64url" | "url" | "hex" | "jwt" | "rot13" }
+  | { op: "encode"; codec: "base64" | "base64url" | "url" | "hex" | "rot13" | "binary" }
+  | { op: "decode"; codec: "base64" | "base64url" | "url" | "hex" | "jwt" | "rot13" | "binary" }
   // Hashing is ONE-WAY (encode-hash-rot13): sha256/sha1/md5 produce a hex digest; there is no decode.
   | { op: "encode"; codec: "sha256" | "sha1" | "md5" };
 
@@ -30,7 +30,7 @@ export function parseEncodingRequest(text: string): (EncOp & { text: string }) |
   const raw = String(text ?? "");
   const t = raw.trim();
   const lower = t.toLowerCase();
-  if (!/\b(base64url|base64|b64|url[- ]?encode|url[- ]?decode|urlencode|urldecode|hex|jwt|sha-?256|sha-?1|md5|hash|rot-?13|encode|decode)\b/.test(lower)) return null;
+  if (!/\b(base64url|base64|b64|url[- ]?encode|url[- ]?decode|urlencode|urldecode|hex|jwt|sha-?256|sha-?1|md5|hash|rot-?13|binary|encode|decode)\b/.test(lower)) return null;
 
   // Decode a JWT — "decode this jwt <token>" / "what's in this jwt <token>". Payload only, no verify.
   const jwt = t.match(/\b(?:jwt|token)\b[\s:]*([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*)/);
@@ -55,6 +55,35 @@ export function parseEncodingRequest(text: string): (EncOp & { text: string }) |
   const op: "encode" | "decode" = isDecode ? "decode" : "encode";
 
   // codec: base64url before base64; url; hex; rot13. Default base64 when only encode/decode is named.
+  // Binary is handled before the generic codec path because its natural phrasing puts the payload on
+  // EITHER side of the keyword ("binary of hi", "hi in binary", "decode this binary 0110...") and the
+  // op is inferred from the payload shape (all 0/1 -> decode to text) rather than an explicit "decode"
+  // word a casual user won't type (encode-binary-text).
+  if (/\bbinary\b/.test(lower) && !/\b(base64|b64|hex|url|jwt|sha|md5|rot)/.test(lower)) {
+    // Extract the payload from any of binary's natural phrasings:
+    //   "hello in binary"        -> text BEFORE "in binary"
+    //   "binary of hi" / "binary <payload>" / "decode this binary 0110..." -> text AFTER the last of
+    //   the leading keywords (binary/of/decode/this/to/text/a colon).
+    let payload = "";
+    const before = raw.match(/^(.*?)\s+(?:in|to|as|into)\s+binary\b/i);
+    if (before && before[1]!.trim()) {
+      payload = before[1]!.trim();
+    } else {
+      const colon = raw.indexOf(":");
+      const afterColon = colon >= 0 ? raw.slice(colon + 1) : raw;
+      // drop a leading run of connective keywords ("decode this binary of", "binary to text")
+      payload = afterColon.replace(/^\s*(?:please\s+)?(?:can\s+you\s+)?(?:decode|encode|convert|the|this|that|a|of|to|from|in|into|as|text|ascii|letters|words|binary)\b[\s:]*/gi, "");
+      // keep stripping stacked keywords until stable
+      let prev = "";
+      while (prev !== payload) { prev = payload; payload = payload.replace(/^\s*(?:decode|encode|of|to|from|in|into|as|text|ascii|letters|words|binary|this|that|the)\b[\s:]*/i, ""); }
+    }
+    payload = payload.trim().replace(/^["'`]|["'`]$/g, "").trim();
+    if (!payload) return null;
+    const looksBinary = /^[01\s]+$/.test(payload) && /[01]{4,}/.test(payload.replace(/\s/g, ""));
+    const wantsDecode = looksBinary || /\bto\s+(?:text|ascii|letters|words)\b/i.test(lower);
+    return { op: wantsDecode ? "decode" : "encode", codec: "binary", text: payload } as EncOp & { text: string };
+  }
+
   const codec: EncOp["codec"] =
     /\bbase64url\b/.test(lower) ? "base64url"
     : /\b(base64|b64)\b/.test(lower) ? "base64"
@@ -104,11 +133,19 @@ export function runEncoding(req: EncOp & { text: string }): string {
       case "url": return encodeURIComponent(text);
       case "hex": return Buffer.from(text, "utf8").toString("hex");
       case "rot13": return rot13(text);
+      case "binary": return [...Buffer.from(text, "utf8")].map((b) => b.toString(2).padStart(8, "0")).join(" ");
     }
   }
   // decode
   switch (codec) {
     case "rot13": return rot13(text); // rot13 is its own inverse
+    case "binary": {
+      const bits = text.replace(/[^01]/g, "");
+      if (!bits || bits.length % 8 !== 0) throw new Error("That isn't valid binary (need 8-bit bytes, e.g. 01001000 01101001).");
+      const bytes: number[] = [];
+      for (let k = 0; k < bits.length; k += 8) bytes.push(parseInt(bits.slice(k, k + 8), 2));
+      return Buffer.from(bytes).toString("utf8");
+    }
     case "base64":
     case "base64url": {
       const out = Buffer.from(text, codec === "base64url" ? "base64url" : "base64").toString("utf8");
