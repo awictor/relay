@@ -25,6 +25,12 @@ describe("parseRandomRequest (random-decision-helper)", () => {
     expect(parseRandomRequest("choose between tacos and sushi")).toEqual({ kind: "pick", options: ["tacos", "sushi"] });
     expect(parseRandomRequest("tacos or sushi")).toEqual({ kind: "pick", options: ["tacos", "sushi"] });
   });
+  it("uuid / guid", () => {
+    expect(parseRandomRequest("generate a uuid")).toEqual({ kind: "uuid" });
+    expect(parseRandomRequest("random uuid")).toEqual({ kind: "uuid" });
+    expect(parseRandomRequest("give me a guid")).toEqual({ kind: "uuid" });
+    expect(parseRandomRequest("uuid v4")).toEqual({ kind: "uuid" });
+  });
   it("null for a non-random message (no hijack)", () => {
     expect(parseRandomRequest("what's the weather")).toBeNull();
     expect(parseRandomRequest("a coin costs a dollar")).toBeNull();
@@ -58,5 +64,10 @@ describe("runRandom (seeded rng)", () => {
   it("pick returns one of the options", () => {
     expect(runRandom({ kind: "pick", options: ["a", "b", "c"] }, () => 0)).toBe("👉 a");
     expect(runRandom({ kind: "pick", options: ["a", "b", "c"] }, () => 0.99)).toBe("👉 c");
+  });
+  it("uuid is a well-formed RFC-4122 v4 (version + variant nibbles fixed)", () => {
+    // A real PRNG source — assert the SHAPE (version 4, variant 8-b), not an exact value.
+    const out = runRandom({ kind: "uuid" }, Math.random);
+    expect(out).toMatch(/^🆔 [0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 });

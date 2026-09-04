@@ -8,7 +8,8 @@ export type RandomRequest =
   | { kind: "coin" }
   | { kind: "dice"; count: number; sides: number }
   | { kind: "number"; min: number; max: number }
-  | { kind: "pick"; options: string[] };
+  | { kind: "pick"; options: string[] }
+  | { kind: "uuid" };
 
 /**
  * Parse a message into a random-decision request, or null if it isn't one. Handles:
@@ -20,6 +21,10 @@ export type RandomRequest =
  */
 export function parseRandomRequest(text: string): RandomRequest | null {
   const t = text.trim().toLowerCase();
+
+  // UUID — "generate a uuid", "random uuid", "give me a guid", "uuid v4". A convenience identifier (a
+  // v4 from the injected PRNG); not a credential, so it doesn't need crypto RNG like generate_password.
+  if (/\b(uuid|guid)\b/.test(t)) return { kind: "uuid" };
 
   // Coin — "flip a coin", "coin flip", "heads or tails", "toss a coin".
   if (/\b(flip|toss)\s+(a\s+)?coin\b|\bcoin\s+(flip|toss)\b|\bheads\s+or\s+tails\b/.test(t)) return { kind: "coin" };
@@ -89,5 +94,12 @@ export function runRandom(req: RandomRequest, rand: () => number = Math.random):
     }
     case "pick":
       return `👉 ${pick(req.options)}`;
+    case "uuid": {
+      // RFC-4122 v4: 32 hex digits, version nibble = 4, variant nibble ∈ {8,9,a,b}. Built from the
+      // injected rand() so it's deterministic in tests (a convenience id, not a security token).
+      const hex = (n: number) => Array.from({ length: n }, () => Math.floor(rand() * 16).toString(16)).join("");
+      const variant = (8 + Math.floor(rand() * 4)).toString(16); // 8/9/a/b
+      return `🆔 ${hex(8)}-${hex(4)}-4${hex(3)}-${variant}${hex(3)}-${hex(12)}`;
+    }
   }
 }

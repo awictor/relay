@@ -39,7 +39,7 @@ const HELP = `Relay — what I can do:
 • Weather: "weather in Paris" or just "weather" (if you've shared your location) → current + today's high/low, instantly.
 • Find places nearby: "coffee near me", "nearest pharmacy" (share your location first) → real nearby spots with distance + hours.
 • Crypto + stock prices: "price of bitcoin", "what's ETH at", "AAPL price" → live price + 24h change, instantly.
-• Flip / roll / pick: "flip a coin", "roll a d20", "random number 1-100", "pick one: tacos or sushi" → a genuinely random answer.
+• Flip / roll / pick: "flip a coin", "roll a d20", "random number 1-100", "pick one: tacos or sushi", "generate a uuid" → a genuinely random answer.
 • Strong passwords: "generate a strong password", "a 24-character password no symbols", "a passphrase", "6-digit PIN" → a cryptographically-random secret you copy into your password manager. I don't store it.
 • Encode / decode: "base64 encode X", "decode this base64 ...", "url-encode ...", "hex decode ...", "decode this JWT ..." → exact conversion, instantly (I read a JWT's payload but don't verify its signature).
 • Convert currency: "how much is 200 USD in EUR" → I use the live rate, instantly.

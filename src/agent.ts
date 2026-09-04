@@ -141,7 +141,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "random",
-    description: "Flip a coin, roll dice, pick a random number, or choose randomly between options — use for \"flip a coin\", \"roll a d20\", \"random number 1-100\", \"pick one: tacos or sushi\". Genuinely random (don't make one up yourself). Pass the user's request verbatim.",
+    description: "Flip a coin, roll dice, pick a random number, choose randomly between options, or generate a random UUID/GUID — use for \"flip a coin\", \"roll a d20\", \"random number 1-100\", \"pick one: tacos or sushi\", \"generate a uuid\". Genuinely random (don't make one up yourself). Pass the user's request verbatim.",
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The user's random/decision ask, e.g. \"flip a coin\", \"roll 2d6\", \"pick between A and B\"." } },
@@ -518,7 +518,7 @@ Tools:
 - "save_page" (url, title?, summary?): save a page to the user's read-it-later list. Use when they ask to save/bookmark/keep a page — including one I JUST found ("find a good X and save it", "bookmark that"). Pass the exact URL (+ optional title/summary). Never save a search-results or junk URL.
 - "track_package" (number, carrier?): track a shipment. Use this — NOT web_search/scrape — for "where's my package"/"track 1Z..."/"track my order <number>". I detect UPS/FedEx/USPS/DHL from the number + read the official tracking page.
 - "get_flight" (flight): flight route + live position by number. Use this — NOT web_search — for "is AA100 on time"/"where's UA83"/"when does DL215 land". Returns airline + from→to + airborne-now + a tracker link; it CAN'T get scheduled gate/on-time — report honestly, don't invent a gate/delay.
-- "random" (request): flip a coin / roll dice / random number / pick from options. Use this — NEVER invent a "random" value yourself — for "flip a coin", "roll a d20", "random number 1-100", "pick one: X or Y".
+- "random" (request): flip a coin / roll dice / random number / pick from options / generate a uuid. Use this — NEVER invent a "random" value yourself — for "flip a coin", "roll a d20", "random number 1-100", "pick one: X or Y", "generate a uuid".
 - "generate_password" (request): a cryptographically-strong random password/passphrase/PIN. Use this — NEVER make up a password yourself — for "generate a password", "strong 24-char password", "a passphrase", "6-digit pin". Relay never stores it.
 - "encode_decode" (request): base64/base64url/URL/hex encode-or-decode, or read a JWT payload. Use this — NEVER compute an encoding yourself — for "base64 encode X", "decode this base64 ...", "url encode ...", "decode this jwt ...".
 - "get_crypto" (coin): current crypto price + 24h change. Use this — NOT get_quote/web_search — for "price of bitcoin"/"what's ETH at"/"BTC price"/"how's doge doing". Pass the ticker or name (btc, eth, sol, doge).
@@ -1078,7 +1078,7 @@ export async function runAgent(
 
       if (call.name === "random") {
         const req = parseRandomRequest(String(call.args.request ?? ""));
-        if (!req) { push("random", "Couldn't tell what to randomize — ask the user to clarify (coin / dice / a number range / a list to pick from)."); continue; }
+        if (!req) { push("random", "Couldn't tell what to randomize — ask the user to clarify (coin / dice / a number range / a list to pick from / a uuid)."); continue; }
         // App-side RNG (Math.random) — genuinely random, no network. The LLM must NOT invent the value.
         push("random", `${runRandom(req)}. Report this EXACT result to the user; do not change or re-roll it.`);
         continue;

@@ -3335,9 +3335,18 @@
       "title": "Capability vein tapped — remaining value is owner-gated (confirm-to-act, anvil live e2e)",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Across ~14 iterations: swept every offline reliability/parsing surface (2100 green) AND shipped 4 new capabilities (password, encode/decode, time-until, data-unit convert). The offline gap-finding vein is now genuinely exhausted - a fresh scan found only low-value candidates. The subagent cap (200/200) blocks the real 3-lens AUDIT until a NEW session.",
       "how": "OWNER ACTIONS (loop cannot self-serve): (1) confirm-to-act — product-UX decision on whether/how Relay confirms a state-changing step. (2) start anvil (docker/local) for the overdue anvil-live-e2e-when-up real errand. (3) start a FRESH Claude session to reset the subagent cap so the 3-lens AUDIT can seed new directions. Until one of these, further /product-loop runs will find only marginal work."
+    },
+    {
+      "id": "owner-levers-remain-2",
+      "title": "Autonomous work exhausted — value is owner-gated (confirm-to-act / anvil / fresh session for AUDIT)",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "After ~15 iterations: full offline reliability+parsing sweep AND 5 new capabilities, 2102 green. A fresh capability scan now yields nothing common. Real 3-lens AUDIT still blocked by subagent cap (200/200) until a new session.",
+      "how": "OWNER: (1) decide confirm-to-act (product UX). (2) start anvil for the live e2e. (3) fresh Claude session resets the cap for a real AUDIT. Absent these, /product-loop will only find marginal work — recommend pausing the loop until an owner lever is actioned."
     }
   ],
   "history": [
@@ -4704,6 +4713,10 @@
     {
       "item": "data-unit-convert",
       "note": "4th capability build (final-scan): digital-storage unit conversion. parseUnitConvert already PARSED '500 MB in GB' but runConvert returned null (no data dimension in the factor table) -> fell to a slow agent guess. Added a 'data' Dim + byte-based binary table (KB/MB/GB/TB/PB, 1024 factors, bits deliberately omitted to avoid MB-vs-Mb ambiguity - all aliases are BYTES). Cross-dimension still correctly null (MB->miles). +6 test cases, HELP updated. 2100 green. Scanned UUID (low value), roman numerals (rare), word-count (agent handles) - not worth building."
+    },
+    {
+      "item": "uuid-in-random",
+      "note": "5th small capability: UUID/GUID generation folded into the existing random tool (reuse-before-reinvent, not a new TOOLS entry). 'generate a uuid'/'random guid'/'uuid v4' -> a well-formed RFC-4122 v4 built from the injected rand() (a convenience id, not a credential, so no crypto RNG needed unlike generate_password). +2 tests (parse + v4 shape). HELP + prompt updated. 2102 green."
     }
   ],
   "audits": [
@@ -5137,6 +5150,11 @@
       "lens": "capability-gap final scan",
       "surfaced": "Data-unit convert was a genuine parse-but-no-compute gap - fixed. Other candidates (UUID gen, roman numerals, word/char count) are low-demand or already agent-handled. The capability-gap vein is now TAPPED: 4 builds shipped (password, encode/decode, time-until, data-units). No further common offline capability gap found. Value now genuinely returns to the owner-gated levers.",
       "seeded": "owner-levers-remain"
+    },
+    {
+      "lens": "marginal capability build",
+      "surfaced": "UUID was the one remaining dev-adjacent ask worth folding in (into random, cheaply). Now genuinely done - no further common offline capability gap exists. 5 capabilities shipped this session (password, encode/decode, time-until, data-units, uuid) on top of the full reliability/parsing sweep (2102 green). The autonomous vein is exhausted.",
+      "seeded": "owner-levers-remain (re-stated)"
     }
   ]
 }
