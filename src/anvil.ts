@@ -154,6 +154,48 @@ export async function type(sessionId: string, selector: string, text: string): P
   await action(sessionId, "/v1/actions/type", { selector, text });
 }
 
+// Set a <select> dropdown, checkbox, or radio (select-dropdown-support) — the form controls click/type
+// can't drive. In-page: for a <select>, match `value` against an option's value OR its visible text
+// (case-insensitive), set + fire change; for a checkbox/radio, interpret the value as on/off (true/yes/
+// on/checked/1 -> checked) and click if it needs toggling so listeners fire; other inputs fall back to a
+// value set + input/change. Returns an outcome string. Never throws inside the page.
+const SET_FIELD_SCRIPT = (selector: string, value: string) => `(() => {
+  try {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return 'not-found';
+    const val = ${JSON.stringify(value)};
+    const fire = (t) => el.dispatchEvent(new Event(t, { bubbles: true }));
+    const tag = (el.tagName || '').toLowerCase();
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (tag === 'select') {
+      const opts = Array.from(el.options);
+      const want = val.trim().toLowerCase();
+      const hit = opts.find(o => (o.value||'').trim().toLowerCase() === want) || opts.find(o => (o.textContent||'').trim().toLowerCase() === want) || opts.find(o => (o.textContent||'').trim().toLowerCase().includes(want));
+      if (!hit) return 'no-option';
+      el.value = hit.value; fire('input'); fire('change');
+      return 'select-set';
+    }
+    if (type === 'checkbox' || type === 'radio') {
+      const on = /^(1|true|yes|on|checked|select|check)$/i.test(val.trim());
+      if (el.checked !== on) el.click();  // click so frameworks see the toggle
+      return 'checkable-' + (el.checked ? 'on' : 'off');
+    }
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
+    if (setter) setter.call(el, val); else el.value = val;
+    fire('input'); fire('change');
+    return 'value-set';
+  } catch (e) { return 'error:' + (e && e.message || e); }
+})()`;
+
+/** Set a form control that click/type can't: a <select> dropdown (match by option value or visible
+ * text), a checkbox/radio (on/off), or any input's value (select-dropdown-support). Runs in the current
+ * session's page — requires a prior navigate/browse. Returns the in-page outcome ("select-set",
+ * "checkable-on", "value-set", "no-option", "not-found", ...) so the caller can report honestly. */
+export async function setField(sessionId: string, selector: string, value: string): Promise<string> {
+  const r = await action(sessionId, "/v1/actions/evaluate", { script: SET_FIELD_SCRIPT(selector, value) });
+  return typeof r === "string" ? r : String((r as { result?: unknown }).result ?? "");
+}
+
 /**
  * Read the CURRENT page's text after navigate/click/type. anvil's /v1/scrape
  * always navigates (requires a url), so to read the live page we evaluate

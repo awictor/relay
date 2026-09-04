@@ -100,6 +100,11 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: "object", properties: { selector: { type: "string", description: "CSS selector of the input" }, text: { type: "string", description: "Text to type" } }, required: ["selector", "text"] },
   },
   {
+    name: "set_field",
+    description: "Set a form control that click/type can't: a <select> DROPDOWN (pass the option's visible text or value), a CHECKBOX or RADIO (value \"on\"/\"off\"), or any input's value. Requires a prior browse. Use for filters, sort-by, quantity, date/size dropdowns, agree checkboxes — the controls between opening a form and submitting it.",
+    parameters: { type: "object", properties: { selector: { type: "string", description: "CSS selector of the select/checkbox/radio/input" }, value: { type: "string", description: "For a select: the option text or value. For a checkbox/radio: on/off. For an input: the text." } }, required: ["selector", "value"] },
+  },
+  {
     name: "read",
     description: "Read the current browsed page's text after navigating/clicking. Requires a prior browse.",
     parameters: { type: "object", properties: {}, required: [] },
@@ -522,7 +527,7 @@ Tools:
 - "site_search" (url, query): search INSIDE a named site using its own search box (types + submits + reads results). Use for "search <site> for X" / "find X on <store/docs/forum>". For a general web search use web_search.
 - "scrape_pages" (url, maxPages): read a listing ACROSS pagination (follows next/more/older), returning several pages combined. Use when the user wants MORE than one page holds ("20 newest", "cheapest across a few pages", "top 30"). Default 3 pages, max 5.
 - "scroll_feed" (url, maxScrolls): read an INFINITE-SCROLL feed (loads more on scroll, no next-page link) — scrolls to load lazy items then returns the expanded text. Use when scrape got only the first few items + there's no pagination link. Default 5 scrolls, max 10.
-- "browse" (url) then "click"/"type"/"read": for tasks needing interaction (search a site, fill a form, page through results). "read" returns the current page after your actions.
+- "browse" (url) then "click"/"type"/"set_field"/"read": for tasks needing interaction (search a site, fill a form, page through results). Use "set_field" for a <select> dropdown, checkbox, or radio (click/type can't set those). "read" returns the current page after your actions.
 - "fetch_json" (url): hit a JSON HTTP API directly, no browser — fastest for public data APIs (weather, prices, sports). Use when you know a JSON endpoint; use scrape/browse for HTML pages.
 - "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
 - "extract_list" (url, fields, limit, maxPages): get a LIST of items as structured rows, gathering across pagination. Use for "the 5 cheapest", "20 newest listings", "top 30 X with price + link" — many items, same fields each. Returns a deduped JSON array. Beats scrape_pages when the user wants ROWS, not a text wall.
@@ -596,6 +601,9 @@ export interface BrowserBackend {
   navigate(sessionId: string, url: string): Promise<{ url: string; title: string }>;
   click(sessionId: string, selector: string): Promise<void>;
   type(sessionId: string, selector: string, text: string): Promise<void>;
+  // Set a <select>/checkbox/radio/input the click+type pair can't drive (select-dropdown-support).
+  // Optional — when absent the set_field tool reports unavailable.
+  setField?(sessionId: string, selector: string, value: string): Promise<string>;
   readCurrent(sessionId: string): Promise<{ title: string; content: string; url: string }>;
   releaseSession(sessionId: string): Promise<void>;
   discoverLinks(url: string, limit?: number): Promise<string[]>;
@@ -819,6 +827,7 @@ const defaultBackend: BrowserBackend = {
   navigate: (id, url) => anvil.navigate(id, url),
   click: (id, sel) => anvil.click(id, sel),
   type: (id, sel, text) => anvil.type(id, sel, text),
+  setField: (id, sel, value) => anvil.setField(id, sel, value),
   readCurrent: (id) => anvil.readCurrent(id),
   releaseSession: (id) => anvil.releaseSession(id),
   discoverLinks: (url, limit) => anvil.discoverLinks(url, limit),
@@ -1115,6 +1124,29 @@ export async function runAgent(
           push(call.name, `Done: ${call.name} ${selector}. Call read to see the updated page.`);
         } catch (e) {
           push(call.name, `ERROR: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "set_field") {
+        if (!sessionId) { push("set_field", "ERROR: no page open. Call browse first."); continue; }
+        if (!backend.setField) { push("set_field", "ERROR: setting form fields isn't available."); continue; }
+        const selector = String(call.args.selector ?? "");
+        const value = String(call.args.value ?? "");
+        // Guard the target like click: setting a "confirm"/"delete" radio or a committing control is still
+        // a committing act. Selecting a filter/quantity/size is benign + falls through.
+        if (isDangerousAction(`${selector} ${value}`)) {
+          push("set_field", `REFUSED: that control looks like a destructive/committing action ("${`${selector} ${value}`.trim()}"). Tell the user instead.`);
+          continue;
+        }
+        try {
+          const outcome = await backend.setField(sessionId, selector, value);
+          const msg = outcome === "not-found" ? `Couldn't find ${selector} on the page.`
+            : outcome === "no-option" ? `No dropdown option matching "${value}" in ${selector}.`
+            : `Set ${selector} (${outcome}). Call read to see the updated page.`;
+          push("set_field", msg);
+        } catch (e) {
+          push("set_field", `ERROR: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

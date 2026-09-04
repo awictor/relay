@@ -95,7 +95,7 @@
       "title": "anvil: support <select> dropdowns (+ checkbox/radio) in the interactive browse path",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "click/type cover text inputs + buttons, but a <select> dropdown, checkbox, or radio (date pickers, filters, sort-by, quantity) cant be set — so a filtered search or a form with a dropdown dead-ends mid-errand. A real chunk of interactive sites need this.",
       "how": "Add a setValue/select action to anvil (in-page: for a <select> set .value + dispatch change; for checkbox/radio set .checked + click) exposed as a select tool or an option on type. Live e2e on a real page with a dropdown; assert the value took."
     },
@@ -107,6 +107,24 @@
       "status": "done",
       "why": "To search WITHIN a site (a store, a docs site, a forum) the agent must browse -> guess the search-box selector -> type -> find+click submit — 4 fragile steps it often flubs. A single site_search(url,query) that finds the search input heuristically (input[type=search], [name*=q], role=searchbox), types, submits, and reads results would make in-site search reliable.",
       "how": "Add site_search to anvil: navigate, find the search box by common selectors/aria, type the query, submit (Enter or a nearby submit), wait, readCurrent. New agent tool + dispatch. Live e2e against a real site search; assert results returned."
+    },
+    {
+      "id": "read-structured-current",
+      "title": "Extract structured rows from the CURRENT browsed session (post-filter results), not just a URL",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "extract_list takes a URL + does its own navigate, so it cant capture the results of an interactive session (after set_field filters + a click). A user who filters a store then wants the rows as a list/CSV cant get structured output from that session — only raw read() text.",
+      "how": "Add an extract mode to read (or a new read_list) that runs extractListResult over readCurrent(session) text with given fields/limit, reusing the session the agent already drove. Offline unit test with a mock backend readCurrent; live e2e: browse->set_field filter->read_list rows."
+    },
+    {
+      "id": "wait-for-selector",
+      "title": "wait_for tool: wait until a selector/text appears before reading (slow AJAX/SPA results)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "click/set_field/site_search use fixed sleeps (600-1500ms). A slow SPA filter or lazy result grid can render AFTER that, so read() captures a stale/empty page and the agent answers wrong. A wait-for-selector closes the race.",
+      "how": "Add anvil waitFor(sessionId, selector|text, timeoutMs) that polls in-page (evaluate querySelector / body.innerText.includes) until present or timeout; expose as a wait_for tool the agent calls after an action before read. Live e2e on a page that loads content after a delay."
     }
   ],
   "history": [
@@ -153,6 +171,10 @@
     {
       "item": "site-search-tool",
       "note": "site_search shipped: navigate to a site, find its search box heuristically (type=search, name/id/aria/placeholder containing search|q, role=searchbox, scored), set value via the native setter + fire input/change (React-safe), submit (form.requestSubmit else a submit/search button else Enter keydown), wait, read results. New anvil siteSearch(url,query) + agent tool + dispatch (honest found:false -> \"landing page, try web_search site:\") + BrowserBackend + SYSTEM_PROMPT + /help. Replaces the fragile browse->guess-selector->type->find-submit->click dance for in-site search. +3 dispatch tests. LIVE e2e: Wikipedia search \"photosynthesis\" -> found:true, landed on the Photosynthesis article (88K chars, mentions query); MDN -> found:false (modal-trigger search, not inline) and HONESTLY reported it (no false success). 2204 green. call-tested: TRUE."
+    },
+    {
+      "item": "select-dropdown-support",
+      "note": "set_field shipped: drives the form controls click/type couldnt — a <select> dropdown (match option by value OR visible text, case-insensitive substring ok), checkbox/radio (on/off, clicks to toggle so frameworks see it), or any inputs value (React-safe native setter + input/change). New anvil setField(sessionId,selector,value) + agent tool set_field + dispatch (requires prior browse; honest not-found/no-option; safety-guarded so a confirm/delete control is REFUSED) + BrowserBackend + SYSTEM_PROMPT + /help note. +3 dispatch tests (dropdown set; no-browse errors; delete-box refused). LIVE e2e on an injected real page: select set by visible text (value->p), checkbox toggled on, missing selector -> not-found. 2207 green. call-tested: TRUE. Completes the interactive form path (filters/sort/quantity/agree now settable, still read-only-safe)."
     }
   ],
   "probes": [
@@ -170,6 +192,9 @@
     },
     {
       "note": "Browse-DEPTH (reading many results) is now complete: pagination + infinite-scroll + load-more button gathering, cross-page structured extract_list, CSV export, all-field dedup. Next frontier is browse-BREADTH / interactive depth (acting on a page), which is thinner: click/type are single-selector only (no multi-field form fill in one step), no <select>/dropdown/checkbox support in anvil, and no site-search convenience (user must browse->find selector->type->click manually). These are the errands that turn Relay from a READER into a DOER (still read-only-safe: no submit/pay, the dangerous-action guard stays). Seeded fill_form + site_search."
+    },
+    {
+      "note": "Interactive form path now complete: browse + click + type + set_field (select/checkbox/radio) + site_search + read, all safety-guarded. Two gaps surfaced: (1) after a filtered/sorted interactive session the agent can only read() raw text — extract_list runs on a fresh URL, so structured rows from the CURRENT session (post-filter results) arent directly extractable. (2) No wait-for-selector/settle tool: click/set_field use fixed sleeps, so a slow AJAX result (SPA filter, lazy grid) may be read before it renders -> stale/empty read. Seeded both."
     }
   ]
 }

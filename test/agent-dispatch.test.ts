@@ -28,6 +28,7 @@ function recordingBackend() {
     navigate: async (_id, url) => { hits.push(`navigate:${url}`); return { url, title: "t" }; },
     click: async (_id, sel) => { hits.push(`click:${sel}`); },
     type: async (_id, sel) => { hits.push(`type:${sel}`); },
+    setField: async (_id, sel, value) => { hits.push(`setField:${sel}=${value}`); return "select-set"; },
     readCurrent: async () => { hits.push("readCurrent"); return { title: "t", content: "text", url: "u" }; },
     releaseSession: async () => { hits.push("releaseSession"); },
     discoverLinks: async (url) => { hits.push(`discoverLinks:${url}`); return ["https://x.com/a"]; },
@@ -42,7 +43,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
     );
   });
 
@@ -209,6 +210,39 @@ describe("runAgent dispatch", () => {
     await runAgent("list from one page", { llm, backend: b });
     expect(hits).toContain("scrape:https://x.com/one");
     expect(hits.some((h) => h.startsWith("scrapePaged:https://x.com/one"))).toBe(false);
+  });
+
+  it("set_field -> backend.setField for a dropdown, requires a prior browse (select-dropdown-support)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://shop.example.com" } } as ToolCall },
+      { toolCall: { name: "set_field", args: { selector: "#sort", value: "Price: Low to High" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "sorted" } } as ToolCall },
+    ]);
+    const r = await runAgent("sort the shop by price", { llm, backend: b });
+    expect(hits).toContain("setField:#sort=Price: Low to High");
+    expect(r.tools).toContain("set_field");
+  });
+
+  it("set_field before any browse errors, no backend call", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "set_field", args: { selector: "#x", value: "y" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "need a page first" } } as ToolCall },
+    ]);
+    await runAgent("set a field", { llm, backend: b });
+    expect(hits.some((h) => h.startsWith("setField:"))).toBe(false);
+  });
+
+  it("set_field refuses a committing control (delete/confirm) via the safety guard", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://x.com" } } as ToolCall },
+      { toolCall: { name: "set_field", args: { selector: "#confirm-delete", value: "on" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "won't do that" } } as ToolCall },
+    ]);
+    await runAgent("check the delete box", { llm, backend: b });
+    expect(hits.some((h) => h.startsWith("setField:"))).toBe(false); // guard blocked it
   });
 
   it("site_search -> backend.siteSearch with url + query (site-search-tool)", async () => {
