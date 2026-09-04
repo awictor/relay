@@ -95,6 +95,43 @@ describe("createHandler — brief-mode length cap (reply-style-apply-to-agent-le
   });
 });
 
+describe("createHandler — onboarding typed-number on a no-button channel (onboarding-tap-to-try-typed)", () => {
+  it("a first-timer on a no-button channel gets a numbered try-list, then a bare number RUNS the example", async () => {
+    const agentTexts: string[] = [];
+    const { handle, sent } = harness({
+      handleCommand: (t) => (t.trim() === "/start" ? "👋 I'm Relay. Text me a task." : null),
+      // no answerCallback -> no inline buttons -> the numbered fallback is used
+      runAgentFn: async (text) => { agentTexts.push(text); return { reply: `did:${text}`, steps: 1, tools: [] }; },
+    });
+    await handle(msg("/start", 9));
+    expect(sent[0]!.text).toMatch(/reply with a number/i);
+    expect(sent[0]!.text).toMatch(/^1\. /m); // numbered list present
+    await handle(msg("1", 9));               // pick the first example
+    expect(agentTexts.length).toBe(1);       // the example ran through the agent
+    expect(sent[1]!.text).toMatch(/did:/);
+  });
+
+  it("does NOT show the numbered list when inline buttons are available (taps used instead)", async () => {
+    const { handle, sent } = harness({
+      handleCommand: (t) => (t.trim() === "/start" ? "👋 I'm Relay." : null),
+      answerCallback: async () => {}, // buttons available
+    });
+    await handle(msg("/start", 9));
+    expect(sent[0]!.text).not.toMatch(/reply with a number/i);
+  });
+
+  it("a bare number with no onboarding context is NOT hijacked (falls through)", async () => {
+    let agentCalled = false;
+    const { handle } = harness({
+      memoryGet: () => [{ role: "user", content: "prior" } as LLMMessage], // not a first contact
+      handleCommand: () => null,
+      runAgentFn: async () => { agentCalled = true; return { reply: "x", steps: 1, tools: [] }; },
+    });
+    await handle(msg("2", 9));
+    expect(agentCalled).toBe(true); // reached the agent, not swallowed by onboarding
+  });
+});
+
 describe("createHandler — no-emoji preference (verbosity-emoji-on-proactive)", () => {
   it("strips emoji from a reply when replyEmoji is false", async () => {
     const { handle, sent } = harness({

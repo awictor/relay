@@ -3687,9 +3687,18 @@
       "title": "First-ever message / /start gives a concrete 3-example tour, not a generic greeting",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "A brand-new user texting Relay for the first time gets a generic capability blurb — they dont know what to actually TYPE. A first-run tour with 3 tappable concrete errands (\"whats the weather in <my city>\", \"top HN story\", \"remind me to X at 5pm\") converts a confused first 10 minutes into a successful first errand, the single biggest retention moment.",
       "how": "Detect the first inbound message per chat (empty memory + no profile + not a slash command) OR /start; reply with a short, concrete example set (ideally inline-button tappable via existing pickButtons infra) instead of the generic greeting. Gate once per chat. Offline test: first msg gets the tour, second msg does not."
+    },
+    {
+      "id": "post-onboarding-set-city-prompt",
+      "title": "After a first weather/near-me errand with no saved city, offer to save it once",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "first-location-capture exists, but confirm which flows actually offer the one-time save. A new user whose first successful errand is weather/near-me benefits most from being asked to save their city right then — it makes every future weather/reminder work without re-typing, the core stickiness loop. Verify + tighten the prompt so it fires on that first location errand and never nags after.",
+      "how": "Audit needsLocationContext + the first-location-capture offer path in handler; ensure a location errand with no saved profile offers save exactly once (not every time, not after a decline). Add/verify offline tests for the fire-once + decline-sticks behavior."
     }
   ],
   "history": [
@@ -5332,6 +5341,10 @@
     {
       "item": "reply-style-menu-discoverability",
       "note": "/profile now SURFACES the reply-style + units knobs so a user discovers them (they were only buried in /help prose). New pure replyStyleSummary(p) in profile.ts renders the CURRENT state incl. defaults — \"Answers: default length, emoji on, auto units.\" — plus a change line (\"say keep it brief / more detail, no emoji / use emoji, use metric / use imperial\"). Shown on BOTH /profile branches (saved-location + no-profile), since style/units stand alone from location. Wired replyStyleLine handler dep -> replyStyleSummary(profiles.get()); /help answer-style line now points at /profile. +5 tests (3 summary: defaults/brief+noemoji+metric/detailed+emoji+imperial, 2 handler: line shown with + without a saved location). 2354 green. call-tested: offline (pure render + handler routing)."
+    },
+    {
+      "item": "onboarding-first-message-tour",
+      "note": "Onboarding tap-to-try now works on NO-BUTTON channels too (console / a client without inline buttons). It already fired the START card + tap-to-try buttons for a first-timer, but those buttons only render where answerCallback is wired — a plain first-timer got the wall + nothing runnable. Now when START goes to a first contact WITHOUT buttons, we append a numbered try-list (\"reply with a number to try one now: 1. Weather ...\") + register the chat so a bare 1..N RUNS that TRY_EXAMPLE through the normal pipeline (via handleOne, NOT handle — would deadlock the per-chat chain), one-shot so a later real-list \"2\" isnt hijacked. Button channels keep the taps unchanged. Reused TRY_EXAMPLES + parsePickIndex. +3 handler tests (numbered list shown + number runs the example; hidden when buttons available; bare number with no onboarding context falls through). 2357 green. call-tested: offline (handler routing)."
     }
   ],
   "audits": [

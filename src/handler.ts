@@ -482,6 +482,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
   // Chats told once that brief-mode trimmed a reply (reply-style-apply-to-agent-length) — so the "say
   // 'more' for the rest" hint appends a single time, not after every shortened answer.
   const briefHinted = new Set<number>();
+  // Chats shown the numbered try-list on a NO-BUTTON channel (onboarding-tap-to-try-typed): tap-to-try
+  // buttons only render where answerCallback is wired, so a console/plain first-timer couldn't run an
+  // example without hand-typing it. When START goes to such a first-timer we append a numbered list +
+  // register here, so a bare "1"/"2"/"3" next runs that example (cleared after one use so a later "2"
+  // isn't hijacked once they're past onboarding).
+  const onboardTry = new Set<number>();
   const handle = ((msg: InboundMessage): Promise<void> => {
     const prev = chainByChat.get(msg.chatId) ?? Promise.resolve();
     const next = prev.then(() => handleOne(msg)).catch((e) => { log(`[handler] uncaught: ${e instanceof Error ? e.message : String(e)}`); });
@@ -1821,9 +1827,34 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       // reading the wall + hand-typing. Only on START (not /help/status), only on a channel with buttons
       // + on the FIRST contact (empty history) so we don't re-badge a returning user's /start.
       const isStart = cmd.startsWith("👋");
-      const kb = isStart && deps.answerCallback && deps.memoryGet(msg.chatId).length === 0 ? buildTryButtons() : undefined;
-      await deps.sendMessage(msg.chatId, cmd, kb);
+      const firstContact = isStart && deps.memoryGet(msg.chatId).length === 0;
+      const kb = firstContact && deps.answerCallback ? buildTryButtons() : undefined;
+      // No-button channel (console / a client without inline buttons): tap-to-try can't render, so a
+      // first-timer would have to hand-type an example. Append a NUMBERED try-list + register the chat so
+      // a bare "1"/"2"/"3" runs that example (onboarding-tap-to-try-typed). Button channels keep the taps.
+      let text = cmd;
+      if (firstContact && !kb) {
+        const lines = TRY_EXAMPLES.map((e, i) => `${i + 1}. ${e.label.replace(/^\S+\s/, "")} — "${e.text}"`).join("\n");
+        text = `${cmd}\n\nOr just reply with a number to try one now:\n${lines}`;
+        onboardTry.add(msg.chatId);
+      }
+      await deps.sendMessage(msg.chatId, text, kb);
       return;
+    }
+
+    // Onboarding typed-number (onboarding-tap-to-try-typed): a no-button first-timer was shown a numbered
+    // try-list; a bare "1".."N" now RUNS that example through the normal flow (mirrors the tap-to-try
+    // button). One-shot — cleared here so a later "2" (e.g. picking from a real result list) isn't hijacked.
+    if (onboardTry.has(msg.chatId)) {
+      const pick = parsePickIndex(msg.text);
+      if (pick !== null && pick >= 1 && pick <= TRY_EXAMPLES.length) {
+        onboardTry.delete(msg.chatId);
+        const ex = TRY_EXAMPLES[pick - 1]!;
+        await handleOne({ ...msg, text: ex.text }); // re-run inline (NOT handle — would deadlock the per-chat chain)
+        return;
+      }
+      // Any other message means they're past onboarding — stop watching for a bare number.
+      onboardTry.delete(msg.chatId);
     }
 
     // Follow-up on the last answer (last-result-drilldown): "more"/"full" pages out the tail a
