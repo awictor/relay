@@ -1809,6 +1809,22 @@ describe("shared location pin (telegram-location-pin)", () => {
     expect(saved).toEqual([{ lat: 30.27, lng: -97.74 }]);
     expect(ran).toBe("coffee near here"); // ran the caption, coords now in profile context
   });
+
+  it("hedges the ack when the coords write fails (persistence-hedge)", async () => {
+    // A failed disk write must not promise a saved location — "near me"/weather would silently break on
+    // restart while the user was told it stuck.
+    const { handle, sent } = harness({ saveCoords: () => false });
+    await handle(pin(30.27, -97.74));
+    expect(sent[0]!.text).toMatch(/got your location/i);
+    expect(sent[0]!.text).toMatch(/couldn't save it to disk/i);
+  });
+
+  it("a successful coords save gives a clean ack (no warning)", async () => {
+    const { handle, sent } = harness({ saveCoords: () => true });
+    await handle(pin(30.27, -97.74));
+    expect(sent[0]!.text).toMatch(/got your location/i);
+    expect(sent[0]!.text).not.toMatch(/couldn't save/i);
+  });
 });
 
 describe("chained recipe run (recipe-chaining)", () => {

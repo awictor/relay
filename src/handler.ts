@@ -136,8 +136,9 @@ export interface HandlerDeps {
   hasLocation?: (chatId: number) => boolean;
   captureLocation?: (chatId: number, text: string) => { location: string; tzOffsetMin?: number; saved?: boolean } | null;
   // Shared location pin (telegram-location-pin): save the chat's precise coords so "near me"/directions
-  // resolve against them. Optional; absent -> a location pin just gets a generic ack.
-  saveCoords?: (chatId: number, lat: number, lng: number) => void;
+  // resolve against them. Returns whether the write persisted (false -> the handler hedges the ack so a
+  // failed disk write doesn't promise a location that's gone on restart). Optional; absent -> generic ack.
+  saveCoords?: (chatId: number, lat: number, lng: number) => boolean | void;
   // One-tap location share (one-shot-location-button): send a message with a Telegram request_location
   // reply-keyboard button so a cold user's first "near me"/"weather" is one tap, not a typed city. Falls
   // back to a plain sendMessage when absent (e.g. the console channel). Optional.
@@ -643,13 +644,16 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
     // now that we have the location, or ack + prompt for what they want. Handled before the empty-text
     // guard so a captionless pin isn't rejected.
     if (msg.location) {
-      deps.saveCoords?.(msg.chatId, msg.location.latitude, msg.location.longitude);
+      const coordsSaved = deps.saveCoords?.(msg.chatId, msg.location.latitude, msg.location.longitude);
       if (msg.text) {
         // Caption present ("coffee near here") — run it as a normal task; the saved coords are now in
         // the agent's profile context.
         msg = { ...msg, location: undefined };
       } else {
-        await deps.sendMessage(msg.chatId, "📍 Got your location — I'll use it for \"near me\", weather, and directions. What would you like?");
+        // Hedge the ack if the coords write didn't reach disk (persistence-hedge): otherwise we promise a
+        // saved location that's gone on restart, and "near me"/weather silently stop working.
+        const warn = coordsSaved === false ? " (⚠️ though I couldn't save it to disk, so I may lose it if I restart — re-share if \"near me\" stops working.)" : "";
+        await deps.sendMessage(msg.chatId, `📍 Got your location — I'll use it for "near me", weather, and directions.${warn} What would you like?`);
         return;
       }
     }

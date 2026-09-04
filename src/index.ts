@@ -552,7 +552,7 @@ const handle = createHandler({
   // First-run location capture (first-location-capture): does this chat have a home location yet, and
   // save a bare "which city?" reply (+re-stamp recurring reminders if a tz came with it).
   hasLocation: (chatId) => { const p = profiles.get(chatId); return !!(p?.location || profiles.freshCoords(chatId, Date.now())); },
-  saveCoords: (chatId, lat, lng) => { profiles.set(chatId, { lat, lng, coordsAt: Date.now() }); },
+  saveCoords: (chatId, lat, lng) => { profiles.set(chatId, { lat, lng, coordsAt: Date.now() }); return profiles.lastSaveOk(); },
   weatherCoords: (chatId) => profiles.freshCoords(chatId, Date.now()),
   weatherUnits: (chatId) => profiles.get(chatId)?.units,
   captureLocation: (chatId, text) => {
