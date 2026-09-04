@@ -115,6 +115,11 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: "object", properties: { fields: { type: "array", items: { type: "string" }, description: "Fields for each row, e.g. [\"title\",\"price\"]" }, limit: { type: "number", description: "Max items (1-50, default 10)" } }, required: ["fields"] },
   },
   {
+    name: "where_am_i",
+    description: "Report which page the current browse session is on — its title + URL — WITHOUT reading the whole page. Use for \"what page are you on?\" / \"what's the link?\" mid-thread, when the user just wants to orient (cheaper than read). Requires a prior browse.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
     name: "read",
     description: "Read the current browsed page's text after navigating/clicking. Requires a prior browse.",
     parameters: { type: "object", properties: {}, required: [] },
@@ -537,7 +542,7 @@ Tools:
 - "site_search" (url, query): search INSIDE a named site using its own search box (types + submits + reads results). Use for "search <site> for X" / "find X on <store/docs/forum>". For a general web search use web_search.
 - "scrape_pages" (url, maxPages): read a listing ACROSS pagination (follows next/more/older), returning several pages combined. Use when the user wants MORE than one page holds ("20 newest", "cheapest across a few pages", "top 30"). Default 3 pages, max 5.
 - "scroll_feed" (url, maxScrolls): read an INFINITE-SCROLL feed (loads more on scroll, no next-page link) — scrolls to load lazy items then returns the expanded text. Use when scrape got only the first few items + there's no pagination link. Default 5 scrolls, max 10.
-- "browse" (url) then "click"/"type"/"set_field"/"wait_for"/"read": for tasks needing interaction (search a site, fill a form, page through results). Use "set_field" for a <select> dropdown, checkbox, or radio (click/type can't set those). After an action on a slow/JS-heavy page, call "wait_for" (a selector or text phrase) before "read" so you don't read a stale page. "read" returns the current page after your actions; "read_list" (fields) turns the current page's results into structured rows (add a CSV ask for a file).
+- "browse" (url) then "click"/"type"/"set_field"/"wait_for"/"read": for tasks needing interaction (search a site, fill a form, page through results). Use "set_field" for a <select> dropdown, checkbox, or radio (click/type can't set those). After an action on a slow/JS-heavy page, call "wait_for" (a selector or text phrase) before "read" so you don't read a stale page. "read" returns the current page after your actions; "read_list" (fields) turns the current page's results into structured rows (add a CSV ask for a file); "where_am_i" reports just the current page's title + URL (for "what page are you on?").
 - "fetch_json" (url): hit a JSON HTTP API directly, no browser — fastest for public data APIs (weather, prices, sports). Use when you know a JSON endpoint; use scrape/browse for HTML pages.
 - "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
 - "extract_list" (url, fields, limit, maxPages): get a LIST of items as structured rows, gathering across pagination. Use for "the 5 cheapest", "20 newest listings", "top 30 X with price + link" — many items, same fields each. Returns a deduped JSON array. Beats scrape_pages when the user wants ROWS, not a text wall.
@@ -1940,6 +1945,17 @@ export async function runAgent(
           push("read_list", count > 0 ? `${note}\n${json}\nReport these to the user.` : `${note} (nothing matched — the results may not have loaded, or try different field names / a wait_for first.)`);
         } catch (e) {
           push("read_list", `ERROR: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
+      if (call.name === "where_am_i") {
+        if (!sessionId) { push("where_am_i", "ERROR: no page open. Call browse first."); continue; }
+        try {
+          const r = await backend.readCurrent(sessionId);
+          push("where_am_i", `Current page: ${r.title || "(untitled)"} — ${r.url}. Report this to the user.`);
+        } catch (e) {
+          push("where_am_i", `ERROR: ${e instanceof Error ? e.message : String(e)}`);
         }
         continue;
       }

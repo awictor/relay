@@ -46,7 +46,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "read_list", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "wait_for", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "read_list", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "wait_for", "where_am_i", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
     );
   });
 
@@ -262,6 +262,29 @@ describe("runAgent dispatch", () => {
       { toolCall: { name: "reply", args: { text: "need a page" } } as ToolCall },
     ]);
     await runAgent("list stuff", { llm, backend: b });
+    expect(hits).not.toContain("readCurrent");
+  });
+
+  it("where_am_i reports the current page's title + url via readCurrent (agent-report-current-url)", async () => {
+    const { b, hits } = recordingBackend();
+    b.readCurrent = async () => { hits.push("readCurrent"); return { title: "Flights | Kayak", content: "…lots of text…", url: "https://kayak.com/flights?sort=price" }; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://kayak.com" } } as ToolCall },
+      { toolCall: { name: "where_am_i", args: {} } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "we're on the Kayak flights page" } } as ToolCall },
+    ]);
+    const r = await runAgent("what page are you on", { llm, backend: b });
+    expect(hits).toContain("readCurrent");
+    expect(r.tools).toContain("where_am_i");
+  });
+
+  it("where_am_i before any browse errors, no readCurrent", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "where_am_i", args: {} } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "no page open" } } as ToolCall },
+    ]);
+    await runAgent("where are you", { llm, backend: b });
     expect(hits).not.toContain("readCurrent");
   });
 
