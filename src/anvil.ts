@@ -460,19 +460,22 @@ export async function scrape(
   }
 }
 
-/** Screenshot a URL: create a session, navigate, capture the viewport as JPEG bytes,
- * release. SSRF-guarded like scrape. Returns the raw image bytes (for Telegram sendPhoto). */
-export async function screenshot(url: string): Promise<Uint8Array> {
+/** Screenshot a URL: create a session, navigate, capture bytes, release. SSRF-guarded like scrape.
+ * `fullPage` captures the whole scrollable page (anvil's ?fullPage=true) instead of just the viewport
+ * fold (full-page-screenshot) — for "screenshot the WHOLE page". A full-page capture of a long page can
+ * be large + slow, so the timeout is bumped for it. Returns the raw image bytes (for Telegram sendPhoto). */
+export async function screenshot(url: string, fullPage = false): Promise<Uint8Array> {
   const check = isUrlSafe(url);
   if (!check.safe) throw new Error(`Blocked URL: ${check.reason}`);
   const session = await createSession();
   try {
     await navigate(session.id, url, "domcontentloaded");
     await new Promise((r) => setTimeout(r, 600)); // brief settle for client-rendered content
-    const r = await fetch(`${BASE}/v1/screenshot?sessionId=${encodeURIComponent(session.id)}`, {
+    const q = `?sessionId=${encodeURIComponent(session.id)}${fullPage ? "&fullPage=true" : ""}`;
+    const r = await fetch(`${BASE}/v1/screenshot${q}`, {
       method: "GET",
       headers: authHeaders(),
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(fullPage ? 35000 : 20000), // a tall full-page render takes longer
     });
     if (!r.ok) throw new Error(`anvil screenshot failed: ${r.status}`);
     return new Uint8Array(await r.arrayBuffer());

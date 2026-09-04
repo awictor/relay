@@ -29,7 +29,7 @@ function recordingBackend() {
     releaseSession: async () => { hits.push("releaseSession"); },
     discoverLinks: async (url) => { hits.push(`discoverLinks:${url}`); return ["https://x.com/a"]; },
     fetchJson: async (url) => { hits.push(`fetchJson:${url}`); return { status: 200, contentType: "application/json", text: "{}" }; },
-    screenshot: async (url) => { hits.push(`screenshot:${url}`); return new Uint8Array([1, 2, 3]); },
+    screenshot: async (url, fullPage) => { hits.push(`screenshot:${url}${fullPage ? ":full" : ""}`); return new Uint8Array([1, 2, 3]); },
     pdf: async (url) => { hits.push(`pdf:${url}`); return new Uint8Array([4, 5, 6, 7]); },
   };
   return { b, hits };
@@ -509,6 +509,17 @@ describe("runAgent dispatch", () => {
     expect(r.photo).toBeInstanceOf(Uint8Array);
     expect(r.photo!.length).toBe(3);
     expect(r.reply).toBe("here it is");
+  });
+
+  it("screenshot fullPage:true passes through to the backend (full-page-screenshot)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "screenshot", args: { url: "https://x.com/p", fullPage: true } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "full page" } } as ToolCall },
+    ]);
+    const r = await runAgent("screenshot the whole page x", { llm, backend: b });
+    expect(hits).toContain("screenshot:https://x.com/p:full"); // fullPage threaded through
+    expect(r.photo).toBeInstanceOf(Uint8Array);
   });
 
   it("make_qr -> backend.makeQr, returns the QR photo bytes (qr-code-tool)", async () => {

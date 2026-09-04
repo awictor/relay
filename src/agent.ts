@@ -468,8 +468,8 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "screenshot",
-    description: "Capture a web page as an IMAGE and send it to the user. Use when the user wants to SEE a page (\"show me\", \"screenshot\", \"what does X look like\") rather than read its text. After calling this, still call reply with a short caption.",
-    parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to capture" } }, required: ["url"] },
+    description: "Capture a web page as an IMAGE and send it to the user. Use when the user wants to SEE a page (\"show me\", \"screenshot\", \"what does X look like\") rather than read its text. Set fullPage:true when the user wants the WHOLE/ENTIRE/FULL page or a long article captured top-to-bottom (not just the visible fold). After calling this, still call reply with a short caption.",
+    parameters: { type: "object", properties: { url: { type: "string", description: "Absolute http(s) URL to capture" }, fullPage: { type: "boolean", description: "Capture the whole scrollable page top-to-bottom instead of just the viewport fold. Default false." } }, required: ["url"] },
   },
   {
     name: "pdf",
@@ -565,7 +565,7 @@ export interface BrowserBackend {
   extractStructured?(url: string): Promise<string>;
   // Optional: capture a URL as image bytes (DEV-0027). When absent, the screenshot tool
   // reports it can't take pictures rather than failing hard.
-  screenshot?(url: string): Promise<Uint8Array>;
+  screenshot?(url: string, fullPage?: boolean): Promise<Uint8Array>;
   // Optional: render a URL to PDF bytes (DEV-0032). Absent -> pdf tool reports unavailable.
   pdf?(url: string): Promise<Uint8Array>;
   // Optional: render a QR code for a payload to PNG bytes (qr-code-tool). Absent -> make_qr reports
@@ -780,7 +780,7 @@ const defaultBackend: BrowserBackend = {
   webSearch: (query, limit) => anvil.webSearch(query, limit),
   fetchJson: (url) => defaultFetchJson(url),
   extractStructured: (url) => anvil.extractStructured(url),
-  screenshot: (url) => anvil.screenshot(url),
+  screenshot: (url, fullPage) => anvil.screenshot(url, fullPage),
   pdf: (url) => anvil.pdf(url),
 };
 
@@ -951,9 +951,10 @@ export async function runAgent(
         const safe = isUrlSafe(url);
         if (!safe.safe) { push("screenshot", `ERROR: refused (${safe.reason}).`); continue; }
         if (!backend.screenshot) { push("screenshot", "ERROR: screenshots aren't available."); continue; }
+        const fullPage = call.args.fullPage === true;
         try {
-          photo = await backend.screenshot(url);
-          push("screenshot", `Captured a screenshot of ${url} (${photo.length} bytes). It will be sent to the user; now call reply with a short caption.`);
+          photo = await backend.screenshot(url, fullPage);
+          push("screenshot", `Captured a ${fullPage ? "full-page" : "viewport"} screenshot of ${url} (${photo.length} bytes). It will be sent to the user; now call reply with a short caption.`);
         } catch (e) {
           push("screenshot", `ERROR capturing ${url}: ${e instanceof Error ? e.message : String(e)}`);
         }

@@ -45,7 +45,7 @@ const HELP = `Relay — what I can do:
 • Pull out data: "extract the price and rating from <link>" → clean values, not a wall of text.
 • Compare across pages: "compare the price of X across these links" → a side-by-side. Add "as a CSV" and I'll send a spreadsheet file you can keep.
 • Find then fetch: "find newest listings for <thing>" → I open the search page, grab the results, and read them.
-• See a page: "screenshot the top of Hacker News" → I send you an image of it.
+• See a page: "screenshot the top of Hacker News", or "screenshot the whole page" for the full top-to-bottom capture → I send you an image of it.
 • Save a page: "save this as a PDF: <link>" → I send you a PDF document.
 • Send me a file: forward a PDF, CSV, spreadsheet, or text file (with a question in the caption) → I read it and answer. "what's my total?", "summarize this statement".
 • Summarize a video: send a YouTube link + "tldr this" → I read its transcript and sum it up.

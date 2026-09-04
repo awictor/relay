@@ -14,7 +14,7 @@
       "title": "Full-page screenshot (not just the viewport fold)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "anvil.ts:463 captures the VIEWPORT only — 'screenshot the whole page' / 'screenshot this article' gives just the top fold, surprising a user who expected the full page.",
       "how": "Add a fullPage option to the screenshot capture in src/anvil.ts (CDP captureBeyondViewport / Page.captureScreenshot with fromSurface+full metrics, or puppeteer fullPage:true). Route 'whole/full/entire page' phrasing to it in the agent's screenshot dispatch; keep viewport as the default (smaller, faster). Live e2e: assert full-page bytes are materially larger than viewport for a long page."
     },
@@ -41,6 +41,10 @@
     {
       "item": "chain-partial-nonrun-paths",
       "note": "Fixed the non-/run chain paths presenting a stopped-early chain as if it completed. digest-runner now takes a STRUCTURED runChain result: a member chain that stopped early (failed/degraded step or unmet if-gate) is shown as \"(partial — N of M steps) ...\" AND counted as failed (so an all-partial digest hits the honest all-failed notice, not a silent half-answer). index.ts: digest dep (174) returns the structured result; trigger-to-action (211) + \"Run again\" (970) return null on stoppedEarly (like a degraded run) instead of attaching a partial. The /run path + scheduler already surfaced it. +3 unit tests; live e2e drove the REAL chain-runner+digest-runner (2-step chain, step 2 degraded -> stoppedEarly -> digest returned allFailed). 2184 green. call-tested: partial (real modules, stubbed agent — pure orchestration logic, no anvil needed)."
+    },
+    {
+      "item": "screenshot-fullpage",
+      "note": "screenshot tool gained fullPage: \"screenshot the whole/entire/full page\" now captures top-to-bottom, not just the viewport fold. anvil already supported ?fullPage=true (actions.ts page.screenshot({fullPage})); threaded it through relay screenshot(url,fullPage) [+bumped timeout 20s->35s for tall renders], the agent tool schema + dispatch (fullPage:true), the BrowserBackend interface, and /help. +1 unit test. LIVE e2e drove real anvil on a long Wikipedia page: viewport 281KB vs fullPage 1.19MB (4.25x) - whole page captured. 2185 green. call-tested: TRUE (live anvil)."
     }
   ],
   "probes": [
