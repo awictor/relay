@@ -161,6 +161,24 @@
       "status": "done",
       "why": "With continuity ON, a session is silently held for a few minutes. A texting user has no signal that a follow-up will continue vs start fresh, and no easy way to say \"drop it\". A light touch — a one-line hint after an interactive turn + a \"done/close/nevermind\" to release — makes the held state legible.",
       "how": "When a turn returns openSessionId (flag on), append a short hint to the reply (once per held thread). Add a \"done\"/\"close the page\"/\"nevermind\" intent that drops the carried session. Handler-only + gated on the flag; unit-test the hint-once + drop-intent."
+    },
+    {
+      "id": "selector-not-found-candidates",
+      "title": "On a click/set_field/type not-found, feed back the page's real candidate elements so the agent self-corrects",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "A wrong selector (model guessed '.buy-btn' but it's '#addToCart') returns a bare 'couldn't find it' - the agent then re-guesses blind + often flails or quits mid-errand. The page KNOWS its buttons/inputs; handing back a short list of real candidate selectors + their visible text on a miss turns a dead-end into a one-step self-correct. The single biggest reliability win for interactive tasks.",
+      "how": "Add an anvil describeControls(sessionId, kind) that evaluates the page for visible buttons/links (kind=click) or inputs/selects (kind=field) -> [{selector,text}] (stable selector: id, else name, else nth-of-type path), capped ~12. On a click/set_field/type not-found in dispatch, call it + append candidates to the error push so the model retries with a real one. Live e2e: wrong selector -> candidates returned -> retry hits."
+    },
+    {
+      "id": "agent-report-current-url",
+      "title": "Agent can report where it currently IS (current url/title) mid-thread",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "After a few interactive steps a user may ask 'what page are you on?' / 'what's the link?' - the agent has readCurrent (returns url) but no cheap just-the-location tool, so it does a full read. A tiny where_am_i is a cheap honest orientation.",
+      "how": "Reuse readCurrent but add a lightweight path (or a where tool) returning just {title,url} of the open session; route 'what page/link are you on' to it. Small; depends on an open session."
     }
   ],
   "history": [
@@ -261,6 +279,9 @@
     },
     {
       "note": "Multi-turn browse continuity DONE (opt-in) — the interactive arc is now end-to-end: open a page, filter/sort/search/fill, wait, read structured rows/CSV, AND keep iterating across messages on the same live page. Whole browse roadmap (depth + breadth + continuity) complete. Next frontier: (1) confirm-to-act multi-step chains stay OWNER-GATED (a committing sequence needs sign-off). (2) With continuity live, the natural add is letting the user SEE the live page mid-thread (a screenshot of the current carried session) so they can direct the next step — currently screenshot re-navigates a fresh URL. Seeded that + a session-status surface."
+    },
+    {
+      "note": "Browse arc complete (depth+breadth+continuity+visibility+status), all opt-in/guarded/live-verified. Cookie-jar authed-site access is ENV-config only (RELAY_COOKIES file) + owner-gated by design (a user can't text their session cookies safely) - leave as-is. Real fresh gap: interactive error recovery. A wrong click/set_field selector returns a bare 'couldn't find #x' - the agent doesn't get the page's ACTUAL clickable/settable elements, so it guesses again + flails or gives up. Feeding back nearby candidate selectors on a not-found turns a dead-end into a self-correct. Seeded that + a smaller current-url surface."
     }
   ]
 }
