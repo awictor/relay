@@ -1014,7 +1014,7 @@ export async function runAgent(
         try {
           const limit = Math.max(1, Math.min(20, Number(call.args.limit) || 6));
           const results = await backend.webSearch(query, limit);
-          if (!results.length) { push("web_search", `No results for "${query}".`); continue; }
+          if (!results.length) { push("web_search", `No results for "${query}". Try broader or different keywords (drop quotes/qualifiers, use the plain topic), or tell the user you couldn't find anything on it — don't invent an answer.`); continue; }
           const lines = results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`);
           push("web_search", `RESULTS for "${query}":\n${lines.join("\n")}\nScrape/extract the most relevant url for details.`);
         } catch (e) {

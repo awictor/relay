@@ -3371,7 +3371,7 @@
       "title": "Sweep remaining user-facing MESSAGE surfaces for accuracy (empty-result, rate-limit, cap-hit, ask-clarify copy)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The friendlyError find shows user-facing message copy is a live probe surface (not just parsing/logic). Other message paths may be vague or wrong: empty-search-result phrasing, per-chat rate-limit message, schedule/list cap-hit copy, the various 'couldn't tell what you meant' clarifiers - do they name the actual problem + a next step?",
       "how": "Probe each canned user-message path (grep push()/sendMessage string literals + the tool clarify branches); where a message is vague, misleading, or lacks a next step, sharpen it + assert in a test. One surface per iteration."
     }
@@ -4764,6 +4764,10 @@
     {
       "item": "failure-network-errno-generic",
       "note": "REAL bug in friendlyError classification: the browser/network category matched 'timeout'/'ECONNREFUSED' but MISSED the common node socket/DNS errno family (ETIMEDOUT, ENOTFOUND, ENETUNREACH, EHOSTUNREACH, EPIPE, ECONNABORTED) and Chrome's net::ERR_* codes — so a timed-out or DNS-failed fetch fell to the vague generic 'something went wrong on my end' instead of the accurate 'my browser's having trouble, try again'. A daily user hitting a flaky network got a confusing message. Widened the browser regex. llm/blocked/generic precedence intact. +1 test. 2105 green."
+    },
+    {
+      "item": "web-search-empty-next-step",
+      "note": "Swept user-facing message copy. Nearly all empty-result/clarify messages already name the problem + a next step well (get_scores coverage list, define spelling hint, meal_ideas retry, all the 'no place given' clarifiers). ONE thin spot: web_search's empty result was a bare 'No results for X' with no guidance -> the model could dead-end or invent instead of broadening. Sharpened to instruct broaden-keywords / admit-not-found / don't-invent. +1 dispatch test. 2106 green. The message-copy surface is otherwise clean; friendlyError (prev run) was the one real bug in this class."
     }
   ],
   "audits": [
@@ -5226,6 +5230,11 @@
       "lens": "friendlyError classification probe",
       "surfaced": "Probed failure.ts error->message mapping: found ETIMEDOUT/ENOTFOUND/net::ERR_* misclassified as generic (should be browser). Fixed. This was a real user-facing-message bug behind the green suite - the error-mapping surface hadn't been idiom-probed. classifyFailure precedence (llm>blocked>browser>generic) verified correct.",
       "seeded": "probe-error-and-edge-messaging"
+    },
+    {
+      "lens": "user-message copy sweep",
+      "surfaced": "Probed canned empty-result + clarify messages across the tool set. Well-crafted overall (name problem + next step); only web_search's empty message was a bare dead-end, now sharpened. Combined with the friendlyError fix, the error/edge-messaging class is swept. No further vague/misleading message found.",
+      "seeded": "(none — message class swept; owner levers remain)"
     }
   ]
 }

@@ -83,6 +83,19 @@ describe("runAgent dispatch", () => {
     expect(hits).toContain("fetchJson:https://api.x.com/d");
   });
 
+  it("web_search with zero results tells the model to broaden or admit it, not dead-end (empty-search-next-step)", async () => {
+    const { b } = recordingBackend();
+    b.webSearch = async () => []; // no results
+    const llm = new ScriptLLM([
+      { toolCall: { name: "web_search", args: { query: "asdfqwerzxcv nonexistent" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "I couldn't find anything on that." } } as ToolCall },
+    ]);
+    await runAgent("search that", { llm, backend: b });
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool")!.content;
+    expect(toolMsg).toMatch(/No results/);
+    expect(toolMsg).toMatch(/broader|different keywords|don't invent/i); // carries a next step, not a dead-end
+  });
+
   it("search -> backend.discoverLinks", async () => {
     const { b, hits } = recordingBackend();
     const llm = new ScriptLLM([
