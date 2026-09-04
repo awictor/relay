@@ -3669,9 +3669,18 @@
       "title": "Honor the no-emoji preference on proactive sends + strip emoji deterministically",
       "impact": "low",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "reply-style-preference stores emoji:false and injects a soft hint, but like brief-mode the free-tier LLM often still emits emoji, and proactive sends dont even get the inbound trim path. A user who said no emoji still sees them in scheduled/alert/digest pings — a small but real annoyance for someone who explicitly asked.",
       "how": "Add a pure stripEmoji(text) lib (unicode emoji ranges) + apply it on the inbound reply AND proactive sends when profile.emoji===false. Keep the labeled header punctuation. Offline tests: strips emoji only when the pref is set, leaves plain text + non-emoji symbols (°, %, $) intact."
+    },
+    {
+      "id": "reply-style-menu-discoverability",
+      "title": "Surface reply-style + units prefs in /profile + a settings summary so users discover them",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "Relay now remembers brief/detailed + emoji + units + location, but a new user has no way to DISCOVER these knobs exist — theyre only in /help prose. A daily user who is mildly annoyed by verbosity/emoji wont know they can just say \"keep it brief\". Making /profile show current style + a one-line \"you can also say...\" hint converts a hidden feature into a used one.",
+      "how": "Extend profileView (or add a settings block) to always show current verbosity/emoji state (even when default) + a short \"say keep it brief / no emoji / use metric to change\" line. Offline test: /profile output names the current style + the change hints."
     }
   ],
   "history": [
@@ -5306,6 +5315,10 @@
     {
       "item": "brief-mode-across-proactive",
       "note": "Brief-mode now extends to PROACTIVE sends, not just inbound replies. A scheduled/recipe agent fire honors the same profile.verbosity===brief preference via the new replyVerbosity+briefen deps on makeScheduleRunner -> briefenReply, so a daily recipe push is shortened the same way an inbound answer is. Only a clean (non-degraded) PROSE body is trimmed; briefenReply no-ops on a bulleted digest (digests stay intact) and a degraded partial is skipped. The untrimmed fullText is still cached (fullBody!==body) so \"more\" pages the tail. Wired in index. +3 tests (brief trims a recipe fire, default-off leaves it full, degraded not trimmed). 2338 green. call-tested: offline (runner tick + prose transform)."
+    },
+    {
+      "item": "verbosity-emoji-on-proactive",
+      "note": "No-emoji preference now HONORED deterministically on both inbound replies AND proactive sends. profile.emoji===false already injected a soft context hint the free-tier LLM ignores; new src/lib/strip-emoji.ts (stripEmoji + hasEmoji) removes emoji for real — pictographic planes, flags, keycaps, ZWJ/skin-tone sequences, misc-technical clocks (⏰) + the ⏰/📋 proactive header glyphs — while PRESERVING useful symbols (°, %, $, €, ×, ±, text arrows → and en-dashes). Wired: handler replyEmoji dep strips the inbound shown body (incl. degraded partials); schedule-runner replyEmoji+stripEmoji deps strip sendText+cached fullText so a later \"more\" stays emoji-free. Whitespace left by removal is collapsed per-line; line structure of a digest is kept. Caught+fixed an under-strip (⏰ U+23F0 lives in Misc-Technical, outside the 2600-27BF block — added 231A-231B + 23E9-23FA) and an over-strip (text arrow U+2192 — dropped the 2190-21FF range). +11 tests (7 unit incl. symbol-preservation + arrow-safety + header glyphs, 2 handler, 2 runner). 2349 green. call-tested: offline (pure transform + handler/runner routing)."
     }
   ],
   "audits": [

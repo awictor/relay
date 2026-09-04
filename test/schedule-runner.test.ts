@@ -1429,3 +1429,33 @@ describe("makeScheduleRunner — brief-mode on proactive sends (brief-mode-acros
     expect(sent[0]!.text).toMatch(/Partial/);            // the partial banner is present
   });
 });
+
+describe("makeScheduleRunner — no-emoji on proactive sends (verbosity-emoji-on-proactive)", () => {
+  const stripEmoji = (t) => t.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{23F0}]/gu, "").replace(/[ \t]{2,}/g, " ").split("\n").map((l) => l.trim()).join("\n").trim();
+
+  it("strips emoji from a scheduled recipe ping when the chat set no-emoji", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock, {
+      runAgent: async () => ({ reply: "Sunny and 72 degrees 🎉" }),
+      replyEmoji: () => false,
+      stripEmoji,
+    });
+    store.add(1, { kind: "once", task: "weather", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(sent[0]!.text).toContain("Sunny and 72 degrees");
+    expect(sent[0]!.text).not.toMatch(/🎉/);
+    expect(sent[0]!.text).not.toMatch(/⏰/); // even the header glyph is stripped
+  });
+
+  it("leaves emoji when the chat has no emoji preference", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock, {
+      runAgent: async () => ({ reply: "Sunny 🎉" }),
+      replyEmoji: () => undefined,
+      stripEmoji,
+    });
+    store.add(1, { kind: "once", task: "weather", dueMs: NOW - 1 }, NOW);
+    await runner.tick();
+    expect(sent[0]!.text).toMatch(/🎉/);
+  });
+});

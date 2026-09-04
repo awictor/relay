@@ -95,6 +95,27 @@ describe("createHandler — brief-mode length cap (reply-style-apply-to-agent-le
   });
 });
 
+describe("createHandler — no-emoji preference (verbosity-emoji-on-proactive)", () => {
+  it("strips emoji from a reply when replyEmoji is false", async () => {
+    const { handle, sent } = harness({
+      replyEmoji: () => false,
+      runAgentFn: async () => ({ reply: "Sunny ☀️, 72°F 🎉", steps: 1, tools: [] }),
+    });
+    await handle(msg("weather"));
+    expect(sent[0]!.text).toContain("Sunny");
+    expect(sent[0]!.text).toContain("72°F");        // the ° symbol survives
+    expect(sent[0]!.text).not.toMatch(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
+  });
+
+  it("leaves emoji when the pref is unset (default)", async () => {
+    const { handle, sent } = harness({
+      runAgentFn: async () => ({ reply: "Sunny ☀️", steps: 1, tools: [] }),
+    });
+    await handle(msg("weather"));
+    expect(sent[0]!.text).toContain("☀");
+  });
+});
+
 describe("createHandler — contact follow-up nudge (contact-followup-nudge)", () => {
   it("'follow up with Sarah in 3 days' schedules it + confirms, no agent", async () => {
     let seen = "";

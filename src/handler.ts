@@ -8,6 +8,7 @@ import type { LLMMessage, LLMClient } from "./llm.js";
 import { runAgent, type AgentDeps } from "./agent.js";
 import { formatReply, formatReplyParts } from "./lib/format-reply.js";
 import { briefenReply } from "./lib/brief.js";
+import { stripEmoji } from "./lib/strip-emoji.js";
 import { isMoreRequest, isLinkRequest, extractLinks, chunkFrom, deliveredLen, parsePickIndex } from "./lib/last-result.js";
 import { BrowseSessionStore, browseContinuityEnabled, isCloseSessionRequest } from "./lib/browse-session.js";
 import { formatTurnLog } from "./lib/turn-log.js";
@@ -132,6 +133,11 @@ export interface HandlerDeps {
   // first few sentences (a free-tier LLM ignores the soft context hint). Absent/"default" -> no trim.
   // Only the SHOWN text is shortened; the full reply is still cached for a "more" follow-up.
   replyVerbosity?: (chatId: number) => "brief" | "detailed" | undefined;
+  // The chat's emoji preference (verbosity-emoji-on-proactive): false means the user asked for NO emoji,
+  // so the reply is deterministically stripped of emoji (a free-tier LLM ignores the soft context hint).
+  // Absent/undefined/true -> leave emoji alone. Applied to the shown body only; the cached full keeps the
+  // original so "more" is consistent with what was shown (also stripped below).
+  replyEmoji?: (chatId: number) => boolean | undefined;
   // The chat's tz offset (minutes east of UTC) for the agent's current-datetime line + reasoning
   // (inject-current-datetime). Optional; absent -> UTC (0).
   chatTzOffsetMin?: (chatId: number) => number | undefined;
@@ -1959,8 +1965,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       // a photo/doc/structured list is left alone by briefenReply). The full text is still cached below so
       // "more" pages the hidden tail — brief HIDES the rest, never loses it.
       const briefMode = !degraded && !photo && !doc && deps.replyVerbosity?.(msg.chatId) === "brief";
-      const body = briefMode ? briefenReply(parts.shown) : parts.shown;
+      let body = briefMode ? briefenReply(parts.shown) : parts.shown;
       const briefened = briefMode && body.length < parts.shown.length; // trim actually removed something
+      // No-emoji preference (verbosity-emoji-on-proactive): a user who set "no emoji" gets emoji stripped
+      // deterministically (the LLM ignores the soft hint). Applies to any text reply, incl. a degraded
+      // partial (still their preference). Symbols like °/%/$ are preserved by stripEmoji.
+      if (!photo && !doc && deps.replyEmoji?.(msg.chatId) === false) body = stripEmoji(body);
       let out = degraded ? `⚠️ Partial answer — I ran low on steps. Try narrowing the request.\n\n${body}` : body;
       // Cache the full (untrimmed) reply + what we showed, so a follow-up "more"/"link" serves the
       // dropped tail / source URLs without re-running the agent (last-result-drilldown). Text replies

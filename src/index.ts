@@ -26,6 +26,7 @@ import { fetchFeedItems, resolveFeedSource, parseFollowCommand } from "./lib/fee
 import { readQrFromBytes } from "./lib/qr-decode.js";
 import { formatReply, formatReplyParts } from "./lib/format-reply.js";
 import { briefenReply } from "./lib/brief.js";
+import { stripEmoji } from "./lib/strip-emoji.js";
 import { friendlyError } from "./lib/failure.js";
 import { statePaths, writeMetricsSnapshot } from "./lib/state-paths.js";
 import { ScheduleStore, parseSchedule, parseSnoozeCommand, tzOffsetMin, quietUntilMs, PAUSE_INDEFINITE, isStickyAck } from "./lib/schedule.js";
@@ -260,6 +261,7 @@ const scheduleRunner = makeScheduleRunner({
   // Brief-mode on proactive sends (brief-mode-across-proactive): a scheduled/recipe fire honors the same
   // "keep it brief" preference as an inbound reply. briefen no-ops on a bulleted digest, so digests stay intact.
   replyVerbosity: (c) => profiles.get(c)?.verbosity, briefen: briefenReply,
+  replyEmoji: (c) => profiles.get(c)?.emoji, stripEmoji,
   now: () => Date.now(), periodMs: SCHED_TICK_MS,
   log: (m) => console.log(m),
   recordTurn, // proactive fires count in the same Metrics as inbound turns (m8)
@@ -366,6 +368,8 @@ const handle = createHandler({
   // Answer-length preference (reply-style-apply-to-agent-length): brief-mode deterministically shortens
   // the main agent reply so "keep it brief" is felt even when the free-tier LLM ignores the soft hint.
   replyVerbosity: (chatId) => profiles.get(chatId)?.verbosity,
+  // No-emoji preference (verbosity-emoji-on-proactive): strip emoji from the inbound reply when set.
+  replyEmoji: (chatId) => profiles.get(chatId)?.emoji,
 
   // /profile view + clear (product-loop): echo the stored profile so a wrong city/tz is visible.
   profileView: (chatId) => { const l = profiles.contextLine(chatId); return l ? l.charAt(0).toUpperCase() + l.slice(1) : null; },

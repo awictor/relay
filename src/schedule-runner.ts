@@ -46,6 +46,10 @@ export interface ScheduleRunnerDeps {
   // pages the tail. Optional; absent/"default"/"detailed" -> no trim (prior behavior).
   replyVerbosity?: (chatId: number) => "brief" | "detailed" | undefined;
   briefen?: (text: string) => string;
+  // No-emoji preference on proactive sends (verbosity-emoji-on-proactive): false -> strip emoji from the
+  // ping (incl. the ⏰/📋 header). Optional; absent/undefined/true -> untouched. stripEmoji preserves °/%/$.
+  replyEmoji?: (chatId: number) => boolean | undefined;
+  stripEmoji?: (text: string) => string;
   now: () => number;
   periodMs: number;                                       // 0 (or <=0) disables the interval
   setInterval?: (fn: () => void, ms: number) => unknown;  // injectable for tests
@@ -484,6 +488,14 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
     // If this fire already timed out, the tick's catch has advanced/failed the schedule — a late finish
     // must NOT also send + complete (duplicate ping + double-advance). Drop the result silently.
     if (isCancelled()) { log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, dropped: "timed_out_late_finish" })}`); return; }
+    // No-emoji preference on proactive sends (verbosity-emoji-on-proactive): a user who set "no emoji" gets
+    // it honored on scheduled/alert/digest/recipe pings too, not just inbound replies — including the ⏰/📋
+    // header glyphs. Strip both the shown text + the cached full so a later "more" stays emoji-free. Only
+    // when the pref is explicitly false + a stripper is wired; else untouched (prior behavior).
+    if (sendText && deps.stripEmoji && deps.replyEmoji?.(s.chatId) === false) {
+      sendText = deps.stripEmoji(sendText);
+      if (fullText) fullText = deps.stripEmoji(fullText);
+    }
     // Attach one-tap buttons for a watch/digest/recipe ping (inline-tap-buttons): Refresh/Snooze/Stop
     // on an alert, Run again on a digest/recipe. A plain reminder (no marker) gets none. buttonsForTask
     // reads the "alert:/digest:/recipe:<name>" marker; a channel without inline buttons ignores it.
