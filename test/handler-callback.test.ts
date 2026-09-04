@@ -377,6 +377,36 @@ describe("confirm-to-act button taps (confirm-to-act)", () => {
   });
 });
 
+describe("save-inline-city button taps (save-city-cta-tap-button)", () => {
+  it("an inline-city weather answer attaches a Save button; a YES tap stores the city", async () => {
+    const saves: string[] = [];
+    const { handle, sent } = harness({
+      hasLocation: () => false,
+      captureLocation: (_c, place) => { saves.push(place); return { location: place }; },
+      editReplyMarkup: async () => {},
+      runAgentFn: async () => ({ reply: "Sunny, 70F in Denver", steps: 1, tools: [] }),
+    });
+    // A text turn naming the city inline -> the answer carries the Save button.
+    await handle({ chatId: 8, from: "u", text: "weather in Denver", messageId: 0 } as InboundMessage);
+    expect(sent.some((s) => s.hasButtons && /save Denver as your home/i.test(s.text))).toBe(true);
+    await handle(tap(encodeCallback({ kind: "savecity", decision: "yes", place: "Denver" })!, 8));
+    expect(saves).toEqual(["Denver"]);
+    expect(sent.some((s) => /Saved Denver as your home/i.test(s.text))).toBe(true);
+  });
+
+  it("a NO tap saves nothing", async () => {
+    const saves: string[] = [];
+    const { handle, sent } = harness({
+      hasLocation: () => false,
+      captureLocation: (_c, place) => { saves.push(place); return { location: place }; },
+      editReplyMarkup: async () => {},
+    });
+    await handle(tap(encodeCallback({ kind: "savecity", decision: "no" })!, 8));
+    expect(saves).toHaveLength(0);
+    expect(sent.some((s) => /won't save/i.test(s.text))).toBe(true);
+  });
+});
+
 describe("multi-turn browse continuity (persist-browse-session-across-turns)", () => {
   const mkMsg = (text: string, chatId = 1, messageId = 1): InboundMessage => ({ chatId, from: "u", text, messageId } as InboundMessage);
 

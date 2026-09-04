@@ -24,7 +24,7 @@ import { parseSaveThatAs, parseWatchThat, parseScheduleThat, isChain } from "./l
 import { classifyConfirmReply, formatConfirmPrompt, CONFIRM_TTL_MS } from "./lib/confirm-action.js";
 import { getTemplate, templateCatalog, templateButtons } from "./lib/templates.js";
 import { photoNeedsAgent, photoIsQrScan } from "./lib/photo-intent.js";
-import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, tryButtons as buildTryButtons, actButtons, installButtons, confirmButtons, TRY_EXAMPLES, type InlineKeyboard } from "./lib/callbacks.js";
+import { decodeCallback, alertButtons as buildAlertKeyboard, digestButtons as buildDigestKeyboard, recipeButtons as buildRecipeKeyboard, pickButtons, tryButtons as buildTryButtons, actButtons, installButtons, confirmButtons, saveCityButtons, TRY_EXAMPLES, type InlineKeyboard } from "./lib/callbacks.js";
 import { parseResultList, firstUrl, type ResultItem } from "./lib/result-list.js";
 import { rowsToCsv } from "./lib/to-csv.js";
 import type { DigestOutcome } from "./digest-runner.js";
@@ -609,6 +609,20 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         const what = pend.label ? `"${pend.label}"` : "that";
         await deps.sendMessage(chatId, r.ok ? `✅ Done — clicked ${what}.` : `Couldn't complete it: ${r.error ?? "the click failed"}. The page may have changed — try again.`);
         return r.ok ? "Done" : "Failed";
+      }
+      if (action.kind === "savecity") {
+        // Save-inline-city tap (save-city-cta-tap-button): YES stores the offered city via captureLocation
+        // (parses + infers tz), NO dismisses. Retire the buttons so a re-tap can't double-save. The place
+        // rides in the YES payload, so this works even if the pendingSaveCity map was cleared meanwhile.
+        if (messageId) await deps.editReplyMarkup?.(chatId, messageId).catch(() => {});
+        pendingSaveCity.delete(chatId);
+        if (action.decision === "no") { await deps.sendMessage(chatId, "No problem — I won't save it. You can always set it with /setlocation."); return "Dismissed"; }
+        if (!deps.captureLocation) { await deps.sendMessage(chatId, "I can't save that right now — try /setlocation."); return null; }
+        const saved = deps.captureLocation(chatId, action.place);
+        if (!saved) { await deps.sendMessage(chatId, "I couldn't save that place — try /setlocation <city>."); return "Failed"; }
+        const note = saved.saved === false ? " (heads up: I couldn't save it to disk, so I may ask again after a restart)" : " (Change it anytime with /setlocation.)";
+        await deps.sendMessage(chatId, `Saved ${saved.location} as your home.${note}`);
+        return "Saved";
       }
       if (action.kind === "install") {
         // Tap-to-install a starter automation (starter-automation-gallery): resolve the template + save
@@ -2081,13 +2095,20 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       // Denver") and has NO saved home — offer ONCE to save it so tomorrow's bare "weather" just works.
       // Respects locationAsked (shared with the ask-for-city path) so a chat is never nagged twice about
       // location. Clean text weather/time answers only; a "yes" on the next turn saves it (branch above).
+      let saveCityKb: InlineKeyboard | undefined;
       if (deps.hasLocation && deps.captureLocation && !deps.hasLocation(msg.chatId) && !locationAsked.has(msg.chatId)
           && !degraded && !photo && !doc) {
         const inline = parseInlineLocationErrand(msg.text, deps.now());
         if (inline) {
           locationAsked.add(msg.chatId);            // one location prompt per chat, ever
           pendingSaveCity.set(msg.chatId, inline.location);
-          out += `\n\n(Want me to save ${inline.location} as your home? Reply "yes" and I won't ask the city next time.)`;
+          // On a button channel, offer a one-tap Save button (save-city-cta-tap-button) — converts far
+          // better than asking the user to type "yes". Falls back to the text "reply yes" ask on a
+          // console/no-button channel (the pendingSaveCity text branch still handles a typed yes).
+          saveCityKb = deps.answerCallback ? saveCityButtons(inline.location) : undefined;
+          out += saveCityKb
+            ? `\n\n(Want me to save ${inline.location} as your home? Tap below and I won't ask the city next time.)`
+            : `\n\n(Want me to save ${inline.location} as your home? Reply "yes" and I won't ask the city next time.)`;
         }
       }
       // If the agent produced a binary (screenshot image or PDF), send it first with the reply as
@@ -2103,6 +2124,10 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
       // pick/act CTAs. The text YES/NO gate still works for a channel without buttons.
       if (pendingAction && deps.confirmAction) {
         replyKeyboard = confirmButtons();
+      } else if (saveCityKb) {
+        // The save-inline-city offer owns this turn's keyboard (save-city-cta-tap-button) — a one-time,
+        // higher-value prompt than the pick/act CTAs, and it never stacks with them.
+        replyKeyboard = saveCityKb;
       } else if (!photo && !doc && !degraded) {
         const items = parseResultList(body);
         if (items.length >= 2) { pickLists.set(msg.chatId, items); replyKeyboard = pickButtons(items.length); }

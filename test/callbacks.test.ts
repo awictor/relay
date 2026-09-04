@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   encodeCallback, decodeCallback, alertButtons, digestButtons, recipeButtons, buttonsForTask, pickButtons,
-  tryButtons, actButtons, installButtons, confirmButtons, TRY_EXAMPLES, CALLBACK_MAX_BYTES,
+  tryButtons, actButtons, installButtons, confirmButtons, saveCityButtons, TRY_EXAMPLES, CALLBACK_MAX_BYTES,
 } from "../src/lib/callbacks.js";
 
 describe("callback codec", () => {
@@ -126,6 +126,20 @@ describe("keyboard builders", () => {
     expect(kb[0]!.map((b) => b.text)).toEqual(["✅ Yes, do it", "✋ No"]);
     expect(decodeCallback(kb[0]![0]!.callback_data)).toEqual({ kind: "confirm", decision: "yes" });
     expect(decodeCallback(kb[0]![1]!.callback_data)).toEqual({ kind: "confirm", decision: "no" });
+  });
+
+  it("savecity ops round-trip: YES carries the place, NO is a bare opcode (save-city-cta-tap-button)", () => {
+    const yes = encodeCallback({ kind: "savecity", decision: "yes", place: "Paris, TX" })!;
+    const no = encodeCallback({ kind: "savecity", decision: "no" })!;
+    expect(decodeCallback(yes)).toEqual({ kind: "savecity", decision: "yes", place: "Paris, TX" });
+    expect(no).not.toContain("|");
+    expect(decodeCallback(no)).toEqual({ kind: "savecity", decision: "no" });
+  });
+  it("saveCityButtons: a Save + dismiss row that decode to the right action", () => {
+    const kb = saveCityButtons("Denver")!;
+    expect(kb[0]![0]!.text).toBe("📍 Save Denver");
+    expect(decodeCallback(kb[0]![0]!.callback_data)).toEqual({ kind: "savecity", decision: "yes", place: "Denver" });
+    expect(decodeCallback(kb[0]![1]!.callback_data)).toEqual({ kind: "savecity", decision: "no" });
   });
 
   it("actButtons: Every-morning by default, Watch-this only when watchable", () => {

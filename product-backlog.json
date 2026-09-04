@@ -3714,9 +3714,18 @@
       "title": "Make the save-inline-city offer a one-tap YES button on button channels",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The inline-city save offer (save-city-cta-on-agent-weather) is text-only (\"reply yes\"). On Telegram a one-tap YES/No button converts far better than asking the user to type — mirrors the existing confirm/act button infra. Small polish that lifts the save-rate on the primary channel.",
       "how": "On a button channel, attach a YES/dismiss inline keyboard to the save offer (reuse confirmButtons or a new callback kind); on tap YES, run the same captureLocation(place) save. Text yes still works for console. Offline test: tap saves, dismiss clears."
+    },
+    {
+      "id": "fresh-session-audit-needed",
+      "title": "Run the 3-lens product AUDIT in a FRESH session to refill a new value vein",
+      "impact": "high",
+      "effort": "S",
+      "status": "todo",
+      "why": "The reply-style + onboarding + location-capture veins are worked down to low-value polish; remaining non-owner todos are all low. A new high-value direction needs the 3 parallel audit agents (new-user / reliability / power), but the subagent spawn cap is 200/200 for THIS session and cannot be reset mid-session — every AUDIT attempt this session fell back to inline single-surface probes. A fresh session resets the cap.",
+      "how": "Start a fresh Claude session, run /product-loop; TRIAGE will find no actionable medium+ todo and trigger STAGE AUDIT, which can now spawn the 3 agents. Seed their synthesized findings + build the top item."
     }
   ],
   "history": [
@@ -5371,6 +5380,10 @@
     {
       "item": "save-city-cta-on-agent-weather",
       "note": "Closed the location-capture loop for the MOST COMMON phrasing: a user who names the city inline (\"weather in Denver\", \"time in Tokyo\", \"forecast for Paris, TX\"). first-location-capture only fired when the message had NO city, so inline-city users answered fine but were never offered to save home -> tomorrows bare \"weather\" re-asked. New pure parseInlineLocationErrand(text) extracts the place from a weather/time/sunset errand + only returns it when it resolves to a KNOWN city (inferTz != null) so we never mis-save a typo/ambiguous place. Handler: the ask-for-city branch now SKIPS when a city is named inline (message reaches the agent), then after a clean weather/time answer with no saved home it offers ONCE (shares the locationAsked guard so no double-nag) \"save Denver as your home?\"; a \"yes\"/\"sure\" next turn stores it via captureLocation, anything else declines + routes normally. +6 tests (4 parse incl. region-tail + unknown-place null, 3 handler: inline answers+offer+yes-saves, decline stores nothing, offer fires once). 2364 green. call-tested: offline (parse + handler routing)."
+    },
+    {
+      "item": "save-city-cta-tap-button",
+      "note": "The save-inline-city offer is now a one-TAP button on button channels (Telegram), not just \"reply yes\". New savecity callback kind (YES carries the place in the payload so no re-parse; NO is a bare opcode) + saveCityButtons(place) builder, encode/decode round-trip. Handler: on a button channel the inline-city offer attaches [📍 Save <city>] [✋ No thanks] and owns that turns keyboard (priority over the pick/act CTAs, never stacks); a YES tap stores via captureLocation + retires the buttons (editReplyMarkup, no double-save), NO dismisses. Console/no-button falls back to the existing text \"reply yes\" path unchanged. +4 tests (2 codec: savecity round-trip + button row; 2 handler-callback: inline answer attaches Save button + YES stores, NO saves nothing). 2368 green. call-tested: offline (codec + handler routing). NOTE: 3-lens AUDIT is blocked — subagent cap 200/200 for the whole session; needs a fresh session to refill a new vein."
     }
   ],
   "audits": [

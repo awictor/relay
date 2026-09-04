@@ -36,7 +36,11 @@ export type CallbackAction =
   | { kind: "confirm"; decision: "yes" | "no" } // confirm-to-act: tap YES/NO on a pending committing click
   // Install a starter automation from the /templates gallery with one tap (starter-automation-gallery).
   // Carries the template id (short + stable), which the handler resolves to a recipe + installs.
-  | { kind: "install"; id: string };
+  | { kind: "install"; id: string }
+  // Save an inline-named city as home with one tap (save-city-cta-tap-button). Carries the place text so
+  // the handler stores it via captureLocation without re-parsing the original message. "no" dismisses.
+  | { kind: "savecity"; decision: "yes"; place: string }
+  | { kind: "savecity"; decision: "no" };
 
 // Opcode <-> action for the NAME-carrying actions. 2-char ops keep the payload short so long-ish
 // names still fit the 64-byte cap. The pick action (index-carrying) uses opcode "pk" handled separately.
@@ -57,6 +61,8 @@ const ACT_WATCH = "aw";
 const INSTALL_OP = "in";
 const CONFIRM_YES = "cy"; // confirm-to-act: bare opcodes (the pending action is stashed per-chat)
 const CONFIRM_NO = "cn";
+const SAVECITY_OP = "sc"; // save-city-cta-tap-button: "sc|<place>" = save; SAVECITY_NO = dismiss (bare)
+const SAVECITY_NO = "sn";
 
 const utf8Len = (s: string): number => new TextEncoder().encode(s).length;
 
@@ -90,6 +96,8 @@ export function encodeCallback(a: CallbackAction): string | null {
     ? (a.decision === "yes" ? CONFIRM_YES : CONFIRM_NO)
     : a.kind === "install"
     ? `${INSTALL_OP}|${a.id}`
+    : a.kind === "savecity"
+    ? (a.decision === "yes" ? `${SAVECITY_OP}|${a.place}` : SAVECITY_NO)
     : (() => { const op = OP_FOR.get(`${a.kind}:${a.action}`); return op ? `${op}|${a.name}` : null; })();
   if (data === null) return null;
   return utf8Len(data) <= CALLBACK_MAX_BYTES ? data : null;
@@ -105,6 +113,7 @@ export function decodeCallback(data: string | undefined | null): CallbackAction 
   if (data === ACT_WATCH) return { kind: "act", mode: "watch" };
   if (data === CONFIRM_YES) return { kind: "confirm", decision: "yes" };
   if (data === CONFIRM_NO) return { kind: "confirm", decision: "no" };
+  if (data === SAVECITY_NO) return { kind: "savecity", decision: "no" };
   const i = data.indexOf("|");
   if (i < 0) return null;
   const op = data.slice(0, i);
@@ -119,6 +128,9 @@ export function decodeCallback(data: string | undefined | null): CallbackAction 
   }
   if (op === INSTALL_OP) {
     return rest ? { kind: "install", id: rest } : null;
+  }
+  if (op === SAVECITY_OP) {
+    return rest ? { kind: "savecity", decision: "yes", place: rest } : null;
   }
   const spec = OP[op];
   if (!spec || !rest) return null;
@@ -209,6 +221,17 @@ export function confirmButtons(): InlineKeyboard | undefined {
   const no = encodeCallback({ kind: "confirm", decision: "no" });
   if (!yes || !no) return undefined;
   return [[{ text: "✅ Yes, do it", callback_data: yes }, { text: "✋ No", callback_data: no }]];
+}
+
+/** Buttons for the save-inline-city offer (save-city-cta-tap-button): one tap saves the named city as
+ * home, one dismisses. `place` rides in the YES payload so the handler stores it without re-parsing the
+ * message. Returns undefined if the place overflows the 64-byte cap (the text "reply yes" offer still
+ * works). */
+export function saveCityButtons(place: string): InlineKeyboard | undefined {
+  const yes = encodeCallback({ kind: "savecity", decision: "yes", place });
+  const no = encodeCallback({ kind: "savecity", decision: "no" });
+  if (!yes || !no) return undefined;
+  return [[{ text: `📍 Save ${place}`, callback_data: yes }, { text: "✋ No thanks", callback_data: no }]];
 }
 
 /** Buttons for the /templates starter-automation gallery (starter-automation-gallery): one button per
