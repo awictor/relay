@@ -6,6 +6,7 @@
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
 import { pageWatchUrl } from "./pagediff.js";
 import { parseWeatherCondition } from "./weather-alert.js";
+import { stripTrailingCourtesy } from "./text-clean.js";
 
 export interface Alert {
   chatId: number;
@@ -238,7 +239,10 @@ export function parseAlertCommand(text: string): ParsedAlert | null {
   const m = text.trim().match(/^\s*(?:alert(?:\s+me)?|watch)\s+([^:]+?)\s*:(?!\/\/)\s*(.+)$/i);
   if (!m) return null;
   const name = normalizeName(m[1]!);
-  let task = m[2]!.trim();
+  // Drop a trailing courtesy first (outermost tail) so "watch btc: price of bitcoin please" doesn't watch
+  // "...please" + a watchlist member "eth price thanks" isn't a garbage sub-watch (courtesy-tail bug
+  // class). Before the then/weather/watchlist/threshold parsing so they see a clean tail.
+  let task = stripTrailingCourtesy(m[2]!.trim());
   let threshold: number | undefined;
   let condition: AlertCondition | undefined;
   let then: string | undefined;

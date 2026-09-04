@@ -3,6 +3,7 @@
 // answer): a list is an editable collection the user reads back + checks items off. Small atomic +
 // corrupt-safe JSON store keyed by chatId + list name, free-infra. Pure parse helpers exported + tested.
 import { atomicWriteJson, readJsonSafe } from "./safe-store.js";
+import { stripTrailingCourtesy } from "./text-clean.js";
 
 interface List { name: string; items: string[] }
 interface ChatLists { chatId: number; lists: List[] }
@@ -34,7 +35,10 @@ export type ListCommand =
  * through — an "add X to (my) <name> list" / "on my <name> list" shape is required. Exported for tests.
  */
 export function parseListCommand(text: string): ListCommand | null {
-  const t = text.trim();
+  // Drop a trailing courtesy first so "add milk to my grocery list please" doesn't yield the list name
+  // "grocery list please" (a wrong/new list) and "...groceries thanks" doesn't fail to match at all
+  // (courtesy-tail bug class). Safe: the ITEM sits before the "to my <list>" clause, never at the tail.
+  const t = stripTrailingCourtesy(text.trim());
 
   // clear / empty
   const clear = t.match(/^\s*(?:clear|empty|wipe)\s+(?:out\s+)?(?:my|the)\s+(.+?)\s*$/i);

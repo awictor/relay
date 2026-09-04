@@ -3185,6 +3185,15 @@
       "status": "done",
       "why": "Same courtesy-tail bug as datecalc/unit-convert/schedule, in 3 more verbatim-storing parsers: parseRemember stored 'I'm vegetarian please' (recited forever), parseFollowCommand targeted 'r/programming please' / made a garbage 'HN thanks' feed, parseSavePlace stored 'Gold's on Main please' (breaks near-me geocoding).",
       "how": "Extracted a shared stripTrailingCourtesy(s,{onlyPlease?}) helper (src/lib/text-clean.ts) — strips a trailing please/pls/plz(/thanks) only when value text precedes it, keeps a mid-value or whole-value word. Applied in notes/feeds/places; refactored schedule.cleanTask to use it (onlyPlease=true, keeps 'say thanks'). DRY across the class."
+    },
+    {
+      "id": "courtesy-tail-alerts-lists",
+      "title": "Trailing courtesy poisoned watch tasks + targeted the wrong list",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "Two more verbatim-storing parsers had the courtesy-tail bug: parseAlertCommand watched 'price of bitcoin please' (poisons value extraction) + made a garbage watchlist member 'eth price thanks'; parseListCommand read 'add milk to my grocery list please' as the list name 'grocery list please' — a wrong/new list, so the item vanished from the real one.",
+      "how": "Applied the shared stripTrailingCourtesy: on parseAlertCommand's task (before then/weather/watchlist/threshold parsing, so a member's tail is dropped before the ';' split) and at parseListCommand's input top (item sits before the 'to my <list>' clause, never at the tail)."
     }
   ],
   "history": [
@@ -4479,6 +4488,10 @@
     {
       "id": "courtesy-tail-sweep-shared",
       "note": "Courtesy-tail sweep, run 4 (final): found the SAME trailing-please bug in 3 more verbatim parsers (notes/feeds/places). Instead of a 4th inline copy, extracted a shared stripTrailingCourtesy helper (text-clean.ts) + applied everywhere incl. refactoring the schedule fix onto it. onlyPlease flag lets schedule keep 'thanks'. +7 tests (helper unit + 3 parser cases + refactor coverage), 2032 green. Class now fully swept: datecalc, unit-convert, schedule, notes, feeds, places."
+    },
+    {
+      "id": "courtesy-tail-alerts-lists",
+      "note": "Extended the courtesy-tail sweep to the last 2 verbatim parsers I'd missed: alerts (watch task + watchlist members) + lists (list-name target). Both now use the shared stripTrailingCourtesy. 'grocery list please' -> 'grocery' (was silently adding to a wrong list). +2 tests, 2034 green. Courtesy-tail class now covers 8 tools: datecalc, unit-convert, schedule, notes, feeds, places, alerts, lists."
     }
   ],
   "audits": [
@@ -4829,6 +4842,9 @@
     },
     {
       "note": "anvil DOWN, agent cap exhausted. Courtesy-tail class SWEPT: found + fixed the last 3 (notes/feeds/places) via a shared helper, DRY'd the schedule fix onto it. That parse-tail vein is now exhausted (6 tools done). Remaining: confirm-to-act (owner) + anvil-live-e2e (anvil) — the two gated levers, unchanged."
+    },
+    {
+      "note": "anvil DOWN, agent cap exhausted. Courtesy-tail: caught alerts + lists (I'd declared the class swept a run early — it wasn't). Both fixed via the shared helper. NOW genuinely swept (8 tools, one tested helper). confirm-to-act (owner) + anvil-live-e2e (anvil) remain the gated levers."
     }
   ]
 }

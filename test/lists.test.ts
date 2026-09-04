@@ -43,6 +43,10 @@ describe("parseListCommand", () => {
     expect(parseListCommand("put oat milk on my shopping list")).toEqual({ op: "add", list: "shopping", item: "oat milk" });
     expect(parseListCommand("add milk and bread to my grocery list")).toEqual({ op: "add", list: "grocery", item: "milk and bread" });
   });
+  it("strips a trailing courtesy so 'add milk to my grocery list please' targets 'grocery', not 'grocery list please' (courtesy-tail)", () => {
+    expect(parseListCommand("add milk to my grocery list please")).toEqual({ op: "add", list: "grocery", item: "milk" });
+    expect(parseListCommand("remove eggs from my grocery list thanks")).toEqual({ op: "remove", list: "grocery", item: "eggs" });
+  });
   it("requires the word 'list' for add (so 'add a comment to the PR' falls through)", () => {
     expect(parseListCommand("add a comment to the PR")).toBeNull();
     expect(parseListCommand("add this to the readme")).toBeNull();

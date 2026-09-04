@@ -396,6 +396,11 @@ describe("feed-watch (new-item-feed-watch)", () => {
     // A non-URL task is NOT a page watch (stays a normal value/prose watch).
     expect(parseAlertCommand("watch hn: the top HN story")).toEqual({ name: "hn", task: "the top HN story" });
   });
+  it("strips a trailing courtesy from the watch task + watchlist members (courtesy-tail)", () => {
+    expect(parseAlertCommand("watch btc: price of bitcoin please")).toEqual({ name: "btc", task: "price of bitcoin" });
+    // the courtesy tail sits on the LAST watchlist member — stripped before the ';' split, so no garbage member.
+    expect(parseAlertCommand("watch markets: btc price; eth price thanks")!.members!.map((mm) => mm.task)).toEqual(["btc price", "eth price"]);
+  });
   it("does NOT split on a URL-scheme colon (alert-colon-in-url)", () => {
     // "watch this page https://ex.com for changes" has no name:task colon — the ":" is inside "https://".
     // Before the (?!//) guard this made a garbage alert named "this page https" watching "//ex.com ...".
