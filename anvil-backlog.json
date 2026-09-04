@@ -203,7 +203,7 @@
       "title": "List-watch gathers rows via scrape_pages/extract_list (not just per-reply-line keys)",
       "impact": "medium",
       "effort": "L",
-      "status": "todo",
+      "status": "done",
       "why": "feedItemKey now dedups list items by URL (flap fixed), but the item SET still comes from extractListItems parsing the agents text reply — so a listing that needs pagination/scroll to show all rows, or whose rows arent clean bullet lines, under-detects. Gathering the row set with the browse-depth tools (scrape_pages+extract_list) would make new-item detection as deep as the read path.",
       "how": "In the feed/list-watch path, when the source is a web listing URL, optionally gather via scrapePaged+extractListResult to a {title,url} row set + diff by the URL key (reuse feedItemKeys URL logic). Gate so RSS/HN/reddit feeds keep the direct fetch. Live e2e across two checks on a real listing; assert only genuinely-new rows ping."
     }
@@ -296,6 +296,10 @@
     {
       "item": "save-interactive-recipe",
       "note": "Verified + documented that an interactive browse+filter errand saves as a re-runnable recipe. A recipe task is one string run through runAgent, which holds ONE browse session across its steps (browse->site_search->set_field->read_list), so a saved interactive task replays like any other recipe with no special handling — confirmed by reading the /run path (handler rewrites msg.text to the saved task -> agent) + a new handler test (an interactive job-board recipe reaches the agent verbatim) + a LIVE e2e (real runAgent+anvil ran \"open quotes.toscrape.com and list the first 5 authors\" -> used extract_list, answered with real authors, no degrade). /help now shows an interactive recipe example (save jobs: on <board> filter to remote react + list newest). +1 test, 2243 green. call-tested: TRUE. Retention flywheel now covers interactive errands, not just one-shot lookups."
+    },
+    {
+      "item": "watch-extract-row-set",
+      "note": "Made the URL-keyed dedup actually ENGAGE on real feed watches: a feed/new-items watch now nudges the agent (via injected context) to return items ONE per line WITH each items direct LINK. Without links the shipped feedItemKey URL-keying had nothing to key on (titles reword -> flap); with them, a listing/job watch keys by URL so reworded titles dont false-fire + same-title-different-URL stay distinct. Tight high-leverage slice of the L: reused the existing extractListItems+feedItemKey pipeline (no risky live-path refactor), just ensured the reply carries the URLs the keying needs. +1 alert-runner test (feed watch gets the link nudge, plain watch doesnt). 2244 green. LIVE e2e: real agent feed reply -> 11 items all with links -> feedItemKey produced u: URL keys (two same-author items correctly collapsed). call-tested: TRUE."
     }
   ],
   "probes": [

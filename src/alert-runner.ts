@@ -289,7 +289,16 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
   const advance = (v: string) => () => deps.setLast(alert.chatId, alert.name, v);
   let value: string;
   try {
-    const res = await deps.runAgent(alert.task, { llm: deps.llm, context: deps.contextFor?.(alert.chatId) || undefined, ...deps.agentEnv?.(alert.chatId) }, []);
+    // For a LIST/feed watch, nudge the agent to include each item's LINK (watch-extract-row-set): the
+    // seen-set keys items by URL when present (feedItemKey), which is what kills flap/dup/miss on real
+    // listings — but only if the reply actually carries the links. Fold the nudge into the per-user
+    // context so a job-board/listings watch returns "Title — https://…/item" lines, not bare titles.
+    const feedNudge = alert.feed
+      ? "This is a NEW-ITEMS watch: return the current items as a list, ONE per line, and include each item's direct LINK (URL) on its line when the page has one — the link is how repeats are detected. No lead-in prose."
+      : "";
+    const baseCtx = deps.contextFor?.(alert.chatId) || "";
+    const ctx = [baseCtx, feedNudge].filter(Boolean).join(" ") || undefined;
+    const res = await deps.runAgent(alert.task, { llm: deps.llm, context: ctx, ...deps.agentEnv?.(alert.chatId) }, []);
     // A degraded (soft-failure) reply is NOT a real value — comparing it to lastValue would read as a
     // change and spam the user with the failure text. Skip notify, keep lastValue (DEV-0176).
     if (res.degraded) return { notify: false, message: null, value: alert.lastValue ?? "", commit: noop, softFail: true };

@@ -21,6 +21,19 @@ function deps(reply: string, over: Partial<Parameters<typeof checkAlert>[1]> = {
 }
 
 describe("checkAlert", () => {
+  it("a feed watch nudges the agent to include per-item LINKS; a plain watch doesn't (watch-extract-row-set)", async () => {
+    let feedCtx: string | undefined, plainCtx: string | undefined;
+    const capture = (sink: (c: string | undefined) => void) => ({
+      runAgent: async (_task: string, dd: { context?: string }) => { sink(dd.context); return { reply: "• Role — https://jobs.co/1" }; },
+    });
+    // feed watch: context carries the link nudge
+    await checkAlert(alert({ feed: true, seen: [] }), deps("x", capture((c) => { feedCtx = c; })).d);
+    expect(feedCtx).toMatch(/include each item's direct LINK/i);
+    // plain (non-feed) watch: no nudge
+    await checkAlert(alert({ lastValue: "sunny" }), deps("x", capture((c) => { plainCtx = c; })).d);
+    expect(plainCtx ?? "").not.toMatch(/include each item's direct LINK/i);
+  });
+
   it("first run notifies (baseline) and seeds lastValue", async () => {
     const { d, lastSet } = deps("$65,000");
     const r = await checkAlert(alert(), d); // no lastValue
