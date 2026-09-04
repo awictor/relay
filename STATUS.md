@@ -3,6 +3,25 @@
 Thesis: **anvil-engine is the self-hosted agentic browser both products run on** — no
 Browserbase/Browserless/Steel vendor. Built autonomously via `/agent-loop`. Free infra only.
 
+## Product-loop status (Relay) — converged, 2 levers left for the owner
+
+`/product-loop` has driven Relay from MVP to a deep, hardened product surface (**~2021 offline
+tests**, tsc-clean, every push green). The reliability/parse/safety/feed/UX veins are swept:
+send-delivery gating, DST-correct reminders + world-clock + datetime, no-threshold-watch
+deadband, silent-data-loss fixes (list/digest/watchlist/chain caps now surfaced), a widened +
+runtime-verified dangerous-action guard, read-it-later (capture/recall/digest-recap/weekly
+nudge), dead-follow fixes (HN/GitHub/Reddit-user/YouTube), and a run of parse fixes (unit-price,
+alert-colon, quick-log commas, weather day-resolution, .ics line-folding). Recent iterations
+have been self-audits of fresh surfaces — still finding real bugs, but returns are diminishing.
+
+**Two high-value levers remain, both gated (the loop can't do them):**
+1. **`confirm-to-act`** *(high, owner decision)* — should Relay confirm before a state-changing
+   step, and with what UX? A product call, not a code task. This is the top remaining lever.
+2. **`anvil-live-e2e-when-up`** *(medium, needs anvil running)* — anvil has been DOWN for ~20
+   iterations, so every recent change is unit-verified only. Start anvil
+   (`docker run -p 3000:3000 anvil-engine`) and the loop will drive one real errand end-to-end
+   (scrape + weather via the console channel) and report `call-tested: true`.
+
 ## What shipped
 
 **Relay** (`awictor/relay`) — text-a-Telegram-bot agent, an Instinct competitor.

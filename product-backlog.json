@@ -4410,6 +4410,10 @@
     {
       "id": "ics-line-fold",
       "note": "Self-audit (anvil DOWN, both todos gated): probed calendar.ts. icsStamp/normalizeIsoDate/gcalLink (all-day exclusive-end) clean. Found buildIcs never folded lines -> a long summary/description made an >75-octet line that strict calendar apps reject/truncate (ics-line-fold). Added RFC-5545 folding (75-octet, byte-measured, code-point-safe, leading-space continuation, reversible). +2 tests, 2021 green."
+    },
+    {
+      "id": "status-surface-gated-levers",
+      "note": "CONVERGENCE run: probed 3 more fresh surfaces (directions routeMode/wantsTransit + parseOsrm, calendar already fixed last run, QR parseQrRequest) — all sound (transit correctly gated before driving; QR/directions clean). No new medium found; the offline self-audit has hit diminishing returns after the recent parse-fix run. Instead of shipping filler, brought STATUS.md current (~2021 tests) + added a 'Product-loop status: converged' section surfacing the two remaining high-value levers to the owner: confirm-to-act (product decision) + anvil-live-e2e (needs anvil up). Doc-only, 2021 green."
     }
   ],
   "audits": [
@@ -4739,6 +4743,9 @@
     },
     {
       "note": "anvil DOWN -> both todos still gated. Self-audit found + fixed ics-line-fold (long calendar events failed to import into strict apps) — a genuine medium. Fresh-surface sweeps still yielding real mediums; confirm-to-act (owner) + anvil-live-e2e (anvil) remain the two gated high-value levers."
+    },
+    {
+      "note": "CONVERGED. anvil DOWN. Directions + QR probes clean (no bug); calendar was last run's find. Rather than mine low filler, updated STATUS.md to flag the two gated levers for Alex. Backlog = confirm-to-act (owner) + anvil-live-e2e (anvil). Honest state: the loop has swept the reachable medium+ surface; the next real progress needs the owner (confirm-to-act decision) or anvil started (live e2e). Future runs: if anvil up, do the e2e; else a fresh-surface probe, accepting most will now be clean."
     }
   ]
 }
