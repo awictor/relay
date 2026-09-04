@@ -34,6 +34,19 @@ describe("checkAlert", () => {
     expect(plainCtx ?? "").not.toMatch(/include each item's direct LINK/i);
   });
 
+  it("a watch's 'then' recipe receives the fired new/changed items as context (watch-then-pass-rows)", async () => {
+    let thenCtx: string | undefined;
+    const d = deps("$70,000", {
+      runThen: async (_c: number, _name: string, context?: string) => { thenCtx = context; return "summary"; },
+    }).d;
+    // a changed value fires -> withThen runs the recipe with the fired message as context
+    const r = await checkAlert(alert({ lastValue: "$65,000", then: "summarize" }), d);
+    expect(r.notify).toBe(true);
+    expect(thenCtx).toMatch(/just fired/i);       // the fired items are passed
+    expect(thenCtx).toMatch(/70,000/);            // ...and include what triggered
+    expect(r.message).toMatch(/▶ summarize:\nsummary/); // recipe output appended
+  });
+
   it("first run notifies (baseline) and seeds lastValue", async () => {
     const { d, lastSet } = deps("$65,000");
     const r = await checkAlert(alert(), d); // no lastValue

@@ -221,9 +221,18 @@
       "title": "A watch's 'then run <recipe>' can use the new items it found",
       "impact": "low",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "trigger-to-action runs a recipe when a watch fires but the recipe starts cold — it can't see WHICH new listings triggered it, so 'watch jobs then run summarize' re-fetches instead of summarizing the exact new rows.",
       "how": "Thread the fired new-item list into the runChain/runThen call as context (like the digest ping-context pattern) so the 'then' recipe reasons over the actual new rows. Reuse the AgentEnv/context injection. Offline test the context passthrough."
+    },
+    {
+      "id": "browse-tools-reliability-sweep",
+      "title": "Reliability sweep of the ~30 new browse/interactive tools (timeouts, session leaks, error shapes)",
+      "impact": "medium",
+      "effort": "L",
+      "status": "todo",
+      "why": "~30 tools (scrape_pages/scroll_feed/extract_list/site_search/set_field/wait_for/read_list/describeControls/screenshotCurrent/continuity) shipped fast across ~16 iterations, each live-verified in isolation. A daily-reliant user hits combinations + failure modes not individually swept: a session leak if runAgent throws mid-interactive, a scrape_pages budget that strands a session, an anvil-down mid-continuity-thread, error-shape consistency. Best done by a fresh-session 3-agent AUDIT (trust lens) that can hold all of it at once.",
+      "how": "In a FRESH session (subagent cap reset), run the 3-agent AUDIT; the reliability/trust lens reads anvil.ts + agent.ts dispatch + handler continuity for: session release on every throw path, budget/timeout strandings, anvil-down degradation across the new tools, and consistent honest error messages. Fix the top 2-3 found. Until then this is the parked high-value direction."
     }
   ],
   "history": [
@@ -322,6 +331,10 @@
     {
       "item": "start-card-surface-depth",
       "note": "START first-touch card now surfaces the browse-depth differentiator: added \"the 20 newest listings on <site> as a spreadsheet — I page/scroll past screen one and hand back a clean list\" under Bigger stuff. Previously only the deep /help mentioned multi-page/structured errands, so a new user never learned the competitor-grade capability. +1 START assertion. 2244 green. call-tested: n/a (copy)."
+    },
+    {
+      "item": "watch-then-pass-rows",
+      "note": "A watchs \"then run <recipe>\" now receives the fired new/changed items as context: withThen passes the fired message (the new rows / changed value) into runThen -> runAgent context (and via contextFor for a chain), so \"watch jobs ... then run summarize-jobs\" summarizes the ACTUAL new listings instead of cold re-fetching. Optional passthrough (recipe ignores it if it wants a fresh fetch). runThen signature widened (chatId,name,context?). +1 alert-runner test (then recipe gets fired-items context incl. the triggering value). 2245 green. call-tested: n/a (handler/orchestration logic, offline-verified). Completes the anvil-backlog: browse+automation arc fully worked out."
     }
   ],
   "probes": [
@@ -357,6 +370,9 @@
     },
     {
       "note": "Whole browse+automation arc is now deep + live-verified: read (pagination/scroll/load-more/extract/CSV), act (search/fill/select/wait/self-correct/orient), iterate (continuity/see), automate (interactive recipes, URL-keyed feed watches with per-item links). Delivery is solid too (4096 msg split + 1024 caption handling present; /help richly documents everything). Diminishing returns on THIS arc — remaining ideas are polish/edges, not new capability: (1) the START first-touch card doesn't surface the browse-depth differentiator (only /help does) — a discovery gap, low impact. (2) watch-then-DO could pass the new structured rows to the 'then' recipe. Both seeded but small; the high-impact anvil-depth veins are worked out. A fresh-session 3-agent AUDIT (cap resets) would be the honest way to find the NEXT arc (reliability sweep of the ~30 new tools, or a different product surface) rather than mining this one further."
+    },
+    {
+      "note": "anvil-backlog now fully DRAINED: browse read/act/iterate/automate + the two polish tails (START discovery, watch-then context) all shipped + verified. No actionable non-owner-gated todo remains in this vein. The 3-agent AUDIT to find the NEXT arc still cannot run (subagent cap 200/200 all session) so refills are inline single-surface probes that only surface edges of the same arc. HONEST STOP for this session: recommend a FRESH session so the parallel AUDIT runs (reliability sweep of the ~30 new browse tools under the trust lens, or a new product surface under power/retention) rather than mining polish. Seeding one reliability item to keep the loop non-empty."
     }
   ]
 }

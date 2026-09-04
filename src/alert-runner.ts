@@ -71,7 +71,7 @@ export interface AlertRunnerDeps {
   // recipe and return its result text to append to the notification (or null if the recipe is gone /
   // failed — the base alert still sends). Resolves the recipe's CURRENT task by name at fire time.
   // Optional; absent -> `then` is ignored (plain notify).
-  runThen?: (chatId: number, recipeName: string) => Promise<string | null>;
+  runThen?: (chatId: number, recipeName: string, context?: string) => Promise<string | null>;
   // Current epoch ms for stamping time-series points (watch-time-series). Optional; default Date.now.
   now?: () => number;
   // Watchlist (watchlists): record the members that changed this check (by label) so an unchanged
@@ -110,10 +110,15 @@ export async function checkAlert(alert: Alert, deps: AlertRunnerDeps): Promise<A
 
   // Trigger-to-action (trigger-to-action-alerts): append the `then` recipe's output to a fired ping.
   // Hoisted above the watchlist branch so a WATCHLIST with a `then` runs it too (watchlist-then-dropped).
+  // The fired message body (minus the header) IS the list of what triggered — the new items/changed
+  // values — so pass it to the `then` recipe as context (watch-then-pass-rows). The recipe then reasons
+  // over the ACTUAL new rows ("summarize these new jobs") instead of cold-starting a re-fetch. Optional:
+  // runThen ignores the arg if it doesn't take one; a recipe that wants a fresh fetch just doesn't use it.
   const withThen = async (message: string): Promise<string> => {
     if (!alert.then || !deps.runThen) return message;
     try {
-      const out = (await deps.runThen(alert.chatId, alert.then))?.trim();
+      const context = `The watch "${alert.name}" just fired with these new/changed items:\n${message}\nUse these when running the task below.`;
+      const out = (await deps.runThen(alert.chatId, alert.then, context))?.trim();
       return out ? `${message}\n\n▶ ${alert.then}:\n${out}` : message;
     } catch { return message; }
   };

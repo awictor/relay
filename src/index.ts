@@ -202,9 +202,13 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
     now: () => Date.now(),
     contextFor: (c) => profiles.contextLine(c, Date.now()),
     // Trigger-to-action (trigger-to-action-alerts): run the named recipe's CURRENT task on fire.
-    runThen: async (c, recipeName) => {
+    runThen: async (c, recipeName, firedContext) => {
       const rec = recipes.get(c, recipeName);
       if (!rec) return null;
+      // The fired watch's new/changed items are passed as `firedContext` (watch-then-pass-rows) so the
+      // `then` recipe reasons over what actually triggered instead of cold re-fetching. Fold it into the
+      // per-user profile context. For a chain, prepend it via contextFor so every step sees it too.
+      const baseCtx = (cc: number) => [profiles.contextLine(cc, Date.now()), firedContext].filter(Boolean).join("\n\n") || undefined;
       // A slotted recipe ('{item}') has no per-fire value here, and a '>>' chain is a workflow — running
       // either as one literal agent task appends garbage to the ping (trigger-to-action-recipe-shape,
       // the one recipe-execution path missed when the chain/slot guards were added to /run + schedule +
@@ -214,11 +218,11 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
         // A trigger-to-action chain that STOPPED EARLY only half-ran — don't attach a partial result to
         // the alert ping as if the workflow completed (chain-partial-nonrun-paths); treat it like a
         // degraded run and skip the action addendum (the alert itself still fires).
-        const r = await runChain(c, rec.task, { llm, runAgent, formatReply, contextFor: (cc) => profiles.contextLine(cc, Date.now()), agentEnv: agentEnvFor });
+        const r = await runChain(c, rec.task, { llm, runAgent, formatReply, contextFor: (cc) => baseCtx(cc) ?? "", agentEnv: agentEnvFor });
         if (r.stoppedEarly) return null;
         return r.final?.trim() ? r.final : null;
       }
-      const out = await runAgent(rec.task, { llm, context: profiles.contextLine(c, Date.now()) || undefined, ...agentEnvFor(c) }, []);
+      const out = await runAgent(rec.task, { llm, context: baseCtx(c), ...agentEnvFor(c) }, []);
       return out.degraded ? null : formatReply(out.reply);
     },
   });
