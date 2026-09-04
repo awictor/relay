@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runAgent, extractFieldsResult, extractOne } from "../src/agent.js";
+import { runAgent, extractFieldsResult, extractListResult, extractOne } from "../src/agent.js";
 import type { LLMClient, LLMMessage, LLMResult, ToolSpec, ToolCall } from "../src/llm.js";
 import type { BrowserBackend } from "../src/agent.js";
 
@@ -47,6 +47,38 @@ describe("extractFieldsResult allNull flag", () => {
     const r = await extractFieldsResult(llm, "PRICE=$5", ["price"]);
     expect(r.allNull).toBe(false);
     expect(JSON.parse(r.json)).toEqual({ price: "$5" });
+  });
+});
+
+describe("extractListResult (extract-across-pages)", () => {
+  // An LLM that echoes a scripted array as its JSON output.
+  const arrayLLM = (arr: unknown): LLMClient => ({ async complete() { return { text: JSON.stringify(arr) }; } } as unknown as LLMClient);
+
+  it("returns rows normalized to the requested fields, capped at limit", async () => {
+    const llm = arrayLLM([
+      { title: "A", price: "$1", junk: "x" }, { title: "B", price: "$2" }, { title: "C", price: "$3" },
+    ]);
+    const r = await extractListResult(llm, "page", ["title", "price"], 2);
+    expect(r.count).toBe(2);                             // capped
+    expect(JSON.parse(r.json)).toEqual([{ title: "A", price: "$1" }, { title: "B", price: "$2" }]); // junk dropped
+  });
+
+  it("dedupes by the first field's value", async () => {
+    const llm = arrayLLM([{ title: "A", price: "$1" }, { title: "A", price: "$9" }, { title: "B", price: "$2" }]);
+    const r = await extractListResult(llm, "page", ["title", "price"], 10);
+    expect(r.count).toBe(2); // the second "A" dropped
+  });
+
+  it("skips all-null junk rows", async () => {
+    const llm = arrayLLM([{ title: "A", price: "$1" }, { title: null, price: null }]);
+    const r = await extractListResult(llm, "page", ["title", "price"], 10);
+    expect(r.count).toBe(1);
+  });
+
+  it("returns [] / count 0 on a non-array or unparseable response", async () => {
+    expect((await extractListResult(arrayLLM({ not: "an array" }), "p", ["title"], 5)).count).toBe(0);
+    const junkLLM = { async complete() { return { text: "no json here" }; } } as unknown as LLMClient;
+    expect((await extractListResult(junkLLM, "p", ["title"], 5))).toEqual({ json: "[]", count: 0 });
   });
 });
 

@@ -112,6 +112,20 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: "extract_list",
+    description: "Extract a LIST of items as structured rows from a listing page, following pagination/scroll to gather across pages. Use for \"the 5 cheapest\", \"20 newest listings\", \"top 30 <things> with price + link\" — when the user wants MANY items with the same fields each, not one page's prose. Returns a JSON ARRAY of objects keyed by `fields`, deduped, capped at `limit`. For ONE item's fields use extract; for comparing specific known URLs use compare.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Absolute http(s) URL of the listing / first page" },
+        fields: { type: "array", items: { type: "string" }, description: "Fields for each row, e.g. [\"title\",\"price\",\"url\"]" },
+        limit: { type: "number", description: "Max items to return (1-50, default 10)" },
+        maxPages: { type: "number", description: "How many pages to gather across (1-5, default 2). Set 1 for a single page." },
+      },
+      required: ["url", "fields"],
+    },
+  },
+  {
     name: "compare",
     description: "Fetch SEVERAL pages and extract the same fields from each, returning a JSON array (one object per URL, plus its url). Use for 'compare X across these links' tasks. Capped at a few URLs.",
     parameters: {
@@ -505,6 +519,7 @@ Tools:
 - "browse" (url) then "click"/"type"/"read": for tasks needing interaction (search a site, fill a form, page through results). "read" returns the current page after your actions.
 - "fetch_json" (url): hit a JSON HTTP API directly, no browser — fastest for public data APIs (weather, prices, sports). Use when you know a JSON endpoint; use scrape/browse for HTML pages.
 - "extract" (url, fields): fetch a page and get back clean JSON for specific fields (price, title, rating...). Prefer this over "scrape" when the user wants particular data points, not a summary.
+- "extract_list" (url, fields, limit, maxPages): get a LIST of items as structured rows, gathering across pagination. Use for "the 5 cheapest", "20 newest listings", "top 30 X with price + link" — many items, same fields each. Returns a deduped JSON array. Beats scrape_pages when the user wants ROWS, not a text wall.
 - "compare" (urls, fields): fetch several pages and extract the same fields from each; returns a JSON array. Use when the user wants to compare data points across multiple links.
 - "web_search" (query): plain-language web search, NO url needed — use this FIRST for any open question where the user hasn't named a site or link ("who won...", "cheapest...", "best... near me", "what is..."). Returns top {title,url,snippet}; then scrape/extract the most relevant url.
 - "search" (url): open a specific search/listing page and get candidate result links back. Use when you already know the site — build its search URL, call search, then extract/compare across the returned links.
@@ -1651,6 +1666,33 @@ export async function runAgent(
         continue;
       }
 
+      if (call.name === "extract_list") {
+        const url = String(call.args.url ?? "");
+        const fields = Array.isArray(call.args.fields) ? call.args.fields.map(String).filter(Boolean) : [];
+        const safe = isUrlSafe(url);
+        if (!safe.safe) { push("extract_list", `ERROR: refused (${safe.reason}).`); continue; }
+        if (fields.length === 0) { push("extract_list", "ERROR: no fields given. Provide the row field names."); continue; }
+        const limit = Math.max(1, Math.min(50, Number(call.args.limit) || 10));
+        const maxPages = Math.max(1, Math.min(5, Number(call.args.maxPages) || 2));
+        try {
+          // Gather across pages when available (extract-across-pages) — else a single scrape.
+          let text: string, srcTitle = "", pages = 1;
+          if (maxPages > 1 && backend.scrapePaged) {
+            const r = await backend.scrapePaged(url, maxPages);
+            text = r.content; srcTitle = r.title; pages = r.pages;
+          } else {
+            const r = await backend.scrape(url);
+            text = r.content; srcTitle = r.title;
+          }
+          const { json, count } = await extractListResult(deps.llm, truncateForModel(text, 16000), fields, limit);
+          const note = `Extracted ${count} item${count === 1 ? "" : "s"} across ${pages} page${pages === 1 ? "" : "s"} from ${srcTitle || url}.`;
+          push("extract_list", count > 0 ? `${note}\n${json}\nReport these to the user.` : `${note} (nothing matched — tell the user honestly; the page may need a different URL or the items load another way.)`);
+        } catch (e) {
+          push("extract_list", `ERROR extracting list from ${url}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
+
       if (call.name === "compare") {
         const rawUrls = Array.isArray(call.args.urls) ? call.args.urls.map(String).filter(Boolean) : [];
         const fields = Array.isArray(call.args.fields) ? call.args.fields.map(String).filter(Boolean) : [];
@@ -1784,6 +1826,52 @@ export async function extractOne(
     }
   }
   return { json, title: r.title };
+}
+
+/** Extract a LIST of rows (not one object) from page text — for a listing errand ("the 5 cheapest",
+ * "20 newest") where the caller has gathered one or more pages via scrape_pages/scroll_feed
+ * (extract-across-pages). Asks the LLM for a JSON ARRAY of objects keyed by `fields`, deduped by the
+ * first field's value, capped at `limit`. Returns the array as a formatted JSON string + the row count.
+ * Empty array (nothing matched) is returned as "[]" with count 0 — the caller reports that honestly. */
+export async function extractListResult(
+  llm: LLMClient,
+  pageText: string,
+  fields: string[],
+  limit: number
+): Promise<{ json: string; count: number }> {
+  const cap = Math.max(1, Math.min(50, limit || 10));
+  const prompt = `From the listing page content below, extract UP TO ${cap} items as a JSON ARRAY. Each item is an object with exactly these keys: ${fields.join(", ")}. If a field is missing for an item, use null. Only include real listing items (skip nav/ads/headers). Respond with ONLY the JSON array, no prose, no code fence.
+
+PAGE CONTENT:
+${pageText}`;
+  const res = await llm.complete(
+    [
+      { role: "system", content: "You extract a structured list of items from web page text and output only a JSON array." },
+      { role: "user", content: prompt },
+    ],
+    []
+  );
+  const raw = (res.text ?? "").trim();
+  const match = raw.match(/\[[\s\S]*\]/);
+  if (!match) return { json: "[]", count: 0 };
+  let arr: unknown;
+  try { arr = JSON.parse(match[0]); } catch { return { json: "[]", count: 0 }; }
+  if (!Array.isArray(arr)) return { json: "[]", count: 0 };
+  // Normalize each row to exactly the requested fields; dedup by the first field's value; cap.
+  const key0 = fields[0]!;
+  const seen = new Set<string>();
+  const rows: Record<string, unknown>[] = [];
+  for (const item of arr) {
+    if (rows.length >= cap) break;
+    const obj = (item && typeof item === "object") ? item as Record<string, unknown> : {};
+    const row = Object.fromEntries(fields.map((f) => [f, f in obj ? obj[f] : null]));
+    const dedupKey = String(row[key0] ?? "").trim().toLowerCase();
+    if (dedupKey && seen.has(dedupKey)) continue;      // drop a repeated item (same first-field value)
+    if (dedupKey) seen.add(dedupKey);
+    if (fields.every((f) => row[f] === null)) continue; // skip an all-null junk row
+    rows.push(row);
+  }
+  return { json: JSON.stringify(rows, null, 2), count: rows.length };
 }
 
 /** Like extractFields but also reports whether every field came back null — lets the

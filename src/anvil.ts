@@ -469,12 +469,16 @@ const NEXT_PAGE_SCRIPT = `(() => {
   const abs = (h) => { try { return new URL(h, location.href).href; } catch (e) { return ''; } };
   const rel = document.querySelector('link[rel~="next" i], a[rel~="next" i]');
   if (rel && rel.href) return abs(rel.getAttribute('href') || rel.href);
-  const wants = /^(next|next page|more|show more|load more|older|older posts|›|»|>>?)$/i;
+  const wants = /^(next|next page|more|show more|load more|older|older posts|next »|next ›)$/i;
   const cands = Array.from(document.querySelectorAll('a[href]'));
   for (const a of cands) {
-    const label = ((a.innerText || a.textContent || '') + ' ' + (a.getAttribute('aria-label') || '') + ' ' + (a.getAttribute('title') || '')).trim();
+    let label = ((a.innerText || a.textContent || '') + ' ' + (a.getAttribute('aria-label') || '') + ' ' + (a.getAttribute('title') || '')).replace(/\\s+/g, ' ').trim();
     if (/prev|previous|back|‹|«/i.test(label)) continue;         // never a "previous" control
-    if (wants.test(label.replace(/\\s+/g, ' ').trim())) { const h = a.getAttribute('href'); if (h && !/^javascript:/i.test(h)) return abs(h); }
+    // Strip trailing/leading arrow glyphs a pager appends ("Next →", "Next »", "› Next") so the label
+    // matches the wants list; a bare arrow ("›"/"»"/">"/">>") on its own still counts as next.
+    const bare = label.replace(/[\\u2192\\u00bb\\u203a>\\u2794\\u279c\\u2b95→»›]+/g, '').trim();
+    const isArrowOnly = label !== '' && bare === '';
+    if (isArrowOnly || wants.test(bare)) { const h = a.getAttribute('href'); if (h && !/^javascript:/i.test(h)) return abs(h); }
   }
   return '';
 })()`;

@@ -41,7 +41,7 @@
       "title": "Structured extraction across paginated/scrolled results (rows, not a text wall)",
       "impact": "high",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "scrape_pages + scroll_feed now GATHER multiple pages, but return raw concatenated text — for \"the 5 cheapest\" / \"20 newest listings\" the model must re-parse a big blob, which is lossy + token-heavy. Extracting structured rows (title/price/url) across the gathered pages is the actual competitor-grade listing errand.",
       "how": "Add a paged/scrolled variant to the extract path (or a fields option on scrape_pages/scroll_feed) that runs the existing per-item extraction over each gathered page and returns a deduped JSON array capped at the requested N. Reuse extract.ts + the multi-page gatherers. Offline unit test with a mock 2-page listing; live e2e asserting N rows across pages."
     },
@@ -53,6 +53,15 @@
       "status": "todo",
       "why": "pdf() renders via anvil /v1/pdf; like screenshot before the fullPage fix, a long thread/article likely gets clipped to default print pagination. A user saving a long page expects the whole thing. Mirror the screenshot-fullpage win.",
       "how": "Check anvil /v1/pdf options (printBackground, preferCSSPageSize, scale, full-content). Thread a fullPage/complete flag through relay pdf(url,full) + the pdf tool dispatch when the user says whole/entire/full. Live e2e: full PDF byte size materially larger for a long page."
+    },
+    {
+      "id": "extract-list-scroll-source",
+      "title": "extract_list should also gather from an infinite-scroll feed (not just pagination)",
+      "impact": "medium",
+      "effort": "S",
+      "status": "todo",
+      "why": "extract_list gathers via scrapePaged (pagination links) only. A scroll-loaded feed (no next link) would still extract just the first screen of rows. Pairing it with scrapeScroll closes the gap for feeds like listings/job boards that lazy-load.",
+      "how": "Add a source hint (or auto-detect: if scrapePaged returns pages=1, try scrapeScroll) to extract_list so it can gather from a scrolling feed before the row extraction. Reuse scrapeScroll. Live e2e on a real infinite-scroll listing."
     }
   ],
   "history": [
@@ -71,6 +80,10 @@
     {
       "item": "browse-infinite-scroll",
       "note": "Infinite-scroll capture shipped: new anvil scrapeScroll(url,maxScrolls) navigates, dismisses consent, scrolls to the bottom repeatedly (900ms settle per step) until the page stops growing / cap / 45s budget, then reads the fully-expanded text. Capped 1-10 scrolls (default 5). New agent tool scroll_feed (url,maxScrolls) + dispatch (clamps, reports scrolls done so the model doesn't overclaim) + BrowserBackend.scrapeScroll + SYSTEM_PROMPT + /help. +2 unit tests. LIVE e2e on quotes.toscrape.com/scroll (real infinite-scroll): plain scrape 1492 chars (~first 10) vs scrolled 6x -> 12181 chars (8.16x, all items loaded). 2190 green. call-tested: TRUE (live anvil). This completes the anvil browse-depth backlog (pagination + full-page shot + scroll all done)."
+    },
+    {
+      "item": "extract-across-pages",
+      "note": "Structured list extraction across pages shipped. New extractListResult(llm,text,fields,limit) asks the LLM for a JSON ARRAY of row-objects, normalized to the requested fields, deduped by the first field, all-null rows dropped, capped 1-50. New extract_list tool (url,fields,limit,maxPages) gathers across pagination via scrapePaged (default 2 pages) then extracts rows — the real \"5 cheapest / 20 newest with price+link\" errand, returning clean rows not a text wall. +6 unit tests. ALSO fixed a real pagination-detector bug found in live e2e: NEXT_PAGE_SCRIPT required an EXACT label match so \"Next →\"/\"Next »\" (arrow-suffixed, the common case) was NOT followed — now strips trailing/leading arrow glyphs before matching (also strengthens the shipped scrape_pages). LIVE e2e: quotes.toscrape.com 2 pages gathered -> real Gemini extracted 8 {author,quote} rows across pages. 2196 green. call-tested: TRUE."
     }
   ],
   "probes": [
@@ -79,6 +92,9 @@
     },
     {
       "note": "Depth trio complete (pagination, full-page screenshot, infinite-scroll — all live-verified). Next depth tier surfaced while building: (1) the multi-page tools return RAW concatenated page text; a listing errand (\"5 cheapest\", \"20 newest\") would be far stronger if the agent EXTRACTED structured rows across the gathered pages (title/price/link) instead of the model re-parsing a wall of text — pairs scrape_pages/scroll_feed with the existing extract path. (2) full-page PDF: pdf() exists but, like screenshot was, likely renders one viewport/print-page; \"save the whole thread/article as PDF\" wants the full scroll. Seeded both. Owner-gated confirm-to-act multi-step chains + in-place schedule edit still parked."
+    },
+    {
+      "note": "Live e2e caught the arrow-label pagination miss (quotes.toscrape uses \"Next →\"); fixed in NEXT_PAGE_SCRIPT. Confirms the value of driving REAL sites, not just mock pages."
     }
   ]
 }

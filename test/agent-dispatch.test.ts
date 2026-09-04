@@ -41,7 +41,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
     );
   });
 
@@ -131,6 +131,32 @@ describe("runAgent dispatch", () => {
     ]);
     const r = await runAgent("feed please", { llm, backend: b });
     expect(r.reply).toBe("scrape fallback");
+  });
+
+  it("extract_list gathers across pages then extracts rows as a JSON array (extract-across-pages)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "extract_list", args: { url: "https://x.com/list", fields: ["title", "price"], limit: 5, maxPages: 3 } } as ToolCall },
+      // the extractor LLM step returns a JSON array of rows
+      { text: '[{"title":"A","price":"$1"},{"title":"B","price":"$2"}]' },
+      { toolCall: { name: "reply", args: { text: "found 2" } } as ToolCall },
+    ]);
+    const r = await runAgent("5 cheapest on x", { llm, backend: b });
+    expect(hits).toContain("scrapePaged:https://x.com/list:3"); // gathered across pages
+    expect(r.tools).toContain("extract_list");
+    expect(r.reply).toBe("found 2");
+  });
+
+  it("extract_list maxPages=1 uses a single scrape, not the pager", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "extract_list", args: { url: "https://x.com/one", fields: ["title"], maxPages: 1 } } as ToolCall },
+      { text: '[{"title":"only"}]' },
+      { toolCall: { name: "reply", args: { text: "ok" } } as ToolCall },
+    ]);
+    await runAgent("list from one page", { llm, backend: b });
+    expect(hits).toContain("scrape:https://x.com/one");
+    expect(hits.some((h) => h.startsWith("scrapePaged:https://x.com/one"))).toBe(false);
   });
 
   it("fetch_json -> backend.fetchJson", async () => {
