@@ -3597,7 +3597,7 @@
       "title": "Business-day date math: \"3 business days from now\", \"5 working days after Monday\"",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "datecalc does \"+N days\" but not BUSINESS days — \"when will it arrive, 3 business days from now?\" / \"deadline 5 working days out\" is a common deadline/shipping ask that currently counts calendar days (wrong, includes weekends).",
       "how": "In datecalc.ts add a business-day branch: parse \"N business/working days from <date>\", step forward skipping Sat/Sun (holidays optional/out-of-scope). Reuse the existing date parse + weekday logic. Tests + /help. Note it excludes weekends only, not public holidays."
     }
@@ -5206,6 +5206,10 @@
     {
       "item": "calc-variadic-arity-bug",
       "note": "FIXED a real correctness bug: max/min/any variadic fn with a final 3-digit arg returned a WRONG concatenated value (max(1000,5,10,365)=10365). Root cause was NOT the shunting-yard (RPN + evalRpn were correct) but normalizeExpr's thousands-comma stripper: /(?<=d),(?=d{3}(D|$))/ ate the arg-separator comma before a 3-digit arg (\"10,365)\" -> \"10365)\"). Fix: only strip thousands commas when there's NO function call (no \"(\") in the expression — a lone \"1,234 + 1\" still de-commas, but inside fn(...) every comma stays an arg boundary. With that fixed, restored compound()'s optional 4th times/yr arg (annual/daily), guarded positive. +2 tests (variadic 4-5 args correct + thousands still strip; compound 4-arg annual/daily). 2303 green. call-tested: n/a (pure calc). max(1000,5,10,365) now = 1000."
+    },
+    {
+      "item": "date-business-days",
+      "note": "date_math gained business-day math: \"3 business days from now\", \"5 working days after 2026-09-04\" -> steps forward skipping Sat/Sun (weekends only; public holidays flagged as not counted). Branch checked FIRST in runDateCalc so \"business\" isnt swallowed by the between/since/after or plain-N-days matchers. Parses an explicit from-date or defaults to today. +1 test (Thu+3bd=Tue, weekend-skip, plain-days unaffected). Tool desc + /help. 2304 green. call-tested: n/a (pure). 9th everyday improvement this session; last clearly-valuable keyless one (vein flagged thinning)."
     }
   ],
   "audits": [

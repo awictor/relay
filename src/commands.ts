@@ -69,7 +69,7 @@ const HELP = `Relay — what I can do:
 • Nutrition: "calories in a banana", "how much protein in chicken breast", "carbs in a Big Mac" → calories + protein/carbs/fat from USDA data (per 100g), instantly. I say so if I'm not sure rather than guessing.
 • Where to watch: "where can I watch Dune Part Two", "is Oppenheimer streaming" → a JustWatch link showing where it streams/rents/buys in your region. (Availability shifts constantly, so I point you to the live source instead of guessing a service.)
 • World clock: "what time is it in Tokyo", "what's 9am PT in London" → the time there or a zone conversion, instantly. Also "how long until 5pm" / "minutes until midnight" → a countdown in your timezone.
-• Dates: "how many days until Christmas", "what day is July 4 2026", "how old if born 1990-05-06", "days between two dates" → exact calendar math, instantly.
+• Dates: "how many days until Christmas", "what day is July 4 2026", "how old if born 1990-05-06", "days between two dates", "3 business days from now" → exact calendar math, instantly.
 • Holidays: "is today a holiday?", "when's the next public holiday?", "holidays this year in the UK" → the real public/bank holiday list for a country (defaults to the US), instantly.
 • BMI: "what's my BMI at 5'10 and 160 lb", "BMI for 70 kg 1.75 m" → the number + category, either units (a rough screen, not a diagnosis).
 • On this day: "what happened on this day?", "anything happen on July 4 in history?" → a few notable historical events (with years + a source), instantly.

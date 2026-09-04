@@ -160,8 +160,26 @@ export function runDateCalc(raw: string, today: Ymd): string | null {
   const q = raw.toLowerCase().trim();
   if (!q) return null;
 
+  // "N business/working days from/after <date>" (date-business-days): step forward N weekdays, skipping
+  // Sat/Sun — the common shipping/deadline ask ("3 business days from now"). Checked FIRST so "business"
+  // isn't swallowed by the between/since/after or plain-N-days branches. Excludes weekends only, NOT
+  // public holidays (flagged in the reply).
+  let m = q.match(/(\d+)\s+(?:business|working)\s*days?\s*(?:from\s+(.+)|after\s+(.+)|out|ahead|later)?$/);
+  if (m) {
+    const n = +m[1]!;
+    if (n >= 0 && n <= 3650) {
+      const fromText = (m[2] ?? m[3] ?? "").trim();
+      const start = fromText && !/\b(?:now|today)\b/.test(fromText) ? (parseDate(fromText, today, true) ?? today) : today;
+      let d = toDate(start);
+      let added = 0;
+      while (added < n) { d = new Date(d.getTime() + 86_400_000); const wd = d.getUTCDay(); if (wd !== 0 && wd !== 6) added++; }
+      const target: Ymd = { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() };
+      return `${n} business day${n === 1 ? "" : "s"} after ${formatDate(start)} is ${formatDate(target)} (weekends skipped; public holidays not counted).`;
+    }
+  }
+
   // "days between X and Y" / "days from X to Y" / "how many days between X and Y"
-  let m = q.match(/(?:days?|weeks?)\s+(?:between|from)\s+(.+?)\s+(?:and|to|until|till)\s+(.+)$/);
+  m = q.match(/(?:days?|weeks?)\s+(?:between|from)\s+(.+?)\s+(?:and|to|until|till)\s+(.+)$/);
   if (m) {
     const a = parseDate(m[1]!, today), b = parseDate(m[2]!, today);
     if (!a || !b) return null;

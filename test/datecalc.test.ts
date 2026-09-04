@@ -115,4 +115,15 @@ describe("runDateCalc", () => {
     expect(runDateCalc("days since 2027-01-01", TODAY)).toMatch(/still \d+ days away — ask "days until"/);
     expect(runDateCalc("days since", TODAY)).toBeNull();   // no date -> not this tool
   });
+
+  it("business-day date math skips weekends (date-business-days)", () => {
+    // TODAY = 2026-09-03 is a THURSDAY.
+    expect(runDateCalc("3 business days from now", TODAY)).toMatch(/is Tuesday, September 8, 2026/); // Thu+3bd: Fri,Mon,Tue
+    expect(runDateCalc("1 business day from now", TODAY)).toMatch(/is Friday, September 4, 2026/);
+    expect(runDateCalc("2 working days from now", TODAY)).toMatch(/is Monday, September 7, 2026/);   // Fri then Mon
+    expect(runDateCalc("5 business days after 2026-09-04", TODAY)).toMatch(/is Friday, September 11, 2026/); // Fri+5bd
+    expect(runDateCalc("3 business days from now", TODAY)).toMatch(/weekends skipped/);
+    // plain "days" is unaffected (not intercepted by the business branch)
+    expect(runDateCalc("3 days from now", TODAY)).toMatch(/3 days from today is Sunday, September 6, 2026/);
+  });
 });
