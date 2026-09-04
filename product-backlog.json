@@ -3218,9 +3218,18 @@
       "title": "Probe the agent-loop tool DISPATCH + argument extraction, not just the lib parsers",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "The lib/*.ts pure parsers are now well-swept. The untested surface is src/agent.ts: how the LLM's tool-call arguments are validated/coerced before dispatch, and whether a malformed/edge arg (empty string, wrong type, huge value, missing required field) produces a wrong reply or throws vs a graceful message. That's where a real texting user's odd phrasing actually lands.",
       "how": "Read agent.ts dispatch switch; for 3-4 representative tools, feed edge-case args via a mock-LLM tool call and assert a graceful reply (not a throw/blank). Fix any that mishandle. Offline-testable with the injected LLM."
+    },
+    {
+      "id": "probe-multistep-agent-flows",
+      "title": "Probe multi-step agent flows for state bugs across tool calls (session reuse, photo/doc carryover, truncation)",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "Single-tool dispatch is now robust. The untested surface is MULTI-call flows: a browse then click then read chain, a screenshot followed by reply (photo carryover), window truncation mid-conversation, session release timing. A state bug here would make the bot lose context or send the wrong artifact.",
+      "how": "Script the mock LLM to emit 3-5 chained tool calls (browse->click->read->reply; screenshot->reply; a long chain that trips truncateWindow) and assert the right backend calls fire in order + the right photo/doc/reply is delivered. Offline via ScriptLLM + recordingBackend."
     }
   ],
   "history": [
@@ -4535,6 +4544,10 @@
     {
       "item": "courtesy-tail-digest",
       "note": "Probed labeled/multi-clause parsers (parseSetLocation, parseSavePlace, parseDigestCommand, parseFx). parseDigestCommand (15th parser) leaked: 'digest morning: weather, hn please' kept last member 'hn please' -> matches no recipe -> silently dropped from the digest. Fixed via stripTrailingCourtesy. +1 test. parseSavePlace/parseSetLocation already robust; parseFx is a RESPONSE-body parser not user input (skipped)."
+    },
+    {
+      "item": "convert-currency-nan-amount",
+      "note": "agent.ts convert_currency dispatch: a non-numeric amount (model passed a word like 'twenty', -> NaN) was silently coerced to 1, returning a per-unit rate as if the user asked for it (wrong money answer, no signal). Now errors + asks for a number when amount is present but non-finite; a null amount still keeps the intended per-unit behavior for a rate query. +2 dispatch tests (guard + valid path). Rest of dispatch surface (String/Number coercion, backend guards, try/catch, url safety) reviewed - robust."
     }
   ],
   "audits": [
@@ -4898,6 +4911,11 @@
       "lens": "inline labeled-input probe (agent cap 200/200)",
       "surfaced": "The 'labeled input beyond courtesy' thesis mostly did NOT pan out - parseSavePlace strips trailing addr courtesy already, parseSetLocation robust, parseFx isn't user-facing. The one real leak (parseDigestCommand last comma-member) was still plain courtesy-tail. Verbatim-storing/parsed-into-key parsers are now swept for the courtesy class (15 total).",
       "seeded": "probe-agent-tool-dispatch"
+    },
+    {
+      "lens": "inline agent-dispatch probe (agent cap 200/200)",
+      "surfaced": "Read all ~46 tool dispatch blocks in agent.ts. Arg handling is uniformly defensive (String(x??''), backend-presence guards, per-tool try/catch, isUrlSafe on every url tool) EXCEPT convert_currency, which silently defaulted a bad amount to 1 -> a wrong money figure. Fixed. No other silent-wrong-arg path found.",
+      "seeded": "probe-multistep-agent-flows"
     }
   ]
 }

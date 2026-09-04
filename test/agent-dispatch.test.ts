@@ -142,6 +142,33 @@ describe("runAgent dispatch", () => {
     expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
   });
 
+  it("convert_currency with a non-numeric amount errors instead of silently converting 1 unit", async () => {
+    // Regression: a model that passed amount as a word ("twenty") coerced to NaN, which the dispatch
+    // silently treated as 1 -> a per-unit rate reported as if the user asked for it (wrong, no signal).
+    const { b, hits } = recordingBackend();
+    let called = false;
+    b.convertCurrency = async (amt, from, to) => { called = true; hits.push(`fx:${amt}:${from}:${to}`); return { amount: amt, from, to, rate: 0.9, result: amt * 0.9 }; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "convert_currency", args: { amount: "twenty", from: "usd", to: "eur" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "I need a number." } } as ToolCall },
+    ]);
+    await runAgent("convert twenty usd to eur", { llm, backend: b });
+    expect(called).toBe(false); // never dispatched the wrong 1-unit conversion
+    const toolMsg = llm.calls[1]!.find((m) => m.role === "tool")!.content;
+    expect(toolMsg).toMatch(/isn't a numeric amount/i);
+  });
+
+  it("convert_currency with a valid numeric amount dispatches to the backend", async () => {
+    const { b, hits } = recordingBackend();
+    b.convertCurrency = async (amt, from, to) => { hits.push(`fx:${amt}:${from}:${to}`); return { amount: amt, from, to, rate: 0.9, result: amt * 0.9 }; };
+    const llm = new ScriptLLM([
+      { toolCall: { name: "convert_currency", args: { amount: 20, from: "usd", to: "eur" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "€18." } } as ToolCall },
+    ]);
+    await runAgent("convert 20 usd to eur", { llm, backend: b });
+    expect(hits).toContain("fx:20:usd:eur");
+  });
+
   it("get_suntimes -> backend.getSunTimes with the user's coords, reaches reply", async () => {
     const { b, hits } = recordingBackend();
     b.getSunTimes = async (opts) => { hits.push(`sun:${opts.lat ?? "geo"}`); return { place: "your location", day: "today" as const, date: "2026-09-03", sunrise: "6:30 AM", sunset: "7:28 PM", daylight: "12h 58m" }; };

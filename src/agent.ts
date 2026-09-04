@@ -1023,6 +1023,12 @@ export async function runAgent(
         const amount = Number(call.args.amount);
         const from = String(call.args.from ?? "");
         const to = String(call.args.to ?? "");
+        // A non-finite amount (model passed a word like "twenty", or nothing) must NOT silently become 1 —
+        // that returns a per-unit rate as if the user asked for it, a wrong answer with no signal. Ask.
+        if (call.args.amount != null && !Number.isFinite(amount)) {
+          push("convert_currency", `ERROR: "${String(call.args.amount)}" isn't a numeric amount. Re-call with amount as a number (e.g. 20), or ask the user for the figure.`);
+          continue;
+        }
         try {
           const c = await backend.convertCurrency(Number.isFinite(amount) ? amount : 1, from, to);
           if (!c) { push("convert_currency", `Couldn't convert ${from} -> ${to} (check the currency codes, or try web_search for an unusual pair).`); continue; }
