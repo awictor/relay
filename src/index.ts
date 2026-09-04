@@ -38,7 +38,7 @@ import { DigestChangeStore } from "./lib/digest-change.js";
 import { runDigest, type DigestOutcome } from "./digest-runner.js";
 import { AlertStore, parseAlertCommand, parseAlertEdit, parseTrendRequest, summarizeSeries, isQuietDeferrable } from "./lib/alerts.js";
 import { parseChartRequest, renderChart } from "./lib/chart.js";
-import { ProfileStore, parseSetLocation, parseCityReply, parseUnitsPreference } from "./lib/profile.js";
+import { ProfileStore, parseSetLocation, parseCityReply, parseUnitsPreference, parseReplyStyle } from "./lib/profile.js";
 import { NotesStore, parseRemember, parseForgetFact } from "./lib/notes.js";
 import { SavedStore, parseSavePage, parseSavedRecall, hostLabel, readingRecap, isUnreadSavedRequest, formatUnreadNudge, parseUnreadNudgeToggle } from "./lib/readlater.js";
 import { parseCountdown, countdownMilestones, formatCountdown, milestonePing } from "./lib/countdown.js";
@@ -368,6 +368,19 @@ const handle = createHandler({
   // Standalone units preference (units-preference-setter): "use metric" / "switch to fahrenheit" updates
   // the stored units without re-setting the city. null when it isn't a units-pref command.
   setUnits: (chatId, text) => { const u = parseUnitsPreference(text); if (!u) return null; profiles.set(chatId, { units: u }); return { units: u, saved: profiles.lastSaveOk() }; },
+  // Answer-style preference (reply-style-preference): remember brief/detailed + emoji on/off like units.
+  setReplyStyle: (chatId, text) => {
+    const s = parseReplyStyle(text);
+    if (!s) return null;
+    profiles.set(chatId, s);
+    const parts: string[] = [];
+    if (s.verbosity === "brief") parts.push("I'll keep answers brief");
+    else if (s.verbosity === "detailed") parts.push("I'll give more detailed answers");
+    if (s.emoji === false) parts.push("no more emoji");
+    else if (s.emoji === true) parts.push("I'll use emoji");
+    const saved = profiles.lastSaveOk() ? "" : " (couldn't save to disk — may revert on restart)";
+    return { msg: `Got it — ${parts.join(" + ")} from now on.${saved}` };
+  },
   // Long-term memory (remember-facts-store): parse+store "remember X", forget matching facts, list them.
   rememberFact: (chatId, text) => { const f = parseRemember(text); if (!f) return null; const r = notes.add(chatId, f, Date.now()); return { fact: f, evicted: r.evicted, saved: r.saved }; },
   forgetFact: (chatId, text) => {

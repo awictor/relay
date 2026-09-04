@@ -139,6 +139,8 @@ See everything at once: /dashboard rolls up all your reminders, watches, digests
 
 Set your location: "/setlocation Austin, TX" (or just "I'm in London") so "weather" and "near me" work without repeating the city. I use metric or imperial based on the place (°C for Paris, °F for the US); add "(metric)" or "(imperial)" to force one — or just say "use metric" / "switch to fahrenheit" anytime — and "UTC-5" so daily reminders fire at YOUR local time. /profile shows what's stored; "/profile clear" forgets it.
 
+Answer style: say "keep it brief" / "give me more detail" and I'll match that length going forward; "no emoji" (or "use emoji") toggles emoji. Stored in your profile so you don't repeat it.
+
 Save named places: "my work is 500 5th Ave", "save gym: Gold's on Main" — then "weather at the gym", "coffee near work", "directions to work" all resolve without retyping the address. "what places do you have" lists them; "forget my work address" removes one.
 
 Remember things about you: "remember I'm vegetarian", "remember my wife's birthday is June 3" — I'll factor them into every answer. Ask "what do you know about me" to see them; "forget that I'm vegetarian" or "forget everything you know" to clear.

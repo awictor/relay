@@ -14,6 +14,9 @@ export interface Profile {
   coordsAt?: number;              // epoch ms the coords were shared — coords expire after COORDS_TTL_MS
                                   // (coords-privacy-ttl) so a one-time pin isn't sent to the LLM forever
                                   // and "near me" doesn't resolve against a spot the user has left.
+  verbosity?: "brief" | "detailed"; // answer-style preference (reply-style-preference): "keep it short" /
+                                  // "more detail". Injected into the agent context so replies honor it.
+  emoji?: boolean;                // false = "stop using emoji"; true = "use emoji" (default: unset = model's choice)
 }
 
 // A shared location pin is a point-in-time fix, not a durable home. After this long it's dropped from
@@ -119,6 +122,27 @@ export function parseUnitsPreference(text: string): "metric" | "imperial" | null
   if (metric && !imperial) return "metric";
   if (imperial && !metric) return "imperial";
   return null; // ambiguous or neither
+}
+
+/** Parse a standalone ANSWER-STYLE preference command (reply-style-preference), or null. Returns the
+ * fields to patch: verbosity ("keep it brief/short/concise" -> brief; "more detail/be thorough/longer
+ * answers" -> detailed) and/or emoji ("no emoji/stop using emojis" -> false; "use emoji" -> true). Must
+ * read like a preference command about ANSWERS, not a passing mention, so a normal task isn't hijacked.
+ * Exported for tests. */
+export function parseReplyStyle(text: string): { verbosity?: "brief" | "detailed"; emoji?: boolean } | null {
+  const t = text.trim().toLowerCase();
+  const out: { verbosity?: "brief" | "detailed"; emoji?: boolean } = {};
+  // emoji toggles — whole-ish preference phrasing.
+  if (/\b(no|stop|don'?t|quit|without|less|cut the)\s+(?:the\s+|using\s+)?emojis?\b|\bemoji\s*(?:off|:?\s*off)\b/.test(t)) out.emoji = false;
+  else if (/\b(use|more|add|with)\s+emojis?\b|\bemoji\s*(?:on|:?\s*on)\b/.test(t)) out.emoji = true;
+  // verbosity — require a command cue ("keep/make/be/give me/answer ... short|brief|detailed") so
+  // "that was a short trip" isn't read as a preference.
+  const cue = /\b(keep|make|be|give\s+me|answer|reply|replies|responses?|prefer|want)\b/.test(t);
+  if (cue || /\bemoji/.test(t)) {
+    if (/\b(brief|short|shorter|concise|terse|to the point|tl;?dr|one line|quick answers?)\b/.test(t)) out.verbosity = "brief";
+    else if (/\b(detailed|thorough|longer|more detail|in depth|verbose|elaborate|fuller)\b/.test(t)) out.verbosity = "detailed";
+  }
+  return out.verbosity !== undefined || out.emoji !== undefined ? out : null;
 }
 
 // A location-dependent errand: the answer changes with WHERE the user is, so with no saved location
@@ -337,6 +361,8 @@ export class ProfileStore {
     if (patch.lat !== undefined) p.lat = patch.lat;
     if (patch.lng !== undefined) p.lng = patch.lng;
     if (patch.coordsAt !== undefined) p.coordsAt = patch.coordsAt;
+    if (patch.verbosity !== undefined) p.verbosity = patch.verbosity;
+    if (patch.emoji !== undefined) p.emoji = patch.emoji;
     this.persist();
     return p;
   }
@@ -405,6 +431,11 @@ export class ProfileStore {
     if (coordsFresh) bits.push(`current coordinates are ${p.lat!.toFixed(5)},${p.lng!.toFixed(5)} (use for "near me"/directions)`);
     if (p.units) bits.push(`prefers ${p.units} units`);
     if (typeof p.tzOffsetMin === "number") bits.push(`timezone is ${formatUtcOffset(p.tzOffsetMin)}`);
+    // Answer-style preference (reply-style-preference): a concrete instruction the agent should honor in
+    // its reply, so a user who asked for brief / no-emoji answers doesn't have to repeat it each session.
+    if (p.verbosity === "brief") bits.push("wants BRIEF answers (a sentence or two, no preamble)");
+    else if (p.verbosity === "detailed") bits.push("wants DETAILED, thorough answers");
+    if (p.emoji === false) bits.push("do NOT use emoji in replies");
     return bits.join("; ");
   }
 

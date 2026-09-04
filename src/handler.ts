@@ -137,6 +137,10 @@ export interface HandlerDeps {
   // the stored units WITHOUT re-setting the city. Returns the new units + persist status, or null if the
   // message isn't a units-pref command. Optional.
   setUnits?: (chatId: number, text: string) => { units: "metric" | "imperial"; saved: boolean } | null;
+  // Answer-style preference (reply-style-preference): "keep it brief" / "no emoji" / "more detail" -> save
+  // + a confirmation msg. Optional; absent -> the phrase falls through to the agent. Returns null when the
+  // message isn't a style command.
+  setReplyStyle?: (chatId: number, text: string) => { msg: string } | null;
   // First-run location capture (first-location-capture): hasLocation tells the handler whether this
   // chat has a saved home location; captureLocation parses a bare "which city?" reply + stores it
   // (returns the saved location, or null if the reply isn't a place). When both are present, the first
@@ -985,6 +989,12 @@ export function createHandler(deps: HandlerDeps): RelayHandler {
         await deps.sendMessage(msg.chatId, `Got it — I'll show ${u.units} units (temps, distances) from now on.`);
         return;
       }
+    }
+    // Standalone answer-style preference ("keep it brief" / "no emoji" / "more detail") — checked BEFORE
+    // setLocation so a bare style command isn't misread as a place (reply-style-preference).
+    if (deps.setReplyStyle) {
+      const s = deps.setReplyStyle(msg.chatId, msg.text);
+      if (s) { await deps.sendMessage(msg.chatId, s.msg); return; }
     }
     if (deps.setLocation) {
       const set = deps.setLocation(msg.chatId, msg.text);

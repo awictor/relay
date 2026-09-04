@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply, parseUnitsPreference, inferTzFromLocation, inferZoneFromLocation, offsetForZoneAt } from "../src/lib/profile.js";
+import { parseSetLocation, parseUtcOffset, formatUtcOffset, ProfileStore, needsLocationContext, parseCityReply, parseUnitsPreference, parseReplyStyle, inferTzFromLocation, inferZoneFromLocation, offsetForZoneAt } from "../src/lib/profile.js";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -292,6 +292,40 @@ describe("parseUnitsPreference (units-preference-setter)", () => {
     expect(parseUnitsPreference("what's the weather")).toBeNull();
     expect(parseUnitsPreference("it's freezing outside")).toBeNull();
     expect(parseUnitsPreference("show me km not miles")).toBeNull(); // ambiguous (both) -> no change
+  });
+});
+
+describe("parseReplyStyle (reply-style-preference)", () => {
+  it("parses a standalone verbosity preference", () => {
+    expect(parseReplyStyle("keep it brief")).toEqual({ verbosity: "brief" });
+    expect(parseReplyStyle("keep answers short")).toEqual({ verbosity: "brief" });
+    expect(parseReplyStyle("prefer concise replies")).toEqual({ verbosity: "brief" });
+    expect(parseReplyStyle("give me more detail")).toEqual({ verbosity: "detailed" });
+    expect(parseReplyStyle("be thorough")).toEqual({ verbosity: "detailed" });
+  });
+  it("parses an emoji toggle, incl. combined with verbosity", () => {
+    expect(parseReplyStyle("no emoji")).toEqual({ emoji: false });
+    expect(parseReplyStyle("stop using emojis")).toEqual({ emoji: false });
+    expect(parseReplyStyle("use emoji")).toEqual({ emoji: true });
+    expect(parseReplyStyle("reply briefly and no emoji")).toEqual({ emoji: false });
+    expect(parseReplyStyle("keep it brief and no emoji")).toEqual({ verbosity: "brief", emoji: false });
+  });
+  it("does NOT hijack a passing mention (no command cue)", () => {
+    expect(parseReplyStyle("that was a short trip")).toBeNull();
+    expect(parseReplyStyle("what's the weather")).toBeNull();
+    expect(parseReplyStyle("the detailed report is due")).toBeNull();
+  });
+  it("ProfileStore.set persists style fields and contextLine injects them", () => {
+    const file = tmp();
+    const store = new ProfileStore({ file });
+    store.set(7, parseReplyStyle("keep it brief and no emoji")!);
+    const line = store.contextLine(7);
+    expect(line).toContain("BRIEF");
+    expect(line).toContain("do NOT use emoji");
+    // survives a reload from disk (set() whitelists fields — regression guard for the dropped style patch)
+    const reopened = new ProfileStore({ file });
+    expect(reopened.get(7)?.verbosity).toBe("brief");
+    expect(reopened.get(7)?.emoji).toBe(false);
   });
 });
 

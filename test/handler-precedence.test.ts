@@ -90,4 +90,26 @@ describe("handler command precedence (DEV-0174)", () => {
     expect(calls.schedule).toBe(0);
     expect((calls as any).recipe).toBe(1);    // recipeResolve rewrote it → agent path
   });
+
+  // reply-style-preference: "keep it brief" is a style command, handled + confirmed, never the agent.
+  it("'keep it brief and no emoji' → setReplyStyle (confirmed, not passed to the agent)", async () => {
+    let seen = "";
+    const { handle, sent, calls } = harness({
+      setReplyStyle: (_c, text) => { seen = text; return { msg: "Got it — I'll keep answers brief + no more emoji from now on." }; },
+    });
+    await handle(msg("keep it brief and no emoji"));
+    expect(seen).toBe("keep it brief and no emoji");
+    expect(sent[0]).toMatch(/brief/);
+    expect(calls.agent).toBe(0);
+  });
+
+  it("a non-style message doesn't trigger setReplyStyle (returns null → falls through)", async () => {
+    let called = 0;
+    const { handle, calls } = harness({
+      setReplyStyle: () => { called++; return null; },
+    });
+    await handle(msg("what's the top HN story"));
+    expect(called).toBe(1);       // it was consulted
+    expect(calls.agent).toBe(1);  // but it declined → reached the agent
+  });
 });

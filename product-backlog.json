@@ -3633,7 +3633,7 @@
       "title": "Remember answer-style prefs: \"keep it brief\", \"no emoji\", \"more detail\"",
       "impact": "medium",
       "effort": "M",
-      "status": "todo",
+      "status": "done",
       "why": "Units/location are personalized, but a users ANSWER-STYLE preference isnt — someone who texts \"just give me short answers\" or \"stop with the emojis\" has to repeat it every session. Remembering it (like units) is a real personalization/retention win + reduces annoyance for a daily user.",
       "how": "Add a style field to ProfileStore (e.g. {verbosity?:brief|detailed, emoji?:boolean}). Parse setter phrases (\"keep it brief/short\", \"more detail\", \"no emoji/stop using emojis\", \"use emoji\") in profile.ts. Inject the stored style into the agent SYSTEM context line (like units) so replies honor it. /profile shows it; clearable. Offline tests for parse + context injection."
     },
@@ -3645,6 +3645,15 @@
       "status": "todo",
       "why": "Users log weight/spending/mood (logs.ts), but must ASK for the trend. A weekly auto-summary (\"this weeks spending: $X, weight trend: down 2lb\") as a schedulable digest member closes the log->insight loop passively.",
       "how": "Add a reserved digest member (like the reading-list recap) that summarizes a chats logs for the period via the existing logQuery/chart. Reuse the savedRecap pattern in digest-runner. Offline test the member summary."
+    },
+    {
+      "id": "reply-style-apply-to-agent-length",
+      "title": "Brief-mode should also CAP the agent step/verbosity, not just hint the LLM",
+      "impact": "low",
+      "effort": "M",
+      "status": "todo",
+      "why": "reply-style-preference injects a context line asking for brief answers, but a free-tier LLM often ignores a soft hint and still returns a wall of text. A user who explicitly asked for brief answers would notice if replies stayed long. Making brief-mode actually shorter (hard post-trim or a tighter max) is the follow-through that makes the feature felt.",
+      "how": "When profile.verbosity===brief, either (a) post-process the final reply to the first N sentences / a char cap in handler formatReply, or (b) pass a stricter maxSteps/length budget into runAgent. Prefer a gentle post-trim that keeps whole sentences. Offline test: a long mock reply gets trimmed only when brief is set."
     }
   ],
   "history": [
@@ -5267,6 +5276,10 @@
     {
       "item": "digest-change-summary",
       "note": "Digest ✦ header now names WHATS NEW: when members changed, the header reads \"...(✦ = changed since last time) — new: hn, btc\" so a reader gets the gist before the sections. Names pulled from the changed members line prefixes, in float order. Small add on top of digest-smart-ordering. +1 test. 2318 green. call-tested: n/a (pure compose)."
+    },
+    {
+      "item": "reply-style-preference",
+      "note": "Relay now REMEMBERS answer-style prefs like it remembers units. Say \"keep it brief\"/\"give me more detail\" (verbosity) or \"no emoji\"/\"use emoji\" (emoji toggle) and it stores {verbosity,emoji} in the profile + injects them into the agent context line so every later reply honors it without re-asking. New parseReplyStyle (cue-gated so \"that was a short trip\" != a pref; handles combined \"brief and no emoji\") + setReplyStyle handler dep (routed before setLocation so a style command isnt misread as a place) + /profile shows it + /help line. FOUND+FIXED a real bug: ProfileStore.set whitelists patch fields and never copied verbosity/emoji, so the prefs were silently dropped on save — added the two lines + a reload-from-disk regression test. +6 tests (parse, combined, no-hijack, persist+contextLine, 2 handler-routing). 2324 green. call-tested: offline (no live anvil needed — pure profile/handler)."
     }
   ],
   "audits": [
