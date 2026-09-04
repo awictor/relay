@@ -4747,6 +4747,10 @@
     {
       "item": "idiom-coverage-swept",
       "note": "Completed the documented-idiom coverage sweep (no code change this run - full clean pass). datecalc/flight/translate/feeds/directions documented phrasings all verified working via lib probes. The class yielded 2 real fixes total (calc percent-off-first, convert_units density) then went clean. No manufactured change on a green tree (2104)."
+    },
+    {
+      "item": "readme-capability-refresh",
+      "note": "README doc-drift: the 'What you can text it' section had NO 'Instant answers' subsection at all — every keyless tool (weather/prices/math/units/words/time/dates/utilities/lookups) was undocumented, incl. all 5 new ones shipped this session (password, encode/decode, time-until, data-unit convert, uuid). README is the first thing a prospective user/dev reads; missing capabilities = undiscovered. Added a grouped Instant-answers subsection + refreshed the Commands line (added /setlocation /profile /dashboard /contacts /templates). Doc-only, no code; tsc green, no README test. 2104 tests unchanged."
     }
   ],
   "audits": [
@@ -5199,6 +5203,11 @@
     {
       "lens": "tool-idiom coverage probe #2 (full pass, clean)",
       "surfaced": "Probed the remaining tools' documented idioms: datecalc (days-until/between/what-day/how-old/date-in-N-days/weeks-until/labeled-birthday - ALL work), flight detect (AA100/UA83/DL215/BA249/'track X' - all parse), translate (URL page form + 'to French' both work), feeds (r/x, HN topic, github repo, reddit user, youtube channel via parseFollowCommand->resolveFeedSource - all resolve; 'follow ... please' strips correctly), directions (walk/cycle/drive modes + transit-maps-link branch all correct by design). NO drift found this pass. The idiom-coverage class is now swept: 2 real bugs fixed earlier (calc %-off, convert density), remaining tools verified clean."
+    },
+    {
+      "lens": "README accuracy probe",
+      "surfaced": "The in-bot HELP/START copy is thorough, but the REPO README lagged badly — 0 mentions of instant-answer tools or the session's 5 new capabilities. Fixed. This was the last stale doc surface; in-bot discovery + README now both current.",
+      "seeded": "(none new — owner levers remain the standing work)"
     }
   ]
 }

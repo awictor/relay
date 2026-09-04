@@ -50,6 +50,16 @@ written up in **[THESIS.md](THESIS.md)**.
 - **JSON APIs**: hits a public JSON endpoint directly (no browser) when that's faster.
 - **See / save**: "screenshot the top of Hacker News" → an image; "save this as a PDF: `<link>`" → a doc.
 
+**Instant answers (keyless, no browser — exact + immediate)**
+- **Weather / air / sun**: "weather this weekend", "is it smoky", "when's sunset" → current + forecast, AQI/UV, sunrise/sunset.
+- **Prices**: "price of bitcoin", "AAPL", "200 USD in EUR" → live crypto/stock quotes + currency at the live rate.
+- **Math & units**: "split $127.50 three ways with 20% tip", "20% off $50", "180C to F", "2 cups of flour in grams", "500 MB in GB" → computed exactly (never guessed).
+- **Words & facts**: "what does escrow mean", "how tall is Everest", "calories in a banana", "translate hola to English".
+- **Time**: "what time is it in Tokyo", "9am PT in London", "how long until 5pm".
+- **Dates**: "how many days until Christmas", "what day is July 4 2026", countdowns that ping as they near.
+- **Utilities**: "generate a strong password" / "a passphrase", "base64 encode …" / "decode this JWT", "make a QR code for …", "generate a uuid", "flip a coin", "roll a d20".
+- **Everyday lookups**: news headlines, sports scores, meal ideas, nutrition, where-to-watch a movie, flight status, package tracking, places near you.
+
 **Proactive (it messages you)**
 - **Reminders / schedules**: "remind me to stretch in 20 min", "every morning text me the weather".
 - **Recipes**: "save btc: check the price of bitcoin" → re-run with `/run btc` or `schedule btc every morning`.
@@ -62,8 +72,9 @@ pages by default; you can **authorize specific sites** by configuring host-scope
 hosts you've authorized (names only), and the dangerous-action guard still blocks committing clicks.
 See [SECURITY.md](SECURITY.md).
 
-**Commands**: `/help` `/start` `/reset` (clear chat) `/status` (health) `/sites` (authorized hosts) ·
-`/schedules` `/cancel` · `/recipes` `/run` `/forget` · `/digests` `/forget-digest` · `/alerts` `/forget-alert`.
+**Commands**: `/help` `/start` `/reset` (clear chat) `/status` (health) `/sites` (authorized hosts)
+`/setlocation` `/profile` `/dashboard` · `/schedules` `/cancel` · `/recipes` `/run` `/forget` ·
+`/digests` `/forget-digest` · `/alerts` `/forget-alert` · `/contacts` `/templates`.
 
 Runs on Telegram by default, or a terminal (`RELAY_CHANNEL=console`) — the agent core is
 transport-agnostic (see `src/channel.ts`).
