@@ -3552,7 +3552,7 @@
       "title": "Roman numeral convert: \"42 in roman numerals\", \"MMXXIV to a number\"",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "A common learning/quiz ask with no tool — calc chokes, get_fact is overkill. Pure + keyless, both directions.",
       "how": "Small lib: int<->roman (1-3999 standard), tool convert_roman (or fold into convert_base family) + dispatch + tests + /help."
     },
@@ -5150,6 +5150,10 @@
     {
       "item": "number-base-convert",
       "note": "New convert_base tool: \"255 in binary\", \"0xFF to decimal\", \"42 to octal\", \"0b1010 in hex\" — a dev/learning ask calc.ts choked on + encode_decode only did TEXT hex. src/lib/numbase.ts: parseTargetBase (word/base-N), parseSourceNumber (0x/0b/0o prefixes + plain decimal + named source base), renderBase (prefixed), runNumberBase (guards neg/non-int), formatNumberBase (both sides + base names). Tool + dispatch (pure, no backend) + SYSTEM_PROMPT + /help. +8 tests. 2286 green. call-tested: n/a (pure lib, exhaustively probed). 4th non-browse everyday errand this session (holidays, BMI, on-this-day, number-base)."
+    },
+    {
+      "item": "roman-numerals",
+      "note": "New convert_roman tool: \"42 in roman numerals\"->XLII, \"MMXXIV to a number\"->2024, both directions 1-3999. src/lib/roman.ts: toRoman (range-guarded), fromRoman (round-trip validation rejects IIII/VV/IC), runRoman (free-text either direction + honest out-of-range/invalid). Tool + dispatch (pure) + SYSTEM_PROMPT + /help. +7 tests. 2293 green. call-tested: n/a (pure lib, probed incl. edge/invalid). 5th non-browse everyday errand this session (holidays, BMI, on-this-day, number-base, roman)."
     }
   ],
   "audits": [
