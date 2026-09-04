@@ -27,8 +27,11 @@ export interface DigestRunnerDeps {
   agentEnv?: (chatId: number) => AgentEnv;
   // A member recipe whose task is a ">>" chain must run as a sequential workflow, not as one literal
   // agent task (digest-chain-member-literal) — same as the inbound /run + scheduled-recipe paths. When
-  // absent, a chain member falls back to runAgent (prior behavior). Returns the chain's final output.
-  runChain?: (chatId: number, task: string) => Promise<string>;
+  // absent, a chain member falls back to runAgent (prior behavior). Returns the chain's final output —
+  // as a structured result so a chain that STOPPED EARLY (a failed/degraded step, or an unmet if-gate)
+  // is flagged rather than shown as if it completed (chain-partial-nonrun-paths). A bare string is still
+  // accepted (legacy / when step counts aren't available).
+  runChain?: (chatId: number, task: string) => Promise<string | { final: string; stoppedEarly?: boolean; stepsDone?: number; stepsTotal?: number }>;
   formatReply: (text: string) => string;
   // Reading-list recap (saved-page-digest-integration): a reserved member ("reading list"/"saved") folds
   // the user's read-it-later saves into the briefing. Returns the recap text, or null when nothing's saved
@@ -95,7 +98,17 @@ export async function runDigest(digest: Digest, deps: DigestRunnerDeps): Promise
       // briefing shows the chain's final output, not a confused literal-"a >> b" agent run
       // (digest-chain-member-literal). Falls back to runAgent when runChain isn't wired.
       if (isChain(rec.task) && deps.runChain) {
-        const out = (await deps.runChain(digest.chatId, rec.task)).trim();
+        const raw = await deps.runChain(digest.chatId, rec.task);
+        const out = (typeof raw === "string" ? raw : raw.final).trim();
+        const stoppedEarly = typeof raw === "string" ? false : !!raw.stoppedEarly;
+        // A chain that STOPPED EARLY (a step failed/degraded, or an if-gate wasn't met) produced only a
+        // PARTIAL result — showing it as a normal briefing section reads as if the whole workflow ran
+        // (chain-partial-nonrun-paths). Flag it inline + count it as failed (so an all-partial digest
+        // still triggers the honest "couldn't build it" notice rather than a silent half-answer).
+        if (out && !looksLikeErrorReply(out) && stoppedEarly) {
+          const steps = (typeof raw === "object" && raw.stepsDone && raw.stepsTotal) ? ` (partial — ${raw.stepsDone} of ${raw.stepsTotal} steps)` : " (partial)";
+          return { line: `• ${name}:${steps} ${out}`, status: "failed" };
+        }
         // An error-shaped chain output ("the page returned a 404") is a soft failure, not content
         // (digest-error-as-content) — demote it so it's not shown as a real section + counts as failed.
         return out && !looksLikeErrorReply(out) ? { line: `• ${name}: ${out}`, status: "real" } : { line: `• ${name}: (couldn't fetch)`, status: "failed" };

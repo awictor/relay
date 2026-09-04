@@ -101,6 +101,34 @@ describe("runDigest", () => {
     expect(out).toContain("• weather: RESULT[get the weather]"); // real member carries the digest
   });
 
+  it("a chain member that STOPPED EARLY is flagged partial, not shown as a complete section (chain-partial-nonrun-paths)", async () => {
+    const out = await runDigest(digest(["weather", "flow"]), deps({
+      resolveRecipe: (_c: number, name: string) => name === "weather" ? { task: "get the weather" } : name === "flow" ? { task: "a >> b >> c" } : null,
+      // structured result: the chain only completed 1 of 3 steps
+      runChain: async () => ({ final: "half an answer", stoppedEarly: true, stepsDone: 1, stepsTotal: 3 }),
+    }));
+    expect(out).toContain("• flow: (partial — 1 of 3 steps) half an answer"); // flagged, not silent
+    expect(out).toContain("• weather: RESULT[get the weather]");              // real member carries it
+  });
+
+  it("a digest of ONLY a stopped-early chain triggers the honest all-failed notice, not a half-answer", async () => {
+    const out = await runDigest(digest(["flow"]), deps({
+      resolveRecipe: (_c: number, name: string) => name === "flow" ? { task: "a >> b" } : null,
+      runChain: async () => ({ final: "partial", stoppedEarly: true, stepsDone: 1, stepsTotal: 2 }),
+    }));
+    // partial counts as "failed" (not "real"), so an all-partial digest hits the all-failed path
+    expect(out).toMatchObject({ allFailed: true });
+  });
+
+  it("a COMPLETED chain (stoppedEarly false) shows normally via the structured result", async () => {
+    const out = await runDigest(digest(["flow"]), deps({
+      resolveRecipe: (_c: number, name: string) => name === "flow" ? { task: "a >> b" } : null,
+      runChain: async () => ({ final: "full answer", stoppedEarly: false, stepsDone: 2, stepsTotal: 2 }),
+    }));
+    expect(out).toContain("• flow: full answer");
+    expect(out).not.toContain("partial");
+  });
+
   it("a digest whose recipes were ALL deleted returns null (empty-digest-fires-noise)", async () => {
     const out = await runDigest(digest(["gone", "alsogone"]), deps({ resolveRecipe: () => null }));
     expect(out).toBeNull(); // no real content -> scheduled fire stays silent, /run says "empty or gone"

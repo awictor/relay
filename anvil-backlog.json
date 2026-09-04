@@ -23,7 +23,7 @@
       "title": "Surface stoppedEarly on the non-/run chain paths (digest members, index.ts:174/211/970)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "The interactive /run path (handler.ts:1737) flags a partial chain, but the digest-member + other index.ts call sites take bare .final and DROP stoppedEarly — a chain that failed a step mid-way is presented to the user as if it completed, in a daily briefing. Silent-wrong = trust erosion.",
       "how": "Thread stoppedEarly/step-counts through the digest-member runChain (index.ts:174) + the other .final call sites (211, 970) and have the digest/caller append a short '(partial — N of M steps)' note, mirroring handler.ts:1737. Offline unit test: a 2-step chain whose 2nd step returns degraded shows the partial note."
     },
@@ -37,7 +37,12 @@
       "how": "Add a bounded scroll-to-load to the browse path in src/anvil.ts: repeat scrollBy(0, viewport) + wait-for-network-idle up to K times or until item count stops growing, then read. Cap iterations + time. Live e2e against a real infinite-scroll page; assert post-scroll item count > initial."
     }
   ],
-  "history": [],
+  "history": [
+    {
+      "item": "chain-partial-nonrun-paths",
+      "note": "Fixed the non-/run chain paths presenting a stopped-early chain as if it completed. digest-runner now takes a STRUCTURED runChain result: a member chain that stopped early (failed/degraded step or unmet if-gate) is shown as \"(partial — N of M steps) ...\" AND counted as failed (so an all-partial digest hits the honest all-failed notice, not a silent half-answer). index.ts: digest dep (174) returns the structured result; trigger-to-action (211) + \"Run again\" (970) return null on stoppedEarly (like a degraded run) instead of attaching a partial. The /run path + scheduler already surfaced it. +3 unit tests; live e2e drove the REAL chain-runner+digest-runner (2-step chain, step 2 degraded -> stoppedEarly -> digest returned allFailed). 2184 green. call-tested: partial (real modules, stubbed agent — pure orchestration logic, no anvil needed)."
+    }
+  ],
   "probes": [
     {
       "note": "Seeded from the inline 3-lens gap analysis run at the end of the product-loop session (subagent cap 200/200 blocked the parallel AUDIT agents, so lenses were run inline over schedule-runner/alert-runner/chain-runner/agent/handler/anvil). Keyless-tool surface confirmed exhausted. Real remaining depth gaps: browse reads ONE page only (no pagination/scroll/crawl — grep=0), screenshot is viewport-only (anvil.ts:463), and non-/run chain paths drop stoppedEarly (partial presented as complete). Owner picked the anvil-depth direction; these 4 are the starting backlog. In-place schedule EDIT (alerts retune but reminders can't) was also found — parked for a reliability pass, not this browse-depth loop."

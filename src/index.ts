@@ -171,7 +171,9 @@ const digestRunText = (chatId: number, name: string): Promise<DigestOutcome> => 
     // appears in the daily recap isn't "forgotten".
     savedRecap: (c) => { const list = saved.list(c); const recap = readingRecap(list); if (recap) saved.markRecalled(c, [...list].sort((a, b) => b.created - a.created).slice(0, 5).map((p) => p.url), Date.now()); return recap; },
     // A chained-recipe member runs as a sequential workflow, not a literal task (digest-chain-member-literal).
-    runChain: async (c, task) => (await runChain(c, task, { llm, runAgent, formatReply, contextFor: (cc) => profiles.contextLine(cc, Date.now()), agentEnv: agentEnvFor })).final });
+    // Return the STRUCTURED result so the digest flags a chain that stopped early instead of showing its
+    // partial output as a complete section (chain-partial-nonrun-paths).
+    runChain: async (c, task) => { const r = await runChain(c, task, { llm, runAgent, formatReply, contextFor: (cc) => profiles.contextLine(cc, Date.now()), agentEnv: agentEnvFor }); return { final: r.final, stoppedEarly: r.stoppedEarly, stepsDone: r.steps.filter((s) => !s.skipped).length, stepsTotal: r.steps.length }; } });
 };
 // Check an alert -> { message (null = silent), commit }. The caller MUST call commit() AFTER a
 // successful send so a failed send leaves the baseline un-advanced + the crossing re-fires next
@@ -208,8 +210,12 @@ const alertCheck = async (chatId: number, name: string): Promise<{ message: stri
       // digest). Skip a slotted recipe; run a chain via runChain like every other path.
       if (hasSlots(rec.task)) return null;
       if (isChain(rec.task)) {
-        const chained = (await runChain(c, rec.task, { llm, runAgent, formatReply, contextFor: (cc) => profiles.contextLine(cc, Date.now()), agentEnv: agentEnvFor })).final;
-        return chained?.trim() ? chained : null;
+        // A trigger-to-action chain that STOPPED EARLY only half-ran — don't attach a partial result to
+        // the alert ping as if the workflow completed (chain-partial-nonrun-paths); treat it like a
+        // degraded run and skip the action addendum (the alert itself still fires).
+        const r = await runChain(c, rec.task, { llm, runAgent, formatReply, contextFor: (cc) => profiles.contextLine(cc, Date.now()), agentEnv: agentEnvFor });
+        if (r.stoppedEarly) return null;
+        return r.final?.trim() ? r.final : null;
       }
       const out = await runAgent(rec.task, { llm, context: profiles.contextLine(c, Date.now()) || undefined, ...agentEnvFor(c) }, []);
       return out.degraded ? null : formatReply(out.reply);
@@ -967,7 +973,11 @@ const handle = createHandler({
     const rec = recipes.get(chatId, name);
     if (!rec || hasSlots(rec.task)) return null;
     if (isChain(rec.task)) {
-      const chained = (await runChain(chatId, rec.task, { llm, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor })).final;
+      // A "Run again" chain that stopped early only half-ran — return null (like a degraded run) rather
+      // than resurfacing a partial as a fresh complete answer (chain-partial-nonrun-paths).
+      const r = await runChain(chatId, rec.task, { llm, runAgent, formatReply, contextFor: (c) => profiles.contextLine(c, Date.now()), agentEnv: agentEnvFor });
+      if (r.stoppedEarly) return null;
+      const chained = r.final;
       return chained?.trim() ? chained : null;
     }
     const out = await runAgent(rec.task, { llm, context: profiles.contextLine(chatId, Date.now()) || undefined, ...agentEnvFor(chatId) }, []);
