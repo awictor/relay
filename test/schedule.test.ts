@@ -23,6 +23,16 @@ describe("parseSchedule — relative", () => {
     expect(c.task).toMatch(/invoice/);
   });
 
+  it("strips a TRAILING 'please'/'pls' from the stored task, keeps 'thanks' + mid-task words (schedule-task-trailing-courtesy)", () => {
+    // trailing courtesy pollutes the stored task + the re-ping ("⏰ Reminder: call mom please") — drop it.
+    expect(parseSchedule("remind me to call mom at 5pm please", NOW)!.task).toBe("call mom");
+    expect(parseSchedule("remind me to buy milk tomorrow at 9am pls", NOW)!.task).toBe("buy milk");
+    expect(parseSchedule("every morning send me the weather please", NOW)!.task).toBe("send me the weather");
+    // 'thanks' can BE the task ("say thanks") + a mid-task 'please' is content — both untouched.
+    expect(parseSchedule("remind me to say thanks at 5pm", NOW)!.task).toBe("say thanks");
+    expect(parseSchedule("remind me to say please to grandma at 5pm", NOW)!.task).toBe("say please to grandma");
+  });
+
   it("worded durations resolve to a relative once (worded-duration-reminders)", () => {
     expect(parseSchedule("remind me to leave in an hour", NOW)!.dueMs - NOW).toBe(HR);
     expect(parseSchedule("remind me in half an hour to check the oven", NOW)!.dueMs - NOW).toBe(30 * MIN);

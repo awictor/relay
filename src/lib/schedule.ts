@@ -684,7 +684,15 @@ function cleanTask(raw: string, timeClause: string): string {
   const idx = raw.toLowerCase().indexOf(timeClause.toLowerCase());
   let s = idx >= 0 ? raw.slice(0, idx) + " " + raw.slice(idx + timeClause.length) : raw;
   s = stripReminderPrefix(s);
-  return s.replace(/\s+/g, " ").replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, "").trim();
+  s = s.replace(/\s+/g, " ").replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, "").trim();
+  // Strip a TRAILING courtesy word so it doesn't get stored into the task + echoed back forever
+  // ("remind me to call mom at 5pm please" -> task "call mom", not "call mom please") — the courtesy is
+  // meta, not the errand (schedule-task-trailing-courtesy). ONLY please/pls/plz (rarely a task object),
+  // NOT "thanks"/"thank you" (which can legitimately BE the task — "remind me to say thanks"). Only when
+  // task text precedes it, so a bare-courtesy edge keeps the word. Re-trim exposed dangling punctuation.
+  const stripped = s.replace(/[\s,]*\b(?:please|pls|plz)\b\s*$/i, "").trim();
+  if (stripped) s = stripped;
+  return s.replace(/[\s,;:.\-]+$/g, "").trim();
 }
 
 // --- persistent store (JSON file, gitignored — like MemoryStore) ---

@@ -3167,6 +3167,15 @@
       "status": "done",
       "why": "parseUnitConvert didn't strip a trailing politeness word/punctuation, so 'to lbs please' parsed to target unit 'lbs please' -> unknown unit -> the conversion returned null and a common polite phrasing silently failed (fell to a slow agent guess).",
       "how": "Strip a trailing please/thanks/thx/pls + trailing ?.! before matching (alongside the existing leading-'convert' strip). Regressions (180C to F, 5ft11 to cm, cross-dim null) unchanged."
+    },
+    {
+      "id": "schedule-task-trailing-courtesy",
+      "title": "'remind me to call mom at 5pm please' stored the task as 'call mom please'",
+      "impact": "medium",
+      "effort": "S",
+      "status": "done",
+      "why": "cleanTask didn't drop a trailing courtesy word, so 'please'/'pls' got baked into the stored reminder/recipe task — the reminder re-pinged '⏰ Reminder: call mom please' forever, and a recipe/daily ran 'send me the weather thanks' through the agent verbatim.",
+      "how": "In cleanTask (the single task chokepoint for every schedule kind), strip a TRAILING please/pls/plz only — NOT 'thanks' (can be the task, 'say thanks') and NOT a mid-task 'please' ('say please to grandma'). Only when task text precedes it."
     }
   ],
   "history": [
@@ -4453,6 +4462,10 @@
     {
       "id": "unit-convert-trailing-please",
       "note": "Continued the labeled/phrased-input audit (last run's lesson). Probed parseUnitConvert: 'convert 100 kg to lbs please' -> to='lbs please' -> null -> slow agent. Added a trailing please/thanks/punct strip. +2 tests, 2024 green. Same class as datecalc-labeled-until: the core value parsing is swept, but natural politeness/label tails around it still broke tools."
+    },
+    {
+      "id": "schedule-task-trailing-courtesy",
+      "note": "Third courtesy/label-tail find in a row. cleanTask baked a trailing 'please'/'pls' into the stored reminder/recipe task, so it echoed back in every re-ping + ran verbatim in a recipe. Stripped trailing please/pls/plz at the cleanTask chokepoint (covers all schedule kinds); kept 'thanks' + mid-task words. +1 test, 2025 green."
     }
   ],
   "audits": [
@@ -4797,6 +4810,9 @@
     },
     {
       "note": "anvil DOWN, agent cap exhausted. Labeled/phrased-input sweep continues to pay: unit-convert dropped a trailing 'please' into the unit. Fixed. The productive residual audit is politeness/label tails on the parse tools (compose recipient labels, alert phrasings next). confirm-to-act (owner) + anvil-live-e2e (anvil) still gated."
+    },
+    {
+      "note": "anvil DOWN, agent cap exhausted. Courtesy-tail sweep, run 3: schedule cleanTask stored trailing 'please' into the task. Fixed at the chokepoint. Class nearly swept (datecalc, unit-convert, now schedule). confirm-to-act (owner) + anvil-live-e2e (anvil) still the gated levers."
     }
   ]
 }
