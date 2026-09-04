@@ -3564,6 +3564,24 @@
       "status": "done",
       "why": "calc does \"20% of 50\" + tip, but not \"X to Y percent change\" or a clean \"% off\" final-price. Common shopping/finance ask.",
       "how": "Extend calc.ts normalizeExpr (or a small percent branch) for \"A to B percent change\" -> ((B-A)/A)*100 and \"N% off P\" -> P*(1-N/100). Tests. Verify no clash with existing % idioms."
+    },
+    {
+      "id": "text-stats",
+      "title": "Text stats: \"word count of <text>\", \"how many characters\", \"reverse this\", \"is X a palindrome\"",
+      "impact": "low",
+      "effort": "S",
+      "status": "todo",
+      "why": "Quick text utilities with no tool — the LLM can miscount long text + reverse is fiddly char-by-char. Deterministic + instant beats an unreliable model count.",
+      "how": "Small lib: word count (whitespace split), char count (with/without spaces), reverse (code-point safe), palindrome check (alnum-normalized). One tool text_tool(request) that classifies + answers, or a few. Tests + /help."
+    },
+    {
+      "id": "interest-calc",
+      "title": "Interest calc: \"compound interest on $1000 at 5% for 3 years\", simple interest",
+      "impact": "low",
+      "effort": "M",
+      "status": "todo",
+      "why": "calc has loanpayment but not savings-growth compound/simple interest — a common personal-finance ask (\"how much will $1000 grow at 5% over 3 years\").",
+      "how": "Add compound(principal,ratePct,years,[n]) + simple(principal,ratePct,years) to calc.ts FUNCS, or a dedicated tool that parses the phrasing. Tests."
     }
   ],
   "history": [
@@ -5821,6 +5839,11 @@
       "lens": "new-user everyday-errand (inline; cap 200/200)",
       "surfaced": "Continued inventory: Roman numerals (\"42 in roman numerals\", \"MMXXIV to number\") + percent-change (\"50 to 75 is what % increase\") both have no tool. UUID already covered (random.ts). Seeded both.",
       "seeded": "roman-numerals + percent-change"
+    },
+    {
+      "lens": "new-user everyday-errand (inline; cap 200/200)",
+      "surfaced": "Continued inventory after percent-change: text stats (word/char count, reverse, palindrome check) + compound/simple interest both have no tool. Case-convert is arguably LLM-trivial (skip). Seeded text-stats + interest-calc.",
+      "seeded": "text-stats + interest-calc"
     }
   ]
 }
