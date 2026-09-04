@@ -86,9 +86,27 @@
       "title": "extract_list dedup should consider all fields, not just the first",
       "impact": "low",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "extractListResult dedups by the first field's value only, so two distinct items that share a title (different price/date) collapse to one — a real listing (two tickets same event, different price) loses rows.",
       "how": "Dedup by a composite key of ALL requested field values (JSON.stringify the normalized row) instead of just field[0]. Keep the all-null skip. Update the dedup unit test."
+    },
+    {
+      "id": "select-dropdown-support",
+      "title": "anvil: support <select> dropdowns (+ checkbox/radio) in the interactive browse path",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "click/type cover text inputs + buttons, but a <select> dropdown, checkbox, or radio (date pickers, filters, sort-by, quantity) cant be set — so a filtered search or a form with a dropdown dead-ends mid-errand. A real chunk of interactive sites need this.",
+      "how": "Add a setValue/select action to anvil (in-page: for a <select> set .value + dispatch change; for checkbox/radio set .checked + click) exposed as a select tool or an option on type. Live e2e on a real page with a dropdown; assert the value took."
+    },
+    {
+      "id": "site-search-tool",
+      "title": "site_search: type a query into a sites own search box + submit, in one tool",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "To search WITHIN a site (a store, a docs site, a forum) the agent must browse -> guess the search-box selector -> type -> find+click submit — 4 fragile steps it often flubs. A single site_search(url,query) that finds the search input heuristically (input[type=search], [name*=q], role=searchbox), types, submits, and reads results would make in-site search reliable.",
+      "how": "Add site_search to anvil: navigate, find the search box by common selectors/aria, type the query, submit (Enter or a nearby submit), wait, readCurrent. New agent tool + dispatch. Live e2e against a real site search; assert results returned."
     }
   ],
   "history": [
@@ -127,6 +145,10 @@
     {
       "item": "load-more-button",
       "note": "scrapeScroll now handles a click-driven Load more/Show more BUTTON, not just pure scroll: when a scroll doesnt grow the page it tries clicking a visible, enabled button/anchor whose text matches load more|show more|see more|more results (in-page click via evaluate), waits, re-measures, and only stops if THAT also adds nothing. A pure-scroll feed is unchanged (stops immediately when scroll stops growing). scroll_feed + extract_list (which falls back to scrapeScroll) both inherit it. Tool description + doc updated. LIVE e2e: pure-scroll regression intact (quotes/scroll 5 scrolls, 10K chars); load-more click verified on an injected real-http listing (Load more click grew list 1 -> 11 items). 2200 green. call-tested: TRUE. Logic in anvil internals (module-level fetch), so live e2e is the proof; scroll_feed tool routing covered by dispatch unit tests."
+    },
+    {
+      "item": "extract-list-dedup-multifield",
+      "note": "extract_list now dedups by ALL requested fields (composite delimiter-joined key), not just the first — two genuinely-different items sharing a title (two tickets same event different price, two listings same title different date) BOTH survive; only a row identical across every field collapses. Also fixed a latent bug found while editing: the prior join used a stray \u0001 (SOH) byte as delimiter, now a clean \" | \". +2 unit tests (share-title-keep-both; exact-dup-collapse). 2201 green. call-tested: false (pure logic)."
     }
   ],
   "probes": [
@@ -141,6 +163,9 @@
     },
     {
       "note": "Browse-depth surface now thorough: pagination (link, arrow-suffixed), infinite-scroll, full-page screenshot, cross-page structured extraction (extract_list), CSV export. pdf-fullpage verified NON-issue (page.pdf paginates whole page already). Remaining depth gap surfaced: a click-driven <button>Load more</button> that fetches+appends items is NEITHER a link pager (NEXT_PAGE matches load-more only as <a href>) NOR scroll — a common listing pattern still yields page one. Seeded load-more-button. Also: extract_list dedups by FIRST field only, so two genuinely different items sharing a title collapse — minor, seeded as a refinement."
+    },
+    {
+      "note": "Browse-DEPTH (reading many results) is now complete: pagination + infinite-scroll + load-more button gathering, cross-page structured extract_list, CSV export, all-field dedup. Next frontier is browse-BREADTH / interactive depth (acting on a page), which is thinner: click/type are single-selector only (no multi-field form fill in one step), no <select>/dropdown/checkbox support in anvil, and no site-search convenience (user must browse->find selector->type->click manually). These are the errands that turn Relay from a READER into a DOER (still read-only-safe: no submit/pay, the dangerous-action guard stays). Seeded fill_form + site_search."
     }
   ]
 }

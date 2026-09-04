@@ -63,10 +63,17 @@ describe("extractListResult (extract-across-pages)", () => {
     expect(JSON.parse(r.json)).toEqual([{ title: "A", price: "$1" }, { title: "B", price: "$2" }]); // junk dropped
   });
 
-  it("dedupes by the first field's value", async () => {
+  it("dedupes only when ALL fields match — two items sharing just the title both survive (extract-list-dedup-multifield)", async () => {
+    // same title, DIFFERENT price -> genuinely different items (two tickets, two prices) -> keep both
     const llm = arrayLLM([{ title: "A", price: "$1" }, { title: "A", price: "$9" }, { title: "B", price: "$2" }]);
     const r = await extractListResult(llm, "page", ["title", "price"], 10);
-    expect(r.count).toBe(2); // the second "A" dropped
+    expect(r.count).toBe(3); // all three kept — first-field-only dedup would have dropped one "A"
+  });
+
+  it("drops a row identical across EVERY field", async () => {
+    const llm = arrayLLM([{ title: "A", price: "$1" }, { title: "A", price: "$1" }, { title: "B", price: "$2" }]);
+    const r = await extractListResult(llm, "page", ["title", "price"], 10);
+    expect(r.count).toBe(2); // the exact duplicate {A,$1} collapsed
   });
 
   it("skips all-null junk rows", async () => {

@@ -1876,18 +1876,23 @@ ${pageText}`;
   let arr: unknown;
   try { arr = JSON.parse(match[0]); } catch { return { json: "[]", count: 0 }; }
   if (!Array.isArray(arr)) return { json: "[]", count: 0 };
-  // Normalize each row to exactly the requested fields; dedup by the first field's value; cap.
-  const key0 = fields[0]!;
+  // Normalize each row to exactly the requested fields; dedup by ALL field values (not just the first) so
+  // two genuinely-different items that happen to share their first field — two tickets to the same event
+  // at different prices, two listings with the same title but different dates — both survive
+  // (extract-list-dedup-multifield). Only a row identical across EVERY requested field is a true dup.
   const seen = new Set<string>();
   const rows: Record<string, unknown>[] = [];
   for (const item of arr) {
     if (rows.length >= cap) break;
     const obj = (item && typeof item === "object") ? item as Record<string, unknown> : {};
     const row = Object.fromEntries(fields.map((f) => [f, f in obj ? obj[f] : null]));
-    const dedupKey = String(row[key0] ?? "").trim().toLowerCase();
-    if (dedupKey && seen.has(dedupKey)) continue;      // drop a repeated item (same first-field value)
-    if (dedupKey) seen.add(dedupKey);
     if (fields.every((f) => row[f] === null)) continue; // skip an all-null junk row
+    // Composite key over every field's normalized value, delimiter-joined so "ab"+"c" and "a"+"bc" can't
+    // collide. Only a row identical across ALL requested fields is a true duplicate (the all-null skip
+    // above already dropped the truly-empty rows).
+    const dedupKey = fields.map((f) => String(row[f] ?? "").trim().toLowerCase()).join(" | ");
+    if (seen.has(dedupKey)) continue;                  // identical across ALL fields -> a true duplicate
+    seen.add(dedupKey);
     rows.push(row);
   }
   return { json: JSON.stringify(rows, null, 2), count: rows.length };
