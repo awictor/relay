@@ -179,6 +179,24 @@
       "status": "done",
       "why": "After a few interactive steps a user may ask 'what page are you on?' / 'what's the link?' - the agent has readCurrent (returns url) but no cheap just-the-location tool, so it does a full read. A tiny where_am_i is a cheap honest orientation.",
       "how": "Reuse readCurrent but add a lightweight path (or a where tool) returning just {title,url} of the open session; route 'what page/link are you on' to it. Small; depends on an open session."
+    },
+    {
+      "id": "watch-structured-new-items",
+      "title": "Watch a listing for NEW structured rows (jobs/listings), not a noisy whole-page text diff",
+      "impact": "high",
+      "effort": "L",
+      "status": "todo",
+      "why": "A 'watch jobs: remote react roles for new listings' currently diffs page text, so it flaps on ads/timestamps/reordering + can miss/duplicate real new items. Detecting new items by their extracted rows (title+link) is what a user actually means by 'new listings' and is the competitor's core alerting.",
+      "how": "In the list-watch path, when the source is a web listing (not an RSS/HN/reddit feed), gather via scrape_pages/scroll + extract_list to a row set keyed by a stable field (link/title), diff row-keys against the stored baseline, ping only genuinely-new rows. Reuse extractListResult + the existing new-item alert plumbing (feeds.ts/alerts.ts). Offline unit test the row-diff; live e2e on a real listing across two checks."
+    },
+    {
+      "id": "save-interactive-recipe",
+      "title": "Save an interactive browse+filter as a re-runnable/daily recipe",
+      "impact": "medium",
+      "effort": "M",
+      "status": "todo",
+      "why": "The interactive tools (browse->site_search->set_field->read_list) do a rich errand once, but a user cant SAVE 'filter the jobs board to remote react and list new ones' as a /run recipe or a morning digest member — so the depth only helps ad-hoc, not on the retention flywheel.",
+      "how": "Confirm a multi-tool interactive task survives the recipe save/replay path (recipes run via runAgent, which now has the tools) + the chain runner; add a test that a saved recipe whose task is an interactive browse+filter re-runs cleanly. Mostly verification + any gaps found; document in /help."
     }
   ],
   "history": [
@@ -290,6 +308,9 @@
     },
     {
       "note": "Browse arc complete (depth+breadth+continuity+visibility+status), all opt-in/guarded/live-verified. Cookie-jar authed-site access is ENV-config only (RELAY_COOKIES file) + owner-gated by design (a user can't text their session cookies safely) - leave as-is. Real fresh gap: interactive error recovery. A wrong click/set_field selector returns a bare 'couldn't find #x' - the agent doesn't get the page's ACTUAL clickable/settable elements, so it guesses again + flails or gives up. Feeding back nearby candidate selectors on a not-found turns a dead-end into a self-correct. Seeded that + a smaller current-url surface."
+    },
+    {
+      "note": "Browse arc is now COMPLETE + live-verified end to end: read-deep (pagination/scroll/load-more -> extract_list rows -> CSV), act-broad (site_search/type/set_field dropdowns/wait_for), iterate-across-turns (continuity), see-and-direct (screenshot current + status hints), self-correct (selector candidates on a miss), orient (where_am_i). Scheduled recipes/digests already inherit all of it via runAgent. Next value is on the AUTOMATION side, not the browse primitives: a watch that detects NEW structured items (jobs/listings) via extract_list rows instead of a whole-page text diff (which flaps on ads/timestamps), and saving an interactive browse+filter as a daily recipe. Seeded both; the browse-primitive backlog is drained."
     }
   ]
 }
