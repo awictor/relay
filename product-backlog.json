@@ -5111,6 +5111,10 @@
     {
       "item": "holidays-tool",
       "note": "New get_holidays tool (new-user lens: a common everyday ask with no home). Keyless nager.date API: \"is today a holiday?\", \"next public holiday\", \"holidays this year in <country>\". New src/lib/holidays.ts (pure resolveCountryCode/parseHolidays/parseHolidayIntent + runHolidays with injected fetch); tool + dispatch (local-today from nowMs+tz like date_math) + BrowserBackend.getHolidays + SYSTEM_PROMPT + /help. Country by name/adjective/2-letter code, defaults US. +11 tests (9 lib + 2 dispatch incl. unavailable-fallback). LIVE e2e vs real API: US next=Labor Day(6d), UK=St Andrews Day, is-today Jan1=New Years yes, DE list=19. 2259 green. call-tested: TRUE. First NON-browse capability add in a while — a genuinely new everyday errand class."
+    },
+    {
+      "item": "bmi-tool",
+      "note": "New get_bmi tool (new-user lens): \"what is my BMI at 5’10 160lb\" / \"BMI 70kg 1.75m\" — a common everyday health ask calc.ts choked on (\"I dont know bmi\"). src/lib/bmi.ts: parseHeightM (feet-inches 5’10″/5 ft 10 in/6 foot, cm, m, bare inches; guards a trailing weight from being read as inches), parseWeightKg (lb/kg/stone+lb), runBmi (exact, WHO category, sanity-bounded), formatBmi (not-a-diagnosis caveat). Tool + dispatch (pure, no backend) + SYSTEM_PROMPT + /help. +10 tests (height/weight/run/format + 2 dispatch). Caught+fixed a real parse bug mid-build: “6 foot 200 lb” read 200 as inches -> BMI 1.9; now inches only captured when 0-11 + unit/apostrophe form. 2269 green. call-tested: n/a (pure lib, exhaustively probed)."
     }
   ],
   "audits": [

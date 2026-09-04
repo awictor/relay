@@ -16,6 +16,7 @@ import { fetchYouTubeTranscript } from "./lib/youtube.js";
 import { rowsToCsv } from "./lib/to-csv.js";
 import { convertCurrency as fxConvert, formatConversion } from "./lib/fx.js";
 import { runHolidays } from "./lib/holidays.js";
+import { runBmi, formatBmi } from "./lib/bmi.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
 import { getCryptoQuote as cryptoFetch, formatCrypto } from "./lib/crypto.js";
 import { lookupWord as dictFetch, formatDefinition } from "./lib/dictionary.js";
@@ -271,6 +272,15 @@ export const TOOLS: ToolSpec[] = [
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The compare question verbatim, e.g. \"500g for $4 or 1.2kg for $9\"." } },
+      required: ["request"],
+    },
+  },
+  {
+    name: "get_bmi",
+    description: "Compute BMI (body mass index) EXACTLY from a height + weight, in either units — no key, instant. Use this — NOT calculate or web_search — for \"what's my BMI at 5'10 and 160 lb\", \"BMI for 70 kg 1.75 m\". Pass the user's request verbatim (it carries the height + weight). Reports the number + WHO category with a not-a-diagnosis caveat.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The BMI request verbatim incl. height + weight, e.g. \"5 ft 10, 160 lb\" or \"70kg 1.75m\"." } },
       required: ["request"],
     },
   },
@@ -575,6 +585,7 @@ Tools:
 - "unit_price" (request): compare package sizes + name the better buy by price-per-unit EXACTLY. Use for "which is cheaper, 500g for $4 or 1.2kg for $9"/"$3.99 for 12oz vs $5.49 for 20oz"/"12 for $6 or 30 for $13". NOT mental math.
 - "translate" (request): translate text or a whole page into another language. Use for "translate X to Spanish"/"how do you say X in Japanese"/"read me this page in English: <url>". Pass the request verbatim.
 - "calculate" (expression): compute arithmetic/financial math EXACTLY. Use for chained math, bill-splits, tips, percentages, loan payments — anything past a trivial one-step sum (don't do it in your head, that's silently wrong). loanpayment(principal, annualRatePct, years) for a monthly payment.
+- "get_bmi" (request): compute BMI from a height + weight (either units). Use for "what's my BMI at 5'10 160lb" / "BMI 70kg 1.75m". NOT calculate.
 - "get_news" (topic?): today's top news headlines, or about a topic. Use this — NOT web_search — for "what's the news"/"top headlines"/"news about X"/"latest on Y". Omit topic for general top stories.
 - "get_fun" (request): a joke, fun fact, or trivia question. Use this — NOT web_search or your own memory — for "tell me a joke"/"fun fact"/"trivia"/"quiz me". Pass the request verbatim; I pick joke/fact/trivia.
 - "get_scores" (request): sports scores/schedule for a league or team. Use this — NOT web_search — for "did the Lakers win"/"Man City score"/"NBA scores"/"who's playing tonight" AND upcoming games "when do the Lakers play next"/"next Arsenal game"/"upcoming NFL". Pass the request verbatim (keep their "next"/"when do they play" wording). Covers NBA/NFL/MLB/NHL/NCAA + major soccer.
@@ -1511,6 +1522,14 @@ export async function runAgent(
         } catch (e) {
           push("calculate", `Couldn't compute "${expr}": ${e instanceof Error ? e.message : String(e)}. Ask the user to restate it, or answer a trivial one yourself.`);
         }
+        continue;
+      }
+
+      if (call.name === "get_bmi") {
+        const request = String(call.args.request ?? "").trim();
+        const r = runBmi(request);
+        if (!r) { push("get_bmi", `Couldn't read a height + weight from "${request}". Ask the user for both with units (e.g. "5 ft 10, 160 lb" or "70 kg, 1.75 m").`); continue; }
+        push("get_bmi", `${formatBmi(r)} Report this to the user.`);
         continue;
       }
 
