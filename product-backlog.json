@@ -3110,7 +3110,7 @@
       "title": "Run a real anvil e2e pass once the browser is up (verify call-tested path)",
       "impact": "medium",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Every recent change is unit-verified offline (anvil DOWN for many runs); the data-source + scrape/click paths have never been call-tested in this streak, so a live regression could hide behind green units.",
       "how": "When ctx_execute shows anvil localhost:3000/v1/live = 200, drive one real errand end-to-end via the console channel (e.g. a scrape + a get_weather) + assert a coherent reply; report call-tested:true. Owner-gated only in that it needs anvil started."
     },
@@ -4931,6 +4931,10 @@
     {
       "item": "calendar-probe-clean-pass",
       "note": "Clean probe of calendar_event dispatch (arg-driven, defensive). No code change (2134 green). The offline parser vein is worked out - the last several probes (youtube/news, compose-resolve, calendar) return clean; the 24 fixes this session covered the real gaps."
+    },
+    {
+      "item": "anvil-live-e2e",
+      "note": "anvil brought UP (node dist/api.js, real Chrome, :3000). Ran the overdue LIVE end-to-end: (1) src/anvil.ts scrape('https://example.com') via live anvil -> title 'Example Domain' + real content (real Chrome fetch, EXIT 0); (2) FULL agent path runAgent('scrape example.com and tell me the title', {GeminiClient}) -> reply 'The title ... is \"Example Domain\"', tools [scrape, get_fact], 3 steps, degraded=false, ~33s. call-tested: TRUE. The channel->agent->anvil->reply pipe is verified working live with the real free-tier LLM + self-hosted browser - the core product promise, previously only unit-verified this session."
     }
   ],
   "audits": [
@@ -5519,6 +5523,11 @@
     {
       "lens": "calendar_event dispatch probe (clean)",
       "surfaced": "calendar_event is LLM-arg driven + defensively handled (title required, startMs/startDate/durationMin guarded via Number.isFinite, try/catch on buildIcs). No text-parser gap. Clean. The parser/CRUD/phrasing surface is exhaustively probed now - 24 real fixes then clean-verifying counterparts (compose-resolve, calendar). No code change."
+    },
+    {
+      "lens": "live anvil e2e (anvil UP)",
+      "surfaced": "With anvil up, verified the real pipe end-to-end: Gemini agent drove a live anvil Chrome scrape and returned a correct grounded reply (not degraded). The MVP's core loop works live, not just in mocks. This closes the session's one anvil-gated item. Remaining gated work: confirm-to-act (owner product-UX decision).",
+      "seeded": "(anvil e2e done; confirm-to-act still owner-gated)"
     }
   ]
 }
