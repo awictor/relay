@@ -941,8 +941,8 @@
       "title": "confirm-to-act one-shot approval (the acting gap)",
       "impact": "high",
       "effort": "L",
-      "status": "todo",
-      "why": "Relay is read-only; Instinct core is DOING. A per-chat pending-action flow (agent previews the exact single gated click + target, executes only on explicit YES, expires else) turns reader into doer without abandoning safety. OWNER-GATED though — confirm scope before building.",
+      "status": "in-progress",
+      "why": "Relay is read-only; Instinct core is DOING. A per-chat pending-action flow (agent previews the exact single gated click + target, executes only on explicit YES, expires else) turns reader into doer without abandoning safety. OWNER-GATED though — confirm scope before building. [OWNER SIGNED OFF: build default-OFF opt-in behind RELAY_CONFIRM_TO_ACT.] Core lib built; session-persistence + agent/handler wiring next.",
       "how": "Owner-gated: stash a proposed committing action; on YES run exactly that one click in the held anvil session; timeout/NO discards. Needs owner sign-off (it deliberately crosses the DANGEROUS guard)."
     },
     {
@@ -3437,6 +3437,15 @@
       "status": "done",
       "why": "parseForgetPlace only matches 'forget the gym PLACE' (trailing 'place' required) - 'forget my gym'/'delete my office' return null. parseForgetContact needs \"'s contact\" or 'contact <name>' - bare 'forget mom' / 'remove mom from contacts' return null. Both are the natural way to delete; a user who saved 'mom' can't easily remove her.",
       "how": "Widen parseForgetPlace to 'forget/delete/remove (my) <alias>' (guard against a fact/generic forget) + parseForgetContact to 'forget/remove <name>' / 'remove <name> from contacts'. Careful ordering vs parseForgetFact (which also starts 'forget ...'). +tests."
+    },
+    {
+      "id": "confirm-to-act-wiring",
+      "title": "Wire confirm-to-act: session-persist across turns + flag-gated stash/preview + handler YES/NO",
+      "impact": "high",
+      "effort": "M",
+      "status": "todo",
+      "why": "The tested core (confirm-action.ts) is landed but inert. To make it work end-to-end: (1) the anvil session must survive the preview turn -> the YES turn (currently created+released within one runAgent); (2) the click/type dispatch, when RELAY_CONFIRM_TO_ACT is on + isDangerousAction, must stash a PendingAction + return the preview instead of the flat refuse; (3) the handler must route a YES/NO reply to execute-that-one-click / discard.",
+      "how": "Add a PendingActionStore dep + a keepSession option to runAgent (or a resumable session handle) so the held anvil session persists; gate the click-dispatch branch on confirmToActEnabled(); in handler, before normal routing, if a pending action exists classify the reply (yes->run the exact stashed click in the held session + clear; no/expiry->discard+ack; other->fall through). Real tests with a mock backend asserting the click fires ONLY on yes. Keep default-OFF green."
     }
   ],
   "history": [
@@ -4959,6 +4968,10 @@
     {
       "item": "weather-live-verify",
       "note": "Live-verified the #1 texting errand: 'what's the weather in Tokyo' -> get_weather (Open-Meteo, keyless) -> '24C, overcast, hi 24 lo 22, 95% rain', 2 steps, 3s, not degraded. The highest-frequency user ask works live right now with correct grounded + formatted data. 7th live dimension (top errand). No code change. (Note: 2 weather errands in one run exceeded the 2m harness window - Gemini latency; ran singly.)"
+    },
+    {
+      "item": "confirm-to-act-core",
+      "note": "OWNER SIGNED OFF (AskUserQuestion: 'Build, default-OFF opt-in behind RELAY_CONFIRM_TO_ACT'). Built the tested pure CORE: src/lib/confirm-action.ts - confirmToActEnabled (flag, default OFF so behavior byte-identical), classifyConfirmReply (whole-message yes/no, 'yes please also add milk'->other so no false money-spend), formatConfirmPrompt (names exact click+host, blunt irreversible warning, TTL, YES/NO), PendingActionStore (in-memory per-chat, TTL-expiry-pruned, most-recent-wins, never persisted). +11 tests. .env.example documents the flag. 2145 green. NO behavior change yet - the click dispatch still hard-refuses until the wiring lands (next)."
     }
   ],
   "audits": [
@@ -5582,6 +5595,11 @@
       "lens": "live weather (top-errand) probe",
       "surfaced": "Weather - the most common thing a person texts - verified live end-to-end via Open-Meteo. 7 live dimensions now green (core/harder/safety/session/keyless-APIs/handler-inbound/weather). The product is comprehensively proven against real services at every layer + on its highest-frequency errand. Autonomous + live-verification work is exhaustively done; confirm-to-act (owner product-UX) is the only substantive lever remaining.",
       "seeded": "(top errand live-verified; confirm-to-act owner-gated)"
+    },
+    {
+      "lens": "confirm-to-act core (owner-approved)",
+      "surfaced": "Owner approved the default-OFF opt-in scope, unblocking the one substantive coded feature. Landed the safe tested core (parse/format/store) with zero behavior change. The remaining piece is effort-M: hold the anvil session across the preview->YES turns + wire the click dispatch (flag-gated: stash+preview instead of refuse) + handler YES/NO routing. Seeded.",
+      "seeded": "confirm-to-act-wiring"
     }
   ]
 }
