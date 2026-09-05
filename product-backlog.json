@@ -5488,6 +5488,10 @@
     {
       "item": "random-roll-n-dice + bare-range (gap, found via inline audit)",
       "note": "random tool now parses \"roll 3 dice\" (bare count + dice, no dNN -> defaults to d6) and \"random 1 to 6\" (\"random\" + a range, no \"number\" word) — both returned null before -> slow agent turn. Two small regex adds in parseRandomRequest (nDice fallback + a random-bare-range branch); existing coin/dNN/number/pick/uuid forms unchanged. +2 assertions. 2406 green. call-tested: offline."
+    },
+    {
+      "item": "text-case-ops (gap, found via inline audit)",
+      "note": "text_stats now does case conversion + slugify: \"uppercase X\", \"make X uppercase\", \"X in caps\", \"lowercase X\", \"title case X\", \"slugify X\", \"make a slug of X\" — no home existed (encoding did base64/url/hash, textstats did count/reverse/palindrome, nothing cased/slugged). New titleCase + slugify helpers (accent-stripping, punct->hyphen) + 4 TextOp cases + parse branches (ordered so \"make a slug of X\" doesnt leak \"of\"). Tool desc + /help updated. +3 tests. 2409 green. call-tested: offline."
     }
   ],
   "audits": [

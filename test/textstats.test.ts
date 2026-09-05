@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { wordCount, charCount, reverseText, isPalindrome, parseTextStats, runTextStats } from "../src/lib/textstats.js";
+import { wordCount, charCount, reverseText, isPalindrome, titleCase, slugify, parseTextStats, runTextStats } from "../src/lib/textstats.js";
 
 describe("primitives", () => {
   it("wordCount", () => {
@@ -46,5 +46,24 @@ describe("runTextStats", () => {
     expect(runTextStats("is racecar a palindrome")).toMatch(/Yes/);
     expect(runTextStats("is hello a palindrome")).toMatch(/No/);
     expect(runTextStats("random chatter")).toBeNull();
+  });
+  it("case conversion ops (text-case-ops)", () => {
+    expect(runTextStats("uppercase hello world")).toBe("HELLO WORLD");
+    expect(runTextStats("make hello uppercase")).toBe("HELLO");
+    expect(runTextStats("hello in caps")).toBe("HELLO");
+    expect(runTextStats("lowercase HELLO")).toBe("hello");
+    expect(runTextStats("title case the quick brown fox")).toBe("The Quick Brown Fox");
+    expect(runTextStats("slugify My Blog Post!")).toBe("my-blog-post");
+    expect(runTextStats("make a slug of Hello World")).toBe("hello-world");
+  });
+});
+
+describe("titleCase / slugify primitives", () => {
+  it("titleCase capitalizes each word, lowercasing the rest", () => {
+    expect(titleCase("the QUICK brown")).toBe("The Quick Brown");
+  });
+  it("slugify lowercases, strips accents + punctuation, hyphenates", () => {
+    expect(slugify("Café Déjà Vu!")).toBe("cafe-deja-vu");
+    expect(slugify("  Multiple   Spaces  ")).toBe("multiple-spaces");
   });
 });

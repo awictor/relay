@@ -76,7 +76,7 @@ const HELP = `Relay — what I can do:
 • Number bases: "255 in binary", "0xFF to decimal", "42 to octal" → exact base conversion (decimal/hex/binary/octal), instantly.
 • Roman numerals: "42 in roman numerals", "MMXXIV to a number" → both directions (1–3999), instantly.
 • Spell a number out: "spell out 1234", "$99.99 in words" → English words (a "$" gives the check form "… and 99/100 dollars").
-• Text tools: "word count of <text>", "how many characters in <text>", "reverse this: <text>", "is <X> a palindrome" → exact, instantly.
+• Text tools: "word count of <text>", "how many characters in <text>", "reverse this: <text>", "is <X> a palindrome", "uppercase <text>", "title case <text>", "slugify <text>" → exact, instantly.
 • Countdowns: "countdown to my flight Dec 20", "countdown to vacation on 2026-07-01" → I save it and ping you as it nears (a week out, the day before, the morning of), not just a one-time answer.
 • Sports scores: "did the Lakers win?", "Man City score", "NBA scores tonight" → today's scores + status, instantly (NBA/NFL/MLB/NHL/NCAA + major soccer).
 • News: "what's the news?", "top headlines", "news about AI" → today's top headlines, instantly.

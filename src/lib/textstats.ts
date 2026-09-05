@@ -2,7 +2,20 @@
 // palindrome" are quick everyday asks with no tool — and an LLM miscounts long text + reverses fiddly
 // char-by-char. This does them deterministically. Pure; no key. Exported for the tool.
 
-export type TextOp = "words" | "chars" | "reverse" | "palindrome";
+export type TextOp = "words" | "chars" | "reverse" | "palindrome" | "upper" | "lower" | "title" | "slug";
+
+/** Title Case: capitalize the first letter of each word (simple — every word, no minor-word rules).
+ * Code-point safe on the first char. Exported. */
+export function titleCase(s: string): string {
+  return s.replace(/\S+/g, (w) => { const c = [...w]; return (c[0] ?? "").toUpperCase() + c.slice(1).join("").toLowerCase(); });
+}
+
+/** Slugify: lowercase, strip accents, spaces/punct -> single hyphens, trim leading/trailing hyphens.
+ * "My Blog Post!" -> "my-blog-post". Exported. */
+export function slugify(s: string): string {
+  return s.normalize("NFKD").replace(/[̀-ͯ]/g, "") // drop combining accents
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
 
 /** Count words: runs of non-whitespace. 0 for empty/whitespace-only. Exported. */
 export function wordCount(s: string): number {
@@ -41,6 +54,17 @@ export function parseTextStats(request: string): { op: TextOp; text: string } | 
   // reverse: "reverse <X>" / "reverse this: X"
   m = r.match(/\breverse(?:\s+(?:this|the text|string))?[:\s]+(.+)$/i);
   if (m) return { op: "reverse", text: m[1]!.trim().replace(/^["'`]|["'`]$/g, "") };
+  // case conversion (text-case-ops): "uppercase X" / "make X uppercase" / "X in caps" / "lowercase X" /
+  // "title case X" / "slugify X" / "make a slug of X". A common formatting errand with no home.
+  const clean = (x: string) => x.trim().replace(/^["'`]|["'`]$/g, "");
+  m = r.match(/\b(?:upper\s?case|all\s+caps|uppercase)(?:\s+(?:this|the text))?[:\s]+(.+)$/i) || r.match(/\bmake\s+(.+?)\s+(?:upper\s?case|all\s+caps)$/i) || r.match(/^(.+?)\s+in\s+(?:caps|upper\s?case|all\s+caps)$/i);
+  if (m) return { op: "upper", text: clean(m[1]!) };
+  m = r.match(/\blower\s?case(?:\s+(?:this|the text))?[:\s]+(.+)$/i) || r.match(/\bmake\s+(.+?)\s+lower\s?case$/i) || r.match(/^(.+?)\s+in\s+lower\s?case$/i);
+  if (m) return { op: "lower", text: clean(m[1]!) };
+  m = r.match(/\btitle\s?case(?:\s+(?:this|the text))?[:\s]+(.+)$/i) || r.match(/\bmake\s+(.+?)\s+title\s?case$/i);
+  if (m) return { op: "title", text: clean(m[1]!) };
+  m = r.match(/\bmake\s+(?:a\s+)?slug\s+(?:of|from|for)\s+(.+)$/i) || r.match(/\bslugify(?:\s+(?:this|the text))?[:\s]+(.+)$/i) || r.match(/\bslug(?:ify)?\s+(?:of|from|for)\s+(.+)$/i) || r.match(/\b(.+?)\s+(?:as\s+)?(?:a\s+)?slug$/i);
+  if (m && /\bslug/i.test(lower)) return { op: "slug", text: clean(m[1]!) };
   // char count: "how many characters in X" / "character count of X" / "char count: X" / "count the characters: X"
   m = r.match(/\b(?:how many characters?(?:\s+(?:are\s+)?in)?|characters?\s+count(?:\s+of)?|char\s*count|count\s+(?:the\s+)?characters?(?:\s+(?:in|of))?)[:\s]+(.+)$/i);
   if (m && /character|char/i.test(lower)) return { op: "chars", text: m[1]!.trim().replace(/^["'`]|["'`]$/g, "") };
@@ -62,5 +86,9 @@ export function runTextStats(request: string): string | null {
     case "chars": { const withSp = charCount(text, true); const noSp = charCount(text, false); return `That's ${withSp} character${withSp === 1 ? "" : "s"} (${noSp} without spaces).`; }
     case "reverse": return `Reversed: ${reverseText(text)}`;
     case "palindrome": return isPalindrome(text) ? `Yes — "${text}" is a palindrome.` : `No — "${text}" isn't a palindrome.`;
+    case "upper": return text.toUpperCase();
+    case "lower": return text.toLowerCase();
+    case "title": return titleCase(text);
+    case "slug": return slugify(text);
   }
 }

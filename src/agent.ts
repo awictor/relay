@@ -282,7 +282,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: "text_stats",
-    description: "Quick text utilities EXACTLY (no key): word count, character count, reverse a string, or palindrome check. Use this — NOT mental counting — for \"word count of <text>\", \"how many characters in <text>\", \"reverse this: <text>\", \"is <X> a palindrome\". Pass the user's request verbatim (it carries the text).",
+    description: "Quick text utilities EXACTLY (no key): word count, character count, reverse a string, palindrome check, UPPERCASE / lowercase / Title Case, or slugify. Use this — NOT mental effort — for \"word count of <text>\", \"how many characters in <text>\", \"reverse this: <text>\", \"is <X> a palindrome\", \"uppercase <text>\", \"title case <text>\", \"slugify <text>\". Pass the user's request verbatim (it carries the text).",
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The request verbatim incl. the text, e.g. \"word count of the quick brown fox\" or \"reverse this: hello\"." } },
