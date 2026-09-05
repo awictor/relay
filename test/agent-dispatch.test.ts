@@ -46,7 +46,7 @@ describe("tool surface", () => {
   it("exposes exactly the expected tool names", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "get_holidays", "get_bmi", "get_on_this_day", "convert_base", "convert_roman", "text_stats", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "read_list", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "wait_for", "where_am_i", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
+      ["browse", "calculate", "calendar_event", "click", "compare", "compose", "convert_currency", "convert_units", "date_math", "define", "get_holidays", "get_bmi", "get_on_this_day", "convert_base", "convert_roman", "spell_number", "text_stats", "directions", "encode_decode", "generate_password", "get_air_quality", "get_fact", "get_flight", "get_fun", "get_news", "get_nutrition", "where_to_watch", "get_scores", "get_suntimes", "get_time", "make_qr", "meal_ideas", "extract", "fetch_json", "find_nearby", "get_crypto", "get_quote", "get_weather", "pdf", "random", "recall", "save_page", "track_package", "read", "read_list", "reply", "scrape", "scrape_pages", "scroll_feed", "screenshot", "search", "site_search", "set_field", "wait_for", "where_am_i", "transcript", "translate", "type", "unit_price", "web_search", "extract_list"].sort()
     );
   });
 
@@ -818,6 +818,17 @@ describe("runAgent dispatch", () => {
     ]);
     const out = await runAgent("42 in roman", { llm, backend: b });
     expect(out.reply).toBe("XLII");
+    expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
+  });
+
+  it("spell_number spells a number out, pure, reaches reply (number-to-words)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "spell_number", args: { request: "spell out 1234" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "One thousand two hundred thirty-four." } } as ToolCall },
+    ]);
+    const out = await runAgent("spell out 1234", { llm, backend: b });
+    expect(out.reply).toMatch(/one thousand two hundred thirty-four/i);
     expect(hits.filter((h) => h.startsWith("scrape") || h.startsWith("fetchJson"))).toHaveLength(0);
   });
 

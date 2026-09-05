@@ -5472,6 +5472,10 @@
     {
       "item": "countdown-two-word (gap, found via inline audit)",
       "note": "Countdown parse now accepts \"count down\" as two words, not just \"countdown\". \"count down to launch on 2026-02-01\" returned null (only the joined spelling matched the intent regex) -> fell to a slow agent turn. Added optional space (counts?down) to both intent forms. Existing joined-word + start/set-a-lead + holiday-label forms unchanged. +2 assertions. 2394 green. call-tested: offline. Also swept snooze-duration parsing (3 days/week/couple-days/until-monday/indefinite) — all correct."
+    },
+    {
+      "item": "spell-number-tool (new capability, found via inline audit)",
+      "note": "New keyless spell_number tool: \"spell out 1234\", \"$99.99 in words\", \"how do you say 42 in words\" -> English words, with the check-writing cents form on a $ amount (\"ninety-nine and 99/100 dollars\"). No home existed — calc computes, nothing spelled out. New src/lib/numwords.ts (intToWords 0..999,999,999,999 via 3-digit grouping + scales; numberToWords with money/cents form ONLY on explicit $ so \"3.14\"->\"three point one four\" not \"/100\"; runNumWords cue-gated so a bare number isnt hijacked). Wired agent tool + dispatch + SYSTEM_PROMPT + /help. +9 tests (intToWords scales/range, cents-vs-point, runNumWords plain/$/commas/out-of-range/no-cue-null, dispatch reaches reply pure). Tool count 58->59; updated the exact-names surface test. 2403 green. call-tested: offline (probe: 1234, $99.99, 3.14, 1e12-null all correct)."
     }
   ],
   "audits": [

@@ -19,6 +19,7 @@ import { runHolidays } from "./lib/holidays.js";
 import { runBmi, formatBmi } from "./lib/bmi.js";
 import { runNumberBase, formatNumberBase } from "./lib/numbase.js";
 import { runRoman } from "./lib/roman.js";
+import { runNumWords } from "./lib/numwords.js";
 import { runTextStats } from "./lib/textstats.js";
 import { runOnThisDay } from "./lib/onthisday.js";
 import { getQuote as quoteFetch, formatQuote } from "./lib/quote.js";
@@ -294,6 +295,15 @@ export const TOOLS: ToolSpec[] = [
     parameters: {
       type: "object",
       properties: { request: { type: "string", description: "The roman-numeral request verbatim, e.g. \"42 in roman numerals\" or \"MMXXIV to a number\"." } },
+      required: ["request"],
+    },
+  },
+  {
+    name: "spell_number",
+    description: "Spell a number out in English words (no key, instant). Use this — NOT calculate — for \"spell out 1234\", \"write 1,250.50 in words\", \"how do you say 42 in words\", \"$99.99 in words\" (check-writing). A \"$\" gives the check/cents form (\"... and 99/100 dollars\"). Pass the request verbatim.",
+    parameters: {
+      type: "object",
+      properties: { request: { type: "string", description: "The number-in-words request verbatim, e.g. \"spell out 1234\" or \"$99.99 in words\"." } },
       required: ["request"],
     },
   },
@@ -628,6 +638,7 @@ Tools:
 - "get_bmi" (request): compute BMI from a height + weight (either units). Use for "what's my BMI at 5'10 160lb" / "BMI 70kg 1.75m". NOT calculate.
 - "convert_base" (request): integer base conversion (dec/hex/binary/octal). Use for "255 in binary", "0xFF to decimal", "42 to octal". NOT calculate (base-10) or encode_decode (text hex).
 - "convert_roman" (request): Roman numerals both directions (1–3999). Use for "42 in roman numerals", "MMXXIV to a number".
+- "spell_number" (request): spell a number out in English words. Use for "spell out 1234", "$99.99 in words" (check-writing — a "$" gives the "... and 99/100 dollars" form).
 - "text_stats" (request): word/character count, reverse, or palindrome check. Use for "word count of X", "how many characters in X", "reverse this: X", "is X a palindrome".
 - "get_news" (topic?): today's top news headlines, or about a topic. Use this — NOT web_search — for "what's the news"/"top headlines"/"news about X"/"latest on Y". Omit topic for general top stories.
 - "get_fun" (request): a joke, fun fact, or trivia question. Use this — NOT web_search or your own memory — for "tell me a joke"/"fun fact"/"trivia"/"quiz me". Pass the request verbatim; I pick joke/fact/trivia.
@@ -1604,6 +1615,14 @@ export async function runAgent(
         const r = runRoman(request);
         if (!r) { push("convert_roman", `Couldn't read a number or Roman numeral from "${request}". Ask for one (e.g. "42 in roman numerals" or "MMXXIV to a number").`); continue; }
         push("convert_roman", `${r} Report this exact result to the user.`);
+        continue;
+      }
+
+      if (call.name === "spell_number") {
+        const request = String(call.args.request ?? "").trim();
+        const r = runNumWords(request);
+        if (!r) { push("spell_number", `Couldn't read a number to spell out from "${request}". Ask for one (e.g. "spell out 1234" or "$99.99 in words").`); continue; }
+        push("spell_number", `${r} Report this exact result to the user.`);
         continue;
       }
 
