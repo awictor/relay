@@ -42,6 +42,17 @@ export function tokenize(input: string): Token[] {
   //   "20% of 50" -> "(20/100)*50" ; "50 + 20%" / "50 plus 20%" -> "50*(1+20/100)" ; "50 - 20%" off ->
   //   "50*(1-20/100)". A bare trailing "%" elsewhere means /100.
   let s = " " + input.toLowerCase() + " "; // pad so a leading/trailing operator-word matches
+  // "X is what percent of Y" / "what percent of Y is X" / "what % is X of Y" -> (X/Y)*100 (calc-what-percent).
+  // A super-common everyday percent question the tokenizer choked on ("what"/"is"/"percent" are unknown
+  // words). Rewritten FIRST into plain arithmetic. Requires a "what percent/%" cue + two numbers so a normal
+  // expression isn't hijacked. Handles both word orders. Y != 0 (else leave to error).
+  if (/\bwhat\b/.test(s) && /(?:\bpercent(?:age)?\b|%)/.test(s)) {
+    // "X is what percent of Y"  |  "what percent of Y is X"  |  "what percent is X of Y"  |  "what % is X of Y"
+    let wp = s.match(/(-?\d+(?:\.\d+)?)\s+is\s+what\s+(?:percent(?:age)?|%)\s+of\s+(-?\d+(?:\.\d+)?)/);
+    if (!wp) { const alt = s.match(/what\s+(?:percent(?:age)?|%)\s+of\s+(-?\d+(?:\.\d+)?)\s+is\s+(-?\d+(?:\.\d+)?)/); if (alt) wp = [alt[0], alt[2]!, alt[1]!] as RegExpMatchArray; }
+    if (!wp) { const alt = s.match(/what\s+(?:percent(?:age)?|%)\s+is\s+(-?\d+(?:\.\d+)?)\s+of\s+(-?\d+(?:\.\d+)?)/); if (alt) wp = [alt[0], alt[1]!, alt[2]!] as RegExpMatchArray; }
+    if (wp && parseFloat(wp[2]!) !== 0) return tokenize(`(${wp[1]}/${wp[2]})*100`);
+  }
   // Percent CHANGE from A to B (calc-percent-change): "50 to 75 percent change", "percent increase from
   // 50 to 75", "% change 100 to 90" -> ((B-A)/A)*100. Rewritten FIRST (before the words are stripped) into
   // a plain expression the evaluator handles; the "of"/"off" idioms below don't touch a change phrase.

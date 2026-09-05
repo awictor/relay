@@ -5476,6 +5476,10 @@
     {
       "item": "spell-number-tool (new capability, found via inline audit)",
       "note": "New keyless spell_number tool: \"spell out 1234\", \"$99.99 in words\", \"how do you say 42 in words\" -> English words, with the check-writing cents form on a $ amount (\"ninety-nine and 99/100 dollars\"). No home existed — calc computes, nothing spelled out. New src/lib/numwords.ts (intToWords 0..999,999,999,999 via 3-digit grouping + scales; numberToWords with money/cents form ONLY on explicit $ so \"3.14\"->\"three point one four\" not \"/100\"; runNumWords cue-gated so a bare number isnt hijacked). Wired agent tool + dispatch + SYSTEM_PROMPT + /help. +9 tests (intToWords scales/range, cents-vs-point, runNumWords plain/$/commas/out-of-range/no-cue-null, dispatch reaches reply pure). Tool count 58->59; updated the exact-names surface test. 2403 green. call-tested: offline (probe: 1234, $99.99, 3.14, 1e12-null all correct)."
+    },
+    {
+      "item": "calc-what-percent (gap, found via inline audit)",
+      "note": "calc now handles \"X is what percent of Y\" — \"30 is what % of 120\" -> 25 (all word orders: X-first, what-percent-of-Y-is-X, what-percent-is-X-of-Y). Previously THREW \"I dont know what/is\" — a super-common everyday percent question the tokenizer choked on, so it fell to a slow/guessy agent turn. Rewritten in normalizeExpr FIRST (before % idioms) into (X/Y)*100, cue-gated on \"what\"+\"percent/%\" + two numbers so normal expressions arent hijacked; Y=0 leaves it to error. Existing %-of / +X% / percent-change idioms unchanged. +1 test (3 word orders + no-hijack). 2404 green. call-tested: offline."
     }
   ],
   "audits": [

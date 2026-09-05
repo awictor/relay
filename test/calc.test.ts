@@ -52,6 +52,15 @@ describe("calc — percentages", () => {
     // still distinct from "% of": "20% of 50" is the part, not the remainder
     expect(calc("20% of 50")).toBe(10);
   });
+  it("'X is what percent of Y' (calc-what-percent), all word orders", () => {
+    expect(calc("30 is what % of 120")).toBe(25);
+    expect(calc("what percent is 30 of 120")).toBe(25);
+    expect(calc("what percent of 120 is 30")).toBe(25);
+    expect(calc("15 is what percentage of 60")).toBe(25);
+    // doesn't hijack the existing idioms
+    expect(calc("20% of 50")).toBe(10);
+    expect(calc("percent change from 40 to 60")).toBe(50);
+  });
 });
 
 describe("calc — the bill-split + loan cases the audit flagged", () => {
