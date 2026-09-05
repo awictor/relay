@@ -66,6 +66,17 @@ describe("runDateCalc", () => {
   it("days between two dates", () => {
     expect(runDateCalc("how many days between March 1 2026 and April 1 2026", TODAY)).toMatch(/31 days/);
   });
+  it("leap year check (date-leap-year), incl. the century rule", () => {
+    expect(runDateCalc("is 2024 a leap year", TODAY)).toMatch(/2024 is a leap year/);
+    expect(runDateCalc("is 2026 a leap year", TODAY)).toMatch(/2026 is not a leap year/);
+    expect(runDateCalc("is 2000 a leap year", TODAY)).toMatch(/2000 is a leap year/); // /400 -> leap
+    expect(runDateCalc("is 1900 a leap year", TODAY)).toMatch(/1900 is not a leap year/); // century, not /400
+  });
+  it("days in a month (date-days-in-month), leap-aware", () => {
+    expect(runDateCalc("how many days in February 2024", TODAY)).toMatch(/February 2024 has 29 days/);
+    expect(runDateCalc("how many days in Feb 2025", TODAY)).toMatch(/28 days/);
+    expect(runDateCalc("days in April", TODAY)).toMatch(/April \d{4} has 30 days/);
+  });
   it("date N days/weeks from today", () => {
     expect(runDateCalc("what's the date in 10 days", TODAY)).toMatch(/Sunday, September 13, 2026/);
     expect(runDateCalc("2 weeks from now", TODAY)).toMatch(/September 17, 2026/);

@@ -178,6 +178,28 @@ export function runDateCalc(raw: string, today: Ymd): string | null {
     }
   }
 
+  // "is YYYY a leap year" / "leap year 2024?" (date-leap-year): a common quiz/planning ask. A year is leap
+  // if divisible by 4, except centuries unless divisible by 400. Uses the year in the text, else this year.
+  if (/\bleap\s+year\b/.test(q)) {
+    const ym = q.match(/\b(\d{4})\b/);
+    const y = ym ? +ym[1]! : today.y;
+    const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+    return `${y} ${leap ? "is" : "is not"} a leap year${leap ? " (366 days)" : ""}.`;
+  }
+
+  // "how many days in <month> [year]" / "days in February 2024" / "days in this month" (date-days-in-month).
+  // Feb depends on the leap rule; the year defaults to the current one (so "days in February" is this year).
+  const MONTHS: Record<string, number> = { january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12, jan: 1, feb: 2, mar: 3, apr: 4, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
+  m = q.match(/(?:how\s+many\s+)?days?\s+(?:are\s+)?in\s+(?:the\s+month\s+of\s+)?([a-z]+)\.?(?:\s+(\d{4}))?\s*\??$/);
+  if (m && (MONTHS[m[1]!] || /^(this|current)$/.test(m[1]!))) {
+    const mon = MONTHS[m[1]!] ?? today.m;
+    const y = m[2] ? +m[2]! : today.y;
+    const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+    const DIM = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    const MO = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    return `${MO[mon - 1]} ${y} has ${DIM[mon - 1]} days.`;
+  }
+
   // "days between X and Y" / "days from X to Y" / "how many days between X and Y"
   m = q.match(/(?:days?|weeks?)\s+(?:between|from)\s+(.+?)\s+(?:and|to|until|till)\s+(.+)$/);
   if (m) {

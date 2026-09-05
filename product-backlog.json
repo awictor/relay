@@ -5480,6 +5480,10 @@
     {
       "item": "calc-what-percent (gap, found via inline audit)",
       "note": "calc now handles \"X is what percent of Y\" — \"30 is what % of 120\" -> 25 (all word orders: X-first, what-percent-of-Y-is-X, what-percent-is-X-of-Y). Previously THREW \"I dont know what/is\" — a super-common everyday percent question the tokenizer choked on, so it fell to a slow/guessy agent turn. Rewritten in normalizeExpr FIRST (before % idioms) into (X/Y)*100, cue-gated on \"what\"+\"percent/%\" + two numbers so normal expressions arent hijacked; Y=0 leaves it to error. Existing %-of / +X% / percent-change idioms unchanged. +1 test (3 word orders + no-hijack). 2404 green. call-tested: offline."
+    },
+    {
+      "item": "date-leap-year + days-in-month (gap, found via inline audit)",
+      "note": "datecalc now answers \"is 2024 a leap year\" (century rule correct: 2000 leap, 1900 not) and \"how many days in February 2024\" (leap-aware, 29; Feb 2025=28; any month). Both returned null before -> slow agent guess. Added two branches near the top of runDateCalc (leap-year cue, days-in-<month>[year] with a MONTHS map, year defaults to current). Existing until/since/between/business-days/age branches unchanged. +2 tests. /help updated. 2406 green. call-tested: offline."
     }
   ],
   "audits": [
