@@ -11,12 +11,16 @@ describe("parseRandomRequest (random-decision-helper)", () => {
     expect(parseRandomRequest("roll a d20")).toEqual({ kind: "dice", count: 1, sides: 20 });
     expect(parseRandomRequest("roll 2d6")).toEqual({ kind: "dice", count: 2, sides: 6 });
     expect(parseRandomRequest("roll a die")).toEqual({ kind: "dice", count: 1, sides: 6 });
+    // bare "roll N dice" (no dNN) defaults to d6 (random-roll-n-dice)
+    expect(parseRandomRequest("roll 3 dice")).toEqual({ kind: "dice", count: 3, sides: 6 });
   });
   it("number ranges", () => {
     expect(parseRandomRequest("random number 1-100")).toEqual({ kind: "number", min: 1, max: 100 });
     expect(parseRandomRequest("pick a number between 1 and 10")).toEqual({ kind: "number", min: 1, max: 10 });
     expect(parseRandomRequest("random number up to 50")).toEqual({ kind: "number", min: 1, max: 50 });
     expect(parseRandomRequest("random number")).toEqual({ kind: "number", min: 1, max: 100 }); // bare default
+    // "random 1 to 6" — no "number" word (random-bare-range)
+    expect(parseRandomRequest("random 1 to 6")).toEqual({ kind: "number", min: 1, max: 6 });
     // reversed range is normalized
     expect(parseRandomRequest("random number between 20 and 5")).toEqual({ kind: "number", min: 5, max: 20 });
   });

@@ -29,8 +29,12 @@ export function parseRandomRequest(text: string): RandomRequest | null {
   // Coin — "flip a coin", "coin flip", "heads or tails", "toss a coin".
   if (/\b(flip|toss)\s+(a\s+)?coin\b|\bcoin\s+(flip|toss)\b|\bheads\s+or\s+tails\b/.test(t)) return { kind: "coin" };
 
-  // Dice — "roll a d20", "roll 2d6", "roll a die", "roll dice", "roll two dice".
-  const dice = t.match(/\broll\s+(?:a\s+)?(?:(\d+)\s*)?d\s?(\d+)\b/) || (/\broll\s+(?:a\s+)?(dice|die)\b/.test(t) ? ["", "1", "6"] as unknown as RegExpMatchArray : null);
+  // Dice — "roll a d20", "roll 2d6", "roll a die", "roll dice", "roll two dice", "roll 3 dice" (bare count
+  // + dice, no dNN, defaults to d6 — random-roll-n-dice).
+  const nDice = t.match(/\broll\s+(\d+)\s+(?:dice|die|d6s?)\b/);
+  const dice = t.match(/\broll\s+(?:a\s+)?(?:(\d+)\s*)?d\s?(\d+)\b/)
+    || (nDice ? ["", nDice[1]!, "6"] as unknown as RegExpMatchArray : null)
+    || (/\broll\s+(?:a\s+)?(dice|die)\b/.test(t) ? ["", "1", "6"] as unknown as RegExpMatchArray : null);
   if (dice) {
     const count = Math.min(20, Math.max(1, parseInt(dice[1] || "1", 10) || 1)); // cap 20 dice
     const sides = Math.min(1000, Math.max(2, parseInt(dice[2] || "6", 10) || 6));
@@ -38,7 +42,9 @@ export function parseRandomRequest(text: string): RandomRequest | null {
   }
 
   // Number — "random number 1-100", "between 1 and 10", "a number from 1 to 6", "up to 50".
-  const between = t.match(/\bnumber\b.*?\b(\d+)\s*(?:-|to|and|through)\s*(\d+)\b/) || t.match(/\bbetween\s+(\d+)\s+and\s+(\d+)\b/) || t.match(/\bfrom\s+(\d+)\s+to\s+(\d+)\b/);
+  const between = t.match(/\bnumber\b.*?\b(\d+)\s*(?:-|to|and|through)\s*(\d+)\b/) || t.match(/\bbetween\s+(\d+)\s+and\s+(\d+)\b/) || t.match(/\bfrom\s+(\d+)\s+to\s+(\d+)\b/)
+    // "random 1 to 6" / "random 1-100" — "random" + a bare range, no "number" word (random-bare-range).
+    || (/\brandom\b/.test(t) ? t.match(/\brandom\s+(\d+)\s*(?:-|to|and|through)\s*(\d+)\b/) : null);
   if (between && /\b(random|number|pick|choose|roll)\b/.test(t)) {
     let min = parseInt(between[1]!, 10), max = parseInt(between[2]!, 10);
     if (min > max) [min, max] = [max, min];

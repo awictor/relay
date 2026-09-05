@@ -5484,6 +5484,10 @@
     {
       "item": "date-leap-year + days-in-month (gap, found via inline audit)",
       "note": "datecalc now answers \"is 2024 a leap year\" (century rule correct: 2000 leap, 1900 not) and \"how many days in February 2024\" (leap-aware, 29; Feb 2025=28; any month). Both returned null before -> slow agent guess. Added two branches near the top of runDateCalc (leap-year cue, days-in-<month>[year] with a MONTHS map, year defaults to current). Existing until/since/between/business-days/age branches unchanged. +2 tests. /help updated. 2406 green. call-tested: offline."
+    },
+    {
+      "item": "random-roll-n-dice + bare-range (gap, found via inline audit)",
+      "note": "random tool now parses \"roll 3 dice\" (bare count + dice, no dNN -> defaults to d6) and \"random 1 to 6\" (\"random\" + a range, no \"number\" word) — both returned null before -> slow agent turn. Two small regex adds in parseRandomRequest (nDice fallback + a random-bare-range branch); existing coin/dNN/number/pick/uuid forms unchanged. +2 assertions. 2406 green. call-tested: offline."
     }
   ],
   "audits": [
