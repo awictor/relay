@@ -62,10 +62,14 @@ describe("runAgent loop control (DEV-0014)", () => {
     expect(idxOld).toBeLessThan(idxNew);
   });
 
-  it("an empty reply text falls back to \"Done.\"", async () => {
+  it("an empty reply with no action taken is the couldn't-answer fallback, not a fake \"Done.\" (empty-reply-tool-noop)", async () => {
+    // An empty reply after zero real actions is a no-op — replying "Done." would present nothing-
+    // accomplished as success. It must degrade like the null-tool-call empty path below.
     const llm = new ScriptLLM([{ toolCall: { name: "reply", args: { text: "   " } } as ToolCall }]);
-    const { reply, steps } = await runAgent("finish", { llm, backend: stubBackend() });
-    expect(reply).toBe("Done.");
+    const { reply, steps, degraded } = await runAgent("finish", { llm, backend: stubBackend() });
+    expect(reply).not.toBe("Done.");
+    expect(reply).toMatch(/couldn't come up with an answer/i);
+    expect(degraded).toBe(true);
     expect(steps).toBe(1);
   });
 

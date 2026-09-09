@@ -1120,6 +1120,32 @@ describe("runAgent multi-step flows", () => {
     expect(out.photo!.length).toBe(3);
     expect(out.doc!.length).toBe(4);
     expect(out.reply).toBe("Done.");
+    expect(out.degraded).toBeFalsy(); // an artifact WAS produced -> honest success
+  });
+
+  it("empty reply after a real action (browse+click) is an honest 'Done.', not degraded (empty-reply-tool-noop)", async () => {
+    const { b, hits } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "browse", args: { url: "https://shop.example.com" } } as ToolCall },
+      { toolCall: { name: "click", args: { selector: "#tab", label: "Details" } } as ToolCall },
+      { toolCall: { name: "reply", args: { text: "" } } as ToolCall }, // empty -> a click DID land
+    ]);
+    const out = await runAgent("open the details tab", { llm, backend: b });
+    expect(hits.some((h) => h.startsWith("click:"))).toBe(true);
+    expect(out.reply).toBe("Done.");
+    expect(out.degraded).toBeFalsy(); // a state-changing action ran -> "Done." is truthful
+  });
+
+  it("empty reply after ONLY a read-only lookup is a no-op: flagged degraded, NOT a fake 'Done.' (empty-reply-tool-noop)", async () => {
+    const { b } = recordingBackend();
+    const llm = new ScriptLLM([
+      { toolCall: { name: "scrape", args: { url: "https://x.com" } } as ToolCall }, // read-only, no artifact
+      { toolCall: { name: "reply", args: { text: "" } } as ToolCall }, // empty -> nothing was accomplished
+    ]);
+    const out = await runAgent("what's the price", { llm, backend: b });
+    expect(out.reply).not.toBe("Done."); // a silent no-op must never read as success
+    expect(out.reply).toMatch(/couldn't come up with an answer/i);
+    expect(out.degraded).toBe(true);
   });
 
   describe("browse session continuity (persist-browse-session-across-turns)", () => {

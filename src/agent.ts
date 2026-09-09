@@ -1004,6 +1004,12 @@ export interface AgentDeps {
 // Hard ceiling on a single run's steps regardless of override — a runaway agent can't loop forever.
 const MAX_STEPS_CEILING = 30;
 
+// Tools whose success genuinely accomplishes something, so an empty reply backed by one is honestly
+// "Done." (a click/type/set_field landed, a page was saved, a calendar event drafted). Any other empty
+// reply — after only read-only lookups, or no tool at all — is a no-op and must NOT read as success
+// (empty-reply-tool-noop). Artifact tools (screenshot/pdf/make_qr) are covered by photo/doc separately.
+const ACTION_TOOLS = new Set(["click", "type", "set_field", "save_page", "calendar_event"]);
+
 const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** A system line telling the model the current wall-clock in the user's zone (inject-current-datetime).
@@ -1091,7 +1097,18 @@ export async function runAgent(
       if (call.name !== "reply") toolsUsed.push(call.name);
 
       if (call.name === "reply") {
-        finalReply = String(call.args.text ?? "").trim() || "Done.";
+        const replyText = String(call.args.text ?? "").trim();
+        if (replyText) {
+          finalReply = replyText;
+        } else {
+          // Empty reply text: only honestly "Done." if a real action landed (or an artifact was produced).
+          // After read-only lookups or nothing, an empty reply is a no-op — flag it degraded and say so,
+          // matching the no-tool-call empty path above, so a user never reads a silent no-op as success
+          // (empty-reply-tool-noop).
+          const didAction = toolsUsed.some((t) => ACTION_TOOLS.has(t)) || photo != null || doc != null;
+          finalReply = didAction ? "Done." : "Sorry, I couldn't come up with an answer.";
+          degraded = !didAction;
+        }
         usedSteps = step;
         break;
       }
