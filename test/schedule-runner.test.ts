@@ -315,6 +315,32 @@ describe("makeScheduleRunner.tick", () => {
     expect(store.list(7)).toHaveLength(0);         // once -> gone
   });
 
+  it("a reminderOnly fired long after its scheduled instant is annotated as delayed (late-reminder-annotation)", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock);
+    // Scheduled for ~2h ago (dueMs), only firing now — the restart-after-downtime / over-cap-force case.
+    store.add(7, { kind: "once", task: "take my meds", dueMs: NOW - 2 * 3_600_000, reminderOnly: true }, NOW - 2 * 3_600_000);
+    await runner.tick();
+    expect(sent[0]!.text).toContain("take my meds");
+    expect(sent[0]!.text).toMatch(/delayed.*~2h-ago scheduled one/); // user won't act on it as if on-time
+  });
+
+  it("a reminderOnly fired within tick jitter of its time carries NO delayed note (late-reminder-annotation)", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock);
+    store.add(7, { kind: "once", task: "take my meds", dueMs: NOW - 60_000, reminderOnly: true }, NOW - 60_000); // 1m late = jitter
+    await runner.tick();
+    expect(sent[0]!.text).toBe("⏰ Reminder: take my meds"); // unchanged — no spurious "delayed" on an on-time fire
+  });
+
+  it("a late agent-backed once reminder is annotated in its header (late-reminder-annotation)", async () => {
+    const clock = { t: NOW };
+    const { store, runner, sent } = harness(clock);
+    store.add(42, { kind: "once", task: "stretch", dueMs: NOW - 90 * 60_000 }, NOW - 90 * 60_000); // 90m late
+    await runner.tick();
+    expect(sent[0]!.text).toMatch(/⏰ Reminder \(delayed.*~2h-ago scheduled one\): stretch/);
+  });
+
   it("threads the chat's clock + units into the proactive runAgent (proactive-runs-datetime-units-blind)", async () => {
     const clock = { t: NOW };
     let seenDeps: { nowMs?: number; tzOffsetMin?: number; weatherUnits?: string } | null = null;

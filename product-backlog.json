@@ -3777,7 +3777,7 @@
       "title": "Late/deferred reminders carry no this-is-late note — a delayed meds/standup reminder looks identical to an on-time one",
       "impact": "high",
       "effort": "S",
-      "status": "todo",
+      "status": "done",
       "why": "Reminders are the highest-trust feature; a user acts on a delayed reminder as if on-time, or is silently confused why it landed at the wrong hour.",
       "how": "In schedule-runner, when a fire is deferred past quiet-hours / force-delivered after over-cap grace / fired-on-restart-after-downtime, prefix the reminder text with the intended time."
     },
@@ -5541,6 +5541,10 @@
     {
       "id": "empty-reply-noop-degraded",
       "what": "empty reply after a no-op no longer reads as a confident Done — flagged degraded + could-not-answer fallback unless a real action/artifact backs it"
+    },
+    {
+      "id": "late-reminder-annotation",
+      "what": "reminders firing >5m after their scheduled instant (restart-after-downtime, over-cap force, retry) now carry a relative \"(delayed — this is the ~Nh-ago scheduled one)\" note so a user never acts on a stale meds/standup ping as if on-time; tz-free, quiet-hours defers correctly NOT flagged"
     }
   ],
   "audits": [

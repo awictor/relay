@@ -172,6 +172,22 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
   // it's delivered ANYWAY (once-reminder-cap-starvation). An explicit promise slipping this far past
   // its time is worse than one extra send over the anti-spam cap. Default 15 min.
   const ONCE_CAP_GRACE_MS = Math.max(0, Number(process.env.RELAY_ONCE_CAP_GRACE_MS) || 15 * 60_000);
+  // A reminder that fires meaningfully after its scheduled instant (deferred past over-cap grace,
+  // force-delivered, or fired-on-restart after downtime) is annotated so the user doesn't act on a
+  // delayed "take meds"/standup ping as if it were on time, or puzzle over why it landed at the wrong
+  // hour (late-reminder-annotation). Below this threshold the gap is just ordinary tick jitter (tasks
+  // run at most once per poll period) and isn't worth a note. Env-tunable; default 5 min.
+  const LATE_REMINDER_MS = Math.max(0, Number(process.env.RELAY_LATE_REMINDER_MS) || 5 * 60_000);
+  // How late this fire is vs its scheduled instant, as a short human phrase, or "" if on time / early
+  // (a quiet-hours defer bumps dueMs to the intended send instant, so a deferred send is NOT "late").
+  // Relative, not absolute — the runner has no per-chat timezone, so "~2h late" beats a wrong clock time.
+  const lateNote = (s: Schedule): string => {
+    const lateMs = deps.now() - s.dueMs;
+    if (lateMs < LATE_REMINDER_MS) return "";
+    const mins = Math.round(lateMs / 60_000);
+    const human = mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.round(mins / 60)}h` : `${Math.round(mins / 1440)}d`;
+    return ` (delayed — this is the ~${human}-ago scheduled one)`;
+  };
   // A relative "once" set to fire within this horizon is treated as a DELIBERATE near-term instant and
   // is EXEMPT from the quiet-hours defer (relative-once-quiet-defer): "remind me in 4 hours" / "timer
   // for 20 min" must fire on time, not get pushed to quiet-end. 18h covers any same-day "in N hours"
@@ -418,7 +434,7 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
       // (so editing the recipe changes what fires, and a deleted recipe stops firing). A plain task
       // (legacy schedules / reminders) runs as-is.
       let taskToRun = s.task;
-      let label = s.kind === "once" ? "⏰ Reminder" : "⏰ Recurring";
+      let label = (s.kind === "once" ? "⏰ Reminder" : "⏰ Recurring") + lateNote(s);
       if (recipeMatch && deps.recipeResolveTask) {
         const resolved = deps.recipeResolveTask(s.chatId, recipeMatch[1]!.trim());
         if (resolved === null) {
@@ -453,7 +469,8 @@ export function makeScheduleRunner(deps: ScheduleRunnerDeps): ScheduleRunner {
         if (isCancelled()) { log(`[proactive] ${JSON.stringify({ id: s.id, kind: s.kind, ok: false, dropped: "timed_out_late_finish" })}`); return; }
         // A sticky reminder (sticky-acknowledged-reminders) re-pings until acknowledged — tell the user
         // how to stop it so the nag has an off switch. Plain reminders echo as before.
-        const echo = s.sticky ? `⏰ Reminder: ${taskToRun}\n(reply "done" when you've handled it and I'll stop)` : `⏰ Reminder: ${taskToRun}`;
+        const late = lateNote(s);
+        const echo = s.sticky ? `⏰ Reminder${late}: ${taskToRun}\n(reply "done" when you've handled it and I'll stop)` : `⏰ Reminder${late}: ${taskToRun}`;
         // Gate on actual delivery (send-never-throws-dead-commit-guard): deps.send returns false on a
         // failed send (it doesn't throw), so a dropped "take your meds" reminder must NOT complete —
         // throw into the tick's catch so a once retries next tick (no budget burn) instead of vanishing.
